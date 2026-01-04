@@ -5,10 +5,9 @@
 #include <cerrno>
 #include <climits>
 #include <cstdint>
+#include <dsa_stdexec/error.hpp>
 #include <fcntl.h>
 #include <fmt/format.h>
-#include <immintrin.h>
-#include <stdexcept>
 #include <sys/mman.h>
 #include <system_error>
 #include <unistd.h>
@@ -93,7 +92,7 @@ Dsa::Dsa(bool start_poller) : ctx_(), wq_(nullptr), wq_portal_(nullptr) {
     }
 
     if (wq_portal_ == nullptr) {
-      throw std::runtime_error(
+      throw dsa_stdexec::DsaInitError(
           "Failed to locate and map a usable user work queue portal");
     }
 
@@ -132,15 +131,15 @@ void Dsa::data_move(void *src, void *dst, size_t size) {
   }
 
   if (wq_portal_ == nullptr) {
-    throw std::runtime_error("DSA work queue portal is not mapped");
+    throw dsa_stdexec::DsaError("DSA work queue portal is not mapped");
   }
 
   if (src == nullptr || dst == nullptr) {
-    throw std::invalid_argument("DSA data_move received a null pointer");
+    throw dsa_stdexec::DsaError("DSA data_move received a null pointer");
   }
 
   if (size > UINT32_MAX) {
-    throw std::invalid_argument(
+    throw dsa_stdexec::DsaError(
         "DSA data_move size exceeds the maximum transfer length");
   }
 
@@ -174,7 +173,8 @@ retry:
 
     while (_enqcmd(wq_portal_, &desc) != 0) {
       if (++enqueue_attempts >= kEnqueueSpinLimit) {
-        throw std::runtime_error("DSA portal busy while submitting descriptor");
+        throw dsa_stdexec::DsaSubmitError(
+            "DSA portal busy - enqueue spin limit exceeded", EBUSY);
       }
       _mm_pause();
     }
@@ -189,8 +189,8 @@ retry:
     return;
   }
 
-  throw std::runtime_error(
-      fmt::format("DSA data move failed (status=0x{:02x})", status_code));
+  throw dsa_stdexec::DsaError(status_code, comp, DSA_OPCODE_MEMMOVE,
+                              "data_move");
 }
 
 void *Dsa::map_wq(accfg_wq *wq) {
@@ -227,7 +227,7 @@ void *Dsa::map_wq(accfg_wq *wq) {
 
 void Dsa::submit(dsa_stdexec::OperationBase *op, dsa_hw_desc *desc) {
   if (wq_portal_ == nullptr) {
-    throw std::runtime_error("DSA work queue portal is not mapped");
+    throw dsa_stdexec::DsaSubmitError("DSA work queue portal is not mapped");
   }
 
   {
@@ -249,7 +249,8 @@ void Dsa::submit(dsa_stdexec::OperationBase *op, dsa_hw_desc *desc) {
 
     while (_enqcmd(wq_portal_, desc) != 0) {
       if (++enqueue_attempts >= kEnqueueSpinLimit) {
-        throw std::runtime_error("DSA portal busy while submitting descriptor");
+        throw dsa_stdexec::DsaSubmitError(
+            "DSA portal busy - enqueue spin limit exceeded", EBUSY);
       }
     }
   }

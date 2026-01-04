@@ -1,15 +1,15 @@
 #pragma once
 #include <cstring>
+#include <fmt/base.h>
 #ifndef DSA_STDEXEC_DATA_MOVE_HPP
 #define DSA_STDEXEC_DATA_MOVE_HPP
 
 #include <cstdint>
 #include <dsa/dsa.hpp>
+#include <dsa_stdexec/error.hpp>
 #include <dsa_stdexec/operation_base.hpp>
 #include <exception>
-#include <stdexcept>
 #include <stdexec/execution.hpp>
-#include <tuple>
 #include <utility>
 
 namespace dsa_stdexec {
@@ -43,8 +43,17 @@ public:
 
     try {
       dsa_.submit(&hook_, &desc_);
-    } catch (...) {
+    } catch (const DsaError &e) {
+      fmt::println(stderr, "DSA submit failed: {}", e.full_report());
       stdexec::set_error(std::move(r_), std::current_exception());
+    } catch (const std::exception &e) {
+      fmt::println(stderr, "DSA submit failed: {}", e.what());
+      stdexec::set_error(std::move(r_), std::make_exception_ptr(
+          DsaSubmitError(e.what())));
+    } catch (...) {
+      fmt::println(stderr, "DSA submit failed: unknown error");
+      stdexec::set_error(std::move(r_), std::make_exception_ptr(
+          DsaSubmitError("unknown error")));
     }
   }
 
@@ -62,10 +71,9 @@ private:
     if (status == DSA_COMP_SUCCESS) {
       stdexec::set_value(std::move(r_));
     } else {
-      // TODO: Better error handling
-      stdexec::set_error(
-          std::move(r_),
-          std::make_exception_ptr(std::runtime_error("DSA operation failed")));
+      auto err = DsaError(status, comp_, desc_.opcode, "data_move");
+      fmt::println(stderr, "DSA operation failed: {}", err.full_report());
+      stdexec::set_error(std::move(r_), std::make_exception_ptr(std::move(err)));
     }
   }
 
