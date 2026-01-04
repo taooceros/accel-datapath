@@ -1,15 +1,15 @@
 #include <dsa/dsa.hpp>
 #include <dsa_stdexec/data_move.hpp>
+#include <fmt/base.h>
 #include <stdexec/execution.hpp>
 #include <vector>
 #include <chrono>
-#include <iostream>
 #include <fmt/core.h>
 #include <fmt/ranges.h>
-#include <numeric>
 #include <cstring>
 #include <utility>
 #include <latch>
+#include <cstdlib>
 
 // Helper to recursively build senders to avoid hitting tuple size limits in stdexec
 template <size_t Offset, size_t Remaining>
@@ -81,28 +81,40 @@ void benchmark(Dsa& dsa, size_t batch_size, size_t msg_size) {
     std::memset(src.data(), 1, total_size);
     std::memset(dst.data(), 0, total_size);
 
-    // --- Static Benchmark ---
-    double bw_static = 0.0;
-    if (batch_size <= 32) {
-        auto start_static = std::chrono::high_resolution_clock::now();
-        run_static_batch(dsa, batch_size, msg_size, src, dst);
-        auto end_static = std::chrono::high_resolution_clock::now();
+        // --- Static Benchmark ---
+        double bw_static_sum = 0.0;
+        if (batch_size <= 32) {
+            // Warmup
+            run_static_batch(dsa, batch_size, msg_size, src, dst);
 
-        std::chrono::duration<double> diff_static = end_static - start_static;
-        bw_static = (double)total_size / (1024.0 * 1024.0 * 1024.0) / diff_static.count();
-    }
+            for (int i = 0; i < 10; ++i) {
+                auto start_static = std::chrono::high_resolution_clock::now();
+                run_static_batch(dsa, batch_size, msg_size, src, dst);
+                auto end_static = std::chrono::high_resolution_clock::now();
 
-    // --- Dynamic Benchmark ---
-    // Reset dst (optional, but good practice)
-    std::memset(dst.data(), 0, total_size);
+                std::chrono::duration<double> diff_static = end_static - start_static;
+                bw_static_sum += (double)total_size / (1024.0 * 1024.0 * 1024.0) / diff_static.count();
+            }
+        }
+        double bw_static = bw_static_sum / 10.0;
 
-    auto start_dynamic = std::chrono::high_resolution_clock::now();
-    run_dynamic_batch(dsa, batch_size, msg_size, src, dst);
-    auto end_dynamic = std::chrono::high_resolution_clock::now();
+        // --- Dynamic Benchmark ---
+        // Reset dst (optional, but good practice)
+        std::memset(dst.data(), 0, total_size);
 
-    std::chrono::duration<double> diff_dynamic = end_dynamic - start_dynamic;
-    double bw_dynamic = (double)total_size / (1024.0 * 1024.0 * 1024.0) / diff_dynamic.count();
+        // Warmup
+        run_dynamic_batch(dsa, batch_size, msg_size, src, dst);
 
+        double bw_dynamic_sum = 0.0;
+        for (int i = 0; i < 10; ++i) {
+            auto start_dynamic = std::chrono::high_resolution_clock::now();
+            run_dynamic_batch(dsa, batch_size, msg_size, src, dst);
+            auto end_dynamic = std::chrono::high_resolution_clock::now();
+
+            std::chrono::duration<double> diff_dynamic = end_dynamic - start_dynamic;
+            bw_dynamic_sum += (double)total_size / (1024.0 * 1024.0 * 1024.0) / diff_dynamic.count();
+        }
+        double bw_dynamic = bw_dynamic_sum / 10.0;
     if (batch_size <= 32) {
         fmt::println("Batch: {:3}, Size: {:8} bytes | Static: {:.2f} GB/s | Dynamic: {:.2f} GB/s",
                batch_size, msg_size, bw_static, bw_dynamic);
@@ -113,12 +125,14 @@ void benchmark(Dsa& dsa, size_t batch_size, size_t msg_size) {
 }
 
 int main(int argc, char** argv) {
+    std::system("stty opost onlcr");
     try {
         // Check arguments if we want to customize, but defaults are fine.
         bool use_poller = true;
 
         fmt::println("Initializing DSA (poller={})...", use_poller);
         Dsa dsa(use_poller);
+
 
         std::vector<size_t> batch_sizes = {1, 2, 4, 8, 16, 32};
         std::vector<size_t> msg_sizes = {1024, 4096, 64*1024, 1024*1024};
@@ -139,5 +153,7 @@ int main(int argc, char** argv) {
         fmt::println(stderr, "Error: {}", e.what());
         return 1;
     }
+
+    fmt::println("Benchmark completed.");
     return 0;
 }

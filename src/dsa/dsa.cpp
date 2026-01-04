@@ -5,6 +5,7 @@
 #include <cerrno>
 #include <climits>
 #include <cstdint>
+#include <cstdlib>
 #include <dsa_stdexec/error.hpp>
 #include <fcntl.h>
 #include <fmt/format.h>
@@ -31,6 +32,7 @@ Dsa::Dsa(bool start_poller) : ctx_(), wq_(nullptr), wq_portal_(nullptr) {
       const char *devname = accfg_device_get_devname(device);
       int dev_id = accfg_device_get_id(device);
       std::string type_str = accfg_device_get_type_str(device);
+      std::system("stty opost onlcr");
       fmt::println("Device {0} ({1}): {2}", dev_id, devname, type_str);
       int wq_count = 0;
 
