@@ -1,4 +1,4 @@
 inputs:
-    proxy:
+    stdexec:
         url: github:nvidia/stdexec
         flake: false

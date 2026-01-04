@@ -133,10 +133,10 @@
     "stdexec": {
       "flake": false,
       "locked": {
-        "lastModified": 1766792112,
+        "lastModified": 1767380293,
         "owner": "nvidia",
         "repo": "stdexec",
-        "rev": "5ffee4679be9e933d3b949e74bf56f4f80729c19",
+        "rev": "c03da7a7c6e1b4ccf86c5112d8d17a61e2e30f54",
         "type": "github"
       },
       "original": {
