@@ -35,3 +35,15 @@ devenv.local.yaml
 
 # pre-commit
 .pre-commit-config.yaml
+
+
+# claude code
+.claude/
+.claude-plugins/
+CLAUDE.md
+
+
+# profiler
+perf*
+profile*
+gmon.out
