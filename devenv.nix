@@ -44,7 +44,17 @@
     xmlto
     fmt_12
     ninja
+    samply
+    linuxPackages.perf
+    pkgs.glibc.out
+    pkgs.glibc.debug
   ];
+
+  # 1. Force C/C++ Compiler Flags
+  # -g: Generate debug info
+  # -fno-omit-frame-pointer: Crucial for 'perf' to unwind stacks correctly
+  env.CFLAGS = "-g -fno-omit-frame-pointer";
+  env.CXXFLAGS = "-g -fno-omit-frame-pointer";
 
   env.NIX_ENFORCE_NO_NATIVE = "0";
 

@@ -11,6 +11,7 @@
 #include <stdexec/execution.hpp>
 #include <utility>
 #include <vector>
+#include <thread>
 
 // Helper to recursively build senders to avoid hitting tuple size limits in
 // stdexec
@@ -84,23 +85,41 @@ void benchmark(Dsa &dsa, size_t batch_size, size_t msg_size) {
   std::memset(src.data(), 1, total_size);
   std::memset(dst.data(), 0, total_size);
 
+  // --- Memcpy Benchmark ---
+  // Reset dst
+  std::memset(dst.data(), 0, total_size);
+
+  // Warmup
+  std::memcpy(dst.data(), src.data(), total_size);
+
+  constexpr int iterations = 100;
+
+  auto start_memcpy = std::chrono::high_resolution_clock::now();
+  for (int i = 0; i < iterations; ++i) {
+    std::memcpy(dst.data(), src.data(), total_size);
+  }
+  auto end_memcpy = std::chrono::high_resolution_clock::now();
+
+  std::chrono::duration<double> diff_memcpy = end_memcpy - start_memcpy;
+  double bw_memcpy = (double)total_size * iterations /
+                     (1024.0 * 1024.0 * 1024.0) / diff_memcpy.count();
+
   // --- Static Benchmark ---
-  double bw_static_sum = 0.0;
+  double bw_static = 0.0;
   if (batch_size <= 32) {
     // Warmup
     run_static_batch(dsa, batch_size, msg_size, src, dst);
 
-    for (int i = 0; i < 10; ++i) {
-      auto start_static = std::chrono::high_resolution_clock::now();
+    auto start_static = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < iterations; ++i) {
       run_static_batch(dsa, batch_size, msg_size, src, dst);
-      auto end_static = std::chrono::high_resolution_clock::now();
-
-      std::chrono::duration<double> diff_static = end_static - start_static;
-      bw_static_sum +=
-          (double)total_size / (1024.0 * 1024.0 * 1024.0) / diff_static.count();
     }
+    auto end_static = std::chrono::high_resolution_clock::now();
+
+    std::chrono::duration<double> diff_static = end_static - start_static;
+    bw_static = (double)total_size * iterations / (1024.0 * 1024.0 * 1024.0) /
+                diff_static.count();
   }
-  double bw_static = bw_static_sum / 10.0;
 
   // --- Dynamic Benchmark ---
   // Reset dst (optional, but good practice)
@@ -109,25 +128,23 @@ void benchmark(Dsa &dsa, size_t batch_size, size_t msg_size) {
   // Warmup
   run_dynamic_batch(dsa, batch_size, msg_size, src, dst);
 
-  double bw_dynamic_sum = 0.0;
-  for (int i = 0; i < 10; ++i) {
-    auto start_dynamic = std::chrono::high_resolution_clock::now();
+  auto start_dynamic = std::chrono::high_resolution_clock::now();
+  for (int i = 0; i < iterations; ++i) {
     run_dynamic_batch(dsa, batch_size, msg_size, src, dst);
-    auto end_dynamic = std::chrono::high_resolution_clock::now();
-
-    std::chrono::duration<double> diff_dynamic = end_dynamic - start_dynamic;
-    bw_dynamic_sum +=
-        (double)total_size / (1024.0 * 1024.0 * 1024.0) / diff_dynamic.count();
   }
-  double bw_dynamic = bw_dynamic_sum / 10.0;
+  auto end_dynamic = std::chrono::high_resolution_clock::now();
+
+  std::chrono::duration<double> diff_dynamic = end_dynamic - start_dynamic;
+  double bw_dynamic = (double)total_size * iterations /
+                      (1024.0 * 1024.0 * 1024.0) / diff_dynamic.count();
   if (batch_size <= 32) {
-    fmt::println("Batch: {:3}, Size: {:8} bytes | Static: {:.2f} GB/s | "
-                 "Dynamic: {:.2f} GB/s",
-                 batch_size, msg_size, bw_static, bw_dynamic);
+    fmt::println("Batch: {:3}, Size: {:8} bytes | Memcpy: {:.2f} GB/s | Static: "
+                 "{:.2f} GB/s | Dynamic: {:.2f} GB/s",
+                 batch_size, msg_size, bw_memcpy, bw_static, bw_dynamic);
   } else {
-    fmt::println("Batch: {:3}, Size: {:8} bytes | Static: N/A        | "
-                 "Dynamic: {:.2f} GB/s",
-                 batch_size, msg_size, bw_dynamic);
+    fmt::println("Batch: {:3}, Size: {:8} bytes | Memcpy: {:.2f} GB/s | Static: "
+                 "N/A        | Dynamic: {:.2f} GB/s",
+                 batch_size, msg_size, bw_memcpy, bw_dynamic);
   }
 }
 
@@ -153,6 +170,7 @@ int main(int argc, char **argv) {
           fmt::println("Skipping Batch: {}, Size: {} (Total > 2GB)", bs, ms);
           continue;
         }
+        // std::this_thread::sleep_for(std::chrono::milliseconds(100));
         benchmark(dsa, bs, ms);
       }
     }
