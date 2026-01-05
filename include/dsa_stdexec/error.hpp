@@ -84,6 +84,8 @@ constexpr std::string_view dsa_status_to_string(uint8_t status) noexcept {
   default:
     return "Unknown error";
   }
+
+
 }
 
 // Convert DSA opcode to human-readable string
