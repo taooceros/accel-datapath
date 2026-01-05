@@ -1,6 +1,6 @@
 #include "dsa.hpp"
 #include "accel-config/libaccel_config.h"
-#include "enum_format.hpp" // IWYU pragma: keep
+#include "enum_format.hpp"
 #include "fmt/base.h"
 #include <cerrno>
 #include <climits>
@@ -187,12 +187,20 @@ retry:
   }
 
   uint8_t status_code = op_status(comp.status);
-  if (status_code == DSA_COMP_SUCCESS) {
-    return;
+  if (status_code != DSA_COMP_SUCCESS) {
+    if (status_code == DSA_COMP_PAGE_FAULT_NOBOF) {
+      int wr = comp.status & DSA_COMP_STATUS_WRITE;
+      volatile char *t;
+      t = (char *)comp.fault_addr;
+      wr ? *t = *t : *t;
+      desc.src_addr += comp.bytes_completed;
+      desc.dst_addr += comp.bytes_completed;
+      desc.xfer_size -= comp.bytes_completed;
+      goto retry;
+    }
+    throw dsa_stdexec::DsaError(status_code, comp, DSA_OPCODE_MEMMOVE,
+                                "data_move");
   }
-
-  throw dsa_stdexec::DsaError(status_code, comp, DSA_OPCODE_MEMMOVE,
-                              "data_move");
 }
 
 void *Dsa::map_wq(accfg_wq *wq) {

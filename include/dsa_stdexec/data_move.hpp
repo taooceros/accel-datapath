@@ -70,10 +70,28 @@ private:
     uint8_t status = comp_.status & DSA_COMP_STATUS_MASK;
     if (status == DSA_COMP_SUCCESS) {
       stdexec::set_value(std::move(r_));
+    } else if (status == DSA_COMP_PAGE_FAULT_NOBOF) {
+      int wr = comp_.status & DSA_COMP_STATUS_WRITE;
+      volatile char *t;
+      t = (char *)comp_.fault_addr;
+      wr ? *t = *t : *t;
+      desc_.src_addr += comp_.bytes_completed;
+      desc_.dst_addr += comp_.bytes_completed;
+      desc_.xfer_size -= comp_.bytes_completed;
+
+      // Zero out completion record
+      memset(&comp_, 0, sizeof(comp_));
+
+      try {
+        dsa_.submit(&hook_, &desc_);
+      } catch (...) {
+        stdexec::set_error(std::move(r_), std::current_exception());
+      }
     } else {
       auto err = DsaError(status, comp_, desc_.opcode, "data_move");
       fmt::println(stderr, "DSA operation failed: {}", err.full_report());
-      stdexec::set_error(std::move(r_), std::make_exception_ptr(std::move(err)));
+      stdexec::set_error(std::move(r_),
+                         std::make_exception_ptr(std::move(err)));
     }
   }
 
