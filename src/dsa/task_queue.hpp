@@ -248,6 +248,7 @@ using BackoffSpinlockTaskQueue = LockedTaskQueue<locks::TtasBackoffSpinlock>;
 // Ring buffer task queue (MPSC - multi-producer, single-consumer)
 // Fixed capacity, uses atomic indices for lock-free operation
 // Push can be called from multiple threads, poll from single thread
+// Maintains a pending list for incomplete operations to avoid re-pushing
 template <std::size_t Capacity = 1024>
 class RingBufferTaskQueue {
   static_assert((Capacity & (Capacity - 1)) == 0, "Capacity must be power of 2");
@@ -285,40 +286,74 @@ public:
   }
 
   std::size_t poll() {
-    dsa_stdexec::OperationBase *completed_head = nullptr;
     std::size_t count = 0;
 
-    // Process all available items
-    while (true) {
-      std::size_t head = head_.load(std::memory_order_relaxed);
-      std::size_t index = head & (Capacity - 1);
+    // First, check pending list from previous polls
+    dsa_stdexec::OperationBase **pprev = &pending_head_;
+    dsa_stdexec::OperationBase *curr = pending_head_;
+    dsa_stdexec::OperationBase *completed_head = nullptr;
 
-      // Check if slot has data (sequence should be head + 1)
-      std::size_t seq = sequence_[index].load(std::memory_order_acquire);
-      if (seq != head + 1) {
-        break; // No more items available
+    while (curr != nullptr) {
+      if (curr->proxy->check_completion()) {
+        // Remove from pending list
+        *pprev = curr->next;
+        // Add to completed list
+        dsa_stdexec::OperationBase *completed = curr;
+        curr = curr->next;
+        completed->next = completed_head;
+        completed_head = completed;
+      } else {
+        pprev = &curr->next;
+        curr = curr->next;
       }
+    }
 
-      // Read the operation
+    // Batch consume from ring buffer - find how many items are available
+    std::size_t head = head_.load(std::memory_order_relaxed);
+    std::size_t available = 0;
+
+    // Count available items
+    while (true) {
+      std::size_t check_pos = head + available;
+      std::size_t index = check_pos & (Capacity - 1);
+      std::size_t seq = sequence_[index].load(std::memory_order_acquire);
+      if (seq != check_pos + 1) {
+        break;
+      }
+      ++available;
+      if (available >= Capacity) break; // Safety limit
+    }
+
+    // Batch consume all available items
+    for (std::size_t i = 0; i < available; ++i) {
+      std::size_t pos = head + i;
+      std::size_t index = pos & (Capacity - 1);
+
       dsa_stdexec::OperationBase *op = buffer_[index];
 
-      // Advance head
-      head_.store(head + 1, std::memory_order_relaxed);
-
-      // Mark slot as consumed (ready for next round)
-      sequence_[index].store(head + Capacity, std::memory_order_release);
-
-      // Check completion
+      // Check completion immediately
       if (op->proxy->check_completion()) {
         op->next = completed_head;
         completed_head = op;
       } else {
-        // Re-queue if not complete
-        push(op);
+        // Add to pending list (prepend)
+        op->next = pending_head_;
+        pending_head_ = op;
       }
     }
 
-    // Notify completed operations
+    // Batch advance head and release slots
+    for (std::size_t i = 0; i < available; ++i) {
+      std::size_t pos = head + i;
+      std::size_t index = pos & (Capacity - 1);
+      sequence_[index].store(pos + Capacity, std::memory_order_release);
+    }
+
+    if (available > 0) {
+      head_.store(head + available, std::memory_order_relaxed);
+    }
+
+    // Notify all completed operations
     while (completed_head != nullptr) {
       dsa_stdexec::OperationBase *op = completed_head;
       completed_head = op->next;
@@ -330,6 +365,9 @@ public:
   }
 
   bool empty() const {
+    if (pending_head_ != nullptr) {
+      return false;
+    }
     std::size_t head = head_.load(std::memory_order_relaxed);
     std::size_t index = head & (Capacity - 1);
     std::size_t seq = sequence_[index].load(std::memory_order_acquire);
@@ -341,6 +379,8 @@ private:
   alignas(64) std::atomic<std::size_t> tail_{0};
   std::array<dsa_stdexec::OperationBase *, Capacity> buffer_{};
   std::array<std::atomic<std::size_t>, Capacity> sequence_{};
+  // Pending list for operations not yet complete (consumer-only, no sync needed)
+  dsa_stdexec::OperationBase *pending_head_{nullptr};
 };
 
 // Convenience alias with default capacity
