@@ -14,7 +14,7 @@
 
 namespace dsa_stdexec {
 
-template <class ReceiverId> class DataMoveOperation {
+template <class DsaType, class ReceiverId> class DataMoveOperation {
   using Receiver = stdexec::__t<ReceiverId>;
   static_assert(!std::is_reference_v<Receiver>,
                 "Receiver must not be a reference");
@@ -22,7 +22,7 @@ template <class ReceiverId> class DataMoveOperation {
 public:
   using operation_state_concept = stdexec::operation_state_t;
 
-  DataMoveOperation(Dsa &dsa, void *src, void *dst, size_t size, Receiver r)
+  DataMoveOperation(DsaType &dsa, void *src, void *dst, size_t size, Receiver r)
       : dsa_(dsa), src_(src), dst_(dst), size_(size), r_(std::move(r)) {}
 
   DataMoveOperation(DataMoveOperation &&) = delete;
@@ -96,7 +96,7 @@ private:
   }
 
 private:
-  Dsa &dsa_;
+  DsaType &dsa_;
   void *src_;
   void *dst_;
   size_t size_;
@@ -106,6 +106,7 @@ private:
   OperationBase hook_;
 };
 
+template <class DsaType>
 class DataMoveSender {
 public:
   using sender_concept = stdexec::sender_t;
@@ -113,26 +114,28 @@ public:
       stdexec::completion_signatures<stdexec::set_value_t(),
                                      stdexec::set_error_t(std::exception_ptr)>;
 
-  DataMoveSender(Dsa &dsa, void *src, void *dst, size_t size)
+  DataMoveSender(DsaType &dsa, void *src, void *dst, size_t size)
       : dsa_(dsa), src_(src), dst_(dst), size_(size) {}
 
   auto connect(stdexec::receiver auto &&r) {
-    return DataMoveOperation<stdexec::__id<std::remove_cvref_t<decltype(r)>>>(
+    return DataMoveOperation<DsaType, stdexec::__id<std::remove_cvref_t<decltype(r)>>>(
         dsa_, src_, dst_, size_, std::forward<decltype(r)>(r));
   }
 
 private:
-  Dsa &dsa_;
+  DsaType &dsa_;
   void *src_;
   void *dst_;
   size_t size_;
 };
 
-// Helper to create the sender
-inline DataMoveSender dsa_data_move(Dsa &dsa, void *src, void *dst,
-                                    size_t size) {
-  return DataMoveSender(dsa, src, dst, size);
+// Helper to create the sender (templated)
+template <class DsaType>
+inline DataMoveSender<DsaType> dsa_data_move(DsaType &dsa, void *src, void *dst,
+                                              size_t size) {
+  return DataMoveSender<DsaType>(dsa, src, dst, size);
 }
+
 // Helper for pipeable syntax: just(src, dst, size) | dsa_data_move(dsa)
 // This is a bit more complex to implement correctly as a closure.
 // For simplicity, let's stick to direct construction or a simple adaptor if
@@ -143,9 +146,10 @@ inline DataMoveSender dsa_data_move(Dsa &dsa, void *src, void *dst,
 // adaptor. Let's implement a simple sender adaptor that takes arguments from
 // the previous sender.
 
+template <class DsaType>
 struct DsaDataMoveAdaptor {
-  Dsa &dsa_;
-  explicit DsaDataMoveAdaptor(Dsa &dsa) : dsa_(dsa) {}
+  DsaType &dsa_;
+  explicit DsaDataMoveAdaptor(DsaType &dsa) : dsa_(dsa) {}
 
   template <class Sender>
   friend auto operator|(Sender &&sender, DsaDataMoveAdaptor adaptor) {

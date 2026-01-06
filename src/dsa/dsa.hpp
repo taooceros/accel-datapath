@@ -5,7 +5,6 @@
 #include <atomic>
 #include <cstddef>
 #include <memory>
-#include <mutex>
 #include <thread>
 
 extern "C" {
@@ -13,6 +12,7 @@ extern "C" {
 #include <linux/idxd.h>
 }
 
+#include "task_queue.hpp"
 #include <dsa_stdexec/operation_base.hpp>
 
 struct AccfgCtxDeleter {
@@ -35,10 +35,11 @@ private:
   std::unique_ptr<accfg_ctx, AccfgCtxDeleter> ctx_;
 };
 
-class Dsa {
+template <dsa::TaskQueue Queue = dsa::DefaultTaskQueue>
+class DsaBase {
 public:
-  explicit Dsa(bool start_poller = true);
-  ~Dsa();
+  explicit DsaBase(bool start_poller = true);
+  ~DsaBase();
 
   void data_move(void *src, void *dst, size_t size);
 
@@ -47,6 +48,9 @@ public:
   void submit(dsa_stdexec::OperationBase *op, dsa_hw_desc *desc);
   void submit(dsa_stdexec::OperationBase *op);
   void poll();
+
+  Queue &task_queue() noexcept { return task_queue_; }
+  const Queue &task_queue() const noexcept { return task_queue_; }
 
 private:
   AccfgCtx ctx_;
@@ -61,13 +65,24 @@ private:
 
   void *map_wq(accfg_wq *wq);
 
-  dsa_stdexec::OperationBase *head_ = nullptr;
-  std::mutex head_mutex_;
+  Queue task_queue_;
   std::thread poller_;
   std::atomic<bool> running_{false};
 
-  Dsa(const Dsa &) = delete;
-  Dsa &operator=(const Dsa &) = delete;
+  DsaBase(const DsaBase &) = delete;
+  DsaBase &operator=(const DsaBase &) = delete;
 };
+
+// Default Dsa type using mutex-based queue
+using Dsa = DsaBase<dsa::DefaultTaskQueue>;
+
+// Convenience aliases for different queue strategies
+using DsaSingleThread = DsaBase<dsa::SingleThreadTaskQueue>;
+using DsaTasSpinlock = DsaBase<dsa::TasSpinlockTaskQueue>;
+using DsaSpinlock = DsaBase<dsa::SpinlockTaskQueue>;  // TTAS
+using DsaBackoffSpinlock = DsaBase<dsa::BackoffSpinlockTaskQueue>;
+using DsaLockFree = DsaBase<dsa::LockFreeTaskQueue>;
+
+#include "dsa.ipp"
 
 #endif
