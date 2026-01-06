@@ -82,6 +82,7 @@ using DsaTasSpinlock = DsaBase<dsa::TasSpinlockTaskQueue>;
 using DsaSpinlock = DsaBase<dsa::SpinlockTaskQueue>;  // TTAS
 using DsaBackoffSpinlock = DsaBase<dsa::BackoffSpinlockTaskQueue>;
 using DsaLockFree = DsaBase<dsa::LockFreeTaskQueue>;
+using DsaRingBuffer = DsaBase<dsa::RingBufferTaskQueue1K>;
 
 #include "dsa.ipp"
 

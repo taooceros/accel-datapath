@@ -48,6 +48,7 @@
     linuxPackages.perf
     pkgs.glibc.out
     pkgs.glibc.debug
+    numactl
   ];
 
   # 1. Force C/C++ Compiler Flags

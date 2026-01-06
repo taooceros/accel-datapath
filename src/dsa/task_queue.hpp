@@ -2,6 +2,7 @@
 #ifndef DSA_TASK_QUEUE_HPP
 #define DSA_TASK_QUEUE_HPP
 
+#include <array>
 #include <atomic>
 #include <concepts>
 #include <cstddef>
@@ -243,6 +244,107 @@ using SpinlockTaskQueue = LockedTaskQueue<locks::TtasSpinlock>;
 
 // TTAS Spinlock with backoff
 using BackoffSpinlockTaskQueue = LockedTaskQueue<locks::TtasBackoffSpinlock>;
+
+// Ring buffer task queue (MPSC - multi-producer, single-consumer)
+// Fixed capacity, uses atomic indices for lock-free operation
+// Push can be called from multiple threads, poll from single thread
+template <std::size_t Capacity = 1024>
+class RingBufferTaskQueue {
+  static_assert((Capacity & (Capacity - 1)) == 0, "Capacity must be power of 2");
+
+public:
+  RingBufferTaskQueue() {
+    for (std::size_t i = 0; i < Capacity; ++i) {
+      sequence_[i].store(i, std::memory_order_relaxed);
+    }
+  }
+  ~RingBufferTaskQueue() = default;
+
+  RingBufferTaskQueue(const RingBufferTaskQueue &) = delete;
+  RingBufferTaskQueue &operator=(const RingBufferTaskQueue &) = delete;
+  RingBufferTaskQueue(RingBufferTaskQueue &&) = delete;
+  RingBufferTaskQueue &operator=(RingBufferTaskQueue &&) = delete;
+
+  void push(dsa_stdexec::OperationBase *op) {
+    // Reserve a slot using fetch_add
+    std::size_t slot = tail_.fetch_add(1, std::memory_order_relaxed);
+    std::size_t index = slot & (Capacity - 1);
+
+    // Spin until slot is available (previous consumer has read it)
+    // Each slot has a sequence number to track availability
+    std::size_t expected_seq = slot;
+    while (sequence_[index].load(std::memory_order_acquire) != expected_seq) {
+      __builtin_ia32_pause();
+    }
+
+    // Write the operation
+    buffer_[index] = op;
+
+    // Mark slot as filled by advancing sequence
+    sequence_[index].store(slot + 1, std::memory_order_release);
+  }
+
+  std::size_t poll() {
+    dsa_stdexec::OperationBase *completed_head = nullptr;
+    std::size_t count = 0;
+
+    // Process all available items
+    while (true) {
+      std::size_t head = head_.load(std::memory_order_relaxed);
+      std::size_t index = head & (Capacity - 1);
+
+      // Check if slot has data (sequence should be head + 1)
+      std::size_t seq = sequence_[index].load(std::memory_order_acquire);
+      if (seq != head + 1) {
+        break; // No more items available
+      }
+
+      // Read the operation
+      dsa_stdexec::OperationBase *op = buffer_[index];
+
+      // Advance head
+      head_.store(head + 1, std::memory_order_relaxed);
+
+      // Mark slot as consumed (ready for next round)
+      sequence_[index].store(head + Capacity, std::memory_order_release);
+
+      // Check completion
+      if (op->proxy->check_completion()) {
+        op->next = completed_head;
+        completed_head = op;
+      } else {
+        // Re-queue if not complete
+        push(op);
+      }
+    }
+
+    // Notify completed operations
+    while (completed_head != nullptr) {
+      dsa_stdexec::OperationBase *op = completed_head;
+      completed_head = op->next;
+      op->proxy->notify();
+      ++count;
+    }
+
+    return count;
+  }
+
+  bool empty() const {
+    std::size_t head = head_.load(std::memory_order_relaxed);
+    std::size_t index = head & (Capacity - 1);
+    std::size_t seq = sequence_[index].load(std::memory_order_acquire);
+    return seq != head + 1;
+  }
+
+private:
+  alignas(64) std::atomic<std::size_t> head_{0};
+  alignas(64) std::atomic<std::size_t> tail_{0};
+  std::array<dsa_stdexec::OperationBase *, Capacity> buffer_{};
+  std::array<std::atomic<std::size_t>, Capacity> sequence_{};
+};
+
+// Convenience alias with default capacity
+using RingBufferTaskQueue1K = RingBufferTaskQueue<1024>;
 
 // Lock-free task queue using atomic operations
 // Supports concurrent push from multiple threads

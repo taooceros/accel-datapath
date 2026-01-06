@@ -103,6 +103,7 @@ struct BenchmarkResult {
   DsaMetric ttas_spinlock;
   DsaMetric backoff_spinlock;
   DsaMetric lockfree;
+  DsaMetric ringbuffer;
 };
 
 // Format a metric as "x.xxGB/s(pgfaults)"
@@ -132,7 +133,7 @@ void benchmark_queues_with_dsa() {
       std::memset(src.data(), 1, total_size);
       std::memset(dst.data(), 0, total_size);
 
-      BenchmarkResult result{bs, ms, {}, {}, {}, {}, {}, {}};
+      BenchmarkResult result{bs, ms, {}, {}, {}, {}, {}, {}, {}};
 
       { DsaSingleThread dsa(false); result.single_thread = benchmark_dynamic_inline(dsa, bs, ms, src, dst, iterations); }
       { Dsa dsa(false); result.mutex = benchmark_dynamic_inline(dsa, bs, ms, src, dst, iterations); }
@@ -140,6 +141,7 @@ void benchmark_queues_with_dsa() {
       { DsaSpinlock dsa(false); result.ttas_spinlock = benchmark_dynamic_inline(dsa, bs, ms, src, dst, iterations); }
       { DsaBackoffSpinlock dsa(false); result.backoff_spinlock = benchmark_dynamic_inline(dsa, bs, ms, src, dst, iterations); }
       { DsaLockFree dsa(false); result.lockfree = benchmark_dynamic_inline(dsa, bs, ms, src, dst, iterations); }
+      { DsaRingBuffer dsa(false); result.ringbuffer = benchmark_dynamic_inline(dsa, bs, ms, src, dst, iterations); }
 
       inline_results.push_back(result);
       fmt::println("  Batch {:>2}, Size {:>7}: done", bs, ms);
@@ -159,13 +161,14 @@ void benchmark_queues_with_dsa() {
       std::memset(src.data(), 1, total_size);
       std::memset(dst.data(), 0, total_size);
 
-      BenchmarkResult result{bs, ms, {-1, 0}, {}, {}, {}, {}, {}};
+      BenchmarkResult result{bs, ms, {-1, 0}, {}, {}, {}, {}, {}, {}};
 
       { Dsa dsa(true); result.mutex = benchmark_dynamic_threaded(dsa, bs, ms, src, dst, iterations); }
       { DsaTasSpinlock dsa(true); result.tas_spinlock = benchmark_dynamic_threaded(dsa, bs, ms, src, dst, iterations); }
       { DsaSpinlock dsa(true); result.ttas_spinlock = benchmark_dynamic_threaded(dsa, bs, ms, src, dst, iterations); }
       { DsaBackoffSpinlock dsa(true); result.backoff_spinlock = benchmark_dynamic_threaded(dsa, bs, ms, src, dst, iterations); }
       { DsaLockFree dsa(true); result.lockfree = benchmark_dynamic_threaded(dsa, bs, ms, src, dst, iterations); }
+      { DsaRingBuffer dsa(true); result.ringbuffer = benchmark_dynamic_threaded(dsa, bs, ms, src, dst, iterations); }
 
       threaded_results.push_back(result);
       fmt::println("  Batch {:>2}, Size {:>7}: done", bs, ms);
@@ -180,36 +183,38 @@ void benchmark_queues_with_dsa() {
 
   // Inline polling
   fmt::println("========== INLINE POLLING ==========\n");
-  fmt::println("{:>5} {:>10} {:>16} {:>16} {:>16} {:>16} {:>16} {:>16}",
-               "Batch", "Size", "NoLock", "Mutex", "TAS", "TTAS", "Backoff", "LockFree");
-  fmt::println("{:-^5} {:-^10} {:-^16} {:-^16} {:-^16} {:-^16} {:-^16} {:-^16}",
-               "", "", "", "", "", "", "", "");
+  fmt::println("{:>5} {:>10} {:>16} {:>16} {:>16} {:>16} {:>16} {:>16} {:>16}",
+               "Batch", "Size", "NoLock", "Mutex", "TAS", "TTAS", "Backoff", "LockFree", "RingBuf");
+  fmt::println("{:-^5} {:-^10} {:-^16} {:-^16} {:-^16} {:-^16} {:-^16} {:-^16} {:-^16}",
+               "", "", "", "", "", "", "", "", "");
   for (const auto &r : inline_results) {
-    fmt::println("{:>5} {:>10} {:>16} {:>16} {:>16} {:>16} {:>16} {:>16}",
+    fmt::println("{:>5} {:>10} {:>16} {:>16} {:>16} {:>16} {:>16} {:>16} {:>16}",
                  r.batch_size, r.msg_size,
                  format_metric(r.single_thread),
                  format_metric(r.mutex),
                  format_metric(r.tas_spinlock),
                  format_metric(r.ttas_spinlock),
                  format_metric(r.backoff_spinlock),
-                 format_metric(r.lockfree));
+                 format_metric(r.lockfree),
+                 format_metric(r.ringbuffer));
   }
   fmt::println("");
 
   // Threaded polling
   fmt::println("========== BACKGROUND THREAD POLLING ==========\n");
-  fmt::println("{:>5} {:>10} {:>16} {:>16} {:>16} {:>16} {:>16}",
-               "Batch", "Size", "Mutex", "TAS", "TTAS", "Backoff", "LockFree");
-  fmt::println("{:-^5} {:-^10} {:-^16} {:-^16} {:-^16} {:-^16} {:-^16}",
-               "", "", "", "", "", "", "");
+  fmt::println("{:>5} {:>10} {:>16} {:>16} {:>16} {:>16} {:>16} {:>16}",
+               "Batch", "Size", "Mutex", "TAS", "TTAS", "Backoff", "LockFree", "RingBuf");
+  fmt::println("{:-^5} {:-^10} {:-^16} {:-^16} {:-^16} {:-^16} {:-^16} {:-^16}",
+               "", "", "", "", "", "", "", "");
   for (const auto &r : threaded_results) {
-    fmt::println("{:>5} {:>10} {:>16} {:>16} {:>16} {:>16} {:>16}",
+    fmt::println("{:>5} {:>10} {:>16} {:>16} {:>16} {:>16} {:>16} {:>16}",
                  r.batch_size, r.msg_size,
                  format_metric(r.mutex),
                  format_metric(r.tas_spinlock),
                  format_metric(r.ttas_spinlock),
                  format_metric(r.backoff_spinlock),
-                 format_metric(r.lockfree));
+                 format_metric(r.lockfree),
+                 format_metric(r.ringbuffer));
   }
 }
 
