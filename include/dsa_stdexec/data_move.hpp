@@ -4,6 +4,7 @@
 #ifndef DSA_STDEXEC_DATA_MOVE_HPP
 #define DSA_STDEXEC_DATA_MOVE_HPP
 
+#include <atomic>
 #include <cstdint>
 #include <dsa/dsa.hpp>
 #include <dsa_stdexec/error.hpp>
@@ -13,6 +14,17 @@
 #include <utility>
 
 namespace dsa_stdexec {
+
+// Global counter for page fault retries
+inline std::atomic<uint64_t> g_page_fault_retries{0};
+
+inline uint64_t get_page_fault_retries() {
+  return g_page_fault_retries.load(std::memory_order_relaxed);
+}
+
+inline void reset_page_fault_retries() {
+  g_page_fault_retries.store(0, std::memory_order_relaxed);
+}
 
 template <class DsaType, class ReceiverId> class DataMoveOperation {
   using Receiver = stdexec::__t<ReceiverId>;
@@ -71,6 +83,9 @@ private:
     if (status == DSA_COMP_SUCCESS) {
       stdexec::set_value(std::move(r_));
     } else if (status == DSA_COMP_PAGE_FAULT_NOBOF) {
+      // Increment page fault retry counter
+      g_page_fault_retries.fetch_add(1, std::memory_order_relaxed);
+
       int wr = comp_.status & DSA_COMP_STATUS_WRITE;
       volatile char *t;
       t = (char *)comp_.fault_addr;
