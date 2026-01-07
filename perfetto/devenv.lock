@@ -3,10 +3,10 @@
     "devenv": {
       "locked": {
         "dir": "src/modules",
-        "lastModified": 1767561815,
+        "lastModified": 1767733209,
         "owner": "cachix",
         "repo": "devenv",
-        "rev": "06b370166a3eca029f664710fcc49bf44365778a",
+        "rev": "32a795ac142f4578aa5f6ecc8eafb79d253d99ae",
         "type": "github"
       },
       "original": {
@@ -72,21 +72,6 @@
         "type": "github"
       }
     },
-    "idxd-config": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1753977205,
-        "owner": "intel",
-        "repo": "idxd-config",
-        "rev": "b78f65f5d342643815124d36a52023fda4a945e3",
-        "type": "github"
-      },
-      "original": {
-        "owner": "intel",
-        "repo": "idxd-config",
-        "type": "github"
-      }
-    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1767052823,
@@ -118,48 +103,15 @@
         "type": "github"
       }
     },
-    "proxy": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1765024133,
-        "owner": "microsoft",
-        "repo": "proxy",
-        "rev": "1d4ea35f45922ead34f90e26a44fd0d55521b803",
-        "type": "github"
-      },
-      "original": {
-        "owner": "microsoft",
-        "repo": "proxy",
-        "type": "github"
-      }
-    },
     "root": {
       "inputs": {
         "devenv": "devenv",
         "git-hooks": "git-hooks",
-        "idxd-config": "idxd-config",
         "nixpkgs": "nixpkgs",
         "perfetto": "perfetto",
         "pre-commit-hooks": [
           "git-hooks"
-        ],
-        "proxy": "proxy",
-        "stdexec": "stdexec"
-      }
-    },
-    "stdexec": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1767489852,
-        "owner": "nvidia",
-        "repo": "stdexec",
-        "rev": "250f35737790392d666fd157e0af9be16d0c789f",
-        "type": "github"
-      },
-      "original": {
-        "owner": "nvidia",
-        "repo": "stdexec",
-        "type": "github"
+        ]
       }
     }
   },

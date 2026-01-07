@@ -15,3 +15,4 @@ imports:
     - ./idxd-config
     - ./stdexec
     - ./proxy
+    - ./perfetto

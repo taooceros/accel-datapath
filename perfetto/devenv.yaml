@@ -1,0 +1,4 @@
+inputs:
+    perfetto:
+        url: github:google/perfetto/v53.0
+        flake: false
