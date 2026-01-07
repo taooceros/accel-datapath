@@ -6,10 +6,12 @@
 #include <dsa_stdexec/data_move.hpp>
 #include <dsa_stdexec/run_loop.hpp>
 #include <dsa_stdexec/sync_wait.hpp>
+#include <dsa_stdexec/trace.hpp>
 #include <exec/async_scope.hpp>
 #include <fmt/base.h>
 #include <fmt/core.h>
 #include <fmt/ranges.h>
+#include <functional>
 #include <stdexec/execution.hpp>
 #include <thread>
 #include <utility>
@@ -54,16 +56,32 @@ struct DsaMetric {
 template <typename DsaType>
 DsaMetric benchmark_dynamic_inline(DsaType &dsa, size_t batch_size,
                                    size_t msg_size, std::vector<char> &src,
-                                   std::vector<char> &dst, int iterations) {
+                                   std::vector<char> &dst, int iterations,
+                                   std::string_view setup_name) {
   size_t total_size = batch_size * msg_size;
+  size_t track_uuid = std::hash<std::string_view>{}(setup_name);
+  auto track = perfetto::Track(track_uuid);
+  {
+    auto desc = track.Serialize();
+    desc.set_name(std::string(setup_name));
+    perfetto::TrackEvent::SetTrackDescriptor(track, desc);
+  }
 
-  run_dynamic_batch_inline(dsa, batch_size, msg_size, src, dst); // Warmup
+  {
+    TRACE_EVENT("dsa", "Warmup", track);
+    run_dynamic_batch_inline(dsa, batch_size, msg_size, src, dst); // Warmup
+  }
 
   dsa_stdexec::reset_page_fault_retries();
 
   auto start = std::chrono::high_resolution_clock::now();
-  for (int i = 0; i < iterations; ++i) {
-    run_dynamic_batch_inline(dsa, batch_size, msg_size, src, dst);
+  {
+    TRACE_EVENT("dsa", "BenchmarkRun", track, "batch_size", batch_size,
+                "msg_size", msg_size);
+    for (int i = 0; i < iterations; ++i) {
+      TRACE_EVENT("dsa", "Iteration", track);
+      run_dynamic_batch_inline(dsa, batch_size, msg_size, src, dst);
+    }
   }
   auto end = std::chrono::high_resolution_clock::now();
 
@@ -79,16 +97,32 @@ DsaMetric benchmark_dynamic_inline(DsaType &dsa, size_t batch_size,
 template <typename DsaType>
 DsaMetric benchmark_dynamic_threaded(DsaType &dsa, size_t batch_size,
                                      size_t msg_size, std::vector<char> &src,
-                                     std::vector<char> &dst, int iterations) {
+                                     std::vector<char> &dst, int iterations,
+                                     std::string_view setup_name) {
   size_t total_size = batch_size * msg_size;
+  size_t track_uuid = std::hash<std::string_view>{}(setup_name);
+  auto track = perfetto::Track(track_uuid);
+  {
+    auto desc = track.Serialize();
+    desc.set_name(std::string(setup_name));
+    perfetto::TrackEvent::SetTrackDescriptor(track, desc);
+  }
 
-  run_dynamic_batch_threaded(dsa, batch_size, msg_size, src, dst); // Warmup
+  {
+    TRACE_EVENT("dsa", "Warmup", track);
+    run_dynamic_batch_threaded(dsa, batch_size, msg_size, src, dst); // Warmup
+  }
 
   dsa_stdexec::reset_page_fault_retries();
 
   auto start = std::chrono::high_resolution_clock::now();
-  for (int i = 0; i < iterations; ++i) {
-    run_dynamic_batch_threaded(dsa, batch_size, msg_size, src, dst);
+  {
+    TRACE_EVENT("dsa", "BenchmarkRun", track, "batch_size", batch_size,
+                "msg_size", msg_size);
+    for (int i = 0; i < iterations; ++i) {
+      TRACE_EVENT("dsa", "Iteration", track);
+      run_dynamic_batch_threaded(dsa, batch_size, msg_size, src, dst);
+    }
   }
   auto end = std::chrono::high_resolution_clock::now();
 
@@ -148,38 +182,38 @@ void benchmark_queues_with_dsa() {
 
       {
         DsaSingleThread dsa(false);
-        result.single_thread =
-            benchmark_dynamic_inline(dsa, bs, ms, src, dst, iterations);
+        result.single_thread = benchmark_dynamic_inline(
+            dsa, bs, ms, src, dst, iterations, "Inline-SingleThread");
       }
       {
         Dsa dsa(false);
-        result.mutex =
-            benchmark_dynamic_inline(dsa, bs, ms, src, dst, iterations);
+        result.mutex = benchmark_dynamic_inline(dsa, bs, ms, src, dst,
+                                                iterations, "Inline-Mutex");
       }
       {
         DsaTasSpinlock dsa(false);
-        result.tas_spinlock =
-            benchmark_dynamic_inline(dsa, bs, ms, src, dst, iterations);
+        result.tas_spinlock = benchmark_dynamic_inline(
+            dsa, bs, ms, src, dst, iterations, "Inline-TasSpinlock");
       }
       {
         DsaSpinlock dsa(false);
-        result.ttas_spinlock =
-            benchmark_dynamic_inline(dsa, bs, ms, src, dst, iterations);
+        result.ttas_spinlock = benchmark_dynamic_inline(
+            dsa, bs, ms, src, dst, iterations, "Inline-TtasSpinlock");
       }
       {
         DsaBackoffSpinlock dsa(false);
-        result.backoff_spinlock =
-            benchmark_dynamic_inline(dsa, bs, ms, src, dst, iterations);
+        result.backoff_spinlock = benchmark_dynamic_inline(
+            dsa, bs, ms, src, dst, iterations, "Inline-BackoffSpinlock");
       }
       {
         DsaLockFree dsa(false);
-        result.lockfree =
-            benchmark_dynamic_inline(dsa, bs, ms, src, dst, iterations);
+        result.lockfree = benchmark_dynamic_inline(
+            dsa, bs, ms, src, dst, iterations, "Inline-LockFree");
       }
       {
         DsaRingBuffer dsa(false);
-        result.ringbuffer =
-            benchmark_dynamic_inline(dsa, bs, ms, src, dst, iterations);
+        result.ringbuffer = benchmark_dynamic_inline(
+            dsa, bs, ms, src, dst, iterations, "Inline-RingBuffer");
       }
 
       inline_results.push_back(result);
@@ -205,33 +239,33 @@ void benchmark_queues_with_dsa() {
 
       {
         Dsa dsa(true);
-        result.mutex =
-            benchmark_dynamic_threaded(dsa, bs, ms, src, dst, iterations);
+        result.mutex = benchmark_dynamic_threaded(dsa, bs, ms, src, dst,
+                                                  iterations, "Threaded-Mutex");
       }
       {
         DsaTasSpinlock dsa(true);
-        result.tas_spinlock =
-            benchmark_dynamic_threaded(dsa, bs, ms, src, dst, iterations);
+        result.tas_spinlock = benchmark_dynamic_threaded(
+            dsa, bs, ms, src, dst, iterations, "Threaded-TasSpinlock");
       }
       {
         DsaSpinlock dsa(true);
-        result.ttas_spinlock =
-            benchmark_dynamic_threaded(dsa, bs, ms, src, dst, iterations);
+        result.ttas_spinlock = benchmark_dynamic_threaded(
+            dsa, bs, ms, src, dst, iterations, "Threaded-TtasSpinlock");
       }
       {
         DsaBackoffSpinlock dsa(true);
-        result.backoff_spinlock =
-            benchmark_dynamic_threaded(dsa, bs, ms, src, dst, iterations);
+        result.backoff_spinlock = benchmark_dynamic_threaded(
+            dsa, bs, ms, src, dst, iterations, "Threaded-BackoffSpinlock");
       }
       {
         DsaLockFree dsa(true);
-        result.lockfree =
-            benchmark_dynamic_threaded(dsa, bs, ms, src, dst, iterations);
+        result.lockfree = benchmark_dynamic_threaded(
+            dsa, bs, ms, src, dst, iterations, "Threaded-LockFree");
       }
       {
         DsaRingBuffer dsa(true);
-        result.ringbuffer =
-            benchmark_dynamic_threaded(dsa, bs, ms, src, dst, iterations);
+        result.ringbuffer = benchmark_dynamic_threaded(
+            dsa, bs, ms, src, dst, iterations, "Threaded-RingBuffer");
       }
 
       threaded_results.push_back(result);
@@ -282,16 +316,24 @@ void benchmark_queues_with_dsa() {
 }
 
 int main(int argc, char **argv) {
+  ::init_tracing();
   std::system("stty opost onlcr");
   try {
     benchmark_queues_with_dsa();
 
     fmt::println("");
     fmt::println("Benchmark completed.");
+    perfetto::Tracing::ActivateTriggers({"app_finished"}, 0);
+
   } catch (const std::exception &e) {
     fmt::println(stderr, "Error: {}", e.what());
+    perfetto::Tracing::ActivateTriggers({"app_finished"}, 0);
+
     return 1;
   }
 
+  fmt::println("Tracing completed.");
+
+  std::this_thread::sleep_for(std::chrono::seconds(1));
   return 0;
 }

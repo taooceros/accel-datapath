@@ -1,0 +1,64 @@
+buffers: {
+    # 1. Size: Make this big enough to hold your whole algorithm run!
+    # If this is too small, the "Start" of your algo will be overwritten.
+    # 256MB is usually plenty for <10s of heavy tracing.
+    size_kb: 262144 
+    fill_policy: RING_BUFFER
+}
+
+
+
+duration_ms: 0
+
+trigger_config {
+  # 1. Ensure this is explicitly set to STOP_TRACING
+  #    (If missing, it might default to START_TRACING, causing your error)
+  trigger_mode: STOP_TRACING
+
+  # 2. REQUIRED: The safety timeout.
+  #    If your app crashes or never sends the signal, Perfetto will 
+  #    stop automatically after this time (e.g., 60 seconds) to avoid hanging.
+  trigger_timeout_ms: 60000 
+
+  triggers {
+    name: "app_finished"
+    stop_delay_ms: 500
+  }
+}
+
+data_sources: {
+    config {
+        name: "linux.perf"
+        perf_event_config {
+            # How often to sample (Hz). 100Hz = every 10ms. 
+            # Go up to 1000Hz for very short algorithms, but it adds overhead.
+            timebase {
+                frequency: 500
+            }
+            
+            callstack_sampling {
+                # CRITICAL: Only sample your specific app to reduce noise
+                scope {
+                    target_cmdline: "dsa_benchmark" 
+                }
+                
+                # Set to true if you want to see kernel time (syscalls)
+                kernel_frames: true 
+            }
+        }
+    }
+}
+# 4. DATA SOURCE B: Track Events (The "When")
+# Note: This must be in its own 'data_sources' block!
+data_sources: {
+    config {
+        # The source name is ALWAYS "track_event" for standard tracing
+        name: "track_event" 
+        track_event_config {
+            # Filter for your specific categories here
+            enabled_categories: "dsa"
+            enabled_categories: "benchmark"
+            enabled_categories: "app_finished"
+        }
+    }
+}

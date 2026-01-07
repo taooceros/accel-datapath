@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <dsa_stdexec/error.hpp>
+#include <dsa_stdexec/trace.hpp>
 #include <fcntl.h>
 #include <fmt/format.h>
 #include <sys/mman.h>
@@ -133,6 +134,7 @@ DsaBase<Queue>::~DsaBase() {
 
 template <dsa::TaskQueue Queue>
 void DsaBase<Queue>::data_move(void *src, void *dst, size_t size) {
+  TRACE_EVENT("dsa", "data_move", "size", size);
   if (size == 0) {
     return;
   }
@@ -238,6 +240,7 @@ void *DsaBase<Queue>::map_wq(accfg_wq *wq) {
 
 template <dsa::TaskQueue Queue>
 void DsaBase<Queue>::submit(dsa_stdexec::OperationBase *op, dsa_hw_desc *desc) {
+  TRACE_EVENT("dsa", "submit_hw", "op", (uintptr_t)op);
   if (wq_portal_ == nullptr) {
     throw dsa_stdexec::DsaSubmitError("DSA work queue portal is not mapped");
   }
@@ -263,6 +266,7 @@ void DsaBase<Queue>::submit(dsa_stdexec::OperationBase *op, dsa_hw_desc *desc) {
 
 template <dsa::TaskQueue Queue>
 void DsaBase<Queue>::submit(dsa_stdexec::OperationBase *op) {
+  TRACE_EVENT("dsa", "submit", "op", (uintptr_t)op);
   task_queue_.push(op);
 }
 

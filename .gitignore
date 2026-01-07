@@ -48,3 +48,4 @@ perf.data
 perf.data.*
 profile*
 gmon.out
+*.perfetto-trace
