@@ -19,25 +19,24 @@
 
 // Dynamic batch with inline polling
 template <typename DsaType>
-void run_dynamic_batch_inline(DsaType &dsa, size_t batch_size, size_t msg_size,
+void run_dynamic_batch_inline(DsaType &dsa, exec::async_scope &scope,
+                              size_t batch_size, size_t msg_size,
                               std::vector<char> &src, std::vector<char> &dst) {
   dsa_stdexec::PollingRunLoop loop([&dsa] { dsa.poll(); });
-  exec::async_scope scope;
   for (size_t i = 0; i < batch_size; ++i) {
     auto snd = dsa_stdexec::dsa_data_move(dsa, src.data() + i * msg_size,
                                           dst.data() + i * msg_size, msg_size);
     scope.spawn(snd);
   }
   dsa_stdexec::wait_start(scope.on_empty(), loop);
-  loop.reset();
 }
 
 // Dynamic batch with background thread polling
 template <typename DsaType>
-void run_dynamic_batch_threaded(DsaType &dsa, size_t batch_size,
-                                size_t msg_size, std::vector<char> &src,
+void run_dynamic_batch_threaded(DsaType &dsa, exec::async_scope &scope,
+                                size_t batch_size, size_t msg_size,
+                                std::vector<char> &src,
                                 std::vector<char> &dst) {
-  exec::async_scope scope;
   for (size_t i = 0; i < batch_size; ++i) {
     auto snd = dsa_stdexec::dsa_data_move(dsa, src.data() + i * msg_size,
                                           dst.data() + i * msg_size, msg_size);
@@ -54,8 +53,9 @@ struct DsaMetric {
 // Benchmark DSA dynamic batch with inline polling, returns bandwidth and page
 // faults
 template <typename DsaType>
-DsaMetric benchmark_dynamic_inline(DsaType &dsa, size_t batch_size,
-                                   size_t msg_size, std::vector<char> &src,
+DsaMetric benchmark_dynamic_inline(DsaType &dsa, exec::async_scope &scope,
+                                   size_t batch_size, size_t msg_size,
+                                   std::vector<char> &src,
                                    std::vector<char> &dst, int iterations,
                                    std::string_view setup_name) {
   size_t total_size = batch_size * msg_size;
@@ -69,7 +69,7 @@ DsaMetric benchmark_dynamic_inline(DsaType &dsa, size_t batch_size,
 
   {
     TRACE_EVENT("dsa", "Warmup", track);
-    run_dynamic_batch_inline(dsa, batch_size, msg_size, src, dst); // Warmup
+    run_dynamic_batch_inline(dsa, scope, batch_size, msg_size, src, dst); // Warmup
   }
 
   dsa_stdexec::reset_page_fault_retries();
@@ -80,7 +80,7 @@ DsaMetric benchmark_dynamic_inline(DsaType &dsa, size_t batch_size,
                 "msg_size", msg_size);
     for (int i = 0; i < iterations; ++i) {
       TRACE_EVENT("dsa", "Iteration", track);
-      run_dynamic_batch_inline(dsa, batch_size, msg_size, src, dst);
+      run_dynamic_batch_inline(dsa, scope, batch_size, msg_size, src, dst);
     }
   }
   auto end = std::chrono::high_resolution_clock::now();
@@ -95,8 +95,9 @@ DsaMetric benchmark_dynamic_inline(DsaType &dsa, size_t batch_size,
 // Benchmark DSA dynamic batch with background thread polling, returns bandwidth
 // and page faults
 template <typename DsaType>
-DsaMetric benchmark_dynamic_threaded(DsaType &dsa, size_t batch_size,
-                                     size_t msg_size, std::vector<char> &src,
+DsaMetric benchmark_dynamic_threaded(DsaType &dsa, exec::async_scope &scope,
+                                     size_t batch_size, size_t msg_size,
+                                     std::vector<char> &src,
                                      std::vector<char> &dst, int iterations,
                                      std::string_view setup_name) {
   size_t total_size = batch_size * msg_size;
@@ -110,7 +111,7 @@ DsaMetric benchmark_dynamic_threaded(DsaType &dsa, size_t batch_size,
 
   {
     TRACE_EVENT("dsa", "Warmup", track);
-    run_dynamic_batch_threaded(dsa, batch_size, msg_size, src, dst); // Warmup
+    run_dynamic_batch_threaded(dsa, scope, batch_size, msg_size, src, dst); // Warmup
   }
 
   dsa_stdexec::reset_page_fault_retries();
@@ -121,7 +122,7 @@ DsaMetric benchmark_dynamic_threaded(DsaType &dsa, size_t batch_size,
                 "msg_size", msg_size);
     for (int i = 0; i < iterations; ++i) {
       TRACE_EVENT("dsa", "Iteration", track);
-      run_dynamic_batch_threaded(dsa, batch_size, msg_size, src, dst);
+      run_dynamic_batch_threaded(dsa, scope, batch_size, msg_size, src, dst);
     }
   }
   auto end = std::chrono::high_resolution_clock::now();
@@ -181,39 +182,46 @@ void benchmark_queues_with_dsa() {
       BenchmarkResult result{bs, ms, {}, {}, {}, {}, {}, {}, {}};
 
       {
+        exec::async_scope scope;
         DsaSingleThread dsa(false);
         result.single_thread = benchmark_dynamic_inline(
-            dsa, bs, ms, src, dst, iterations, "Inline-SingleThread");
+            dsa, scope, bs, ms, src, dst, iterations, "Inline-SingleThread");
       }
       {
+        exec::async_scope scope;
         Dsa dsa(false);
-        result.mutex = benchmark_dynamic_inline(dsa, bs, ms, src, dst,
-                                                iterations, "Inline-Mutex");
+        result.mutex = benchmark_dynamic_inline(
+            dsa, scope, bs, ms, src, dst, iterations, "Inline-Mutex");
       }
       {
+        exec::async_scope scope;
         DsaTasSpinlock dsa(false);
         result.tas_spinlock = benchmark_dynamic_inline(
-            dsa, bs, ms, src, dst, iterations, "Inline-TasSpinlock");
+            dsa, scope, bs, ms, src, dst, iterations, "Inline-TasSpinlock");
       }
       {
+        exec::async_scope scope;
         DsaSpinlock dsa(false);
         result.ttas_spinlock = benchmark_dynamic_inline(
-            dsa, bs, ms, src, dst, iterations, "Inline-TtasSpinlock");
+            dsa, scope, bs, ms, src, dst, iterations, "Inline-TtasSpinlock");
       }
       {
+        exec::async_scope scope;
         DsaBackoffSpinlock dsa(false);
         result.backoff_spinlock = benchmark_dynamic_inline(
-            dsa, bs, ms, src, dst, iterations, "Inline-BackoffSpinlock");
+            dsa, scope, bs, ms, src, dst, iterations, "Inline-BackoffSpinlock");
       }
       {
+        exec::async_scope scope;
         DsaLockFree dsa(false);
         result.lockfree = benchmark_dynamic_inline(
-            dsa, bs, ms, src, dst, iterations, "Inline-LockFree");
+            dsa, scope, bs, ms, src, dst, iterations, "Inline-LockFree");
       }
       {
+        exec::async_scope scope;
         DsaRingBuffer dsa(false);
         result.ringbuffer = benchmark_dynamic_inline(
-            dsa, bs, ms, src, dst, iterations, "Inline-RingBuffer");
+            dsa, scope, bs, ms, src, dst, iterations, "Inline-RingBuffer");
       }
 
       inline_results.push_back(result);
@@ -238,34 +246,40 @@ void benchmark_queues_with_dsa() {
       BenchmarkResult result{bs, ms, {-1, 0}, {}, {}, {}, {}, {}, {}};
 
       {
+        exec::async_scope scope;
         Dsa dsa(true);
-        result.mutex = benchmark_dynamic_threaded(dsa, bs, ms, src, dst,
-                                                  iterations, "Threaded-Mutex");
+        result.mutex = benchmark_dynamic_threaded(
+            dsa, scope, bs, ms, src, dst, iterations, "Threaded-Mutex");
       }
       {
+        exec::async_scope scope;
         DsaTasSpinlock dsa(true);
         result.tas_spinlock = benchmark_dynamic_threaded(
-            dsa, bs, ms, src, dst, iterations, "Threaded-TasSpinlock");
+            dsa, scope, bs, ms, src, dst, iterations, "Threaded-TasSpinlock");
       }
       {
+        exec::async_scope scope;
         DsaSpinlock dsa(true);
         result.ttas_spinlock = benchmark_dynamic_threaded(
-            dsa, bs, ms, src, dst, iterations, "Threaded-TtasSpinlock");
+            dsa, scope, bs, ms, src, dst, iterations, "Threaded-TtasSpinlock");
       }
       {
+        exec::async_scope scope;
         DsaBackoffSpinlock dsa(true);
         result.backoff_spinlock = benchmark_dynamic_threaded(
-            dsa, bs, ms, src, dst, iterations, "Threaded-BackoffSpinlock");
+            dsa, scope, bs, ms, src, dst, iterations, "Threaded-BackoffSpinlock");
       }
       {
+        exec::async_scope scope;
         DsaLockFree dsa(true);
         result.lockfree = benchmark_dynamic_threaded(
-            dsa, bs, ms, src, dst, iterations, "Threaded-LockFree");
+            dsa, scope, bs, ms, src, dst, iterations, "Threaded-LockFree");
       }
       {
+        exec::async_scope scope;
         DsaRingBuffer dsa(true);
         result.ringbuffer = benchmark_dynamic_threaded(
-            dsa, bs, ms, src, dst, iterations, "Threaded-RingBuffer");
+            dsa, scope, bs, ms, src, dst, iterations, "Threaded-RingBuffer");
       }
 
       threaded_results.push_back(result);

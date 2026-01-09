@@ -10,6 +10,17 @@ add_includedirs("include", "src")
 add_links("stdc++exp")
 add_cxxflags("-fno-omit-frame-pointer")
 
+-- AddressSanitizer support: use `xmake f --policies=build.sanitizer.address`
+option("asan")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Enable AddressSanitizer")
+option_end()
+
+if has_config("asan") then
+    set_policy("build.sanitizer.address", true)
+end
+
 target("dsa-stdexec")
     set_kind("binary")
     add_files("src/**.cpp")
