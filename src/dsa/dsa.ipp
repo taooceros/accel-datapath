@@ -108,7 +108,6 @@ DsaBase<Queue>::DsaBase(bool start_poller)
       poller_ = std::thread([this] {
         while (running_) {
           poll();
-          std::this_thread::yield();
         }
       });
     }
