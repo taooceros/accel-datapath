@@ -9,3 +9,9 @@ void init_tracing() {
   perfetto::Tracing::Initialize(args);
   perfetto::TrackEvent::Register();
 }
+
+void stop_tracing(const char* /*output_path*/) {
+  // With system backend, trace is collected by traced daemon
+  // Use perfetto CLI to stop and save the trace
+  perfetto::TrackEvent::Flush();
+}

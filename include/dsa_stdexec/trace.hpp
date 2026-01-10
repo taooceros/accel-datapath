@@ -9,4 +9,5 @@ PERFETTO_DEFINE_CATEGORIES(
 );
 
 void init_tracing();
+void stop_tracing(const char* output_path);
 #endif

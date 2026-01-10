@@ -2,7 +2,7 @@ buffers: {
     # 1. Size: Make this big enough to hold your whole algorithm run!
     # If this is too small, the "Start" of your algo will be overwritten.
     # 256MB is usually plenty for <10s of heavy tracing.
-    size_kb: 262144
+    size_kb: 1000000
     fill_policy: RING_BUFFER
 }
 
@@ -30,10 +30,14 @@ data_sources: {
     config {
         name: "linux.perf"
         perf_event_config {
+            # Sample all CPUs
+            all_cpus: true
+
             # How often to sample (Hz). 100Hz = every 10ms.
-            # Go up to 1000Hz for very short algorithms, but it adds overhead.
             timebase {
-                frequency: 100
+                counter: HW_CPU_CYCLES
+                frequency: 6000
+                timestamp_clock: PERF_CLOCK_MONOTONIC
             }
 
             callstack_sampling {

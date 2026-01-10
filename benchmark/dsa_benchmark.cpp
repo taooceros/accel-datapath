@@ -18,28 +18,34 @@
 #include <vector>
 
 // Dynamic batch with inline polling
+// base_offset is the starting offset for this iteration's batch
 template <typename DsaType>
 void run_dynamic_batch_inline(DsaType &dsa, exec::async_scope &scope,
                               size_t batch_size, size_t msg_size,
-                              std::vector<char> &src, std::vector<char> &dst) {
+                              std::vector<char> &src, std::vector<char> &dst,
+                              size_t base_offset) {
   dsa_stdexec::PollingRunLoop loop([&dsa] { dsa.poll(); });
   for (size_t i = 0; i < batch_size; ++i) {
-    auto snd = dsa_stdexec::dsa_data_move(dsa, src.data() + i * msg_size,
-                                          dst.data() + i * msg_size, msg_size);
+    size_t offset = base_offset + i * msg_size;
+    auto snd = dsa_stdexec::dsa_data_move(dsa, src.data() + offset,
+                                          dst.data() + offset, msg_size);
     scope.spawn(snd);
   }
   dsa_stdexec::wait_start(scope.on_empty(), loop);
 }
 
 // Dynamic batch with background thread polling
+// base_offset is the starting offset for this iteration's batch
 template <typename DsaType>
 void run_dynamic_batch_threaded(DsaType &dsa, exec::async_scope &scope,
                                 size_t batch_size, size_t msg_size,
                                 std::vector<char> &src,
-                                std::vector<char> &dst) {
+                                std::vector<char> &dst,
+                                size_t base_offset) {
   for (size_t i = 0; i < batch_size; ++i) {
-    auto snd = dsa_stdexec::dsa_data_move(dsa, src.data() + i * msg_size,
-                                          dst.data() + i * msg_size, msg_size);
+    size_t offset = base_offset + i * msg_size;
+    auto snd = dsa_stdexec::dsa_data_move(dsa, src.data() + offset,
+                                          dst.data() + offset, msg_size);
     scope.spawn(snd);
   }
   stdexec::sync_wait(scope.on_empty());
@@ -50,6 +56,35 @@ struct DsaMetric {
   uint64_t page_faults;
 };
 
+// Track UUIDs for each queue type (fixed so they appear as separate rows)
+enum class QueueTrackId : uint64_t {
+  SingleThread = 1000,
+  Mutex = 1001,
+  TasSpinlock = 1002,
+  TtasSpinlock = 1003,
+  BackoffSpinlock = 1004,
+  LockFree = 1005,
+  RingBuffer = 1006,
+};
+
+// Initialize tracks upfront so they appear vertically aligned in Perfetto
+inline void init_benchmark_tracks() {
+  auto register_track = [](QueueTrackId id, const char* name) {
+    auto track = perfetto::Track(static_cast<uint64_t>(id));
+    auto desc = track.Serialize();
+    desc.set_name(name);
+    perfetto::TrackEvent::SetTrackDescriptor(track, desc);
+  };
+
+  register_track(QueueTrackId::SingleThread, "SingleThread (NoLock)");
+  register_track(QueueTrackId::Mutex, "Mutex");
+  register_track(QueueTrackId::TasSpinlock, "TAS Spinlock");
+  register_track(QueueTrackId::TtasSpinlock, "TTAS Spinlock");
+  register_track(QueueTrackId::BackoffSpinlock, "Backoff Spinlock");
+  register_track(QueueTrackId::LockFree, "Lock-Free");
+  register_track(QueueTrackId::RingBuffer, "Ring Buffer");
+}
+
 // Benchmark DSA dynamic batch with inline polling, returns bandwidth and page
 // faults
 template <typename DsaType>
@@ -57,37 +92,35 @@ DsaMetric benchmark_dynamic_inline(DsaType &dsa, exec::async_scope &scope,
                                    size_t batch_size, size_t msg_size,
                                    std::vector<char> &src,
                                    std::vector<char> &dst, int iterations,
-                                   std::string_view setup_name) {
-  size_t total_size = batch_size * msg_size;
-  size_t track_uuid = std::hash<std::string_view>{}(setup_name);
-  auto track = perfetto::Track(track_uuid);
-  {
-    auto desc = track.Serialize();
-    desc.set_name(std::string(setup_name));
-    perfetto::TrackEvent::SetTrackDescriptor(track, desc);
-  }
+                                   QueueTrackId track_id) {
+  size_t batch_bytes = batch_size * msg_size;
+  auto track = perfetto::Track(static_cast<uint64_t>(track_id));
 
-  {
-    TRACE_EVENT("dsa", "Warmup", track);
-    run_dynamic_batch_inline(dsa, scope, batch_size, msg_size, src, dst); // Warmup
-  }
+  // Create slice name with batch/msg info
+  std::string slice_name = fmt::format("b{}×{}B", batch_size, msg_size);
+
+  TRACE_EVENT_BEGIN("dsa", "Warmup", track);
+  run_dynamic_batch_inline(dsa, scope, batch_size, msg_size, src, dst, 0);
+  TRACE_EVENT_END("dsa", track);
 
   dsa_stdexec::reset_page_fault_retries();
 
   auto start = std::chrono::high_resolution_clock::now();
-  {
-    TRACE_EVENT("dsa", "BenchmarkRun", track, "batch_size", batch_size,
-                "msg_size", msg_size);
-    for (int i = 0; i < iterations; ++i) {
-      TRACE_EVENT("dsa", "Iteration", track);
-      run_dynamic_batch_inline(dsa, scope, batch_size, msg_size, src, dst);
-    }
+  TRACE_EVENT_BEGIN("dsa", perfetto::DynamicString(slice_name), track,
+                    "batch_size", batch_size, "msg_size", msg_size,
+                    "mode", "inline");
+  for (int i = 0; i < iterations; ++i) {
+    size_t base_offset = static_cast<size_t>(i) * batch_bytes;
+    TRACE_EVENT_BEGIN("dsa", "Iteration", track, "i", i);
+    run_dynamic_batch_inline(dsa, scope, batch_size, msg_size, src, dst, base_offset);
+    TRACE_EVENT_END("dsa", track);
   }
+  TRACE_EVENT_END("dsa", track);
   auto end = std::chrono::high_resolution_clock::now();
 
   uint64_t page_faults = dsa_stdexec::get_page_fault_retries();
   std::chrono::duration<double> diff = end - start;
-  double bw = (double)total_size * iterations / (1024.0 * 1024.0 * 1024.0) /
+  double bw = (double)batch_bytes * iterations / (1024.0 * 1024.0 * 1024.0) /
               diff.count();
   return {bw, page_faults};
 }
@@ -99,37 +132,35 @@ DsaMetric benchmark_dynamic_threaded(DsaType &dsa, exec::async_scope &scope,
                                      size_t batch_size, size_t msg_size,
                                      std::vector<char> &src,
                                      std::vector<char> &dst, int iterations,
-                                     std::string_view setup_name) {
-  size_t total_size = batch_size * msg_size;
-  size_t track_uuid = std::hash<std::string_view>{}(setup_name);
-  auto track = perfetto::Track(track_uuid);
-  {
-    auto desc = track.Serialize();
-    desc.set_name(std::string(setup_name));
-    perfetto::TrackEvent::SetTrackDescriptor(track, desc);
-  }
+                                     QueueTrackId track_id) {
+  size_t batch_bytes = batch_size * msg_size;
+  auto track = perfetto::Track(static_cast<uint64_t>(track_id));
 
-  {
-    TRACE_EVENT("dsa", "Warmup", track);
-    run_dynamic_batch_threaded(dsa, scope, batch_size, msg_size, src, dst); // Warmup
-  }
+  // Create slice name with batch/msg info
+  std::string slice_name = fmt::format("b{}×{}B", batch_size, msg_size);
+
+  TRACE_EVENT_BEGIN("dsa", "Warmup", track);
+  run_dynamic_batch_threaded(dsa, scope, batch_size, msg_size, src, dst, 0);
+  TRACE_EVENT_END("dsa", track);
 
   dsa_stdexec::reset_page_fault_retries();
 
   auto start = std::chrono::high_resolution_clock::now();
-  {
-    TRACE_EVENT("dsa", "BenchmarkRun", track, "batch_size", batch_size,
-                "msg_size", msg_size);
-    for (int i = 0; i < iterations; ++i) {
-      TRACE_EVENT("dsa", "Iteration", track);
-      run_dynamic_batch_threaded(dsa, scope, batch_size, msg_size, src, dst);
-    }
+  TRACE_EVENT_BEGIN("dsa", perfetto::DynamicString(slice_name), track,
+                    "batch_size", batch_size, "msg_size", msg_size,
+                    "mode", "threaded");
+  for (int i = 0; i < iterations; ++i) {
+    size_t base_offset = static_cast<size_t>(i) * batch_bytes;
+    TRACE_EVENT_BEGIN("dsa", "Iteration", track, "i", i);
+    run_dynamic_batch_threaded(dsa, scope, batch_size, msg_size, src, dst, base_offset);
+    TRACE_EVENT_END("dsa", track);
   }
+  TRACE_EVENT_END("dsa", track);
   auto end = std::chrono::high_resolution_clock::now();
 
   uint64_t page_faults = dsa_stdexec::get_page_fault_retries();
   std::chrono::duration<double> diff = end - start;
-  double bw = (double)total_size * iterations / (1024.0 * 1024.0 * 1024.0) /
+  double bw = (double)batch_bytes * iterations / (1024.0 * 1024.0 * 1024.0) /
               diff.count();
   return {bw, page_faults};
 }
@@ -158,26 +189,33 @@ std::string format_metric(const DsaMetric &m) {
 void benchmark_queues_with_dsa() {
   fmt::println("=== DSA BENCHMARK WITH DIFFERENT TASK QUEUES ===\n");
 
+  // Initialize tracks upfront for vertical alignment in Perfetto
+  init_benchmark_tracks();
+
   std::vector<size_t> batch_sizes = {1, 4, 16, 32};
   std::vector<size_t> msg_sizes = {512,  1024,      2048,
                                    4096, 64 * 1024, 1024 * 1024};
-  constexpr int iterations = 100;
+  constexpr size_t total_bytes_target = 32ULL * 1024 * 1024;  // 512MB total data to copy
 
   std::vector<BenchmarkResult> inline_results;
   std::vector<BenchmarkResult> threaded_results;
+
+  // Allocate buffers at total size once (reused across all benchmarks)
+  std::vector<char> src(total_bytes_target);
+  std::vector<char> dst(total_bytes_target);
+  std::memset(src.data(), 1, total_bytes_target);
+  std::memset(dst.data(), 0, total_bytes_target);
 
   // Collect inline polling results
   fmt::println("Running inline polling benchmarks...");
   for (auto bs : batch_sizes) {
     for (auto ms : msg_sizes) {
-      size_t total_size = bs * ms;
-      if (total_size > 2ULL * 1024 * 1024 * 1024)
+      size_t batch_bytes = bs * ms;
+      if (batch_bytes > 2ULL * 1024 * 1024 * 1024)
         continue;
 
-      std::vector<char> src(total_size);
-      std::vector<char> dst(total_size);
-      std::memset(src.data(), 1, total_size);
-      std::memset(dst.data(), 0, total_size);
+      int iterations = static_cast<int>(total_bytes_target / batch_bytes);
+      if (iterations < 1) iterations = 1;
 
       BenchmarkResult result{bs, ms, {}, {}, {}, {}, {}, {}, {}};
 
@@ -185,43 +223,43 @@ void benchmark_queues_with_dsa() {
         exec::async_scope scope;
         DsaSingleThread dsa(false);
         result.single_thread = benchmark_dynamic_inline(
-            dsa, scope, bs, ms, src, dst, iterations, "Inline-SingleThread");
+            dsa, scope, bs, ms, src, dst, iterations, QueueTrackId::SingleThread);
       }
       {
         exec::async_scope scope;
         Dsa dsa(false);
         result.mutex = benchmark_dynamic_inline(
-            dsa, scope, bs, ms, src, dst, iterations, "Inline-Mutex");
+            dsa, scope, bs, ms, src, dst, iterations, QueueTrackId::Mutex);
       }
       {
         exec::async_scope scope;
         DsaTasSpinlock dsa(false);
         result.tas_spinlock = benchmark_dynamic_inline(
-            dsa, scope, bs, ms, src, dst, iterations, "Inline-TasSpinlock");
+            dsa, scope, bs, ms, src, dst, iterations, QueueTrackId::TasSpinlock);
       }
       {
         exec::async_scope scope;
         DsaSpinlock dsa(false);
         result.ttas_spinlock = benchmark_dynamic_inline(
-            dsa, scope, bs, ms, src, dst, iterations, "Inline-TtasSpinlock");
+            dsa, scope, bs, ms, src, dst, iterations, QueueTrackId::TtasSpinlock);
       }
       {
         exec::async_scope scope;
         DsaBackoffSpinlock dsa(false);
         result.backoff_spinlock = benchmark_dynamic_inline(
-            dsa, scope, bs, ms, src, dst, iterations, "Inline-BackoffSpinlock");
+            dsa, scope, bs, ms, src, dst, iterations, QueueTrackId::BackoffSpinlock);
       }
       {
         exec::async_scope scope;
         DsaLockFree dsa(false);
         result.lockfree = benchmark_dynamic_inline(
-            dsa, scope, bs, ms, src, dst, iterations, "Inline-LockFree");
+            dsa, scope, bs, ms, src, dst, iterations, QueueTrackId::LockFree);
       }
       {
         exec::async_scope scope;
         DsaRingBuffer dsa(false);
         result.ringbuffer = benchmark_dynamic_inline(
-            dsa, scope, bs, ms, src, dst, iterations, "Inline-RingBuffer");
+            dsa, scope, bs, ms, src, dst, iterations, QueueTrackId::RingBuffer);
       }
 
       inline_results.push_back(result);
@@ -234,14 +272,12 @@ void benchmark_queues_with_dsa() {
   fmt::println("Running background thread polling benchmarks...");
   for (auto bs : batch_sizes) {
     for (auto ms : msg_sizes) {
-      size_t total_size = bs * ms;
-      if (total_size > 2ULL * 1024 * 1024 * 1024)
+      size_t batch_bytes = bs * ms;
+      if (batch_bytes > 2ULL * 1024 * 1024 * 1024)
         continue;
 
-      std::vector<char> src(total_size);
-      std::vector<char> dst(total_size);
-      std::memset(src.data(), 1, total_size);
-      std::memset(dst.data(), 0, total_size);
+      int iterations = static_cast<int>(total_bytes_target / batch_bytes);
+      if (iterations < 1) iterations = 1;
 
       BenchmarkResult result{bs, ms, {-1, 0}, {}, {}, {}, {}, {}, {}};
 
@@ -249,37 +285,37 @@ void benchmark_queues_with_dsa() {
         exec::async_scope scope;
         Dsa dsa(true);
         result.mutex = benchmark_dynamic_threaded(
-            dsa, scope, bs, ms, src, dst, iterations, "Threaded-Mutex");
+            dsa, scope, bs, ms, src, dst, iterations, QueueTrackId::Mutex);
       }
       {
         exec::async_scope scope;
         DsaTasSpinlock dsa(true);
         result.tas_spinlock = benchmark_dynamic_threaded(
-            dsa, scope, bs, ms, src, dst, iterations, "Threaded-TasSpinlock");
+            dsa, scope, bs, ms, src, dst, iterations, QueueTrackId::TasSpinlock);
       }
       {
         exec::async_scope scope;
         DsaSpinlock dsa(true);
         result.ttas_spinlock = benchmark_dynamic_threaded(
-            dsa, scope, bs, ms, src, dst, iterations, "Threaded-TtasSpinlock");
+            dsa, scope, bs, ms, src, dst, iterations, QueueTrackId::TtasSpinlock);
       }
       {
         exec::async_scope scope;
         DsaBackoffSpinlock dsa(true);
         result.backoff_spinlock = benchmark_dynamic_threaded(
-            dsa, scope, bs, ms, src, dst, iterations, "Threaded-BackoffSpinlock");
+            dsa, scope, bs, ms, src, dst, iterations, QueueTrackId::BackoffSpinlock);
       }
       {
         exec::async_scope scope;
         DsaLockFree dsa(true);
         result.lockfree = benchmark_dynamic_threaded(
-            dsa, scope, bs, ms, src, dst, iterations, "Threaded-LockFree");
+            dsa, scope, bs, ms, src, dst, iterations, QueueTrackId::LockFree);
       }
       {
         exec::async_scope scope;
         DsaRingBuffer dsa(true);
         result.ringbuffer = benchmark_dynamic_threaded(
-            dsa, scope, bs, ms, src, dst, iterations, "Threaded-RingBuffer");
+            dsa, scope, bs, ms, src, dst, iterations, QueueTrackId::RingBuffer);
       }
 
       threaded_results.push_back(result);
@@ -337,17 +373,21 @@ int main(int argc, char **argv) {
 
     fmt::println("");
     fmt::println("Benchmark completed.");
-    perfetto::Tracing::ActivateTriggers({"app_finished"}, 0);
 
   } catch (const std::exception &e) {
     fmt::println(stderr, "Error: {}", e.what());
+    perfetto::TrackEvent::Flush();
     perfetto::Tracing::ActivateTriggers({"app_finished"}, 0);
-
+    std::this_thread::sleep_for(std::chrono::seconds(1));
     return 1;
   }
 
-  fmt::println("Tracing completed.");
+  // Flush pending track events and fire trigger to stop tracing
+  perfetto::TrackEvent::Flush();
+  perfetto::Tracing::ActivateTriggers({"app_finished"}, 0);
+  fmt::println("Trigger 'app_finished' sent.");
 
+  // Wait for perfetto to process trigger and save trace
   std::this_thread::sleep_for(std::chrono::seconds(1));
   return 0;
 }
