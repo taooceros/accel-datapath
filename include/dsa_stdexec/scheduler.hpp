@@ -18,6 +18,7 @@ public:
     ScheduleOperation *op;
     bool check_completion() { return op->check_completion(); }
     void notify() { op->notify(); }
+    dsa_hw_desc *get_descriptor() { return nullptr; }  // No HW descriptor for schedule
   };
 
   ScheduleOperation(Dsa &dsa, Receiver r) : dsa_(dsa), r_(std::move(r)) {

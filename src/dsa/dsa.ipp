@@ -27,9 +27,9 @@ inline uint8_t op_status(uint8_t status) {
 
 } // namespace detail
 
-template <dsa::TaskQueue Queue>
-DsaBase<Queue>::DsaBase(bool start_poller)
-    : ctx_(), wq_(nullptr), wq_portal_(nullptr) {
+template <template <typename> class QueueTemplate>
+DsaBase<QueueTemplate>::DsaBase(bool start_poller)
+    : ctx_(), wq_(nullptr), wq_portal_(nullptr), task_queue_(DsaHwSubmit{}) {
   try {
     auto &ctx = context();
     accfg_device *device = nullptr;
@@ -103,6 +103,9 @@ DsaBase<Queue>::DsaBase(bool start_poller)
           "Failed to locate and map a usable user work queue portal");
     }
 
+    // Set up hardware submission context for the task queue
+    task_queue_.hw_submit().set_context(wq_portal_, mode_);
+
     if (start_poller) {
       running_ = true;
       poller_ = std::thread([this] {
@@ -118,8 +121,8 @@ DsaBase<Queue>::DsaBase(bool start_poller)
   }
 }
 
-template <dsa::TaskQueue Queue>
-DsaBase<Queue>::~DsaBase() {
+template <template <typename> class QueueTemplate>
+DsaBase<QueueTemplate>::~DsaBase() {
   running_ = false;
   if (poller_.joinable()) {
     poller_.join();
@@ -131,8 +134,8 @@ DsaBase<Queue>::~DsaBase() {
   }
 }
 
-template <dsa::TaskQueue Queue>
-void DsaBase<Queue>::data_move(void *src, void *dst, size_t size) {
+template <template <typename> class QueueTemplate>
+void DsaBase<QueueTemplate>::data_move(void *src, void *dst, size_t size) {
   TRACE_EVENT("dsa", "data_move", "size", size);
   if (size == 0) {
     return;
@@ -204,8 +207,8 @@ retry:
   }
 }
 
-template <dsa::TaskQueue Queue>
-void *DsaBase<Queue>::map_wq(accfg_wq *wq) {
+template <template <typename> class QueueTemplate>
+void *DsaBase<QueueTemplate>::map_wq(accfg_wq *wq) {
   char path[PATH_MAX] = {};
   if (accfg_wq_get_user_dev_path(wq, path, sizeof(path)) != 0) {
     fmt::println("    Failed to get user device path for WQ {0}",
@@ -237,40 +240,24 @@ void *DsaBase<Queue>::map_wq(accfg_wq *wq) {
   return portal;
 }
 
-template <dsa::TaskQueue Queue>
-void DsaBase<Queue>::submit(dsa_stdexec::OperationBase *op, dsa_hw_desc *desc) {
-  TRACE_EVENT("dsa", "submit_hw", "op", (uintptr_t)op);
+template <template <typename> class QueueTemplate>
+void DsaBase<QueueTemplate>::submit(dsa_stdexec::OperationBase *op, dsa_hw_desc *) {
+  // The descriptor parameter is now ignored - hardware submission happens in poll()
+  TRACE_EVENT("dsa", "submit", "op", (uintptr_t)op);
   if (wq_portal_ == nullptr) {
     throw dsa_stdexec::DsaSubmitError("DSA work queue portal is not mapped");
   }
-
   task_queue_.push(op);
-
-  _mm_sfence();
-
-  if (mode_ == ACCFG_WQ_DEDICATED) {
-    _movdir64b(wq_portal_, desc);
-  } else {
-    constexpr int kEnqueueSpinLimit = 1 << 20;
-    int enqueue_attempts = 0;
-
-    while (_enqcmd(wq_portal_, desc) != 0) {
-      if (++enqueue_attempts >= kEnqueueSpinLimit) {
-        throw dsa_stdexec::DsaSubmitError(
-            "DSA portal busy - enqueue spin limit exceeded", EBUSY);
-      }
-    }
-  }
 }
 
-template <dsa::TaskQueue Queue>
-void DsaBase<Queue>::submit(dsa_stdexec::OperationBase *op) {
+template <template <typename> class QueueTemplate>
+void DsaBase<QueueTemplate>::submit(dsa_stdexec::OperationBase *op) {
   TRACE_EVENT("dsa", "submit", "op", (uintptr_t)op);
   task_queue_.push(op);
 }
 
-template <dsa::TaskQueue Queue>
-void DsaBase<Queue>::poll() {
+template <template <typename> class QueueTemplate>
+void DsaBase<QueueTemplate>::poll() {
   task_queue_.poll();
 }
 

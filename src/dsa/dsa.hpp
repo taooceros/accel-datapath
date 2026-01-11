@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <memory>
 #include <thread>
+#include <x86intrin.h>
 
 extern "C" {
 #include <accel-config/libaccel_config.h>
@@ -17,6 +18,38 @@ extern "C" {
 
 struct AccfgCtxDeleter {
   void operator()(accfg_ctx *ctx) const noexcept { accfg_unref(ctx); }
+};
+
+// Hardware submission callable for DSA accelerator
+// This is passed to task queues as a template parameter
+class DsaHwSubmit {
+public:
+  DsaHwSubmit() = default;
+  DsaHwSubmit(void *wq_portal, accfg_wq_mode mode)
+      : wq_portal_(wq_portal), mode_(mode) {}
+
+  void set_context(void *wq_portal, accfg_wq_mode mode) {
+    wq_portal_ = wq_portal;
+    mode_ = mode;
+  }
+
+  bool operator()(dsa_hw_desc *desc) const {
+    if (wq_portal_ == nullptr) {
+      return false;
+    }
+    _mm_sfence();
+    if (mode_ == ACCFG_WQ_DEDICATED) {
+      _movdir64b(wq_portal_, desc);
+      return true;
+    } else {
+      // For shared mode, try once and return false if busy
+      return _enqcmd(wq_portal_, desc) == 0;
+    }
+  }
+
+private:
+  void *wq_portal_ = nullptr;
+  accfg_wq_mode mode_ = ACCFG_WQ_SHARED;
 };
 
 class AccfgCtx {
@@ -35,9 +68,15 @@ private:
   std::unique_ptr<accfg_ctx, AccfgCtxDeleter> ctx_;
 };
 
-template <dsa::TaskQueue Queue = dsa::DefaultTaskQueue>
+// Template alias for queue types with DSA hardware submission
+template <template <typename> class QueueTemplate>
+using DsaTaskQueue = QueueTemplate<DsaHwSubmit>;
+
+template <template <typename> class QueueTemplate = dsa::MutexTaskQueue>
 class DsaBase {
 public:
+  using Queue = DsaTaskQueue<QueueTemplate>;
+
   explicit DsaBase(bool start_poller = true);
   ~DsaBase();
 
@@ -74,7 +113,7 @@ private:
 };
 
 // Default Dsa type using mutex-based queue
-using Dsa = DsaBase<dsa::DefaultTaskQueue>;
+using Dsa = DsaBase<dsa::MutexTaskQueue>;
 
 // Convenience aliases for different queue strategies
 using DsaSingleThread = DsaBase<dsa::SingleThreadTaskQueue>;
@@ -82,7 +121,6 @@ using DsaTasSpinlock = DsaBase<dsa::TasSpinlockTaskQueue>;
 using DsaSpinlock = DsaBase<dsa::SpinlockTaskQueue>;  // TTAS
 using DsaBackoffSpinlock = DsaBase<dsa::BackoffSpinlockTaskQueue>;
 using DsaLockFree = DsaBase<dsa::LockFreeTaskQueue>;
-using DsaRingBuffer = DsaBase<dsa::RingBufferTaskQueue1K>;
 
 #include "dsa.ipp"
 

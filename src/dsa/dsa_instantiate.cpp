@@ -4,10 +4,9 @@
 #include "dsa.hpp"
 
 // Instantiate all Dsa variants
-template class DsaBase<dsa::DefaultTaskQueue>;
+template class DsaBase<dsa::MutexTaskQueue>;
 template class DsaBase<dsa::SingleThreadTaskQueue>;
 template class DsaBase<dsa::TasSpinlockTaskQueue>;
 template class DsaBase<dsa::SpinlockTaskQueue>;
 template class DsaBase<dsa::BackoffSpinlockTaskQueue>;
 template class DsaBase<dsa::LockFreeTaskQueue>;
-template class DsaBase<dsa::RingBufferTaskQueue1K>;

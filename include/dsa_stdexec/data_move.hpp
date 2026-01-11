@@ -74,9 +74,12 @@ private:
     DataMoveOperation *op;
     bool check_completion() { return op->check_completion(); }
     void notify() { op->notify(); }
+    dsa_hw_desc *get_descriptor() { return op->get_descriptor(); }
   };
 
   bool check_completion() { return comp_.status != 0; }
+
+  dsa_hw_desc *get_descriptor() { return &desc_; }
 
   void notify() {
     uint8_t status = comp_.status & DSA_COMP_STATUS_MASK;

@@ -127,7 +127,6 @@ enum class QueueTrackId : uint64_t {
   TtasSpinlock = 1003,
   BackoffSpinlock = 1004,
   LockFree = 1005,
-  RingBuffer = 1006,
 };
 
 // Initialize tracks upfront so they appear vertically aligned in Perfetto
@@ -145,7 +144,6 @@ inline void init_benchmark_tracks() {
   register_track(QueueTrackId::TtasSpinlock, "TTAS Spinlock");
   register_track(QueueTrackId::BackoffSpinlock, "Backoff Spinlock");
   register_track(QueueTrackId::LockFree, "Lock-Free");
-  register_track(QueueTrackId::RingBuffer, "Ring Buffer");
 }
 
 // Benchmark DSA dynamic batch with inline polling, returns bandwidth, page
@@ -241,7 +239,6 @@ struct BenchmarkResult {
   DsaMetric ttas_spinlock;
   DsaMetric backoff_spinlock;
   DsaMetric lockfree;
-  DsaMetric ringbuffer;
 };
 
 // Format a metric as "x.xxGB/s(pgfaults)"
@@ -286,7 +283,6 @@ void export_to_csv(const std::string &filename,
     write_row("inline", "TTAS", r.batch_size, r.msg_size, r.ttas_spinlock);
     write_row("inline", "Backoff", r.batch_size, r.msg_size, r.backoff_spinlock);
     write_row("inline", "LockFree", r.batch_size, r.msg_size, r.lockfree);
-    write_row("inline", "RingBuffer", r.batch_size, r.msg_size, r.ringbuffer);
   }
 
   // Write threaded polling results
@@ -296,7 +292,6 @@ void export_to_csv(const std::string &filename,
     write_row("threaded", "TTAS", r.batch_size, r.msg_size, r.ttas_spinlock);
     write_row("threaded", "Backoff", r.batch_size, r.msg_size, r.backoff_spinlock);
     write_row("threaded", "LockFree", r.batch_size, r.msg_size, r.lockfree);
-    write_row("threaded", "RingBuffer", r.batch_size, r.msg_size, r.ringbuffer);
   }
 
   file.close();
@@ -334,7 +329,7 @@ void benchmark_queues_with_dsa() {
       int iterations = static_cast<int>(total_bytes_target / batch_bytes);
       if (iterations < 1) iterations = 1;
 
-      BenchmarkResult result{bs, ms, {}, {}, {}, {}, {}, {}, {}};
+      BenchmarkResult result{bs, ms, {}, {}, {}, {}, {}, {}};
 
       {
         exec::async_scope scope;
@@ -372,13 +367,6 @@ void benchmark_queues_with_dsa() {
         result.lockfree = benchmark_dynamic_inline(
             dsa, scope, bs, ms, src, dst, iterations, QueueTrackId::LockFree);
       }
-      {
-        exec::async_scope scope;
-        DsaRingBuffer dsa(false);
-        result.ringbuffer = benchmark_dynamic_inline(
-            dsa, scope, bs, ms, src, dst, iterations, QueueTrackId::RingBuffer);
-      }
-
       inline_results.push_back(result);
       fmt::println("  Batch {:>2}, Size {:>7}: done", bs, ms);
     }
@@ -396,7 +384,7 @@ void benchmark_queues_with_dsa() {
       int iterations = static_cast<int>(total_bytes_target / batch_bytes);
       if (iterations < 1) iterations = 1;
 
-      BenchmarkResult result{bs, ms, {-1, 0, {}}, {}, {}, {}, {}, {}, {}};
+      BenchmarkResult result{bs, ms, {-1, 0, {}}, {}, {}, {}, {}, {}};
 
       {
         exec::async_scope scope;
@@ -428,12 +416,6 @@ void benchmark_queues_with_dsa() {
         result.lockfree = benchmark_dynamic_threaded(
             dsa, scope, bs, ms, src, dst, iterations, QueueTrackId::LockFree);
       }
-      {
-        exec::async_scope scope;
-        DsaRingBuffer dsa(true);
-        result.ringbuffer = benchmark_dynamic_threaded(
-            dsa, scope, bs, ms, src, dst, iterations, QueueTrackId::RingBuffer);
-      }
 
       threaded_results.push_back(result);
       fmt::println("  Batch {:>2}, Size {:>7}: done", bs, ms);
@@ -450,35 +432,33 @@ void benchmark_queues_with_dsa() {
 
   // Inline polling
   fmt::println("========== INLINE POLLING ==========\n");
-  fmt::println("{:>5} {:>10} {:>16} {:>16} {:>16} {:>16} {:>16} {:>16} {:>16}",
+  fmt::println("{:>5} {:>10} {:>16} {:>16} {:>16} {:>16} {:>16} {:>16}",
                "Batch", "Size", "NoLock", "Mutex", "TAS", "TTAS", "Backoff",
-               "LockFree", "RingBuf");
+               "LockFree");
   fmt::println(
-      "{:-^5} {:-^10} {:-^16} {:-^16} {:-^16} {:-^16} {:-^16} {:-^16} {:-^16}",
-      "", "", "", "", "", "", "", "", "");
+      "{:-^5} {:-^10} {:-^16} {:-^16} {:-^16} {:-^16} {:-^16} {:-^16}",
+      "", "", "", "", "", "", "", "");
   for (const auto &r : inline_results) {
     fmt::println(
-        "{:>5} {:>10} {:>16} {:>16} {:>16} {:>16} {:>16} {:>16} {:>16}",
+        "{:>5} {:>10} {:>16} {:>16} {:>16} {:>16} {:>16} {:>16}",
         r.batch_size, r.msg_size, format_metric(r.single_thread),
         format_metric(r.mutex), format_metric(r.tas_spinlock),
         format_metric(r.ttas_spinlock), format_metric(r.backoff_spinlock),
-        format_metric(r.lockfree), format_metric(r.ringbuffer));
+        format_metric(r.lockfree));
   }
   fmt::println("");
 
   // Threaded polling
   fmt::println("========== BACKGROUND THREAD POLLING ==========\n");
-  fmt::println("{:>5} {:>10} {:>16} {:>16} {:>16} {:>16} {:>16} {:>16}",
-               "Batch", "Size", "Mutex", "TAS", "TTAS", "Backoff", "LockFree",
-               "RingBuf");
-  fmt::println("{:-^5} {:-^10} {:-^16} {:-^16} {:-^16} {:-^16} {:-^16} {:-^16}",
-               "", "", "", "", "", "", "", "");
+  fmt::println("{:>5} {:>10} {:>16} {:>16} {:>16} {:>16} {:>16}",
+               "Batch", "Size", "Mutex", "TAS", "TTAS", "Backoff", "LockFree");
+  fmt::println("{:-^5} {:-^10} {:-^16} {:-^16} {:-^16} {:-^16} {:-^16}",
+               "", "", "", "", "", "", "");
   for (const auto &r : threaded_results) {
-    fmt::println("{:>5} {:>10} {:>16} {:>16} {:>16} {:>16} {:>16} {:>16}",
+    fmt::println("{:>5} {:>10} {:>16} {:>16} {:>16} {:>16} {:>16}",
                  r.batch_size, r.msg_size, format_metric(r.mutex),
                  format_metric(r.tas_spinlock), format_metric(r.ttas_spinlock),
-                 format_metric(r.backoff_spinlock), format_metric(r.lockfree),
-                 format_metric(r.ringbuffer));
+                 format_metric(r.backoff_spinlock), format_metric(r.lockfree));
   }
   fmt::println("");
 
