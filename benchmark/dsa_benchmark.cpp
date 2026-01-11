@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
@@ -11,42 +12,103 @@
 #include <fmt/base.h>
 #include <fmt/core.h>
 #include <fmt/ranges.h>
+#include <fstream>
 #include <functional>
+#include <mutex>
+#include <numeric>
 #include <stdexec/execution.hpp>
 #include <thread>
 #include <utility>
 #include <vector>
 
-// Dynamic batch with inline polling
+// Thread-safe latency collector
+class LatencyCollector {
+public:
+  void record(double latency_ns) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    samples_.push_back(latency_ns);
+  }
+
+  void clear() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    samples_.clear();
+  }
+
+  struct Stats {
+    double min_ns = 0;
+    double max_ns = 0;
+    double avg_ns = 0;
+    double p50_ns = 0;
+    double p99_ns = 0;
+    size_t count = 0;
+  };
+
+  Stats compute_stats() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (samples_.empty()) {
+      return {};
+    }
+
+    std::sort(samples_.begin(), samples_.end());
+    Stats s;
+    s.count = samples_.size();
+    s.min_ns = samples_.front();
+    s.max_ns = samples_.back();
+    s.avg_ns = std::accumulate(samples_.begin(), samples_.end(), 0.0) / s.count;
+    s.p50_ns = samples_[s.count / 2];
+    s.p99_ns = samples_[static_cast<size_t>(s.count * 0.99)];
+    return s;
+  }
+
+private:
+  std::mutex mutex_;
+  std::vector<double> samples_;
+};
+
+// Dynamic batch with inline polling (with latency measurement using then)
 // base_offset is the starting offset for this iteration's batch
 template <typename DsaType>
 void run_dynamic_batch_inline(DsaType &dsa, exec::async_scope &scope,
                               size_t batch_size, size_t msg_size,
                               std::vector<char> &src, std::vector<char> &dst,
-                              size_t base_offset) {
+                              size_t base_offset, LatencyCollector &latency) {
   dsa_stdexec::PollingRunLoop loop([&dsa] { dsa.poll(); });
   for (size_t i = 0; i < batch_size; ++i) {
     size_t offset = base_offset + i * msg_size;
+    auto start_time = std::chrono::high_resolution_clock::now();
     auto snd = dsa_stdexec::dsa_data_move(dsa, src.data() + offset,
-                                          dst.data() + offset, msg_size);
-    scope.spawn(snd);
+                                          dst.data() + offset, msg_size)
+             | stdexec::then([&latency, start_time]() {
+                 auto end_time = std::chrono::high_resolution_clock::now();
+                 auto duration = std::chrono::duration<double, std::nano>(
+                     end_time - start_time).count();
+                 latency.record(duration);
+               });
+    scope.spawn(std::move(snd));
   }
   dsa_stdexec::wait_start(scope.on_empty(), loop);
 }
 
-// Dynamic batch with background thread polling
+// Dynamic batch with background thread polling (with latency measurement using then)
 // base_offset is the starting offset for this iteration's batch
 template <typename DsaType>
 void run_dynamic_batch_threaded(DsaType &dsa, exec::async_scope &scope,
                                 size_t batch_size, size_t msg_size,
                                 std::vector<char> &src,
                                 std::vector<char> &dst,
-                                size_t base_offset) {
+                                size_t base_offset, LatencyCollector &latency) {
   for (size_t i = 0; i < batch_size; ++i) {
     size_t offset = base_offset + i * msg_size;
+    auto start_time = std::chrono::high_resolution_clock::now();
     auto snd = dsa_stdexec::dsa_data_move(dsa, src.data() + offset,
-                                          dst.data() + offset, msg_size);
-    scope.spawn(snd);
+                                          dst.data() + offset, msg_size)
+             | stdexec::then([&latency, start_time]() {
+                 auto end_time = std::chrono::high_resolution_clock::now();
+                 auto duration = std::chrono::duration<double, std::nano>(
+                     end_time - start_time).count();
+                 latency.record(duration);
+               });
+    scope.spawn(std::move(snd));
   }
   stdexec::sync_wait(scope.on_empty());
 }
@@ -54,6 +116,7 @@ void run_dynamic_batch_threaded(DsaType &dsa, exec::async_scope &scope,
 struct DsaMetric {
   double bandwidth;
   uint64_t page_faults;
+  LatencyCollector::Stats latency;
 };
 
 // Track UUIDs for each queue type (fixed so they appear as separate rows)
@@ -85,8 +148,8 @@ inline void init_benchmark_tracks() {
   register_track(QueueTrackId::RingBuffer, "Ring Buffer");
 }
 
-// Benchmark DSA dynamic batch with inline polling, returns bandwidth and page
-// faults
+// Benchmark DSA dynamic batch with inline polling, returns bandwidth, page
+// faults, and latency stats
 template <typename DsaType>
 DsaMetric benchmark_dynamic_inline(DsaType &dsa, exec::async_scope &scope,
                                    size_t batch_size, size_t msg_size,
@@ -95,12 +158,14 @@ DsaMetric benchmark_dynamic_inline(DsaType &dsa, exec::async_scope &scope,
                                    QueueTrackId track_id) {
   size_t batch_bytes = batch_size * msg_size;
   auto track = perfetto::Track(static_cast<uint64_t>(track_id));
+  LatencyCollector warmup_latency;
+  LatencyCollector latency;
 
   // Create slice name with batch/msg info
   std::string slice_name = fmt::format("b{}×{}B", batch_size, msg_size);
 
   TRACE_EVENT_BEGIN("dsa", "Warmup", track);
-  run_dynamic_batch_inline(dsa, scope, batch_size, msg_size, src, dst, 0);
+  run_dynamic_batch_inline(dsa, scope, batch_size, msg_size, src, dst, 0, warmup_latency);
   TRACE_EVENT_END("dsa", track);
 
   dsa_stdexec::reset_page_fault_retries();
@@ -112,7 +177,7 @@ DsaMetric benchmark_dynamic_inline(DsaType &dsa, exec::async_scope &scope,
   for (int i = 0; i < iterations; ++i) {
     size_t base_offset = static_cast<size_t>(i) * batch_bytes;
     TRACE_EVENT_BEGIN("dsa", "Iteration", track, "i", i);
-    run_dynamic_batch_inline(dsa, scope, batch_size, msg_size, src, dst, base_offset);
+    run_dynamic_batch_inline(dsa, scope, batch_size, msg_size, src, dst, base_offset, latency);
     TRACE_EVENT_END("dsa", track);
   }
   TRACE_EVENT_END("dsa", track);
@@ -122,11 +187,11 @@ DsaMetric benchmark_dynamic_inline(DsaType &dsa, exec::async_scope &scope,
   std::chrono::duration<double> diff = end - start;
   double bw = (double)batch_bytes * iterations / (1024.0 * 1024.0 * 1024.0) /
               diff.count();
-  return {bw, page_faults};
+  return {bw, page_faults, latency.compute_stats()};
 }
 
-// Benchmark DSA dynamic batch with background thread polling, returns bandwidth
-// and page faults
+// Benchmark DSA dynamic batch with background thread polling, returns bandwidth,
+// page faults, and latency stats
 template <typename DsaType>
 DsaMetric benchmark_dynamic_threaded(DsaType &dsa, exec::async_scope &scope,
                                      size_t batch_size, size_t msg_size,
@@ -135,12 +200,14 @@ DsaMetric benchmark_dynamic_threaded(DsaType &dsa, exec::async_scope &scope,
                                      QueueTrackId track_id) {
   size_t batch_bytes = batch_size * msg_size;
   auto track = perfetto::Track(static_cast<uint64_t>(track_id));
+  LatencyCollector warmup_latency;
+  LatencyCollector latency;
 
   // Create slice name with batch/msg info
   std::string slice_name = fmt::format("b{}×{}B", batch_size, msg_size);
 
   TRACE_EVENT_BEGIN("dsa", "Warmup", track);
-  run_dynamic_batch_threaded(dsa, scope, batch_size, msg_size, src, dst, 0);
+  run_dynamic_batch_threaded(dsa, scope, batch_size, msg_size, src, dst, 0, warmup_latency);
   TRACE_EVENT_END("dsa", track);
 
   dsa_stdexec::reset_page_fault_retries();
@@ -152,7 +219,7 @@ DsaMetric benchmark_dynamic_threaded(DsaType &dsa, exec::async_scope &scope,
   for (int i = 0; i < iterations; ++i) {
     size_t base_offset = static_cast<size_t>(i) * batch_bytes;
     TRACE_EVENT_BEGIN("dsa", "Iteration", track, "i", i);
-    run_dynamic_batch_threaded(dsa, scope, batch_size, msg_size, src, dst, base_offset);
+    run_dynamic_batch_threaded(dsa, scope, batch_size, msg_size, src, dst, base_offset, latency);
     TRACE_EVENT_END("dsa", track);
   }
   TRACE_EVENT_END("dsa", track);
@@ -162,7 +229,7 @@ DsaMetric benchmark_dynamic_threaded(DsaType &dsa, exec::async_scope &scope,
   std::chrono::duration<double> diff = end - start;
   double bw = (double)batch_bytes * iterations / (1024.0 * 1024.0 * 1024.0) /
               diff.count();
-  return {bw, page_faults};
+  return {bw, page_faults, latency.compute_stats()};
 }
 
 struct BenchmarkResult {
@@ -184,6 +251,56 @@ std::string format_metric(const DsaMetric &m) {
   } else {
     return fmt::format("{:.2f}({})", m.bandwidth, m.page_faults);
   }
+}
+
+// Export benchmark results to CSV file
+void export_to_csv(const std::string &filename,
+                   const std::vector<BenchmarkResult> &inline_results,
+                   const std::vector<BenchmarkResult> &threaded_results) {
+  std::ofstream file(filename);
+  if (!file.is_open()) {
+    fmt::println(stderr, "Failed to open {} for writing", filename);
+    return;
+  }
+
+  // Write CSV header
+  file << "mode,queue_type,batch_size,msg_size,bandwidth_gbps,page_faults,"
+       << "latency_min_ns,latency_max_ns,latency_avg_ns,latency_p50_ns,latency_p99_ns,latency_count\n";
+
+  // Helper to write one metric row
+  auto write_row = [&file](const char *mode, const char *queue_type,
+                            size_t batch_size, size_t msg_size,
+                            const DsaMetric &m) {
+    file << mode << "," << queue_type << "," << batch_size << "," << msg_size
+         << "," << m.bandwidth << "," << m.page_faults << ","
+         << m.latency.min_ns << "," << m.latency.max_ns << ","
+         << m.latency.avg_ns << "," << m.latency.p50_ns << ","
+         << m.latency.p99_ns << "," << m.latency.count << "\n";
+  };
+
+  // Write inline polling results
+  for (const auto &r : inline_results) {
+    write_row("inline", "NoLock", r.batch_size, r.msg_size, r.single_thread);
+    write_row("inline", "Mutex", r.batch_size, r.msg_size, r.mutex);
+    write_row("inline", "TAS", r.batch_size, r.msg_size, r.tas_spinlock);
+    write_row("inline", "TTAS", r.batch_size, r.msg_size, r.ttas_spinlock);
+    write_row("inline", "Backoff", r.batch_size, r.msg_size, r.backoff_spinlock);
+    write_row("inline", "LockFree", r.batch_size, r.msg_size, r.lockfree);
+    write_row("inline", "RingBuffer", r.batch_size, r.msg_size, r.ringbuffer);
+  }
+
+  // Write threaded polling results
+  for (const auto &r : threaded_results) {
+    write_row("threaded", "Mutex", r.batch_size, r.msg_size, r.mutex);
+    write_row("threaded", "TAS", r.batch_size, r.msg_size, r.tas_spinlock);
+    write_row("threaded", "TTAS", r.batch_size, r.msg_size, r.ttas_spinlock);
+    write_row("threaded", "Backoff", r.batch_size, r.msg_size, r.backoff_spinlock);
+    write_row("threaded", "LockFree", r.batch_size, r.msg_size, r.lockfree);
+    write_row("threaded", "RingBuffer", r.batch_size, r.msg_size, r.ringbuffer);
+  }
+
+  file.close();
+  fmt::println("Results exported to {}", filename);
 }
 
 void benchmark_queues_with_dsa() {
@@ -279,7 +396,7 @@ void benchmark_queues_with_dsa() {
       int iterations = static_cast<int>(total_bytes_target / batch_bytes);
       if (iterations < 1) iterations = 1;
 
-      BenchmarkResult result{bs, ms, {-1, 0}, {}, {}, {}, {}, {}, {}};
+      BenchmarkResult result{bs, ms, {-1, 0, {}}, {}, {}, {}, {}, {}, {}};
 
       {
         exec::async_scope scope;
@@ -363,6 +480,10 @@ void benchmark_queues_with_dsa() {
                  format_metric(r.backoff_spinlock), format_metric(r.lockfree),
                  format_metric(r.ringbuffer));
   }
+  fmt::println("");
+
+  // Export results to CSV
+  export_to_csv("dsa_benchmark_results.csv", inline_results, threaded_results);
 }
 
 int main(int argc, char **argv) {

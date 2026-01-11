@@ -17,6 +17,14 @@
     rust = {
       enable = true;
     };
+    python = {
+      enable = true;
+      package = pkgs.python3;
+      libraries = with pkgs; [
+        zlib
+        stdenv.cc.cc.lib
+      ];
+    };
   };
 
   # 3. Environment Variables (The Fix)
@@ -49,6 +57,10 @@
     pkgs.glibc.out
     pkgs.glibc.debug
     numactl
+    # Python packages for benchmark visualization
+    python3Packages.pandas
+    python3Packages.matplotlib
+    python3Packages.numpy
   ];
 
   # 1. Force C/C++ Compiler Flags

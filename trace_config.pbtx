@@ -47,7 +47,7 @@ data_sources: {
                 }
 
                 # Set to true if you want to see kernel time (syscalls)
-                kernel_frames: true
+                kernel_frames: false
             }
         }
     }
