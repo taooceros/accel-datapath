@@ -56,3 +56,10 @@ target("dsa_benchmark")
     after_build(function (target)
         os.exec("sudo setcap cap_sys_rawio+ep " .. target:targetdir() .. "/dsa_benchmark")
     end)
+
+
+target("task_queue_benchmark")
+    set_kind("binary")
+    add_files("benchmark/task_queue_benchmark.cpp")
+    add_packages("fmt")
+    add_packages("stdexec")
