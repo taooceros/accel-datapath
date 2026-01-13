@@ -158,6 +158,10 @@ private:
   MockDsaBase &operator=(const MockDsaBase &) = delete;
 };
 
+// Wrapper to make RingBufferTaskQueue fit the template<typename> class pattern
+template <typename HwSubmit>
+using RingBufferTaskQueue = dsa::RingBufferTaskQueue<HwSubmit, 4096>;
+
 // Convenience aliases for different queue strategies with mock hardware
 using MockDsa = MockDsaBase<dsa::MutexTaskQueue>;
 using MockDsaSingleThread = MockDsaBase<dsa::SingleThreadTaskQueue>;
@@ -165,5 +169,6 @@ using MockDsaTasSpinlock = MockDsaBase<dsa::TasSpinlockTaskQueue>;
 using MockDsaSpinlock = MockDsaBase<dsa::SpinlockTaskQueue>;
 using MockDsaBackoffSpinlock = MockDsaBase<dsa::BackoffSpinlockTaskQueue>;
 using MockDsaLockFree = MockDsaBase<dsa::LockFreeTaskQueue>;
+using MockDsaRingBuffer = MockDsaBase<RingBufferTaskQueue>;
 
 #endif

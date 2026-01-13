@@ -37,7 +37,12 @@ struct BenchmarkResult {
 
 // Benchmark single-threaded push/poll throughput
 template <template <typename> class QueueTemplate>
-BenchmarkResult benchmark_single_thread(std::size_t num_ops) {
+BenchmarkResult benchmark_single_thread(std::size_t num_ops,
+                                        std::size_t batch_size = 0) {
+  if (batch_size == 0) {
+    batch_size = num_ops; // Default: push all, then poll all
+  }
+
   MockDsaBase<QueueTemplate> mock_dsa(false);
   std::vector<BenchmarkOperation> ops(num_ops);
   for (auto &op : ops) {
@@ -46,15 +51,21 @@ BenchmarkResult benchmark_single_thread(std::size_t num_ops) {
 
   auto start = std::chrono::high_resolution_clock::now();
 
-  // Push all operations
-  for (auto &op : ops) {
-    mock_dsa.submit(&op.base);
-  }
-
-  // Poll until all complete
   std::size_t completed = 0;
+  std::size_t submitted = 0;
+
   while (completed < num_ops) {
-    completed += mock_dsa.poll();
+    // Push a batch of operations
+    std::size_t batch_end = std::min(submitted + batch_size, num_ops);
+    for (std::size_t i = submitted; i < batch_end; ++i) {
+      mock_dsa.submit(&ops[i].base);
+    }
+    submitted = batch_end;
+
+    // Poll until batch complete (or all if last batch)
+    while (completed < submitted) {
+      completed += mock_dsa.poll();
+    }
   }
 
   auto end = std::chrono::high_resolution_clock::now();
@@ -67,7 +78,12 @@ BenchmarkResult benchmark_single_thread(std::size_t num_ops) {
 // Benchmark with multiple producer threads and single poller
 template <template <typename> class QueueTemplate>
 BenchmarkResult benchmark_multi_producer(std::size_t num_ops,
-                                         std::size_t num_threads) {
+                                         std::size_t num_threads,
+                                         std::size_t batch_size = 0) {
+  if (batch_size == 0) {
+    batch_size = num_ops; // Default: no batching limit
+  }
+
   MockDsaBase<QueueTemplate> mock_dsa(false);
   std::vector<BenchmarkOperation> ops(num_ops);
   for (auto &op : ops) {
@@ -75,6 +91,7 @@ BenchmarkResult benchmark_multi_producer(std::size_t num_ops,
   }
   std::atomic<std::size_t> push_index{0};
   std::atomic<std::size_t> completed{0};
+  std::atomic<std::size_t> batch_submitted{0};
 
   auto start = std::chrono::high_resolution_clock::now();
 
@@ -83,11 +100,22 @@ BenchmarkResult benchmark_multi_producer(std::size_t num_ops,
   for (std::size_t t = 0; t < num_threads; ++t) {
     producers.emplace_back([&] {
       while (true) {
+        // Wait if we've hit the batch limit
+        while (true) {
+          std::size_t submitted = batch_submitted.load(std::memory_order_relaxed);
+          std::size_t done = completed.load(std::memory_order_relaxed);
+          if (submitted - done < batch_size) {
+            break;
+          }
+          std::this_thread::yield();
+        }
+
         std::size_t idx = push_index.fetch_add(1, std::memory_order_relaxed);
         if (idx >= num_ops) {
           break;
         }
         mock_dsa.submit(&ops[idx].base);
+        batch_submitted.fetch_add(1, std::memory_order_relaxed);
       }
     });
   }
@@ -112,7 +140,12 @@ BenchmarkResult benchmark_multi_producer(std::size_t num_ops,
 // Benchmark with background poller thread
 template <template <typename> class QueueTemplate>
 BenchmarkResult benchmark_background_poller(std::size_t num_ops,
-                                            std::size_t num_threads) {
+                                            std::size_t num_threads,
+                                            std::size_t batch_size = 0) {
+  if (batch_size == 0) {
+    batch_size = num_ops; // Default: no batching limit
+  }
+
   MockDsaBase<QueueTemplate> mock_dsa(true); // Start background poller
   std::vector<BenchmarkOperation> ops(num_ops);
   for (auto &op : ops) {
@@ -120,6 +153,7 @@ BenchmarkResult benchmark_background_poller(std::size_t num_ops,
   }
   std::atomic<std::size_t> push_index{0};
   std::atomic<std::size_t> notified{0};
+  std::atomic<std::size_t> batch_submitted{0};
 
   // Set callbacks to count notifications
   for (auto &op : ops) {
@@ -134,11 +168,22 @@ BenchmarkResult benchmark_background_poller(std::size_t num_ops,
   for (std::size_t t = 0; t < num_threads; ++t) {
     producers.emplace_back([&] {
       while (true) {
+        // Wait if we've hit the batch limit
+        while (true) {
+          std::size_t submitted = batch_submitted.load(std::memory_order_relaxed);
+          std::size_t done = notified.load(std::memory_order_relaxed);
+          if (submitted - done < batch_size) {
+            break;
+          }
+          std::this_thread::yield();
+        }
+
         std::size_t idx = push_index.fetch_add(1, std::memory_order_relaxed);
         if (idx >= num_ops) {
           break;
         }
         mock_dsa.submit(&ops[idx].base);
+        batch_submitted.fetch_add(1, std::memory_order_relaxed);
       }
     });
   }
@@ -167,54 +212,72 @@ void print_result(const char *name, const BenchmarkResult &r) {
 int main() {
   constexpr std::size_t NUM_OPS = 1000000;
   constexpr std::size_t NUM_THREADS = 4;
+  constexpr std::size_t BATCH_SIZES[] = {0, 64, 256, 1024};
 
   fmt::println("=== TASK QUEUE BENCHMARK (Mock DSA - No Hardware) ===\n");
   fmt::println("Operations: {}, Threads: {}\n", NUM_OPS, NUM_THREADS);
 
-  // Single-threaded benchmark
-  fmt::println("--- Single-Threaded Push/Poll ---");
-  print_result("NoLock",
-               benchmark_single_thread<dsa::SingleThreadTaskQueue>(NUM_OPS));
-  print_result("Mutex",
-               benchmark_single_thread<dsa::MutexTaskQueue>(NUM_OPS));
-  print_result("TAS Spinlock",
-               benchmark_single_thread<dsa::TasSpinlockTaskQueue>(NUM_OPS));
-  print_result("TTAS Spinlock",
-               benchmark_single_thread<dsa::SpinlockTaskQueue>(NUM_OPS));
-  print_result("Backoff Spinlock",
-               benchmark_single_thread<dsa::BackoffSpinlockTaskQueue>(NUM_OPS));
-  print_result("Lock-Free",
-               benchmark_single_thread<dsa::LockFreeTaskQueue>(NUM_OPS));
-  fmt::println("");
+  // Single-threaded benchmark with different batch sizes
+  for (std::size_t batch_size : BATCH_SIZES) {
+    if (batch_size == 0) {
+      fmt::println("--- Single-Threaded Push/Poll (no batching) ---");
+    } else {
+      fmt::println("--- Single-Threaded Push/Poll (batch={}) ---", batch_size);
+    }
+    print_result("NoLock",
+                 benchmark_single_thread<dsa::SingleThreadTaskQueue>(NUM_OPS, batch_size));
+    print_result("Mutex",
+                 benchmark_single_thread<dsa::MutexTaskQueue>(NUM_OPS, batch_size));
+    print_result("TAS Spinlock",
+                 benchmark_single_thread<dsa::TasSpinlockTaskQueue>(NUM_OPS, batch_size));
+    print_result("TTAS Spinlock",
+                 benchmark_single_thread<dsa::SpinlockTaskQueue>(NUM_OPS, batch_size));
+    print_result("Backoff Spinlock",
+                 benchmark_single_thread<dsa::BackoffSpinlockTaskQueue>(NUM_OPS, batch_size));
+    print_result("Lock-Free",
+                 benchmark_single_thread<dsa::LockFreeTaskQueue>(NUM_OPS, batch_size));
+    fmt::println("");
+  }
 
-  // Multi-producer, single consumer (inline poll)
-  fmt::println("--- Multi-Producer, Inline Poll ({} threads) ---", NUM_THREADS);
-  print_result("Mutex",
-               benchmark_multi_producer<dsa::MutexTaskQueue>(NUM_OPS, NUM_THREADS));
-  print_result("TAS Spinlock",
-               benchmark_multi_producer<dsa::TasSpinlockTaskQueue>(NUM_OPS, NUM_THREADS));
-  print_result("TTAS Spinlock",
-               benchmark_multi_producer<dsa::SpinlockTaskQueue>(NUM_OPS, NUM_THREADS));
-  print_result("Backoff Spinlock",
-               benchmark_multi_producer<dsa::BackoffSpinlockTaskQueue>(NUM_OPS, NUM_THREADS));
-  print_result("Lock-Free",
-               benchmark_multi_producer<dsa::LockFreeTaskQueue>(NUM_OPS, NUM_THREADS));
-  fmt::println("");
+  // Multi-producer, single consumer (inline poll) with different batch sizes
+  for (std::size_t batch_size : BATCH_SIZES) {
+    if (batch_size == 0) {
+      fmt::println("--- Multi-Producer, Inline Poll ({} threads, no batching) ---", NUM_THREADS);
+    } else {
+      fmt::println("--- Multi-Producer, Inline Poll ({} threads, batch={}) ---", NUM_THREADS, batch_size);
+    }
+    print_result("Mutex",
+                 benchmark_multi_producer<dsa::MutexTaskQueue>(NUM_OPS, NUM_THREADS, batch_size));
+    print_result("TAS Spinlock",
+                 benchmark_multi_producer<dsa::TasSpinlockTaskQueue>(NUM_OPS, NUM_THREADS, batch_size));
+    print_result("TTAS Spinlock",
+                 benchmark_multi_producer<dsa::SpinlockTaskQueue>(NUM_OPS, NUM_THREADS, batch_size));
+    print_result("Backoff Spinlock",
+                 benchmark_multi_producer<dsa::BackoffSpinlockTaskQueue>(NUM_OPS, NUM_THREADS, batch_size));
+    print_result("Lock-Free",
+                 benchmark_multi_producer<dsa::LockFreeTaskQueue>(NUM_OPS, NUM_THREADS, batch_size));
+    fmt::println("");
+  }
 
-  // Multi-producer with background poller
-  fmt::println("--- Multi-Producer, Background Poller ({} threads) ---",
-               NUM_THREADS);
-  print_result("Mutex",
-               benchmark_background_poller<dsa::MutexTaskQueue>(NUM_OPS, NUM_THREADS));
-  print_result("TAS Spinlock",
-               benchmark_background_poller<dsa::TasSpinlockTaskQueue>(NUM_OPS, NUM_THREADS));
-  print_result("TTAS Spinlock",
-               benchmark_background_poller<dsa::SpinlockTaskQueue>(NUM_OPS, NUM_THREADS));
-  print_result("Backoff Spinlock",
-               benchmark_background_poller<dsa::BackoffSpinlockTaskQueue>(NUM_OPS, NUM_THREADS));
-  print_result("Lock-Free",
-               benchmark_background_poller<dsa::LockFreeTaskQueue>(NUM_OPS, NUM_THREADS));
-  fmt::println("");
+  // Multi-producer with background poller with different batch sizes
+  for (std::size_t batch_size : BATCH_SIZES) {
+    if (batch_size == 0) {
+      fmt::println("--- Multi-Producer, Background Poller ({} threads, no batching) ---", NUM_THREADS);
+    } else {
+      fmt::println("--- Multi-Producer, Background Poller ({} threads, batch={}) ---", NUM_THREADS, batch_size);
+    }
+    print_result("Mutex",
+                 benchmark_background_poller<dsa::MutexTaskQueue>(NUM_OPS, NUM_THREADS, batch_size));
+    print_result("TAS Spinlock",
+                 benchmark_background_poller<dsa::TasSpinlockTaskQueue>(NUM_OPS, NUM_THREADS, batch_size));
+    print_result("TTAS Spinlock",
+                 benchmark_background_poller<dsa::SpinlockTaskQueue>(NUM_OPS, NUM_THREADS, batch_size));
+    print_result("Backoff Spinlock",
+                 benchmark_background_poller<dsa::BackoffSpinlockTaskQueue>(NUM_OPS, NUM_THREADS, batch_size));
+    print_result("Lock-Free",
+                 benchmark_background_poller<dsa::LockFreeTaskQueue>(NUM_OPS, NUM_THREADS, batch_size));
+    fmt::println("");
+  }
 
   fmt::println("Benchmark completed.");
   return 0;
