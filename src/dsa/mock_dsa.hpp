@@ -31,12 +31,18 @@ public:
   // For mock operations, completion_.status is set when ready
   bool check_completion(dsa_stdexec::OperationBase *op) const {
     // Get completion record address from descriptor
-    dsa_hw_desc *desc = op->proxy->get_descriptor();
+    dsa_hw_desc *desc = get_descriptor(op);
     if (desc == nullptr) {
       return true;  // No HW op, always complete
     }
     auto *comp = reinterpret_cast<dsa_completion_record *>(desc->completion_addr);
     return comp->status != 0;
+  }
+
+  // Get descriptor for an operation - for mock, we use the proxy
+  // since MockOperation is not a DsaOperationBase
+  dsa_hw_desc *get_descriptor(dsa_stdexec::OperationBase *op) const {
+    return op->proxy->get_descriptor();
   }
 };
 

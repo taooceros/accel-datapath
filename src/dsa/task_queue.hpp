@@ -155,7 +155,7 @@ public:
       while (curr != nullptr) {
         // First, submit to hardware if not yet submitted
         if (!curr->submitted) {
-          dsa_hw_desc *desc = curr->proxy->get_descriptor();
+          dsa_hw_desc *desc = hw_ctx_.get_descriptor(curr);
           if (desc != nullptr) {
             if (hw_ctx_.submit(desc)) {
               curr->submitted = true;
@@ -277,7 +277,7 @@ public:
     while (curr != nullptr) {
       // Submit to hardware if not yet submitted
       if (!curr->submitted) {
-        dsa_hw_desc *desc = curr->proxy->get_descriptor();
+        dsa_hw_desc *desc = hw_ctx_.get_descriptor(curr);
         if (desc != nullptr) {
           if (hw_ctx_.submit(desc)) {
             curr->submitted = true;
@@ -327,7 +327,7 @@ public:
 
       // Submit to hardware if not yet submitted
       if (!op->submitted) {
-        dsa_hw_desc *desc = op->proxy->get_descriptor();
+        dsa_hw_desc *desc = hw_ctx_.get_descriptor(op);
         if (desc != nullptr) {
           if (hw_ctx_.submit(desc)) {
             op->submitted = true;
@@ -446,7 +446,7 @@ public:
 
       // Submit to hardware if not yet submitted
       if (!op->submitted) {
-        dsa_hw_desc *desc = op->proxy->get_descriptor();
+        dsa_hw_desc *desc = hw_ctx_.get_descriptor(op);
         if (desc != nullptr) {
           if (hw_ctx_.submit(desc)) {
             op->submitted = true;

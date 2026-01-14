@@ -28,12 +28,15 @@ public:
   ScheduleOperation(Dsa &dsa, Receiver r) : dsa_(dsa), r_(std::move(r)) {
     // Pre-set completion status so check_completion returns true immediately
     comp_.status = 1;
+    // No hardware descriptor for schedule operations
+    has_descriptor = false;
     proxy = pro::make_proxy<OperationFacade>(Wrapper{this});
   }
 
   ScheduleOperation(ScheduleOperation &&other) noexcept
       : dsa::DsaOperationBase(), dsa_(other.dsa_), r_(std::move(other.r_)) {
     comp_.status = 1;
+    has_descriptor = false;
     proxy = pro::make_proxy<OperationFacade>(Wrapper{this});
   }
 

@@ -57,6 +57,13 @@ public:
     return dsa_op->comp_.status != 0;
   }
 
+  // Get descriptor for an operation using static dispatch
+  // Returns nullptr for operations without hardware descriptors (e.g., schedule)
+  dsa_hw_desc *get_descriptor(dsa_stdexec::OperationBase *op) const {
+    auto *dsa_op = static_cast<dsa::DsaOperationBase *>(op);
+    return dsa_op->has_descriptor ? &dsa_op->desc_ : nullptr;
+  }
+
 private:
   void *wq_portal_ = nullptr;
   accfg_wq_mode mode_ = ACCFG_WQ_SHARED;
