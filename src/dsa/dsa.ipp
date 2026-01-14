@@ -241,12 +241,26 @@ void *DsaBase<QueueTemplate>::map_wq(accfg_wq *wq) {
 }
 
 template <template <typename> class QueueTemplate>
-void DsaBase<QueueTemplate>::submit(dsa_stdexec::OperationBase *op, dsa_hw_desc *) {
-  // The descriptor parameter is now ignored - hardware submission happens in poll()
+void DsaBase<QueueTemplate>::submit(dsa_stdexec::OperationBase *op, dsa_hw_desc *desc) {
   TRACE_EVENT("dsa", "submit", "op", (uintptr_t)op);
   if (wq_portal_ == nullptr) {
     throw dsa_stdexec::DsaSubmitError("DSA work queue portal is not mapped");
   }
+  
+  // Submit to hardware immediately if descriptor provided
+  if (desc != nullptr) {
+    _mm_sfence();
+    if (mode_ == ACCFG_WQ_DEDICATED) {
+      _movdir64b(wq_portal_, desc);
+    } else {
+      // Spin retry for shared WQ
+      while (_enqcmd(wq_portal_, desc) != 0) {
+        _mm_pause();
+      }
+    }
+  }
+  
+  // Queue for completion polling
   task_queue_.push(op);
 }
 

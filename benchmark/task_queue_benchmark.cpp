@@ -6,6 +6,7 @@
 #include <numbers>
 #include <stdexec/execution.hpp>
 #include <exec/async_scope.hpp>
+#include <pthread.h>
 #include <thread>
 #include <vector>
 
@@ -13,6 +14,11 @@
 #include <dsa_stdexec/operation_base.hpp>
 #include <dsa_stdexec/run_loop.hpp>
 #include <dsa_stdexec/sync_wait.hpp>
+
+// Helper to set thread name (max 15 chars + null terminator on Linux)
+inline void set_thread_name(const char* name) {
+  pthread_setname_np(pthread_self(), name);
+}
 
 struct BenchmarkResult {
   double ops_per_sec;
@@ -223,7 +229,8 @@ BenchmarkResult benchmark_stdexec_then_chain(std::size_t num_ops) {
 // Benchmark multi-threaded stdexec scheduling
 template <template <typename> class QueueTemplate>
 BenchmarkResult benchmark_stdexec_multi_producer(std::size_t num_ops,
-                                                  std::size_t num_threads) {
+                                                  std::size_t num_threads,
+                                                  const char* thread_name = "mp_producer") {
   MockDsaBase<QueueTemplate> mock_dsa(false);
   MockDsaScheduler<QueueTemplate> scheduler(mock_dsa);
 
@@ -236,7 +243,12 @@ BenchmarkResult benchmark_stdexec_multi_producer(std::size_t num_ops,
   // Producer threads
   std::vector<std::thread> producers;
   for (std::size_t t = 0; t < num_threads; ++t) {
-    producers.emplace_back([&] {
+    producers.emplace_back([&, t, thread_name] {
+      // Set thread name with index (e.g., "mp_mutex_0")
+      char name[16];
+      snprintf(name, sizeof(name), "%s_%zu", thread_name, t);
+      set_thread_name(name);
+      
       while (true) {
         std::size_t idx = op_index.fetch_add(1, std::memory_order_relaxed);
         if (idx >= num_ops) {
@@ -274,7 +286,8 @@ BenchmarkResult benchmark_stdexec_multi_producer(std::size_t num_ops,
 // Benchmark with background poller using stdexec interface
 template <template <typename> class QueueTemplate>
 BenchmarkResult benchmark_stdexec_background_poller(std::size_t num_ops,
-                                                     std::size_t num_threads) {
+                                                     std::size_t num_threads,
+                                                     const char* thread_name = "bg_producer") {
   MockDsaBase<QueueTemplate> mock_dsa(true); // Start background poller
   MockDsaScheduler<QueueTemplate> scheduler(mock_dsa);
 
@@ -287,7 +300,12 @@ BenchmarkResult benchmark_stdexec_background_poller(std::size_t num_ops,
   // Producer threads
   std::vector<std::thread> producers;
   for (std::size_t t = 0; t < num_threads; ++t) {
-    producers.emplace_back([&] {
+    producers.emplace_back([&, t, thread_name] {
+      // Set thread name with index (e.g., "bg_mutex_0")
+      char name[16];
+      snprintf(name, sizeof(name), "%s_%zu", thread_name, t);
+      set_thread_name(name);
+      
       while (true) {
         std::size_t idx = op_index.fetch_add(1, std::memory_order_relaxed);
         if (idx >= num_ops) {
@@ -322,102 +340,137 @@ BenchmarkResult benchmark_stdexec_background_poller(std::size_t num_ops,
           duration / static_cast<double>(num_ops), num_ops};
 }
 
-int main() {
+void print_usage(const char* prog) {
+  fmt::println("Usage: {} [queue_type] [benchmark_type]", prog);
+  fmt::println("");
+  fmt::println("Queue types:");
+  fmt::println("  all       - Run all queue types (default)");
+  fmt::println("  mutex     - std::mutex based queue");
+  fmt::println("  tas       - Test-and-set spinlock queue");
+  fmt::println("  ttas      - Test-and-test-and-set spinlock queue");
+  fmt::println("  backoff   - Backoff spinlock queue");
+  fmt::println("  lockfree  - Lock-free queue");
+  fmt::println("");
+  fmt::println("Benchmark types:");
+  fmt::println("  all       - Run all benchmarks (default)");
+  fmt::println("  schedule  - Single-threaded schedule");
+  fmt::println("  runloop   - PollingRunLoop schedule");
+  fmt::println("  chain     - schedule | then | then chain");
+  fmt::println("  multi     - Multi-producer inline poll");
+  fmt::println("  background- Multi-producer background poller");
+  fmt::println("");
+  fmt::println("Examples:");
+  fmt::println("  {} mutex multi      # Profile mutex queue with multi-producer", prog);
+  fmt::println("  {} lockfree         # Profile lock-free queue, all benchmarks", prog);
+  fmt::println("  samply record {} mutex multi", prog);
+}
+
+// Run benchmark for a specific queue type
+template <template <typename> class QueueTemplate>
+void run_benchmarks_for_queue(const char* queue_name, 
+                               const std::string& benchmark_type,
+                               std::size_t num_ops,
+                               std::size_t num_threads,
+                               std::size_t warmup_ops) {
+  // Set main thread name
+  char main_name[16];
+  snprintf(main_name, sizeof(main_name), "%s_main", queue_name);
+  set_thread_name(main_name);
+
+  bool run_all = (benchmark_type == "all");
+  
+  // Warmup
+  fmt::println("--- Warmup ({} ops) for {} ---", warmup_ops, queue_name);
+  if (run_all || benchmark_type == "schedule") {
+    benchmark_stdexec_schedule<QueueTemplate>(warmup_ops);
+  }
+  if (run_all || benchmark_type == "runloop") {
+    benchmark_polling_run_loop<QueueTemplate>(warmup_ops);
+  }
+  if (run_all || benchmark_type == "chain") {
+    benchmark_stdexec_then_chain<QueueTemplate>(warmup_ops);
+  }
+  if (run_all || benchmark_type == "multi") {
+    benchmark_stdexec_multi_producer<QueueTemplate>(warmup_ops, num_threads, queue_name);
+  }
+  if (run_all || benchmark_type == "background") {
+    benchmark_stdexec_background_poller<QueueTemplate>(warmup_ops, num_threads, queue_name);
+  }
+  fmt::println("Warmup complete.\n");
+
+  // Run actual benchmarks
+  if (run_all || benchmark_type == "schedule") {
+    fmt::println("--- Single-Threaded stdexec::schedule() ---");
+    print_result(queue_name, benchmark_stdexec_schedule<QueueTemplate>(num_ops));
+    fmt::println("");
+  }
+  
+  if (run_all || benchmark_type == "runloop") {
+    fmt::println("--- Single-Threaded PollingRunLoop::schedule() ---");
+    print_result(queue_name, benchmark_polling_run_loop<QueueTemplate>(num_ops));
+    fmt::println("");
+  }
+  
+  if (run_all || benchmark_type == "chain") {
+    fmt::println("--- Single-Threaded schedule() | then() | then() ---");
+    print_result(queue_name, benchmark_stdexec_then_chain<QueueTemplate>(num_ops));
+    fmt::println("");
+  }
+  
+  if (run_all || benchmark_type == "multi") {
+    fmt::println("--- Multi-Producer stdexec, Inline Poll ({} threads) ---", num_threads);
+    print_result(queue_name, benchmark_stdexec_multi_producer<QueueTemplate>(num_ops, num_threads, queue_name));
+    fmt::println("");
+  }
+  
+  if (run_all || benchmark_type == "background") {
+    fmt::println("--- Multi-Producer stdexec, Background Poller ({} threads) ---", num_threads);
+    print_result(queue_name, benchmark_stdexec_background_poller<QueueTemplate>(num_ops, num_threads, queue_name));
+    fmt::println("");
+  }
+}
+
+int main(int argc, char* argv[]) {
   constexpr std::size_t NUM_OPS = 1000000;
   constexpr std::size_t NUM_THREADS = 4;
   constexpr std::size_t WARMUP_OPS = 10000;
 
+  std::string queue_type = "all";
+  std::string benchmark_type = "all";
+
+  if (argc > 1) {
+    std::string arg1 = argv[1];
+    if (arg1 == "-h" || arg1 == "--help") {
+      print_usage(argv[0]);
+      return 0;
+    }
+    queue_type = arg1;
+  }
+  if (argc > 2) {
+    benchmark_type = argv[2];
+  }
+
   fmt::println("=== TASK QUEUE BENCHMARK (stdexec Interface) ===\n");
-  fmt::println("Operations: {}, Threads: {}\n", NUM_OPS, NUM_THREADS);
+  fmt::println("Operations: {}, Threads: {}", NUM_OPS, NUM_THREADS);
+  fmt::println("Queue type: {}, Benchmark: {}\n", queue_type, benchmark_type);
 
-  // Warmup phase
-  fmt::println("--- Warmup ({} ops each) ---", WARMUP_OPS);
-  benchmark_stdexec_schedule<dsa::MutexTaskQueue>(WARMUP_OPS);
-  benchmark_stdexec_schedule<dsa::TasSpinlockTaskQueue>(WARMUP_OPS);
-  benchmark_stdexec_schedule<dsa::SpinlockTaskQueue>(WARMUP_OPS);
-  benchmark_stdexec_schedule<dsa::BackoffSpinlockTaskQueue>(WARMUP_OPS);
-  benchmark_stdexec_schedule<dsa::LockFreeTaskQueue>(WARMUP_OPS);
-  benchmark_polling_run_loop<dsa::MutexTaskQueue>(WARMUP_OPS);
-  benchmark_polling_run_loop<dsa::LockFreeTaskQueue>(WARMUP_OPS);
-  benchmark_stdexec_then_chain<dsa::MutexTaskQueue>(WARMUP_OPS);
-  benchmark_stdexec_then_chain<dsa::LockFreeTaskQueue>(WARMUP_OPS);
-  benchmark_stdexec_multi_producer<dsa::MutexTaskQueue>(WARMUP_OPS, NUM_THREADS);
-  benchmark_stdexec_multi_producer<dsa::LockFreeTaskQueue>(WARMUP_OPS, NUM_THREADS);
-  benchmark_stdexec_background_poller<dsa::MutexTaskQueue>(WARMUP_OPS, NUM_THREADS);
-  benchmark_stdexec_background_poller<dsa::LockFreeTaskQueue>(WARMUP_OPS, NUM_THREADS);
-  fmt::println("Warmup complete.\n");
+  bool run_all_queues = (queue_type == "all");
 
-  // Single-threaded stdexec schedule benchmark
-  fmt::println("--- Single-Threaded stdexec::schedule() ---");
-  print_result("Mutex",
-               benchmark_stdexec_schedule<dsa::MutexTaskQueue>(NUM_OPS));
-  print_result("TAS Spinlock",
-               benchmark_stdexec_schedule<dsa::TasSpinlockTaskQueue>(NUM_OPS));
-  print_result("TTAS Spinlock",
-               benchmark_stdexec_schedule<dsa::SpinlockTaskQueue>(NUM_OPS));
-  print_result("Backoff Spinlock",
-               benchmark_stdexec_schedule<dsa::BackoffSpinlockTaskQueue>(NUM_OPS));
-  print_result("Lock-Free",
-               benchmark_stdexec_schedule<dsa::LockFreeTaskQueue>(NUM_OPS));
-  fmt::println("");
-
-  // PollingRunLoop benchmark
-  fmt::println("--- Single-Threaded PollingRunLoop::schedule() ---");
-  print_result("Mutex",
-               benchmark_polling_run_loop<dsa::MutexTaskQueue>(NUM_OPS));
-  print_result("TAS Spinlock",
-               benchmark_polling_run_loop<dsa::TasSpinlockTaskQueue>(NUM_OPS));
-  print_result("TTAS Spinlock",
-               benchmark_polling_run_loop<dsa::SpinlockTaskQueue>(NUM_OPS));
-  print_result("Backoff Spinlock",
-               benchmark_polling_run_loop<dsa::BackoffSpinlockTaskQueue>(NUM_OPS));
-  print_result("Lock-Free",
-               benchmark_polling_run_loop<dsa::LockFreeTaskQueue>(NUM_OPS));
-  fmt::println("");
-
-  // Single-threaded with sender composition (then chain)
-  fmt::println("--- Single-Threaded schedule() | then() | then() ---");
-  print_result("Mutex",
-               benchmark_stdexec_then_chain<dsa::MutexTaskQueue>(NUM_OPS));
-  print_result("TAS Spinlock",
-               benchmark_stdexec_then_chain<dsa::TasSpinlockTaskQueue>(NUM_OPS));
-  print_result("TTAS Spinlock",
-               benchmark_stdexec_then_chain<dsa::SpinlockTaskQueue>(NUM_OPS));
-  print_result("Backoff Spinlock",
-               benchmark_stdexec_then_chain<dsa::BackoffSpinlockTaskQueue>(NUM_OPS));
-  print_result("Lock-Free",
-               benchmark_stdexec_then_chain<dsa::LockFreeTaskQueue>(NUM_OPS));
-  fmt::println("");
-
-  // Multi-producer with inline poll
-  fmt::println("--- Multi-Producer stdexec, Inline Poll ({} threads) ---",
-               NUM_THREADS);
-  print_result("Mutex",
-               benchmark_stdexec_multi_producer<dsa::MutexTaskQueue>(NUM_OPS, NUM_THREADS));
-  print_result("TAS Spinlock",
-               benchmark_stdexec_multi_producer<dsa::TasSpinlockTaskQueue>(NUM_OPS, NUM_THREADS));
-  print_result("TTAS Spinlock",
-               benchmark_stdexec_multi_producer<dsa::SpinlockTaskQueue>(NUM_OPS, NUM_THREADS));
-  print_result("Backoff Spinlock",
-               benchmark_stdexec_multi_producer<dsa::BackoffSpinlockTaskQueue>(NUM_OPS, NUM_THREADS));
-  print_result("Lock-Free",
-               benchmark_stdexec_multi_producer<dsa::LockFreeTaskQueue>(NUM_OPS, NUM_THREADS));
-  fmt::println("");
-
-  // Multi-producer with background poller
-  fmt::println("--- Multi-Producer stdexec, Background Poller ({} threads) ---",
-               NUM_THREADS);
-  print_result("Mutex",
-               benchmark_stdexec_background_poller<dsa::MutexTaskQueue>(NUM_OPS, NUM_THREADS));
-  print_result("TAS Spinlock",
-               benchmark_stdexec_background_poller<dsa::TasSpinlockTaskQueue>(NUM_OPS, NUM_THREADS));
-  print_result("TTAS Spinlock",
-               benchmark_stdexec_background_poller<dsa::SpinlockTaskQueue>(NUM_OPS, NUM_THREADS));
-  print_result("Backoff Spinlock",
-               benchmark_stdexec_background_poller<dsa::BackoffSpinlockTaskQueue>(NUM_OPS, NUM_THREADS));
-  print_result("Lock-Free",
-               benchmark_stdexec_background_poller<dsa::LockFreeTaskQueue>(NUM_OPS, NUM_THREADS));
-  fmt::println("");
+  if (run_all_queues || queue_type == "mutex") {
+    run_benchmarks_for_queue<dsa::MutexTaskQueue>("mutex", benchmark_type, NUM_OPS, NUM_THREADS, WARMUP_OPS);
+  }
+  if (run_all_queues || queue_type == "tas") {
+    run_benchmarks_for_queue<dsa::TasSpinlockTaskQueue>("tas", benchmark_type, NUM_OPS, NUM_THREADS, WARMUP_OPS);
+  }
+  if (run_all_queues || queue_type == "ttas") {
+    run_benchmarks_for_queue<dsa::SpinlockTaskQueue>("ttas", benchmark_type, NUM_OPS, NUM_THREADS, WARMUP_OPS);
+  }
+  if (run_all_queues || queue_type == "backoff") {
+    run_benchmarks_for_queue<dsa::BackoffSpinlockTaskQueue>("backoff", benchmark_type, NUM_OPS, NUM_THREADS, WARMUP_OPS);
+  }
+  if (run_all_queues || queue_type == "lockfree") {
+    run_benchmarks_for_queue<dsa::LockFreeTaskQueue>("lockfree", benchmark_type, NUM_OPS, NUM_THREADS, WARMUP_OPS);
+  }
 
   fmt::println("Benchmark completed.");
   return 0;

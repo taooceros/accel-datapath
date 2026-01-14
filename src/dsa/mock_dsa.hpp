@@ -16,25 +16,14 @@ extern "C" {
 #include <dsa_stdexec/operation_base.hpp>
 
 // Mock hardware context for testing task queues without real DSA hardware
-// Satisfies the HwContext concept with submit and check_completion methods
+// Satisfies the HwContext concept (only requires check_completion)
 class MockHwContext {
 public:
   MockHwContext() = default;
 
-  // Always returns true (successful submission)
-  bool submit(dsa_hw_desc *desc) const {
-    (void)desc;
+  // Check completion - for mock operations, always returns true (immediate completion)
+  bool check_completion(dsa_stdexec::OperationBase *) const {
     return true;
-  }
-
-  // Check completion by examining the completion record status
-  // For mock operations, completion_.status is set when ready
-  bool check_completion(dsa_stdexec::OperationBase *op) const {
-      return true;
-  }
-
-  dsa_hw_desc *get_descriptor(dsa_stdexec::OperationBase *op) const {
-    return nullptr;
   }
 };
 

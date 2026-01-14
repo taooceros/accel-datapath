@@ -22,8 +22,8 @@ struct AccfgCtxDeleter {
 };
 
 // Hardware context for DSA accelerator
-// Satisfies the HwContext concept with submit and check_completion methods
-// This is passed to task queues as a template parameter
+// Satisfies the HwContext concept (check_completion) for task queue polling
+// Also provides submit() for use by DsaBase::submit()
 class DsaHwContext {
 public:
   DsaHwContext() = default;
@@ -35,34 +35,15 @@ public:
     mode_ = mode;
   }
 
-  // Submit a descriptor to DSA hardware
-  bool submit(dsa_hw_desc *desc) const {
-    if (wq_portal_ == nullptr) {
-      return false;
-    }
-    _mm_sfence();
-    if (mode_ == ACCFG_WQ_DEDICATED) {
-      _movdir64b(wq_portal_, desc);
-      return true;
-    } else {
-      // For shared mode, try once and return false if busy
-      return _enqcmd(wq_portal_, desc) == 0;
-    }
-  }
-
   // Check if an operation has completed by examining its completion record
-  // Static dispatch - no virtual call overhead
+  // Required by HwContext concept for task queue polling
   bool check_completion(dsa_stdexec::OperationBase *op) const {
     auto *dsa_op = static_cast<dsa::DsaOperationBase *>(op);
     return dsa_op->comp_.status != 0;
   }
 
-  // Get descriptor for an operation using static dispatch
-  // Returns nullptr for operations without hardware descriptors (e.g., schedule)
-  dsa_hw_desc *get_descriptor(dsa_stdexec::OperationBase *op) const {
-    auto *dsa_op = static_cast<dsa::DsaOperationBase *>(op);
-    return dsa_op->has_descriptor ? &dsa_op->desc_ : nullptr;
-  }
+  void *portal() const { return wq_portal_; }
+  accfg_wq_mode mode() const { return mode_; }
 
 private:
   void *wq_portal_ = nullptr;

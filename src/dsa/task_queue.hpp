@@ -139,7 +139,6 @@ public:
   void push(dsa_stdexec::OperationBase *op) {
     lock_.lock();
     op->next = head_;
-    op->submitted = false;
     head_ = op;
     lock_.unlock();
   }
@@ -153,22 +152,8 @@ public:
       dsa_stdexec::OperationBase *curr = head_;
 
       while (curr != nullptr) {
-        // First, submit to hardware if not yet submitted
-        if (!curr->submitted) {
-          dsa_hw_desc *desc = hw_ctx_.get_descriptor(curr);
-          if (desc != nullptr) {
-            if (hw_ctx_.submit(desc)) {
-              curr->submitted = true;
-            }
-            // If submission failed, we'll retry next poll
-          } else {
-            // No descriptor (e.g., schedule operation) - mark as submitted
-            curr->submitted = true;
-          }
-        }
-
-        // Check for completion (only if submitted) - static dispatch via HwContext
-        if (curr->submitted && hw_ctx_.check_completion(curr)) {
+        // Check for completion - static dispatch via HwContext
+        if (hw_ctx_.check_completion(curr)) {
           *pprev = curr->next;
           curr->next = completed_head;
           completed_head = curr;
@@ -247,7 +232,6 @@ public:
   RingBufferTaskQueue &operator=(RingBufferTaskQueue &&) = delete;
 
   void push(dsa_stdexec::OperationBase *op) {
-    op->submitted = false;
     // Reserve a slot using fetch_add
     std::size_t slot = tail_.fetch_add(1, std::memory_order_relaxed);
     std::size_t index = slot & (Capacity - 1);
@@ -275,20 +259,8 @@ public:
     dsa_stdexec::OperationBase *completed_head = nullptr;
 
     while (curr != nullptr) {
-      // Submit to hardware if not yet submitted
-      if (!curr->submitted) {
-        dsa_hw_desc *desc = hw_ctx_.get_descriptor(curr);
-        if (desc != nullptr) {
-          if (hw_ctx_.submit(desc)) {
-            curr->submitted = true;
-          }
-        } else {
-          curr->submitted = true;
-        }
-      }
-
       // Check for completion - static dispatch via HwContext
-      if (curr->submitted && hw_ctx_.check_completion(curr)) {
+      if (hw_ctx_.check_completion(curr)) {
         // Remove from pending list
         *pprev = curr->next;
         // Add to completed list
@@ -325,20 +297,8 @@ public:
 
       dsa_stdexec::OperationBase *op = buffer_[index];
 
-      // Submit to hardware if not yet submitted
-      if (!op->submitted) {
-        dsa_hw_desc *desc = hw_ctx_.get_descriptor(op);
-        if (desc != nullptr) {
-          if (hw_ctx_.submit(desc)) {
-            op->submitted = true;
-          }
-        } else {
-          op->submitted = true;
-        }
-      }
-
-      // Check completion immediately (only if submitted) - static dispatch via HwContext
-      if (op->submitted && hw_ctx_.check_completion(op)) {
+      // Check completion immediately - static dispatch via HwContext
+      if (hw_ctx_.check_completion(op)) {
         op->next = completed_head;
         completed_head = op;
       } else {
@@ -408,7 +368,6 @@ public:
   LockFreeTaskQueue &operator=(LockFreeTaskQueue &&) = delete;
 
   void push(dsa_stdexec::OperationBase *op) {
-    op->submitted = false;
     dsa_stdexec::OperationBase *old_head =
         head_.load(std::memory_order_relaxed);
     do {
@@ -444,20 +403,8 @@ public:
       dsa_stdexec::OperationBase *op = reversed;
       reversed = op->next;
 
-      // Submit to hardware if not yet submitted
-      if (!op->submitted) {
-        dsa_hw_desc *desc = hw_ctx_.get_descriptor(op);
-        if (desc != nullptr) {
-          if (hw_ctx_.submit(desc)) {
-            op->submitted = true;
-          }
-        } else {
-          op->submitted = true;
-        }
-      }
-
       // Check for completion - static dispatch via HwContext
-      if (op->submitted && hw_ctx_.check_completion(op)) {
+      if (hw_ctx_.check_completion(op)) {
         op->next = completed_head;
         completed_head = op;
       } else {
@@ -470,7 +417,6 @@ public:
     while (pending_head != nullptr) {
       dsa_stdexec::OperationBase *op = pending_head;
       pending_head = op->next;
-      // Don't reset submitted flag when re-adding
       dsa_stdexec::OperationBase *old_head =
           head_.load(std::memory_order_relaxed);
       do {
