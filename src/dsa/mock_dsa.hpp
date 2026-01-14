@@ -38,12 +38,6 @@ public:
     auto *comp = reinterpret_cast<dsa_completion_record *>(desc->completion_addr);
     return comp->status != 0;
   }
-
-  // Get descriptor for an operation - for mock, we use the proxy
-  // since MockOperation is not a DsaOperationBase
-  dsa_hw_desc *get_descriptor(dsa_stdexec::OperationBase *op) const {
-    return op->proxy->get_descriptor();
-  }
 };
 
 // Mock operation that completes immediately or after a delay
