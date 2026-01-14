@@ -15,21 +15,34 @@ extern "C" {
 #include "task_queue.hpp"
 #include <dsa_stdexec/operation_base.hpp>
 
-// Mock hardware submission callable for testing task queues without real DSA hardware
-// Simulates immediate successful submission
-class MockHwSubmit {
+// Mock hardware context for testing task queues without real DSA hardware
+// Satisfies the HwContext concept with submit and check_completion methods
+class MockHwContext {
 public:
-  MockHwSubmit() = default;
+  MockHwContext() = default;
 
   // Always returns true (successful submission)
-  bool operator()(dsa_hw_desc *desc) const {
+  bool submit(dsa_hw_desc *desc) const {
     (void)desc;
     return true;
+  }
+
+  // Check completion by examining the completion record status
+  // For mock operations, completion_.status is set when ready
+  bool check_completion(dsa_stdexec::OperationBase *op) const {
+    // Get completion record address from descriptor
+    dsa_hw_desc *desc = op->proxy->get_descriptor();
+    if (desc == nullptr) {
+      return true;  // No HW op, always complete
+    }
+    auto *comp = reinterpret_cast<dsa_completion_record *>(desc->completion_addr);
+    return comp->status != 0;
   }
 };
 
 // Mock operation that completes immediately or after a delay
 // Used for benchmarking task queue overhead without actual DSA operations
+// Note: check_completion is handled by MockHwContext, which checks completion_.status
 class MockOperation {
 public:
   // Default: completes immediately
@@ -53,29 +66,6 @@ public:
     use_submit_delay_ = true;
   }
 
-  bool check_completion() {
-    if (use_submit_delay_) {
-      if (!submitted_) {
-        return false;
-      }
-      if (std::chrono::steady_clock::now() >= submit_time_ + delay_from_submit_) {
-        completion_.status = DSA_COMP_SUCCESS;
-        return true;
-      }
-      return false;
-    }
-    
-    if (complete_at_ == std::chrono::steady_clock::time_point::min()) {
-      // Immediate completion
-      return true;
-    }
-    if (std::chrono::steady_clock::now() >= complete_at_) {
-      completion_.status = DSA_COMP_SUCCESS;
-      return true;
-    }
-    return false;
-  }
-
   void notify() {
     notified_ = true;
     if (callback_) {
@@ -88,6 +78,8 @@ public:
       submit_time_ = std::chrono::steady_clock::now();
       submitted_ = true;
     }
+    // Update completion status based on timing (called during poll)
+    update_completion_status();
     return &desc_;
   }
 
@@ -96,6 +88,24 @@ public:
   void set_callback(std::function<void()> cb) { callback_ = std::move(cb); }
 
 private:
+  // Update completion_.status based on timing
+  void update_completion_status() {
+    if (completion_.status != 0) {
+      return; // Already complete
+    }
+    
+    if (use_submit_delay_) {
+      if (submitted_ && std::chrono::steady_clock::now() >= submit_time_ + delay_from_submit_) {
+        completion_.status = DSA_COMP_SUCCESS;
+      }
+    } else if (complete_at_ == std::chrono::steady_clock::time_point::min()) {
+      // Immediate completion
+      completion_.status = DSA_COMP_SUCCESS;
+    } else if (std::chrono::steady_clock::now() >= complete_at_) {
+      completion_.status = DSA_COMP_SUCCESS;
+    }
+  }
+
   dsa_hw_desc desc_{};
   dsa_completion_record completion_{};
   std::chrono::steady_clock::time_point complete_at_;
@@ -107,9 +117,9 @@ private:
   std::function<void()> callback_;
 };
 
-// Template aliases for task queues with mock hardware submission
+// Template aliases for task queues with mock hardware context
 template <template <typename> class QueueTemplate>
-using MockTaskQueue = QueueTemplate<MockHwSubmit>;
+using MockTaskQueue = QueueTemplate<MockHwContext>;
 
 // Mock DSA class for benchmarking task queues without real hardware
 template <template <typename> class QueueTemplate = dsa::MutexTaskQueue>
@@ -118,7 +128,7 @@ public:
   using Queue = MockTaskQueue<QueueTemplate>;
 
   explicit MockDsaBase(bool start_poller = false)
-      : task_queue_(MockHwSubmit{}) {
+      : task_queue_(MockHwContext{}) {
     if (start_poller) {
       running_.store(true, std::memory_order_relaxed);
       poller_ = std::thread([this] {
@@ -159,8 +169,8 @@ private:
 };
 
 // Wrapper to make RingBufferTaskQueue fit the template<typename> class pattern
-template <typename HwSubmit>
-using RingBufferTaskQueue = dsa::RingBufferTaskQueue<HwSubmit, 4096>;
+template <typename HwCtx>
+using RingBufferTaskQueue = dsa::RingBufferTaskQueue<HwCtx, 4096>;
 
 // Convenience aliases for different queue strategies with mock hardware
 using MockDsa = MockDsaBase<dsa::MutexTaskQueue>;

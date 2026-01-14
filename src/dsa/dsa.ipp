@@ -29,7 +29,7 @@ inline uint8_t op_status(uint8_t status) {
 
 template <template <typename> class QueueTemplate>
 DsaBase<QueueTemplate>::DsaBase(bool start_poller)
-    : ctx_(), wq_(nullptr), wq_portal_(nullptr), task_queue_(DsaHwSubmit{}) {
+    : ctx_(), wq_(nullptr), wq_portal_(nullptr), task_queue_(DsaHwContext{}) {
   try {
     auto &ctx = context();
     accfg_device *device = nullptr;
@@ -103,8 +103,8 @@ DsaBase<QueueTemplate>::DsaBase(bool start_poller)
           "Failed to locate and map a usable user work queue portal");
     }
 
-    // Set up hardware submission context for the task queue
-    task_queue_.hw_submit().set_context(wq_portal_, mode_);
+    // Set up hardware context for the task queue
+    task_queue_.hw_context().set_context(wq_portal_, mode_);
 
     if (start_poller) {
       running_ = true;

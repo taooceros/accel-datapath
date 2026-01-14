@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cstdint>
 #include <dsa/dsa.hpp>
+#include <dsa/dsa_operation_base.hpp>
 #include <dsa_stdexec/error.hpp>
 #include <dsa_stdexec/operation_base.hpp>
 #include <exception>
@@ -26,7 +27,8 @@ inline void reset_page_fault_retries() {
   g_page_fault_retries.store(0, std::memory_order_relaxed);
 }
 
-template <class DsaType, class ReceiverId> class DataMoveOperation {
+template <class DsaType, class ReceiverId>
+class DataMoveOperation : public dsa::DsaOperationBase {
   using Receiver = stdexec::__t<ReceiverId>;
   static_assert(!std::is_reference_v<Receiver>,
                 "Receiver must not be a reference");
@@ -50,11 +52,11 @@ public:
     // Zero out completion record
     memset(&comp_, 0, sizeof(comp_));
 
-    // Initialize the proxy hook
-    hook_.proxy = pro::make_proxy<OperationFacade>(Wrapper{this});
+    // Initialize the proxy for notify/get_descriptor callbacks
+    proxy = pro::make_proxy<OperationFacade>(Wrapper{this});
 
     try {
-      dsa_.submit(&hook_, &desc_);
+      dsa_.submit(this, &desc_);
     } catch (const DsaError &e) {
       fmt::println(stderr, "DSA submit failed: {}", e.full_report());
       stdexec::set_error(std::move(r_), std::current_exception());
@@ -72,12 +74,9 @@ public:
 private:
   struct Wrapper {
     DataMoveOperation *op;
-    bool check_completion() { return op->check_completion(); }
     void notify() { op->notify(); }
     dsa_hw_desc *get_descriptor() { return op->get_descriptor(); }
   };
-
-  bool check_completion() { return comp_.status != 0; }
 
   dsa_hw_desc *get_descriptor() { return &desc_; }
 
@@ -101,7 +100,7 @@ private:
       memset(&comp_, 0, sizeof(comp_));
 
       try {
-        dsa_.submit(&hook_, &desc_);
+        dsa_.submit(this, &desc_);
       } catch (...) {
         stdexec::set_error(std::move(r_), std::current_exception());
       }
@@ -119,9 +118,6 @@ private:
   void *dst_;
   size_t size_;
   Receiver r_;
-  dsa_hw_desc desc_ __attribute__((aligned(64))) = {};
-  dsa_completion_record comp_ __attribute__((aligned(32))) = {};
-  OperationBase hook_;
 };
 
 template <class DsaType>

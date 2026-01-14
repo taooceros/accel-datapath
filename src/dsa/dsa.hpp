@@ -13,6 +13,7 @@ extern "C" {
 #include <linux/idxd.h>
 }
 
+#include "dsa_operation_base.hpp"
 #include "task_queue.hpp"
 #include <dsa_stdexec/operation_base.hpp>
 
@@ -20,12 +21,13 @@ struct AccfgCtxDeleter {
   void operator()(accfg_ctx *ctx) const noexcept { accfg_unref(ctx); }
 };
 
-// Hardware submission callable for DSA accelerator
+// Hardware context for DSA accelerator
+// Satisfies the HwContext concept with submit and check_completion methods
 // This is passed to task queues as a template parameter
-class DsaHwSubmit {
+class DsaHwContext {
 public:
-  DsaHwSubmit() = default;
-  DsaHwSubmit(void *wq_portal, accfg_wq_mode mode)
+  DsaHwContext() = default;
+  DsaHwContext(void *wq_portal, accfg_wq_mode mode)
       : wq_portal_(wq_portal), mode_(mode) {}
 
   void set_context(void *wq_portal, accfg_wq_mode mode) {
@@ -33,7 +35,8 @@ public:
     mode_ = mode;
   }
 
-  bool operator()(dsa_hw_desc *desc) const {
+  // Submit a descriptor to DSA hardware
+  bool submit(dsa_hw_desc *desc) const {
     if (wq_portal_ == nullptr) {
       return false;
     }
@@ -45,6 +48,13 @@ public:
       // For shared mode, try once and return false if busy
       return _enqcmd(wq_portal_, desc) == 0;
     }
+  }
+
+  // Check if an operation has completed by examining its completion record
+  // Static dispatch - no virtual call overhead
+  bool check_completion(dsa_stdexec::OperationBase *op) const {
+    auto *dsa_op = static_cast<dsa::DsaOperationBase *>(op);
+    return dsa_op->comp_.status != 0;
   }
 
 private:
@@ -68,9 +78,9 @@ private:
   std::unique_ptr<accfg_ctx, AccfgCtxDeleter> ctx_;
 };
 
-// Template alias for queue types with DSA hardware submission
+// Template alias for queue types with DSA hardware context
 template <template <typename> class QueueTemplate>
-using DsaTaskQueue = QueueTemplate<DsaHwSubmit>;
+using DsaTaskQueue = QueueTemplate<DsaHwContext>;
 
 template <template <typename> class QueueTemplate = dsa::MutexTaskQueue>
 class DsaBase {

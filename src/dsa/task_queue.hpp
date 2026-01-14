@@ -123,55 +123,12 @@ private:
 
 } // namespace locks
 
-namespace detail {
-
-// Helper to poll and notify completed operations from a linked list
-// Returns new head and count of completed operations
-// Caller must hold any necessary locks during this call
-inline std::size_t poll_and_notify(dsa_stdexec::OperationBase *&head) {
-  dsa_stdexec::OperationBase *completed_head = nullptr;
-  dsa_stdexec::OperationBase **pprev = &head;
-  dsa_stdexec::OperationBase *curr = head;
-
-  while (curr != nullptr) {
-    if (curr->proxy->check_completion()) {
-      // Remove from list
-      *pprev = curr->next;
-
-      // Add to completed list
-      curr->next = completed_head;
-      completed_head = curr;
-
-      // Move to next (pprev stays the same because we removed curr)
-      curr = *pprev;
-    } else {
-      // Move to next
-      pprev = &curr->next;
-      curr = curr->next;
-    }
-  }
-
-  // Notify and count completed operations
-  std::size_t count = 0;
-  while (completed_head != nullptr) {
-    dsa_stdexec::OperationBase *op = completed_head;
-    completed_head = op->next;
-    op->proxy->notify();
-    ++count;
-  }
-
-  return count;
-}
-
-} // namespace detail
-
-// Generic locked task queue - parameterized by lock type and hardware submitter type
-// HwSubmit should be a callable type with signature: bool(dsa_hw_desc*) 
-// Returns true if submission succeeded, false to retry later
-template <Lockable Lock, typename HwSubmit>
+// Generic locked task queue - parameterized by lock type and hardware context type
+// HwCtx must satisfy the HwContext concept (submit and check_completion methods)
+template <Lockable Lock, dsa_stdexec::HwContext HwCtx>
 class LockedTaskQueue {
 public:
-  explicit LockedTaskQueue(HwSubmit hw_submit) : hw_submit_(std::move(hw_submit)) {}
+  explicit LockedTaskQueue(HwCtx hw_ctx) : hw_ctx_(std::move(hw_ctx)) {}
   ~LockedTaskQueue() = default;
 
   LockedTaskQueue(const LockedTaskQueue &) = delete;
@@ -200,7 +157,7 @@ public:
         if (!curr->submitted) {
           dsa_hw_desc *desc = curr->proxy->get_descriptor();
           if (desc != nullptr) {
-            if (hw_submit_(desc)) {
+            if (hw_ctx_.submit(desc)) {
               curr->submitted = true;
             }
             // If submission failed, we'll retry next poll
@@ -210,8 +167,8 @@ public:
           }
         }
 
-        // Check for completion (only if submitted)
-        if (curr->submitted && curr->proxy->check_completion()) {
+        // Check for completion (only if submitted) - static dispatch via HwContext
+        if (curr->submitted && hw_ctx_.check_completion(curr)) {
           *pprev = curr->next;
           curr->next = completed_head;
           completed_head = curr;
@@ -243,41 +200,41 @@ public:
     return result;
   }
 
-  HwSubmit &hw_submit() { return hw_submit_; }
-  const HwSubmit &hw_submit() const { return hw_submit_; }
+  HwCtx &hw_context() { return hw_ctx_; }
+  const HwCtx &hw_context() const { return hw_ctx_; }
 
 private:
   dsa_stdexec::OperationBase *head_ = nullptr;
   Lock lock_;
-  [[no_unique_address]] HwSubmit hw_submit_;
+  [[no_unique_address]] HwCtx hw_ctx_;
 };
 
 // Template aliases for different lock strategies
-template <typename HwSubmit>
-using SingleThreadTaskQueue = LockedTaskQueue<locks::NullLock, HwSubmit>;
+template <typename HwCtx>
+using SingleThreadTaskQueue = LockedTaskQueue<locks::NullLock, HwCtx>;
 
-template <typename HwSubmit>
-using MutexTaskQueue = LockedTaskQueue<locks::MutexLock, HwSubmit>;
+template <typename HwCtx>
+using MutexTaskQueue = LockedTaskQueue<locks::MutexLock, HwCtx>;
 
-template <typename HwSubmit>
-using TasSpinlockTaskQueue = LockedTaskQueue<locks::TasSpinlock, HwSubmit>;
+template <typename HwCtx>
+using TasSpinlockTaskQueue = LockedTaskQueue<locks::TasSpinlock, HwCtx>;
 
-template <typename HwSubmit>
-using SpinlockTaskQueue = LockedTaskQueue<locks::TtasSpinlock, HwSubmit>;
+template <typename HwCtx>
+using SpinlockTaskQueue = LockedTaskQueue<locks::TtasSpinlock, HwCtx>;
 
-template <typename HwSubmit>
-using BackoffSpinlockTaskQueue = LockedTaskQueue<locks::TtasBackoffSpinlock, HwSubmit>;
+template <typename HwCtx>
+using BackoffSpinlockTaskQueue = LockedTaskQueue<locks::TtasBackoffSpinlock, HwCtx>;
 
 // Ring buffer task queue (MPSC - multi-producer, single-consumer)
 // Fixed capacity, uses atomic indices for lock-free operation
 // Push can be called from multiple threads, poll from single thread
 // Maintains a pending list for incomplete operations to avoid re-pushing
-template <typename HwSubmit, std::size_t Capacity = 1024>
+template <dsa_stdexec::HwContext HwCtx, std::size_t Capacity = 1024>
 class RingBufferTaskQueue {
   static_assert((Capacity & (Capacity - 1)) == 0, "Capacity must be power of 2");
 
 public:
-  explicit RingBufferTaskQueue(HwSubmit hw_submit) : hw_submit_(std::move(hw_submit)) {
+  explicit RingBufferTaskQueue(HwCtx hw_ctx) : hw_ctx_(std::move(hw_ctx)) {
     for (std::size_t i = 0; i < Capacity; ++i) {
       sequence_[i].store(i, std::memory_order_relaxed);
     }
@@ -322,7 +279,7 @@ public:
       if (!curr->submitted) {
         dsa_hw_desc *desc = curr->proxy->get_descriptor();
         if (desc != nullptr) {
-          if (hw_submit_(desc)) {
+          if (hw_ctx_.submit(desc)) {
             curr->submitted = true;
           }
         } else {
@@ -330,7 +287,8 @@ public:
         }
       }
 
-      if (curr->submitted && curr->proxy->check_completion()) {
+      // Check for completion - static dispatch via HwContext
+      if (curr->submitted && hw_ctx_.check_completion(curr)) {
         // Remove from pending list
         *pprev = curr->next;
         // Add to completed list
@@ -371,7 +329,7 @@ public:
       if (!op->submitted) {
         dsa_hw_desc *desc = op->proxy->get_descriptor();
         if (desc != nullptr) {
-          if (hw_submit_(desc)) {
+          if (hw_ctx_.submit(desc)) {
             op->submitted = true;
           }
         } else {
@@ -379,8 +337,8 @@ public:
         }
       }
 
-      // Check completion immediately (only if submitted)
-      if (op->submitted && op->proxy->check_completion()) {
+      // Check completion immediately (only if submitted) - static dispatch via HwContext
+      if (op->submitted && hw_ctx_.check_completion(op)) {
         op->next = completed_head;
         completed_head = op;
       } else {
@@ -422,8 +380,8 @@ public:
     return seq != head + 1;
   }
 
-  HwSubmit &hw_submit() { return hw_submit_; }
-  const HwSubmit &hw_submit() const { return hw_submit_; }
+  HwCtx &hw_context() { return hw_ctx_; }
+  const HwCtx &hw_context() const { return hw_ctx_; }
 
 private:
   alignas(64) std::atomic<std::size_t> head_{0};
@@ -432,16 +390,16 @@ private:
   std::array<std::atomic<std::size_t>, Capacity> sequence_{};
   // Pending list for operations not yet complete (consumer-only, no sync needed)
   dsa_stdexec::OperationBase *pending_head_{nullptr};
-  [[no_unique_address]] HwSubmit hw_submit_;
+  [[no_unique_address]] HwCtx hw_ctx_;
 };
 
 // Lock-free task queue using atomic operations
 // Supports concurrent push from multiple threads
 // Poll should be called from a single thread (or externally synchronized)
-template <typename HwSubmit>
+template <dsa_stdexec::HwContext HwCtx>
 class LockFreeTaskQueue {
 public:
-  explicit LockFreeTaskQueue(HwSubmit hw_submit) : hw_submit_(std::move(hw_submit)) {}
+  explicit LockFreeTaskQueue(HwCtx hw_ctx) : hw_ctx_(std::move(hw_ctx)) {}
   ~LockFreeTaskQueue() = default;
 
   LockFreeTaskQueue(const LockFreeTaskQueue &) = delete;
@@ -490,7 +448,7 @@ public:
       if (!op->submitted) {
         dsa_hw_desc *desc = op->proxy->get_descriptor();
         if (desc != nullptr) {
-          if (hw_submit_(desc)) {
+          if (hw_ctx_.submit(desc)) {
             op->submitted = true;
           }
         } else {
@@ -498,7 +456,8 @@ public:
         }
       }
 
-      if (op->submitted && op->proxy->check_completion()) {
+      // Check for completion - static dispatch via HwContext
+      if (op->submitted && hw_ctx_.check_completion(op)) {
         op->next = completed_head;
         completed_head = op;
       } else {
@@ -535,12 +494,12 @@ public:
 
   bool empty() const { return head_.load(std::memory_order_relaxed) == nullptr; }
 
-  HwSubmit &hw_submit() { return hw_submit_; }
-  const HwSubmit &hw_submit() const { return hw_submit_; }
+  HwCtx &hw_context() { return hw_ctx_; }
+  const HwCtx &hw_context() const { return hw_ctx_; }
 
 private:
   std::atomic<dsa_stdexec::OperationBase *> head_{nullptr};
-  [[no_unique_address]] HwSubmit hw_submit_;
+  [[no_unique_address]] HwCtx hw_ctx_;
 };
 
 } // namespace dsa

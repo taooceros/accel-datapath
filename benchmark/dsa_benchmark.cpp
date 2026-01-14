@@ -23,7 +23,6 @@ public:
 private:
   struct Wrapper {
     BenchmarkOperation *op;
-    bool check_completion() { return op->MockOperation::check_completion(); }
     void notify() { op->MockOperation::notify(); }
     dsa_hw_desc *get_descriptor() {
       return op->MockOperation::get_descriptor();
