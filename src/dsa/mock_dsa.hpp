@@ -32,6 +32,10 @@ public:
   bool check_completion(dsa_stdexec::OperationBase *op) const {
       return true;
   }
+
+  dsa_hw_desc *get_descriptor(dsa_stdexec::OperationBase *op) const {
+    return nullptr;
+  }
 };
 
 // Mock operation that completes immediately or after a delay
