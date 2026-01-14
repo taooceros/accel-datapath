@@ -13,7 +13,7 @@ namespace dsa_stdexec {
 // ScheduleOperation inherits from DsaOperationBase to work with DsaHwContext.
 // It pre-sets comp_.status = 1 so check_completion returns true immediately.
 // The desc_ member is unused but required by the base class.
-template <class ReceiverId>
+template <class DsaType, class ReceiverId>
 class ScheduleOperation : public dsa::DsaOperationBase {
   using Receiver = stdexec::__t<ReceiverId>;
 
@@ -25,7 +25,7 @@ public:
     dsa_hw_desc *get_descriptor() { return nullptr; }  // No HW descriptor for schedule
   };
 
-  ScheduleOperation(Dsa &dsa, Receiver r) : dsa_(dsa), r_(std::move(r)) {
+  ScheduleOperation(DsaType &dsa, Receiver r) : dsa_(dsa), r_(std::move(r)) {
     // Pre-set completion status so check_completion returns true immediately
     comp_.status = 1;
     // No hardware descriptor for schedule operations
@@ -51,10 +51,11 @@ public:
   void notify() { stdexec::set_value(std::move(r_)); }
 
 private:
-  Dsa &dsa_;
+  DsaType &dsa_;
   Receiver r_;
 };
 
+template <class DsaType>
 class ScheduleSender {
 public:
   using sender_concept = stdexec::sender_t;
@@ -62,37 +63,38 @@ public:
       stdexec::completion_signatures<stdexec::set_value_t(),
                                      stdexec::set_error_t(std::exception_ptr)>;
 
-  explicit ScheduleSender(Dsa &dsa) : dsa_(dsa) {}
+  explicit ScheduleSender(DsaType &dsa) : dsa_(dsa) {}
 
   template <stdexec::receiver Receiver>
   auto connect(Receiver &&r) && {
-    return ScheduleOperation<stdexec::__id<Receiver>>(
+    return ScheduleOperation<DsaType, stdexec::__id<Receiver>>(
         dsa_, std::forward<Receiver>(r));
   }
 
   template <stdexec::receiver Receiver>
   auto connect(Receiver &&r) const & {
-    return ScheduleOperation<stdexec::__id<Receiver>>(
+    return ScheduleOperation<DsaType, stdexec::__id<Receiver>>(
         dsa_, std::forward<Receiver>(r));
   }
 
 private:
-  Dsa &dsa_;
+  DsaType &dsa_;
 };
 
+template <class DsaType>
 class DsaScheduler {
 public:
   using scheduler_concept = stdexec::scheduler_t;
-  explicit DsaScheduler(Dsa &dsa) : dsa_(dsa) {}
+  explicit DsaScheduler(DsaType &dsa) : dsa_(dsa) {}
 
-  ScheduleSender schedule() const noexcept { return ScheduleSender(dsa_); }
+  ScheduleSender<DsaType> schedule() const noexcept { return ScheduleSender<DsaType>(dsa_); }
 
   bool operator==(const DsaScheduler &other) const noexcept {
     return &dsa_ == &other.dsa_;
   }
 
 private:
-  Dsa &dsa_;
+  DsaType &dsa_;
 };
 
 } // namespace dsa_stdexec
