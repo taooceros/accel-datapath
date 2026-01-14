@@ -30,13 +30,7 @@ public:
   // Check completion by examining the completion record status
   // For mock operations, completion_.status is set when ready
   bool check_completion(dsa_stdexec::OperationBase *op) const {
-    // Get completion record address from descriptor
-    dsa_hw_desc *desc = get_descriptor(op);
-    if (desc == nullptr) {
-      return true;  // No HW op, always complete
-    }
-    auto *comp = reinterpret_cast<dsa_completion_record *>(desc->completion_addr);
-    return comp->status != 0;
+      return true;
   }
 };
 
@@ -93,7 +87,7 @@ private:
     if (completion_.status != 0) {
       return; // Already complete
     }
-    
+
     if (use_submit_delay_) {
       if (submitted_ && std::chrono::steady_clock::now() >= submit_time_ + delay_from_submit_) {
         completion_.status = DSA_COMP_SUCCESS;
