@@ -1,0 +1,6 @@
+[
+    {
+        "command": "xmake",
+        "label": "Xmake Build"
+    }
+]

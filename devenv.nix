@@ -53,6 +53,7 @@
     fmt_12
     ninja
     samply
+    mold-wrapped
     linuxPackages.perf
     pkgs.glibc.out
     pkgs.glibc.debug

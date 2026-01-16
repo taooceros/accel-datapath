@@ -1,4 +1,6 @@
 #include "dsa_stdexec/trace.hpp"
+
+#ifdef DSA_ENABLE_TRACING
 #include <perfetto.h>
 
 PERFETTO_TRACK_EVENT_STATIC_STORAGE();
@@ -15,3 +17,4 @@ void stop_tracing(const char* /*output_path*/) {
   // Use perfetto CLI to stop and save the trace
   perfetto::TrackEvent::Flush();
 }
+#endif

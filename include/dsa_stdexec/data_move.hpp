@@ -87,7 +87,7 @@ private:
     } else if (status == DSA_COMP_PAGE_FAULT_NOBOF) {
       // Increment page fault retry counter
       g_page_fault_retries.fetch_add(1, std::memory_order_relaxed);
-
+      fmt::println("page fault");
       int wr = comp_.status & DSA_COMP_STATUS_WRITE;
       volatile char *t;
       t = (char *)comp_.fault_addr;

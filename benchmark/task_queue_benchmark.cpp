@@ -5,8 +5,10 @@
 #include <fmt/core.h>
 #include <stdexec/execution.hpp>
 #include <exec/async_scope.hpp>
+#include <exec/repeat_effect_until.hpp>
 #include <pthread.h>
 #include <string>
+#include <utility>
 
 #include <dsa/mock_dsa.hpp>
 #include <dsa_stdexec/operation_base.hpp>
@@ -18,6 +20,18 @@
 // Helper to set thread name (max 15 chars + null terminator on Linux)
 inline void set_thread_name(const char* name) {
   pthread_setname_np(pthread_self(), name);
+}
+
+// Helper to launch N workers in parallel using when_all (zero allocation)
+template <std::size_t N, typename F, std::size_t... Is>
+auto when_all_n_impl(F&& make_worker, std::index_sequence<Is...>) {
+    return stdexec::when_all(make_worker(Is)...);
+}
+
+template <std::size_t N, typename F>
+auto when_all_n(F&& make_worker) {
+    return when_all_n_impl<N>(std::forward<F>(make_worker),
+                               std::make_index_sequence<N>{});
 }
 
 struct BenchmarkResult {
@@ -120,7 +134,7 @@ template <template <typename> class QueueTemplate>
 BenchmarkResult benchmark_schedule(std::size_t num_ops) {
   MockDsaBase<QueueTemplate> mock_dsa(false);
   MockDsaScheduler<QueueTemplate> scheduler(mock_dsa);
-  
+
   // Create a polling run loop that polls the mock DSA
   dsa_stdexec::PollingRunLoop loop([&mock_dsa] { mock_dsa.poll(); });
 
@@ -144,7 +158,7 @@ template <template <typename> class QueueTemplate>
 BenchmarkResult benchmark_then_chain(std::size_t num_ops) {
   MockDsaBase<QueueTemplate> mock_dsa(false);
   MockDsaScheduler<QueueTemplate> scheduler(mock_dsa);
-  
+
   dsa_stdexec::PollingRunLoop loop([&mock_dsa] { mock_dsa.poll(); });
 
   auto start = std::chrono::high_resolution_clock::now();
@@ -213,7 +227,6 @@ BenchmarkResult benchmark_static_workers(std::size_t num_ops) {
 
   dsa_stdexec::PollingRunLoop loop([&mock_dsa] { mock_dsa.poll(); });
 
-  auto start = std::chrono::high_resolution_clock::now();
 
   // Create a worker that processes items: worker_id, worker_id + NumWorkers, ...
   auto make_worker = [&](std::size_t worker_id) {
@@ -222,9 +235,7 @@ BenchmarkResult benchmark_static_workers(std::size_t num_ops) {
              // Use repeat_effect_until to loop until all items processed
              return exec::repeat_effect_until(
                  scheduler.schedule()
-               | stdexec::then([&completed, num_ops, &current_idx]() mutable {
-                   // Process current item
-                   completed.fetch_add(1, std::memory_order_relaxed);
+               | stdexec::then([num_ops, &current_idx]() mutable {
 
                    // Move to next item for this worker
                    current_idx += NumWorkers;
@@ -235,6 +246,9 @@ BenchmarkResult benchmark_static_workers(std::size_t num_ops) {
              );
            });
   };
+
+  auto start = std::chrono::high_resolution_clock::now();
+
 
   // Launch all workers in parallel (compile-time count = no allocation)
   dsa_stdexec::wait_start(when_all_n<NumWorkers>(make_worker), loop);
@@ -267,7 +281,7 @@ BenchmarkResult benchmark_scoped_workers(std::size_t num_ops, std::size_t num_wo
           // Each worker loops with repeat_effect_until (no allocation per iteration)
           return exec::repeat_effect_until(
               scheduler.schedule()
-            | stdexec::then([&completed, num_ops, num_workers, &current_idx]() mutable {
+            | stdexec::then([num_ops, num_workers, &current_idx]() mutable {
                 // Move to next item for this worker
                 current_idx += num_workers;
 
@@ -307,6 +321,8 @@ void print_usage(const char* prog) {
   fmt::println("  schedule   - Single-threaded schedule (no async_scope)");
   fmt::println("  chain      - schedule | then | then chain");
   fmt::println("  async_scope- Schedule with async_scope overhead");
+  fmt::println("  static     - Static workers with when_all (zero alloc, compile-time N)");
+  fmt::println("  scoped     - Scoped workers with async_scope (N allocs, runtime N)");
   fmt::println("");
   fmt::println("Examples:");
   fmt::println("  {} mutex schedule   # Profile mutex queue schedule", prog);
@@ -316,20 +332,20 @@ void print_usage(const char* prog) {
 
 // Run benchmark for a specific queue type
 template <template <typename> class QueueTemplate>
-void run_benchmarks_for_queue(const char* queue_name, 
+void run_benchmarks_for_queue(const char* queue_name,
                                const std::string& benchmark_type,
                                std::size_t num_ops,
                                std::size_t num_threads,
                                std::size_t warmup_ops) {
   (void)num_threads; // No longer used
-  
+
   // Set main thread name
   char main_name[16];
   snprintf(main_name, sizeof(main_name), "%s_main", queue_name);
   set_thread_name(main_name);
 
   bool run_all = (benchmark_type == "all");
-  
+
   // Warmup
   fmt::println("--- Warmup ({} ops) for {} ---", warmup_ops, queue_name);
   if (run_all || benchmark_type == "schedule") {
@@ -341,6 +357,12 @@ void run_benchmarks_for_queue(const char* queue_name,
   if (run_all || benchmark_type == "async_scope") {
     benchmark_async_scope<QueueTemplate>(warmup_ops);
   }
+  if (run_all || benchmark_type == "static") {
+    benchmark_static_workers<QueueTemplate>(warmup_ops);
+  }
+  if (run_all || benchmark_type == "scoped") {
+    benchmark_scoped_workers<QueueTemplate>(warmup_ops);
+  }
   fmt::println("Warmup complete.\n");
 
   // Run actual benchmarks
@@ -349,16 +371,28 @@ void run_benchmarks_for_queue(const char* queue_name,
     print_result(queue_name, benchmark_schedule<QueueTemplate>(num_ops));
     fmt::println("");
   }
-  
+
   if (run_all || benchmark_type == "chain") {
     fmt::println("--- Single-Threaded schedule() | then() | then() ---");
     print_result(queue_name, benchmark_then_chain<QueueTemplate>(num_ops));
     fmt::println("");
   }
-  
+
   if (run_all || benchmark_type == "async_scope") {
     fmt::println("--- Single-Threaded with async_scope ---");
     print_result(queue_name, benchmark_async_scope<QueueTemplate>(num_ops));
+    fmt::println("");
+  }
+
+  if (run_all || benchmark_type == "static") {
+    fmt::println("--- Static Workers (when_all + repeat_effect_until) ---");
+    print_result(queue_name, benchmark_static_workers<QueueTemplate>(num_ops));
+    fmt::println("");
+  }
+
+  if (run_all || benchmark_type == "scoped") {
+    fmt::println("--- Scoped Workers (async_scope + repeat_effect_until) ---");
+    print_result(queue_name, benchmark_scoped_workers<QueueTemplate>(num_ops));
     fmt::println("");
   }
 }
