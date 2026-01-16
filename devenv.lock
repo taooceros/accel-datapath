@@ -144,7 +144,8 @@
           "git-hooks"
         ],
         "proxy": "proxy",
-        "stdexec": "stdexec"
+        "stdexec": "stdexec",
+        "tomlplusplus": "tomlplusplus"
       }
     },
     "stdexec": {
@@ -159,6 +160,21 @@
       "original": {
         "owner": "nvidia",
         "repo": "stdexec",
+        "type": "github"
+      }
+    },
+    "tomlplusplus": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1766578845,
+        "owner": "marzer",
+        "repo": "tomlplusplus",
+        "rev": "7807a314ad1c0c9c227d9dbd68f23f187163372e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "marzer",
+        "repo": "tomlplusplus",
         "type": "github"
       }
     }

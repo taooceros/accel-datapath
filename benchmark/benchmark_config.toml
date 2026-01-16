@@ -1,0 +1,31 @@
+# DSA Benchmark Configuration
+# This file controls which benchmarks to run
+
+[polling]
+# Polling mode - how DSA completion is detected
+inline = true      # Inline polling using PollingRunLoop (dsa.poll() in task execution)
+threaded = true    # Background thread polling (dedicated polling thread)
+
+[scheduling]
+# Scheduling pattern - how tasks are spawned
+async_scope = true      # async_scope::spawn per operation (batch_size allocations)
+scoped_workers = true  # N workers with repeat_effect_until (N allocations, more efficient)
+
+[queues]
+# Queue types to benchmark - different synchronization strategies
+nolock = true     # Single-threaded, no synchronization (baseline)
+mutex = true      # std::mutex based synchronization
+tas = true        # Test-and-Set spinlock
+ttas = true       # Test-and-Test-and-Set spinlock (cache-friendly)
+backoff = true    # TTAS with exponential backoff
+lockfree = true   # Lock-free using atomic compare-and-swap
+
+[parameters]
+# Benchmark parameters
+batch_sizes = [1, 4, 16, 32]                              # Number of operations per batch
+msg_sizes = [256, 512, 1024, 2048, 4096, 8192, 16384]     # Size of each memory operation in bytes
+total_bytes = 33554432                                     # Total bytes to transfer (32 MB)
+
+[output]
+# Output configuration
+csv_file = "dsa_benchmark_results.csv"

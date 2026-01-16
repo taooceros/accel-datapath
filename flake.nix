@@ -15,6 +15,10 @@
       url = "git+https://github.com/microsoft/proxy.git?rev=f88a3a3bcf0f5e87b5817a3619753a982885ef82";
       flake = false;
     };
+    tomlplusplus = {
+      url = "git+https://github.com/marzer/tomlplusplus.git?ref=master";
+      flake = false;
+    };
   };
 
   outputs =
@@ -24,6 +28,7 @@
       idxd-config,
       stdexec,
       proxy,
+      tomlplusplus,
       ...
     }:
     let
@@ -111,6 +116,21 @@
         '';
       };
 
+      tomlplusplus-pkg = stdenv.mkDerivation {
+        pname = "tomlplusplus";
+        version = "unstable";
+        src = tomlplusplus;
+
+        nativeBuildInputs = with pkgs; [
+          pkg-config
+        ];
+
+        installPhase = ''
+          mkdir -p $out/include
+          cp -r include/* $out/include/
+        '';
+      };
+
       devShells.${system}.default =
         pkgs.mkShellNoCC.override
           {
@@ -130,6 +150,7 @@
               llvmPackages.bintools
               self.stdexec-pkg
               self.proxy-pkg
+              self.tomlplusplus-pkg
               cpptrace
             ];
 
@@ -150,6 +171,7 @@
               llvmPackages.bintools
               self.stdexec-pkg
               self.proxy-pkg
+              self.tomlplusplus-pkg
               cpptrace
             ];
 

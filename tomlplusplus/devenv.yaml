@@ -1,0 +1,4 @@
+inputs:
+    tomlplusplus:
+        url: github:marzer/tomlplusplus
+        flake: false

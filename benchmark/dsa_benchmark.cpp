@@ -20,6 +20,7 @@
 #include <numeric>
 #include <stdexec/execution.hpp>
 #include <thread>
+#include <toml++/toml.hpp>
 #include <utility>
 #include <vector>
 
@@ -421,7 +422,7 @@ void export_to_csv(const std::string &filename,
   fmt::println("Results exported to {}", filename);
 }
 
-// Benchmark configuration from command-line options
+// Benchmark configuration from command-line options or TOML file
 struct BenchmarkConfig {
   // Polling mode dimension
   bool run_inline = true;
@@ -438,13 +439,90 @@ struct BenchmarkConfig {
   bool run_ttas = true;
   bool run_backoff = true;
   bool run_lockfree = true;
+
+  // Benchmark parameters
+  std::vector<size_t> batch_sizes = {1, 4, 16, 32};
+  std::vector<size_t> msg_sizes = {256, 512, 1024, 2048, 4096, 8192, 16384};
+  size_t total_bytes = 32ULL * 1024 * 1024;
+
+  // Output configuration
+  std::string csv_file = "dsa_benchmark_results.csv";
 };
+
+// Load configuration from TOML file
+BenchmarkConfig load_config_from_toml(const std::string &filename) {
+  BenchmarkConfig config;
+
+  toml::table tbl;
+  try {
+    tbl = toml::parse_file(filename);
+  } catch (const toml::parse_error &err) {
+    fmt::println(stderr, "Failed to parse config file '{}': {}", filename, err.what());
+    std::exit(1);
+  }
+
+  // Polling mode
+  if (auto polling = tbl["polling"].as_table()) {
+    config.run_inline = polling->get("inline")->value_or(true);
+    config.run_threaded = polling->get("threaded")->value_or(true);
+  }
+
+  // Scheduling pattern
+  if (auto scheduling = tbl["scheduling"].as_table()) {
+    config.run_async_scope = scheduling->get("async_scope")->value_or(true);
+    config.run_scoped_workers = scheduling->get("scoped_workers")->value_or(false);
+  }
+
+  // Queue types
+  if (auto queues = tbl["queues"].as_table()) {
+    config.run_nolock = queues->get("nolock")->value_or(true);
+    config.run_mutex = queues->get("mutex")->value_or(true);
+    config.run_tas = queues->get("tas")->value_or(true);
+    config.run_ttas = queues->get("ttas")->value_or(true);
+    config.run_backoff = queues->get("backoff")->value_or(true);
+    config.run_lockfree = queues->get("lockfree")->value_or(true);
+  }
+
+  // Benchmark parameters
+  if (auto params = tbl["parameters"].as_table()) {
+    if (auto arr = params->get("batch_sizes")->as_array()) {
+      config.batch_sizes.clear();
+      for (const auto &elem : *arr) {
+        if (auto val = elem.value<int64_t>()) {
+          config.batch_sizes.push_back(static_cast<size_t>(*val));
+        }
+      }
+    }
+    if (auto arr = params->get("msg_sizes")->as_array()) {
+      config.msg_sizes.clear();
+      for (const auto &elem : *arr) {
+        if (auto val = elem.value<int64_t>()) {
+          config.msg_sizes.push_back(static_cast<size_t>(*val));
+        }
+      }
+    }
+    if (auto val = params->get("total_bytes")->value<int64_t>()) {
+      config.total_bytes = static_cast<size_t>(*val);
+    }
+  }
+
+  // Output configuration
+  if (auto output = tbl["output"].as_table()) {
+    if (auto val = output->get("csv_file")->value<std::string>()) {
+      config.csv_file = *val;
+    }
+  }
+
+  return config;
+}
 
 void print_usage(const char *prog) {
   fmt::println("Usage: {} [OPTIONS]", prog);
   fmt::println("");
   fmt::println("Options:");
   fmt::println("  --help, -h          Show this help message");
+  fmt::println("  --config=<file>     Load configuration from TOML file");
+  fmt::println("                      (command-line options override config file)");
   fmt::println("");
   fmt::println("Polling mode (can combine multiple):");
   fmt::println("  --inline            Run inline polling benchmarks (PollingRunLoop)");
@@ -460,6 +538,7 @@ void print_usage(const char *prog) {
   fmt::println("");
   fmt::println("Examples:");
   fmt::println("  {}                                  # Default: async-scope with inline+threaded", prog);
+  fmt::println("  {} --config=benchmark_config.toml   # Load from TOML config file", prog);
   fmt::println("  {} --inline                         # Only inline polling", prog);
   fmt::println("  {} --threaded                       # Only background thread polling", prog);
   fmt::println("  {} --scoped-workers                 # Only scoped workers pattern", prog);
@@ -473,13 +552,32 @@ BenchmarkConfig parse_args(int argc, char **argv) {
   bool polling_specified = false;
   bool pattern_specified = false;
   bool queue_specified = false;
+  std::string config_file;
 
+  // First pass: check for config file
+  for (int i = 1; i < argc; ++i) {
+    std::string arg = argv[i];
+    if (arg.starts_with("--config=")) {
+      config_file = arg.substr(9);
+      break;
+    }
+  }
+
+  // Load config from file if specified
+  if (!config_file.empty()) {
+    config = load_config_from_toml(config_file);
+  }
+
+  // Second pass: override with command-line options
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
 
     if (arg == "--help" || arg == "-h") {
       print_usage(argv[0]);
       std::exit(0);
+    } else if (arg.starts_with("--config=")) {
+      // Already handled in first pass
+      continue;
     } else if (arg == "--inline") {
       if (!polling_specified) {
         config.run_inline = false;
@@ -549,9 +647,9 @@ BenchmarkConfig parse_args(int argc, char **argv) {
 void benchmark_queues_with_dsa(const BenchmarkConfig &config) {
   fmt::println("=== DSA BENCHMARK WITH DIFFERENT TASK QUEUES ===\n");
 
-  std::vector<size_t> batch_sizes = {1, 4, 16, 32};
-  std::vector<size_t> msg_sizes = {256, 512, 1024, 2048, 4096, 8192, 16384};
-  constexpr size_t total_bytes_target = 32ULL * 1024 * 1024;
+  const std::vector<size_t> &batch_sizes = config.batch_sizes;
+  const std::vector<size_t> &msg_sizes = config.msg_sizes;
+  const size_t total_bytes_target = config.total_bytes;
 
   // Results organized by [pattern][polling_mode]
   // pattern: 0 = async_scope, 1 = scoped_workers
@@ -834,7 +932,7 @@ void benchmark_queues_with_dsa(const BenchmarkConfig &config) {
   print_results_table("SCOPED_WORKERS + THREADED", scoped_workers_threaded_results, false);
 
   // Export results to CSV
-  export_to_csv("dsa_benchmark_results.csv",
+  export_to_csv(config.csv_file,
                 async_scope_inline_results, async_scope_threaded_results,
                 scoped_workers_inline_results, scoped_workers_threaded_results);
 }
