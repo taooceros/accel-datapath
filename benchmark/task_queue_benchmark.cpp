@@ -202,6 +202,95 @@ BenchmarkResult benchmark_async_scope(std::size_t num_ops) {
           duration / static_cast<double>(num_ops), num_ops};
 }
 
+// Benchmark: Static workers using when_all + repeat_effect_until
+// N workers run in parallel, each processing items sequentially
+// Zero allocation - avoids async_scope::spawn overhead
+// Worker count must be known at compile time
+template <template <typename> class QueueTemplate, std::size_t NumWorkers = 4>
+BenchmarkResult benchmark_static_workers(std::size_t num_ops) {
+  MockDsaBase<QueueTemplate> mock_dsa(false);
+  MockDsaScheduler<QueueTemplate> scheduler(mock_dsa);
+
+  dsa_stdexec::PollingRunLoop loop([&mock_dsa] { mock_dsa.poll(); });
+
+  auto start = std::chrono::high_resolution_clock::now();
+
+  // Create a worker that processes items: worker_id, worker_id + NumWorkers, ...
+  auto make_worker = [&](std::size_t worker_id) {
+    return scheduler.schedule()
+         | stdexec::let_value([&, worker_id, current_idx = worker_id]() mutable {
+             // Use repeat_effect_until to loop until all items processed
+             return exec::repeat_effect_until(
+                 scheduler.schedule()
+               | stdexec::then([&completed, num_ops, &current_idx]() mutable {
+                   // Process current item
+                   completed.fetch_add(1, std::memory_order_relaxed);
+
+                   // Move to next item for this worker
+                   current_idx += NumWorkers;
+
+                   // Return true when done (no more items for this worker)
+                   return current_idx >= num_ops;
+                 })
+             );
+           });
+  };
+
+  // Launch all workers in parallel (compile-time count = no allocation)
+  dsa_stdexec::wait_start(when_all_n<NumWorkers>(make_worker), loop);
+
+  auto end = std::chrono::high_resolution_clock::now();
+  auto duration = std::chrono::duration<double, std::nano>(end - start).count();
+
+  return {static_cast<double>(num_ops) / (duration / 1e9),
+          duration / static_cast<double>(num_ops), num_ops};
+}
+
+// Benchmark: Scoped workers using async_scope + repeat_effect_until
+// Workers are spawned via async_scope (N allocations), but each worker
+// processes its chunk sequentially with repeat_effect_until (no per-item alloc)
+// This allows runtime-determined worker count while still avoiding per-op allocation
+template <template <typename> class QueueTemplate>
+BenchmarkResult benchmark_scoped_workers(std::size_t num_ops, std::size_t num_workers = 16) {
+  MockDsaBase<QueueTemplate> mock_dsa(false);
+  MockDsaScheduler<QueueTemplate> scheduler(mock_dsa);
+
+  exec::async_scope scope;
+
+  auto start = std::chrono::high_resolution_clock::now();
+
+  // Spawn N workers using async_scope (N allocations total)
+  for (std::size_t worker_id = 0; worker_id < num_workers; ++worker_id) {
+    scope.spawn(
+        scheduler.schedule()
+      | stdexec::let_value([&, worker_id, current_idx = worker_id]() mutable {
+          // Each worker loops with repeat_effect_until (no allocation per iteration)
+          return exec::repeat_effect_until(
+              scheduler.schedule()
+            | stdexec::then([&completed, num_ops, num_workers, &current_idx]() mutable {
+                // Move to next item for this worker
+                current_idx += num_workers;
+
+                // Return true when done (no more items for this worker)
+                return current_idx >= num_ops;
+              })
+          );
+        })
+    );
+  }
+
+
+  // Wait for scope to be empty
+  dsa_stdexec::PollingRunLoop loop([&mock_dsa] { mock_dsa.poll(); });
+  dsa_stdexec::wait_start(scope.on_empty(), loop);
+
+  auto end = std::chrono::high_resolution_clock::now();
+  auto duration = std::chrono::duration<double, std::nano>(end - start).count();
+
+  return {static_cast<double>(num_ops) / (duration / 1e9),
+          duration / static_cast<double>(num_ops), num_ops};
+}
+
 void print_usage(const char* prog) {
   fmt::println("Usage: {} [queue_type] [benchmark_type]", prog);
   fmt::println("");
