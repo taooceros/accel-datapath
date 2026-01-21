@@ -2,6 +2,7 @@
 #define DSA_STDEXEC_RUN_LOOP_HPP
 
 #include <exception>
+#include <fmt/core.h>
 #include <functional>
 #include <mutex>
 #include <stdexec/execution.hpp>
@@ -141,20 +142,29 @@ public:
   auto get_scheduler() noexcept -> Scheduler { return Scheduler{this}; }
 
   void run() {
+    size_t loop_count = 0;
     while (!stop_) {
+      loop_count++;
+      if (loop_count % 1000000 == 0) {
+        fmt::println("run_loop iteration {}, stop_={}", loop_count, stop_);
+      }
       Task *task = try_pop_front();
       if (task) {
         task->execute();
-      } else {
-        if constexpr (std::is_convertible_v<PollFunc, bool>) {
-          if (poll_) {
-            poll_();
-          }
-        } else {
+      }
+      // Always poll for DSA completions - this is needed because:
+      // 1. When queue is empty, we need to poll to make progress on DSA ops
+      // 2. After executing a task, we should poll to check if DSA ops completed
+      //    during task execution (e.g., coroutine submitted DSA work and suspended)
+      if constexpr (std::is_convertible_v<PollFunc, bool>) {
+        if (poll_) {
           poll_();
         }
+      } else {
+        poll_();
       }
     }
+    fmt::println("run_loop: exiting after {} iterations", loop_count);
   }
 
   void finish() {

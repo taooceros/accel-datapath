@@ -42,21 +42,28 @@ public:
   DataMoveOperation(DataMoveOperation &&) = delete;
 
   void start() noexcept {
-    desc_.opcode = DSA_OPCODE_MEMMOVE;
-    desc_.flags = IDXD_OP_FLAG_RCR | IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_CC;
-    desc_.xfer_size = static_cast<uint32_t>(size_);
-    desc_.src_addr = reinterpret_cast<uint64_t>(src_);
-    desc_.dst_addr = reinterpret_cast<uint64_t>(dst_);
-    desc_.completion_addr = reinterpret_cast<uint64_t>(&comp_);
+    auto *desc = desc_ptr();
+    auto *comp = comp_ptr();
+
+    // Zero out descriptor completely - DSA may reject descriptors with garbage fields
+    memset(desc, 0, sizeof(*desc));
+
+    desc->opcode = DSA_OPCODE_MEMMOVE;
+    desc->flags = IDXD_OP_FLAG_RCR | IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_CC;
+    desc->xfer_size = static_cast<uint32_t>(size_);
+    desc->src_addr = reinterpret_cast<uint64_t>(src_);
+    desc->dst_addr = reinterpret_cast<uint64_t>(dst_);
+    desc->completion_addr = reinterpret_cast<uint64_t>(comp);
 
     // Zero out completion record
-    memset(&comp_, 0, sizeof(comp_));
+    memset(comp, 0, sizeof(*comp));
 
     // Initialize the proxy for notify/get_descriptor callbacks
     proxy = pro::make_proxy<OperationFacade>(Wrapper{this});
 
+    // Debug removed for cleaner output
     try {
-      dsa_.submit(this, &desc_);
+      dsa_.submit(this, desc);
     } catch (const DsaError &e) {
       fmt::println(stderr, "DSA submit failed: {}", e.full_report());
       stdexec::set_error(std::move(r_), std::current_exception());
@@ -78,34 +85,35 @@ private:
     dsa_hw_desc *get_descriptor() { return op->get_descriptor(); }
   };
 
-  dsa_hw_desc *get_descriptor() { return &desc_; }
+  dsa_hw_desc *get_descriptor() { return desc_ptr(); }
 
   void notify() {
-    uint8_t status = comp_.status & DSA_COMP_STATUS_MASK;
+    auto *desc = desc_ptr();
+    auto *comp = comp_ptr();
+    uint8_t status = comp->status & DSA_COMP_STATUS_MASK;
     if (status == DSA_COMP_SUCCESS) {
       stdexec::set_value(std::move(r_));
     } else if (status == DSA_COMP_PAGE_FAULT_NOBOF) {
       // Increment page fault retry counter
       g_page_fault_retries.fetch_add(1, std::memory_order_relaxed);
-      // fmt::println("page fault");
-      int wr = comp_.status & DSA_COMP_STATUS_WRITE;
+      int wr = comp->status & DSA_COMP_STATUS_WRITE;
       volatile char *t;
-      t = (char *)comp_.fault_addr;
+      t = (char *)comp->fault_addr;
       wr ? *t = *t : *t;
-      desc_.src_addr += comp_.bytes_completed;
-      desc_.dst_addr += comp_.bytes_completed;
-      desc_.xfer_size -= comp_.bytes_completed;
+      desc->src_addr += comp->bytes_completed;
+      desc->dst_addr += comp->bytes_completed;
+      desc->xfer_size -= comp->bytes_completed;
 
       // Zero out completion record
-      memset(&comp_, 0, sizeof(comp_));
+      memset(comp, 0, sizeof(*comp));
 
       try {
-        dsa_.submit(this, &desc_);
+        dsa_.submit(this, desc);
       } catch (...) {
         stdexec::set_error(std::move(r_), std::current_exception());
       }
     } else {
-      auto err = DsaError(status, comp_, desc_.opcode, "data_move");
+      auto err = DsaError(status, *comp, desc->opcode, "data_move");
       fmt::println(stderr, "DSA operation failed: {}", err.full_report());
       stdexec::set_error(std::move(r_),
                          std::make_exception_ptr(std::move(err)));

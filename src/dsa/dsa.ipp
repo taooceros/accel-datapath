@@ -4,6 +4,7 @@
 
 #include "dsa.hpp"
 #include "enum_format.hpp"
+#include <atomic>
 #include <cerrno>
 #include <climits>
 #include <cstdint>
@@ -258,6 +259,7 @@ void DsaBase<QueueTemplate>::submit(dsa_stdexec::OperationBase *op, dsa_hw_desc 
         _mm_pause();
       }
     }
+    _mm_sfence();  // Ensure the write completes before we return
   }
   
   // Queue for completion polling

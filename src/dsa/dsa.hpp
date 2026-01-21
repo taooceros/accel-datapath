@@ -39,7 +39,13 @@ public:
   // Required by HwContext concept for task queue polling
   bool check_completion(dsa_stdexec::OperationBase *op) const {
     auto *dsa_op = static_cast<dsa::DsaOperationBase *>(op);
-    return dsa_op->comp_.status != 0;
+    auto *comp = dsa_op->comp_ptr();
+    // Flush the cache line containing the completion record to ensure
+    // we see the hardware's DMA write, then reload from memory
+    _mm_clflush(comp);
+    _mm_lfence();
+
+    return comp->status != 0;
   }
 
   void *portal() const { return wq_portal_; }

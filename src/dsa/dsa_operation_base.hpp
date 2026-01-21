@@ -2,6 +2,7 @@
 #ifndef DSA_OPERATION_BASE_HPP
 #define DSA_OPERATION_BASE_HPP
 
+#include <cstdint>
 #include <dsa_stdexec/operation_base.hpp>
 
 extern "C" {
@@ -19,10 +20,40 @@ namespace dsa {
 // - true: operation has a hardware descriptor (e.g., DataMoveOperation)
 // - false: operation has no descriptor (e.g., ScheduleOperation)
 // This avoids virtual dispatch overhead in the hot path.
-struct DsaOperationBase : dsa_stdexec::OperationBase {
-  dsa_hw_desc desc_ __attribute__((aligned(64))) = {};
-  dsa_completion_record comp_ __attribute__((aligned(32))) = {};
+//
+// IMPORTANT: DSA hardware requires:
+// - Descriptors to be 64-byte aligned
+// - Completion records to be 32-byte aligned
+//
+// We use over-allocated buffers and compute aligned addresses at runtime because
+// coroutine frame allocators don't respect alignas() on types. The alignas(64) on
+// the struct may not be honored when allocated within a coroutine frame.
+struct alignas(64) DsaOperationBase : dsa_stdexec::OperationBase {
+  // Over-allocate: 64 bytes for descriptor + 63 bytes padding for alignment
+  alignas(64) char desc_buffer_[64 + 63] = {};
+  // Over-allocate: 32 bytes for completion record + 31 bytes padding for alignment
+  alignas(32) char comp_buffer_[32 + 31] = {};
   bool has_descriptor = true;  // Static dispatch flag for get_descriptor
+
+  // Get 64-byte aligned descriptor pointer
+  dsa_hw_desc* desc_ptr() noexcept {
+    auto addr = reinterpret_cast<uintptr_t>(desc_buffer_);
+    auto aligned = (addr + 63) & ~uintptr_t{63};
+    return reinterpret_cast<dsa_hw_desc*>(aligned);
+  }
+
+  // Get 32-byte aligned completion record pointer
+  dsa_completion_record* comp_ptr() noexcept {
+    auto addr = reinterpret_cast<uintptr_t>(comp_buffer_);
+    auto aligned = (addr + 31) & ~uintptr_t{31};
+    return reinterpret_cast<dsa_completion_record*>(aligned);
+  }
+
+  const dsa_completion_record* comp_ptr() const noexcept {
+    auto addr = reinterpret_cast<uintptr_t>(comp_buffer_);
+    auto aligned = (addr + 31) & ~uintptr_t{31};
+    return reinterpret_cast<const dsa_completion_record*>(aligned);
+  }
 };
 
 } // namespace dsa

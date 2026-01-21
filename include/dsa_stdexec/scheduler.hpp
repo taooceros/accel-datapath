@@ -10,6 +10,10 @@
 
 namespace dsa_stdexec {
 
+// Forward declaration for use in ScheduleSender::Env
+template <class DsaType>
+class DsaScheduler;
+
 // ScheduleOperation inherits from DsaOperationBase to work with DsaHwContext.
 // It pre-sets comp_.status = 1 so check_completion returns true immediately.
 // The desc_ member is unused but required by the base class.
@@ -27,7 +31,7 @@ public:
 
   ScheduleOperation(DsaType &dsa, Receiver r) : dsa_(dsa), r_(std::move(r)) {
     // Pre-set completion status so check_completion returns true immediately
-    comp_.status = 1;
+    comp_ptr()->status = 1;
     // No hardware descriptor for schedule operations
     has_descriptor = false;
     proxy = pro::make_proxy<OperationFacade>(Wrapper{this});
@@ -35,7 +39,7 @@ public:
 
   ScheduleOperation(ScheduleOperation &&other) noexcept
       : dsa::DsaOperationBase(), dsa_(other.dsa_), r_(std::move(other.r_)) {
-    comp_.status = 1;
+    comp_ptr()->status = 1;
     has_descriptor = false;
     proxy = pro::make_proxy<OperationFacade>(Wrapper{this});
   }
@@ -64,6 +68,21 @@ public:
                                      stdexec::set_error_t(std::exception_ptr)>;
 
   explicit ScheduleSender(DsaType &dsa) : dsa_(dsa) {}
+
+  // Environment that advertises DsaScheduler as completion scheduler
+  // This is required by the scheduler concept so that sender algorithms
+  // (like exec::task) can query the completion scheduler.
+  struct Env {
+    DsaType *dsa_;
+
+    template <class CPO>
+    friend auto query(stdexec::get_completion_scheduler_t<CPO>,
+                      const Env &self) noexcept -> DsaScheduler<DsaType> {
+      return DsaScheduler<DsaType>{*self.dsa_};
+    }
+  };
+
+  auto get_env() const noexcept -> Env { return Env{&dsa_}; }
 
   template <stdexec::receiver Receiver>
   auto connect(Receiver &&r) && {

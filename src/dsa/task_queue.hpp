@@ -6,9 +6,11 @@
 #include <atomic>
 #include <concepts>
 #include <cstddef>
+#include <fmt/core.h>
 #include <mutex>
 
 #include <dsa_stdexec/operation_base.hpp>
+#include <immintrin.h>
 
 namespace dsa {
 
@@ -145,6 +147,8 @@ public:
 
   std::size_t poll() {
     dsa_stdexec::OperationBase *completed_head = nullptr;
+    std::size_t queue_size = 0;
+    std::size_t completed_count = 0;
 
     {
       lock_.lock();
@@ -152,12 +156,15 @@ public:
       dsa_stdexec::OperationBase *curr = head_;
 
       while (curr != nullptr) {
+        queue_size++;
         // Check for completion - static dispatch via HwContext
         if (hw_ctx_.check_completion(curr)) {
           *pprev = curr->next;
+          _mm_sfence();  // Ensure list modification is visible
           curr->next = completed_head;
           completed_head = curr;
           curr = *pprev;
+          completed_count++;
         } else {
           pprev = &curr->next;
           curr = curr->next;
