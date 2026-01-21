@@ -58,6 +58,7 @@
     pkgs.glibc.out
     pkgs.glibc.debug
     numactl
+    libcap
     # Python packages for benchmark visualization
     python3Packages.pandas
     python3Packages.matplotlib
@@ -82,8 +83,24 @@
   # services.postgres.enable = true;
 
   # https://devenv.sh/scripts/
-  scripts.hello.exec = ''
-    echo hello from $GREET
+  scripts.run.exec = ''
+    MODE=$(xmake show 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep 'mode:' | awk '{print $2}')
+    BUILD_DIR="./build/linux/x86_64/$MODE"
+    LAUNCHER="$BUILD_DIR/dsa_launcher"
+    BENCHMARK="$BUILD_DIR/dsa_benchmark"
+
+    if [ ! -f "$LAUNCHER" ]; then
+      echo "Launcher not found. Building dsa_launcher..."
+      xmake build dsa_launcher
+    fi
+
+    if [ ! -f "$BENCHMARK" ]; then
+      echo "Benchmark not found. Building dsa_benchmark..."
+      xmake build dsa_benchmark
+    fi
+
+    echo "Running: $LAUNCHER $BENCHMARK $@"
+    exec "$LAUNCHER" "$BENCHMARK" "$@"
   '';
 
   # https://devenv.sh/basics/

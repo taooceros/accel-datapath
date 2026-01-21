@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <dsa/dsa.hpp>
@@ -10,30 +11,88 @@
 #include <dsa_stdexec/sync_wait.hpp>
 #include <exec/async_scope.hpp>
 #include <exec/repeat_effect_until.hpp>
+#include <exec/task.hpp>
 #include <fmt/base.h>
 #include <fmt/core.h>
 #include <fmt/ranges.h>
 #include <fstream>
 #include <functional>
 #include <memory>
-#include <mutex>
+
 #include <numeric>
 #include <stdexec/execution.hpp>
 #include <thread>
 #include <toml++/toml.hpp>
+#include <unistd.h>
 #include <utility>
 #include <vector>
 
-// Thread-safe latency collector
+// Progress bar with time-based throttling to minimize performance impact
+class ProgressBar {
+public:
+  ProgressBar(size_t total, std::string_view label = "")
+      : total_(total), current_(0), label_(label), bar_width_(30) {
+    is_tty_ = isatty(STDERR_FILENO);
+    last_update_ = std::chrono::steady_clock::now();
+  }
+
+  void set_label(std::string_view label) { label_ = label; }
+
+  void update(size_t current) {
+    current_ = current;
+    auto now = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_update_);
+    // Throttle updates to max ~10Hz to minimize overhead
+    if (elapsed.count() >= 100 || current >= total_) {
+      render();
+      last_update_ = now;
+    }
+  }
+
+  void increment() { update(current_ + 1); }
+
+  void finish() {
+    current_ = total_;
+    render();
+    if (is_tty_) {
+      fmt::print(stderr, "\n");
+    }
+  }
+
+private:
+  void render() {
+    if (!is_tty_) return;
+
+    double pct = total_ > 0 ? static_cast<double>(current_) / total_ : 0.0;
+    size_t filled = static_cast<size_t>(pct * bar_width_);
+
+    std::string bar(filled, '=');
+    if (filled < bar_width_) {
+      bar += '>';
+      bar += std::string(bar_width_ - filled - 1, ' ');
+    }
+
+    fmt::print(stderr, "\r\033[K{} [{}] {:3.0f}% ({}/{})",
+               label_, bar, pct * 100, current_, total_);
+    std::fflush(stderr);
+  }
+
+  size_t total_;
+  size_t current_;
+  std::string label_;
+  size_t bar_width_;
+  bool is_tty_;
+  std::chrono::steady_clock::time_point last_update_;
+};
+
+// Latency collector (single-threaded, no locking needed)
 class LatencyCollector {
 public:
   void record(double latency_ns) {
-    std::lock_guard<std::mutex> lock(mutex_);
     samples_.push_back(latency_ns);
   }
 
   void clear() {
-    std::lock_guard<std::mutex> lock(mutex_);
     samples_.clear();
   }
 
@@ -47,7 +106,6 @@ public:
   };
 
   Stats compute_stats() {
-    std::lock_guard<std::mutex> lock(mutex_);
     if (samples_.empty()) {
       return {};
     }
@@ -64,57 +122,88 @@ public:
   }
 
 private:
-  std::mutex mutex_;
   std::vector<double> samples_;
 };
 
-// async_scope + inline polling (PollingRunLoop)
-// Uses schedule() before data_move to properly anchor operations to the scheduler context
+// ============================================================================
+// SLIDING WINDOW STRATEGY (semaphore-like)
+// Maintains exactly `concurrency` operations in-flight. As one completes,
+// immediately spawn the next one.
+// ============================================================================
+
+// Sliding window + inline polling
 template <typename DsaType>
-void run_scope_inline(DsaType &dsa, exec::async_scope &scope,
-                      size_t batch_size, size_t msg_size,
-                      std::vector<char> &src, std::vector<char> &dst,
-                      size_t base_offset, LatencyCollector &latency) {
-  dsa_stdexec::DsaScheduler<DsaType> scheduler(dsa);
+void run_sliding_window_inline(DsaType &dsa, exec::async_scope &scope,
+                               size_t concurrency, size_t msg_size, size_t total_bytes,
+                               std::vector<char> &src, std::vector<char> &dst,
+                               LatencyCollector &latency) {
   dsa_stdexec::PollingRunLoop loop([&dsa] { dsa.poll(); });
-  for (size_t i = 0; i < batch_size; ++i) {
-    size_t offset = base_offset + i * msg_size;
+  auto scheduler = loop.get_scheduler();
+
+  size_t num_ops = total_bytes / msg_size;
+  std::atomic<size_t> in_flight{0};
+  size_t next_op = 0;
+
+  auto spawn_one = [&](size_t op_idx) {
+    size_t offset = op_idx * msg_size;
     auto start_time = std::chrono::high_resolution_clock::now();
     auto snd = scheduler.schedule()
-             | stdexec::let_value([&dsa, &src, &dst, offset, msg_size, &latency, start_time]() {
+             | stdexec::let_value([&dsa, &src, &dst, offset, msg_size, &latency, start_time, &in_flight]() {
                  return dsa_stdexec::dsa_data_move(dsa, src.data() + offset,
                                                    dst.data() + offset, msg_size)
-                      | stdexec::then([&latency, start_time]() {
+                      | stdexec::then([&latency, start_time, &in_flight]() {
                           auto end_time = std::chrono::high_resolution_clock::now();
                           latency.record(std::chrono::duration<double, std::nano>(
                               end_time - start_time).count());
+                          in_flight.fetch_sub(1, std::memory_order_release);
                         });
                });
+    in_flight.fetch_add(1, std::memory_order_relaxed);
     scope.spawn(std::move(snd));
+  };
+
+  // Spawn operations with concurrency limiting (sliding window)
+  while (next_op < num_ops) {
+    // Spawn up to concurrency limit
+    while (next_op < num_ops && in_flight.load(std::memory_order_acquire) < concurrency) {
+      spawn_one(next_op++);
+    }
+    // Poll to make progress and free up slots
+    dsa.poll();
   }
+
   dsa_stdexec::wait_start(scope.on_empty(), loop);
 }
 
-
-// async_scope + threaded polling (background thread via Dsa(true))
-// MUST use schedule() before data_move to coordinate with the dedicated polling thread
+// Sliding window + threaded polling
 template <typename DsaType>
-void run_scope_threaded(DsaType &dsa, exec::async_scope &scope,
-                        size_t batch_size, size_t msg_size,
-                        std::vector<char> &src, std::vector<char> &dst,
-                        size_t base_offset, LatencyCollector &latency) {
+void run_sliding_window_threaded(DsaType &dsa, exec::async_scope &scope,
+                                 size_t concurrency, size_t msg_size, size_t total_bytes,
+                                 std::vector<char> &src, std::vector<char> &dst,
+                                 LatencyCollector &latency) {
   dsa_stdexec::DsaScheduler<DsaType> scheduler(dsa);
-  for (size_t i = 0; i < batch_size; ++i) {
-    size_t offset = base_offset + i * msg_size;
+
+  size_t num_ops = total_bytes / msg_size;
+  std::atomic<size_t> in_flight{0};
+
+  for (size_t op_idx = 0; op_idx < num_ops; ++op_idx) {
+    while (in_flight.load(std::memory_order_acquire) >= concurrency) {
+      std::this_thread::yield();
+    }
+
+    size_t offset = op_idx * msg_size;
     auto start_time = std::chrono::high_resolution_clock::now();
+    in_flight.fetch_add(1, std::memory_order_relaxed);
+
     auto snd = scheduler.schedule()
-             | stdexec::let_value([&dsa, &src, &dst, offset, msg_size, &latency, start_time]() {
+             | stdexec::let_value([&dsa, &src, &dst, offset, msg_size, &latency, start_time, &in_flight]() {
                  return dsa_stdexec::dsa_data_move(dsa, src.data() + offset,
                                                    dst.data() + offset, msg_size)
-                      | stdexec::then([&latency, start_time]() {
+                      | stdexec::then([&latency, start_time, &in_flight]() {
                           auto end_time = std::chrono::high_resolution_clock::now();
                           latency.record(std::chrono::duration<double, std::nano>(
                               end_time - start_time).count());
+                          in_flight.fetch_sub(1, std::memory_order_release);
                         });
                });
     scope.spawn(std::move(snd));
@@ -122,106 +211,178 @@ void run_scope_threaded(DsaType &dsa, exec::async_scope &scope,
   stdexec::sync_wait(scope.on_empty());
 }
 
+// ============================================================================
+// BATCH STRATEGY
+// Spawn `concurrency` operations, wait for ALL to complete, then spawn next batch.
+// ============================================================================
 
-// Scoped workers + inline polling (PollingRunLoop)
-// Spawns N workers via async_scope, each processes items sequentially with repeat_effect_until
-// Only N allocations instead of batch_size allocations
+// Batch + inline polling
 template <typename DsaType>
-void run_scoped_workers_inline(DsaType &dsa, exec::async_scope &scope,
-                               size_t batch_size, size_t msg_size,
-                               std::vector<char> &src, std::vector<char> &dst,
-                               size_t base_offset, LatencyCollector &latency,
-                               size_t num_workers = 16) {
-  dsa_stdexec::DsaScheduler<DsaType> scheduler(dsa);
+void run_batch_inline(DsaType &dsa, exec::async_scope &scope,
+                      size_t concurrency, size_t msg_size, size_t total_bytes,
+                      std::vector<char> &src, std::vector<char> &dst,
+                      LatencyCollector &latency) {
   dsa_stdexec::PollingRunLoop loop([&dsa] { dsa.poll(); });
-  std::atomic<std::size_t> completed{0};
+  auto scheduler = loop.get_scheduler();
 
-  // Limit workers to batch_size if batch is smaller
-  size_t actual_workers = batch_size;
+  size_t num_ops = total_bytes / msg_size;
+  size_t op_idx = 0;
 
-  // Store current index for each worker
-  std::vector<size_t> worker_indices(actual_workers);
-  for (size_t i = 0; i < actual_workers; ++i) {
-    worker_indices[i] = i;
+  while (op_idx < num_ops) {
+    // Spawn a batch of up to `concurrency` operations
+    size_t batch_end = std::min(op_idx + concurrency, num_ops);
+    for (size_t i = op_idx; i < batch_end; ++i) {
+      size_t offset = i * msg_size;
+      auto start_time = std::chrono::high_resolution_clock::now();
+      auto snd = scheduler.schedule()
+               | stdexec::let_value([&dsa, &src, &dst, offset, msg_size, &latency, start_time]() {
+                   return dsa_stdexec::dsa_data_move(dsa, src.data() + offset,
+                                                     dst.data() + offset, msg_size)
+                        | stdexec::then([&latency, start_time]() {
+                            auto end_time = std::chrono::high_resolution_clock::now();
+                            latency.record(std::chrono::duration<double, std::nano>(
+                                end_time - start_time).count());
+                          });
+                 });
+      scope.spawn(std::move(snd));
+    }
+    // Wait for all operations in this batch to complete
+    dsa_stdexec::wait_start(scope.on_empty(), loop);
+    op_idx = batch_end;
+  }
+}
+
+// Batch + threaded polling
+template <typename DsaType>
+void run_batch_threaded(DsaType &dsa, exec::async_scope &scope,
+                        size_t concurrency, size_t msg_size, size_t total_bytes,
+                        std::vector<char> &src, std::vector<char> &dst,
+                        LatencyCollector &latency) {
+  dsa_stdexec::DsaScheduler<DsaType> scheduler(dsa);
+
+  size_t num_ops = total_bytes / msg_size;
+  size_t op_idx = 0;
+
+  while (op_idx < num_ops) {
+    // Spawn a batch of up to `concurrency` operations
+    size_t batch_end = std::min(op_idx + concurrency, num_ops);
+    for (size_t i = op_idx; i < batch_end; ++i) {
+      size_t offset = i * msg_size;
+      auto start_time = std::chrono::high_resolution_clock::now();
+      auto snd = scheduler.schedule()
+               | stdexec::let_value([&dsa, &src, &dst, offset, msg_size, &latency, start_time]() {
+                   return dsa_stdexec::dsa_data_move(dsa, src.data() + offset,
+                                                     dst.data() + offset, msg_size)
+                        | stdexec::then([&latency, start_time]() {
+                            auto end_time = std::chrono::high_resolution_clock::now();
+                            latency.record(std::chrono::duration<double, std::nano>(
+                                end_time - start_time).count());
+                          });
+                 });
+      scope.spawn(std::move(snd));
+    }
+    // Wait for all operations in this batch to complete
+    stdexec::sync_wait(scope.on_empty());
+    op_idx = batch_end;
+  }
+}
+
+
+
+// Coroutine-based worker that processes items sequentially
+// Uses exec::task to properly suspend/resume across async DSA operations
+// Each worker handles ops: worker_id, worker_id + num_workers, worker_id + 2*num_workers, ...
+template <typename DsaType>
+exec::task<void> worker_coro(DsaType &dsa,
+                              std::vector<char> &src, std::vector<char> &dst,
+                              LatencyCollector &latency,
+                              size_t msg_size, size_t num_ops,
+                              size_t num_workers, size_t worker_id) {
+  size_t current_op = worker_id;
+  fmt::println("worker {} started, num_ops={}", worker_id, num_ops);
+  size_t ops_done = 0;
+
+  while (current_op < num_ops) {
+    size_t offset = current_op * msg_size;
+    auto start_time = std::chrono::high_resolution_clock::now();
+
+    // co_await the DSA data move - this properly suspends the coroutine
+    // until the hardware operation completes
+    co_await dsa_stdexec::dsa_data_move(dsa,
+                                         src.data() + offset,
+                                         dst.data() + offset,
+                                         msg_size);
+
+    auto end_time = std::chrono::high_resolution_clock::now();
+    latency.record(std::chrono::duration<double, std::nano>(end_time - start_time).count());
+    current_op += num_workers;
+    ops_done++;
+    if (ops_done % 10000 == 0) {
+      fmt::println("worker {} progress: {}/{}", worker_id, ops_done, num_ops / num_workers);
+    }
   }
 
+  fmt::println("worker {} finished after {} ops", worker_id, ops_done);
+  co_return;
+}
 
-  // Spawn N workers using async_scope (N allocations total)
+// Scoped workers + inline polling (PollingRunLoop)
+// Spawns `concurrency` workers via async_scope, each processes items sequentially using coroutines
+// Only `concurrency` allocations instead of num_ops allocations
+template <typename DsaType>
+void run_scoped_workers_inline(DsaType &dsa, exec::async_scope &scope,
+                               size_t concurrency, size_t msg_size, size_t total_bytes,
+                               std::vector<char> &src, std::vector<char> &dst,
+                               LatencyCollector &latency) {
+  // Use PollingRunLoop's scheduler for execution context scheduling
+  // DSA operations are handled via dsa_data_move sender, not via scheduler
+  dsa_stdexec::PollingRunLoop loop([&dsa] { dsa.poll(); });
+  auto scheduler = loop.get_scheduler();
+
+  size_t num_ops = total_bytes / msg_size;
+  // Limit workers to num_ops if there are fewer operations than concurrency
+  size_t actual_workers = std::min(concurrency, num_ops);
+
+  // Spawn N workers using async_scope with coroutines
   for (size_t worker_id = 0; worker_id < actual_workers; ++worker_id) {
     scope.spawn(
         scheduler.schedule()
-      | stdexec::let_value([&, worker_id]() {
-          // Each worker loops with repeat_effect_until (no allocation per iteration)
-          return exec::repeat_effect_until(
-              stdexec::just()
-            | stdexec::then([]() { return std::chrono::high_resolution_clock::now(); })
-            | stdexec::let_value([&, worker_id](auto start_time) {
-                return dsa_stdexec::dsa_data_move(dsa, src.data() + base_offset + worker_indices[worker_id] * msg_size,
-                                                  dst.data() + base_offset + worker_indices[worker_id] * msg_size, msg_size)
-                     | stdexec::then([&, worker_id, start_time]() {
-                         auto end_time = std::chrono::high_resolution_clock::now();
-                         latency.record(std::chrono::duration<double, std::nano>(end_time - start_time).count());
-                         completed.fetch_add(1, std::memory_order_relaxed);
-                         worker_indices[worker_id] += actual_workers;
-                         return worker_indices[worker_id] >= batch_size;
-                       });
-              })
-          );
+      | stdexec::let_value([&dsa, &src, &dst, &latency, msg_size, num_ops, actual_workers, worker_id]() {
+          return worker_coro(dsa, src, dst, latency, msg_size, num_ops, actual_workers, worker_id);
         })
     );
   }
 
   dsa_stdexec::wait_start(scope.on_empty(), loop);
 }
+
 
 
 // Scoped workers + threaded polling (background thread via Dsa(true))
-// Spawns N workers via async_scope, each processes items sequentially with repeat_effect_until
-// Only N allocations instead of batch_size allocations
+// Spawns `concurrency` workers via async_scope, each processes items sequentially using coroutines
+// Only `concurrency` allocations instead of num_ops allocations
 template <typename DsaType>
 void run_scoped_workers_threaded(DsaType &dsa, exec::async_scope &scope,
-                                 size_t batch_size, size_t msg_size,
+                                 size_t concurrency, size_t msg_size, size_t total_bytes,
                                  std::vector<char> &src, std::vector<char> &dst,
-                                 size_t base_offset, LatencyCollector &latency,
-                                 size_t num_workers = 16) {
+                                 LatencyCollector &latency) {
   dsa_stdexec::DsaScheduler<DsaType> scheduler(dsa);
 
-  // Limit workers to batch_size if batch is smaller
-  size_t actual_workers = std::min(num_workers, batch_size);
+  size_t num_ops = total_bytes / msg_size;
+  // Limit workers to num_ops if there are fewer operations than concurrency
+  size_t actual_workers = std::min(concurrency, num_ops);
 
-  // Store current index for each worker
-  std::vector<size_t> worker_indices(actual_workers);
-  for (size_t i = 0; i < actual_workers; ++i) {
-    worker_indices[i] = i;
-  }
-
-  // Spawn N workers using async_scope (N allocations total)
+  // Spawn N workers using async_scope with coroutines
   for (size_t worker_id = 0; worker_id < actual_workers; ++worker_id) {
     scope.spawn(
         scheduler.schedule()
-      | stdexec::let_value([&dsa, &src, &dst, &latency, &worker_indices, base_offset, msg_size, batch_size, actual_workers, worker_id]() {
-          // Each worker loops with repeat_effect_until (no allocation per iteration)
-          return exec::repeat_effect_until(
-              stdexec::just()
-            | stdexec::then([]() { return std::chrono::high_resolution_clock::now(); })
-            | stdexec::let_value([&dsa, &src, &dst, &latency, &worker_indices, base_offset, msg_size, batch_size, actual_workers, worker_id](auto start_time) {
-                return dsa_stdexec::dsa_data_move(dsa, src.data() + base_offset + worker_indices[worker_id] * msg_size,
-                                                  dst.data() + base_offset + worker_indices[worker_id] * msg_size, msg_size)
-                     | stdexec::then([&latency, &worker_indices, msg_size, batch_size, actual_workers, worker_id, start_time]() {
-                         auto end_time = std::chrono::high_resolution_clock::now();
-                         latency.record(std::chrono::duration<double, std::nano>(end_time - start_time).count());
-                         fmt::println("one operation done {} {}", msg_size, batch_size);
-                         worker_indices[worker_id] += actual_workers;
-                         return worker_indices[worker_id] >= batch_size;
-                       });
-              })
-          );
+      | stdexec::let_value([&dsa, &src, &dst, &latency, msg_size, num_ops, actual_workers, worker_id]() {
+          return worker_coro(dsa, src, dst, latency, msg_size, num_ops, actual_workers, worker_id);
         })
     );
   }
 
   stdexec::sync_wait(scope.on_empty());
-  fmt::println("completed: message size {}, batch size {}", msg_size, batch_size);
 }
 
 
@@ -231,127 +392,41 @@ struct DsaMetric {
   LatencyCollector::Stats latency;
 };
 
-// Benchmark DSA dynamic batch with inline polling, returns bandwidth, page
-// faults, and latency stats
-template <typename DsaType>
-DsaMetric benchmark_scope_inline(DsaType &dsa, exec::async_scope &scope,
-                                   size_t batch_size, size_t msg_size,
-                                   std::vector<char> &src,
-                                   std::vector<char> &dst, int iterations) {
-  size_t batch_bytes = batch_size * msg_size;
+// Generic benchmark runner using a run function
+// RunFn signature: void(DsaType&, async_scope&, concurrency, msg_size, total_bytes, src, dst, latency)
+template <typename DsaType, typename RunFn>
+DsaMetric run_benchmark(DsaType &dsa, size_t concurrency, size_t msg_size,
+                        size_t total_bytes, int iterations,
+                        std::vector<char> &src, std::vector<char> &dst,
+                        RunFn run_fn, ProgressBar *progress = nullptr) {
   LatencyCollector warmup_latency;
   LatencyCollector latency;
 
-  // Warmup
-  run_scope_inline(dsa, scope, batch_size, msg_size, src, dst, 0, warmup_latency);
+  // Warmup (1 full iteration)
+  {
+    exec::async_scope scope;
+    run_fn(dsa, scope, concurrency, msg_size, total_bytes, src, dst, warmup_latency);
+  }
 
   dsa_stdexec::reset_page_fault_retries();
 
   auto start = std::chrono::high_resolution_clock::now();
   for (int i = 0; i < iterations; ++i) {
-    size_t base_offset = static_cast<size_t>(i) * batch_bytes;
-    run_scope_inline(dsa, scope, batch_size, msg_size, src, dst, base_offset, latency);
+    exec::async_scope scope;
+    run_fn(dsa, scope, concurrency, msg_size, total_bytes, src, dst, latency);
+    if (progress) progress->increment();
   }
   auto end = std::chrono::high_resolution_clock::now();
 
   uint64_t page_faults = dsa_stdexec::get_page_fault_retries();
   std::chrono::duration<double> diff = end - start;
-  double bw = (double)batch_bytes * iterations / (1024.0 * 1024.0 * 1024.0) /
-              diff.count();
-  return {bw, page_faults, latency.compute_stats()};
-}
-
-// Benchmark DSA dynamic batch with background thread polling, returns bandwidth,
-// page faults, and latency stats
-template <typename DsaType>
-DsaMetric benchmark_scope_threaded(DsaType &dsa, exec::async_scope &scope,
-                                     size_t batch_size, size_t msg_size,
-                                     std::vector<char> &src,
-                                     std::vector<char> &dst, int iterations) {
-  size_t batch_bytes = batch_size * msg_size;
-  LatencyCollector warmup_latency;
-  LatencyCollector latency;
-
-  // Warmup
-  run_scope_threaded(dsa, scope, batch_size, msg_size, src, dst, 0, warmup_latency);
-
-  dsa_stdexec::reset_page_fault_retries();
-
-  auto start = std::chrono::high_resolution_clock::now();
-  for (int i = 0; i < iterations; ++i) {
-    size_t base_offset = static_cast<size_t>(i) * batch_bytes;
-    run_scope_threaded(dsa, scope, batch_size, msg_size, src, dst, base_offset, latency);
-  }
-  auto end = std::chrono::high_resolution_clock::now();
-
-  uint64_t page_faults = dsa_stdexec::get_page_fault_retries();
-  std::chrono::duration<double> diff = end - start;
-  double bw = (double)batch_bytes * iterations / (1024.0 * 1024.0 * 1024.0) /
-              diff.count();
-  return {bw, page_faults, latency.compute_stats()};
-}
-
-// Benchmark DSA with scoped workers + inline polling
-template <typename DsaType>
-DsaMetric benchmark_scoped_workers_inline(DsaType &dsa, exec::async_scope &scope,
-                                          size_t batch_size, size_t msg_size,
-                                          std::vector<char> &src,
-                                          std::vector<char> &dst, int iterations) {
-  size_t batch_bytes = batch_size * msg_size;
-  LatencyCollector warmup_latency;
-  LatencyCollector latency;
-
-  // Warmup
-  run_scoped_workers_inline(dsa, scope, batch_size, msg_size, src, dst, 0, warmup_latency);
-
-  dsa_stdexec::reset_page_fault_retries();
-
-  auto start = std::chrono::high_resolution_clock::now();
-  for (int i = 0; i < iterations; ++i) {
-    size_t base_offset = static_cast<size_t>(i) * batch_bytes;
-    run_scoped_workers_inline(dsa, scope, batch_size, msg_size, src, dst, base_offset, latency);
-  }
-  auto end = std::chrono::high_resolution_clock::now();
-
-  uint64_t page_faults = dsa_stdexec::get_page_fault_retries();
-  std::chrono::duration<double> diff = end - start;
-  double bw = (double)batch_bytes * iterations / (1024.0 * 1024.0 * 1024.0) /
-              diff.count();
-  return {bw, page_faults, latency.compute_stats()};
-}
-
-// Benchmark DSA with scoped workers + threaded polling
-template <typename DsaType>
-DsaMetric benchmark_scoped_workers_threaded(DsaType &dsa, exec::async_scope &scope,
-                                            size_t batch_size, size_t msg_size,
-                                            std::vector<char> &src,
-                                            std::vector<char> &dst, int iterations) {
-  size_t batch_bytes = batch_size * msg_size;
-  LatencyCollector warmup_latency;
-  LatencyCollector latency;
-
-  // Warmup
-  run_scoped_workers_threaded(dsa, scope, batch_size, msg_size, src, dst, 0, warmup_latency);
-
-  dsa_stdexec::reset_page_fault_retries();
-
-  auto start = std::chrono::high_resolution_clock::now();
-  for (int i = 0; i < iterations; ++i) {
-    size_t base_offset = static_cast<size_t>(i) * batch_bytes;
-    run_scoped_workers_threaded(dsa, scope, batch_size, msg_size, src, dst, base_offset, latency);
-  }
-  auto end = std::chrono::high_resolution_clock::now();
-
-  uint64_t page_faults = dsa_stdexec::get_page_fault_retries();
-  std::chrono::duration<double> diff = end - start;
-  double bw = (double)batch_bytes * iterations / (1024.0 * 1024.0 * 1024.0) /
-              diff.count();
+  double bw = static_cast<double>(total_bytes) * iterations / (1024.0 * 1024.0 * 1024.0) / diff.count();
   return {bw, page_faults, latency.compute_stats()};
 }
 
 
 struct BenchmarkResult {
-  size_t batch_size;
+  size_t concurrency;
   size_t msg_size;
   DsaMetric single_thread;
   DsaMetric mutex;
@@ -372,51 +447,46 @@ std::string format_metric(const DsaMetric &m) {
 
 // Export benchmark results to CSV file
 void export_to_csv(const std::string &filename,
-                   const std::vector<BenchmarkResult> &async_scope_inline,
-                   const std::vector<BenchmarkResult> &async_scope_threaded,
-                   const std::vector<BenchmarkResult> &scoped_workers_inline,
-                   const std::vector<BenchmarkResult> &scoped_workers_threaded) {
+                   const std::vector<std::pair<std::string, std::vector<BenchmarkResult>>> &all_results) {
   std::ofstream file(filename);
   if (!file.is_open()) {
     fmt::println(stderr, "Failed to open {} for writing", filename);
     return;
   }
 
-  // Write CSV header with pattern and polling_mode as separate dimensions
-  file << "pattern,polling_mode,queue_type,batch_size,msg_size,bandwidth_gbps,page_faults,"
+  // Write CSV header
+  file << "pattern,polling_mode,queue_type,concurrency,msg_size,bandwidth_gbps,page_faults,"
        << "latency_min_ns,latency_max_ns,latency_avg_ns,latency_p50_ns,latency_p99_ns,latency_count\n";
 
   // Helper to write one metric row
   auto write_row = [&file](const char *pattern, const char *polling_mode,
-                            const char *queue_type, size_t batch_size,
+                            const char *queue_type, size_t concurrency,
                             size_t msg_size, const DsaMetric &m) {
     file << pattern << "," << polling_mode << "," << queue_type << ","
-         << batch_size << "," << msg_size << "," << m.bandwidth << ","
+         << concurrency << "," << msg_size << "," << m.bandwidth << ","
          << m.page_faults << "," << m.latency.min_ns << "," << m.latency.max_ns
          << "," << m.latency.avg_ns << "," << m.latency.p50_ns << ","
          << m.latency.p99_ns << "," << m.latency.count << "\n";
   };
 
-  // Helper to write all queue types for a result set
-  auto write_results = [&write_row](const char *pattern, const char *polling_mode,
-                                     const std::vector<BenchmarkResult> &results,
-                                     bool include_nolock) {
+  for (const auto &[label, results] : all_results) {
+    // Parse label like "sliding_window_inline" or "batch_threaded"
+    size_t underscore_pos = label.rfind('_');
+    std::string pattern = label.substr(0, underscore_pos);
+    std::string polling_mode = label.substr(underscore_pos + 1);
+    bool include_nolock = (polling_mode == "inline");
+
     for (const auto &r : results) {
       if (include_nolock) {
-        write_row(pattern, polling_mode, "NoLock", r.batch_size, r.msg_size, r.single_thread);
+        write_row(pattern.c_str(), polling_mode.c_str(), "NoLock", r.concurrency, r.msg_size, r.single_thread);
       }
-      write_row(pattern, polling_mode, "Mutex", r.batch_size, r.msg_size, r.mutex);
-      write_row(pattern, polling_mode, "TAS", r.batch_size, r.msg_size, r.tas_spinlock);
-      write_row(pattern, polling_mode, "TTAS", r.batch_size, r.msg_size, r.ttas_spinlock);
-      write_row(pattern, polling_mode, "Backoff", r.batch_size, r.msg_size, r.backoff_spinlock);
-      write_row(pattern, polling_mode, "LockFree", r.batch_size, r.msg_size, r.lockfree);
+      write_row(pattern.c_str(), polling_mode.c_str(), "Mutex", r.concurrency, r.msg_size, r.mutex);
+      write_row(pattern.c_str(), polling_mode.c_str(), "TAS", r.concurrency, r.msg_size, r.tas_spinlock);
+      write_row(pattern.c_str(), polling_mode.c_str(), "TTAS", r.concurrency, r.msg_size, r.ttas_spinlock);
+      write_row(pattern.c_str(), polling_mode.c_str(), "Backoff", r.concurrency, r.msg_size, r.backoff_spinlock);
+      write_row(pattern.c_str(), polling_mode.c_str(), "LockFree", r.concurrency, r.msg_size, r.lockfree);
     }
-  };
-
-  write_results("async_scope", "inline", async_scope_inline, true);
-  write_results("async_scope", "threaded", async_scope_threaded, false);
-  write_results("scoped_workers", "inline", scoped_workers_inline, true);
-  write_results("scoped_workers", "threaded", scoped_workers_threaded, false);
+  }
 
   file.close();
   fmt::println("Results exported to {}", filename);
@@ -429,8 +499,9 @@ struct BenchmarkConfig {
   bool run_threaded = true;
 
   // Scheduling pattern dimension
-  bool run_async_scope = true;     // async_scope::spawn per operation (batch_size allocations)
-  bool run_scoped_workers = false; // async_scope + repeat_effect_until (N allocations)
+  bool run_sliding_window = true;  // Semaphore-like: spawn new op as one completes
+  bool run_batch = false;          // Spawn N ops, wait all, repeat
+  bool run_scoped_workers = false; // N workers processing sequentially (N allocations)
 
   // Queue type dimension
   bool run_nolock = true;
@@ -441,9 +512,10 @@ struct BenchmarkConfig {
   bool run_lockfree = true;
 
   // Benchmark parameters
-  std::vector<size_t> batch_sizes = {1, 4, 16, 32};
+  std::vector<size_t> concurrency_levels = {1, 4, 16, 32};  // Max operations in-flight
   std::vector<size_t> msg_sizes = {256, 512, 1024, 2048, 4096, 8192, 16384};
-  size_t total_bytes = 32ULL * 1024 * 1024;
+  size_t total_bytes = 32ULL * 1024 * 1024;  // Total bytes to copy per iteration
+  int iterations = 10;  // Number of times to repeat the full copy
 
   // Output configuration
   std::string csv_file = "dsa_benchmark_results.csv";
@@ -469,7 +541,8 @@ BenchmarkConfig load_config_from_toml(const std::string &filename) {
 
   // Scheduling pattern
   if (auto scheduling = tbl["scheduling"].as_table()) {
-    config.run_async_scope = scheduling->get("async_scope")->value_or(true);
+    config.run_sliding_window = scheduling->get("sliding_window")->value_or(true);
+    config.run_batch = scheduling->get("batch")->value_or(false);
     config.run_scoped_workers = scheduling->get("scoped_workers")->value_or(false);
   }
 
@@ -485,11 +558,11 @@ BenchmarkConfig load_config_from_toml(const std::string &filename) {
 
   // Benchmark parameters
   if (auto params = tbl["parameters"].as_table()) {
-    if (auto arr = params->get("batch_sizes")->as_array()) {
-      config.batch_sizes.clear();
+    if (auto arr = params->get("concurrency_levels")->as_array()) {
+      config.concurrency_levels.clear();
       for (const auto &elem : *arr) {
         if (auto val = elem.value<int64_t>()) {
-          config.batch_sizes.push_back(static_cast<size_t>(*val));
+          config.concurrency_levels.push_back(static_cast<size_t>(*val));
         }
       }
     }
@@ -500,6 +573,9 @@ BenchmarkConfig load_config_from_toml(const std::string &filename) {
           config.msg_sizes.push_back(static_cast<size_t>(*val));
         }
       }
+    }
+    if (auto val = params->get("iterations")->value<int64_t>()) {
+      config.iterations = static_cast<int>(*val);
     }
     if (auto val = params->get("total_bytes")->value<int64_t>()) {
       config.total_bytes = static_cast<size_t>(*val);
@@ -529,21 +605,22 @@ void print_usage(const char *prog) {
   fmt::println("  --threaded          Run background thread polling benchmarks");
   fmt::println("");
   fmt::println("Scheduling pattern (can combine multiple):");
-  fmt::println("  --async-scope       async_scope::spawn per op (batch_size allocations)");
-  fmt::println("  --scoped-workers    N workers with repeat_effect_until (N allocations)");
+  fmt::println("  --sliding-window    Semaphore-like: spawn new op as one completes (default)");
+  fmt::println("  --batch             Spawn N ops, wait all complete, repeat");
+  fmt::println("  --scoped-workers    N worker coroutines processing sequentially");
   fmt::println("");
   fmt::println("Queue types:");
   fmt::println("  --queue=<type>      Run only specified queue type(s), comma-separated");
   fmt::println("                      Types: nolock, mutex, tas, ttas, backoff, lockfree");
   fmt::println("");
   fmt::println("Examples:");
-  fmt::println("  {}                                  # Default: async-scope with inline+threaded", prog);
+  fmt::println("  {}                                  # Default: sliding-window with inline+threaded", prog);
   fmt::println("  {} --config=benchmark_config.toml   # Load from TOML config file", prog);
   fmt::println("  {} --inline                         # Only inline polling", prog);
   fmt::println("  {} --threaded                       # Only background thread polling", prog);
-  fmt::println("  {} --scoped-workers                 # Only scoped workers pattern", prog);
+  fmt::println("  {} --batch                          # Only batch pattern", prog);
   fmt::println("  {} --scoped-workers --inline        # Scoped workers with inline only", prog);
-  fmt::println("  {} --async-scope --scoped-workers   # Both patterns", prog);
+  fmt::println("  {} --sliding-window --batch         # Both sliding-window and batch", prog);
   fmt::println("  {} --queue=mutex,lockfree           # Specific queue types", prog);
 }
 
@@ -592,16 +669,26 @@ BenchmarkConfig parse_args(int argc, char **argv) {
         polling_specified = true;
       }
       config.run_threaded = true;
-    } else if (arg == "--async-scope") {
+    } else if (arg == "--sliding-window") {
       if (!pattern_specified) {
-        config.run_async_scope = false;
+        config.run_sliding_window = false;
+        config.run_batch = false;
         config.run_scoped_workers = false;
         pattern_specified = true;
       }
-      config.run_async_scope = true;
+      config.run_sliding_window = true;
+    } else if (arg == "--batch") {
+      if (!pattern_specified) {
+        config.run_sliding_window = false;
+        config.run_batch = false;
+        config.run_scoped_workers = false;
+        pattern_specified = true;
+      }
+      config.run_batch = true;
     } else if (arg == "--scoped-workers") {
       if (!pattern_specified) {
-        config.run_async_scope = false;
+        config.run_sliding_window = false;
+        config.run_batch = false;
         config.run_scoped_workers = false;
         pattern_specified = true;
       }
@@ -644,241 +731,153 @@ BenchmarkConfig parse_args(int argc, char **argv) {
   return config;
 }
 
+// Helper to run benchmarks for all queue types with a given run function
+template <typename RunFn>
+std::vector<BenchmarkResult> run_all_queues(
+    const BenchmarkConfig &config,
+    std::vector<char> &src, std::vector<char> &dst,
+    bool use_threaded_polling,
+    RunFn run_fn,
+    const char *pattern_name) {
+
+  std::vector<BenchmarkResult> results;
+
+  // Count enabled queue types for progress bar
+  size_t queue_count = 0;
+  if (!use_threaded_polling && config.run_nolock) queue_count++;
+  if (config.run_mutex) queue_count++;
+  if (config.run_tas) queue_count++;
+  if (config.run_ttas) queue_count++;
+  if (config.run_backoff) queue_count++;
+  if (config.run_lockfree) queue_count++;
+
+  size_t total_configs = config.concurrency_levels.size() * config.msg_sizes.size();
+  size_t total_iterations = total_configs * queue_count * config.iterations;
+
+  ProgressBar progress(total_iterations, pattern_name);
+
+  for (auto concurrency : config.concurrency_levels) {
+    for (auto msg_size : config.msg_sizes) {
+      BenchmarkResult result{concurrency, msg_size, {}, {}, {}, {}, {}, {}};
+
+      progress.set_label(fmt::format("{} c={} sz={}", pattern_name, concurrency, msg_size));
+
+      if (!use_threaded_polling && config.run_nolock) {
+        DsaSingleThread dsa(false);
+        result.single_thread = run_benchmark(dsa, concurrency, msg_size,
+            config.total_bytes, config.iterations, src, dst, run_fn, &progress);
+      }
+      if (config.run_mutex) {
+        Dsa dsa(use_threaded_polling);
+        result.mutex = run_benchmark(dsa, concurrency, msg_size,
+            config.total_bytes, config.iterations, src, dst, run_fn, &progress);
+      }
+      if (config.run_tas) {
+        DsaTasSpinlock dsa(use_threaded_polling);
+        result.tas_spinlock = run_benchmark(dsa, concurrency, msg_size,
+            config.total_bytes, config.iterations, src, dst, run_fn, &progress);
+      }
+      if (config.run_ttas) {
+        DsaSpinlock dsa(use_threaded_polling);
+        result.ttas_spinlock = run_benchmark(dsa, concurrency, msg_size,
+            config.total_bytes, config.iterations, src, dst, run_fn, &progress);
+      }
+      if (config.run_backoff) {
+        DsaBackoffSpinlock dsa(use_threaded_polling);
+        result.backoff_spinlock = run_benchmark(dsa, concurrency, msg_size,
+            config.total_bytes, config.iterations, src, dst, run_fn, &progress);
+      }
+      if (config.run_lockfree) {
+        DsaLockFree dsa(use_threaded_polling);
+        result.lockfree = run_benchmark(dsa, concurrency, msg_size,
+            config.total_bytes, config.iterations, src, dst, run_fn, &progress);
+      }
+
+      results.push_back(result);
+    }
+  }
+
+  progress.finish();
+  return results;
+}
+
 void benchmark_queues_with_dsa(const BenchmarkConfig &config) {
   fmt::println("=== DSA BENCHMARK WITH DIFFERENT TASK QUEUES ===\n");
+  fmt::println("Configuration:");
+  fmt::println("  Total bytes per iteration: {} MB", config.total_bytes / (1024 * 1024));
+  fmt::println("  Iterations: {}", config.iterations);
+  fmt::println("  Concurrency levels: {}", fmt::join(config.concurrency_levels, ", "));
+  fmt::println("  Message sizes: {}", fmt::join(config.msg_sizes, ", "));
+  fmt::println("");
 
-  const std::vector<size_t> &batch_sizes = config.batch_sizes;
-  const std::vector<size_t> &msg_sizes = config.msg_sizes;
-  const size_t total_bytes_target = config.total_bytes;
+  std::vector<char> src(config.total_bytes);
+  std::vector<char> dst(config.total_bytes);
+  std::memset(src.data(), 1, config.total_bytes);
+  std::memset(dst.data(), 0, config.total_bytes);
 
-  // Results organized by [pattern][polling_mode]
-  // pattern: 0 = async_scope, 1 = scoped_workers
-  // polling: 0 = inline, 1 = threaded
-  std::vector<BenchmarkResult> async_scope_inline_results;
-  std::vector<BenchmarkResult> async_scope_threaded_results;
-  std::vector<BenchmarkResult> scoped_workers_inline_results;
-  std::vector<BenchmarkResult> scoped_workers_threaded_results;
+  // Collect all results with labels
+  std::vector<std::pair<std::string, std::vector<BenchmarkResult>>> all_results;
 
-  std::vector<char> src(total_bytes_target);
-  std::vector<char> dst(total_bytes_target);
-  std::memset(src.data(), 1, total_bytes_target);
-  std::memset(dst.data(), 0, total_bytes_target);
-
-  // async_scope pattern + inline polling
-  if (config.run_async_scope && config.run_inline) {
-    fmt::println("Running async_scope + inline polling...");
-    for (auto bs : batch_sizes) {
-      for (auto ms : msg_sizes) {
-        size_t batch_bytes = bs * ms;
-        if (batch_bytes > 2ULL * 1024 * 1024 * 1024)
-          continue;
-
-        int iterations = static_cast<int>(total_bytes_target / batch_bytes);
-        if (iterations < 1) iterations = 1;
-
-        BenchmarkResult result{bs, ms, {}, {}, {}, {}, {}, {}};
-
-        if (config.run_nolock) {
-          exec::async_scope scope;
-          DsaSingleThread dsa(false);
-          result.single_thread = benchmark_scope_inline(
-              dsa, scope, bs, ms, src, dst, iterations);
-        }
-        if (config.run_mutex) {
-          exec::async_scope scope;
-          Dsa dsa(false);
-          result.mutex = benchmark_scope_inline(
-              dsa, scope, bs, ms, src, dst, iterations);
-        }
-        if (config.run_tas) {
-          exec::async_scope scope;
-          DsaTasSpinlock dsa(false);
-          result.tas_spinlock = benchmark_scope_inline(
-              dsa, scope, bs, ms, src, dst, iterations);
-        }
-        if (config.run_ttas) {
-          exec::async_scope scope;
-          DsaSpinlock dsa(false);
-          result.ttas_spinlock = benchmark_scope_inline(
-              dsa, scope, bs, ms, src, dst, iterations);
-        }
-        if (config.run_backoff) {
-          exec::async_scope scope;
-          DsaBackoffSpinlock dsa(false);
-          result.backoff_spinlock = benchmark_scope_inline(
-              dsa, scope, bs, ms, src, dst, iterations);
-        }
-        if (config.run_lockfree) {
-          exec::async_scope scope;
-          DsaLockFree dsa(false);
-          result.lockfree = benchmark_scope_inline(
-              dsa, scope, bs, ms, src, dst, iterations);
-        }
-        async_scope_inline_results.push_back(result);
-        fmt::println("  Batch {:>2}, Size {:>7}: done", bs, ms);
-      }
-    }
+  // Sliding window pattern
+  if (config.run_sliding_window && config.run_inline) {
+    fmt::println("Running sliding_window + inline polling...");
+    auto results = run_all_queues(config, src, dst, false,
+        [](auto &dsa, auto &scope, size_t c, size_t m, size_t t, auto &s, auto &d, auto &l) {
+          run_sliding_window_inline(dsa, scope, c, m, t, s, d, l);
+        }, "sliding_window");
+    all_results.emplace_back("sliding_window_inline", std::move(results));
     fmt::println("");
   }
 
-  // async_scope pattern + threaded polling
-  if (config.run_async_scope && config.run_threaded) {
-    fmt::println("Running async_scope + threaded polling...");
-    for (auto bs : batch_sizes) {
-      for (auto ms : msg_sizes) {
-        size_t batch_bytes = bs * ms;
-        if (batch_bytes > 2ULL * 1024 * 1024 * 1024)
-          continue;
-
-        int iterations = static_cast<int>(total_bytes_target / batch_bytes);
-        if (iterations < 1) iterations = 1;
-
-        BenchmarkResult result{bs, ms, {-1, 0, {}}, {}, {}, {}, {}, {}};
-
-        if (config.run_mutex) {
-          exec::async_scope scope;
-          Dsa dsa(true);
-          result.mutex = benchmark_scope_threaded(
-              dsa, scope, bs, ms, src, dst, iterations);
-        }
-        if (config.run_tas) {
-          exec::async_scope scope;
-          DsaTasSpinlock dsa(true);
-          result.tas_spinlock = benchmark_scope_threaded(
-              dsa, scope, bs, ms, src, dst, iterations);
-        }
-        if (config.run_ttas) {
-          exec::async_scope scope;
-          DsaSpinlock dsa(true);
-          result.ttas_spinlock = benchmark_scope_threaded(
-              dsa, scope, bs, ms, src, dst, iterations);
-        }
-        if (config.run_backoff) {
-          exec::async_scope scope;
-          DsaBackoffSpinlock dsa(true);
-          result.backoff_spinlock = benchmark_scope_threaded(
-              dsa, scope, bs, ms, src, dst, iterations);
-        }
-        if (config.run_lockfree) {
-          exec::async_scope scope;
-          DsaLockFree dsa(true);
-          result.lockfree = benchmark_scope_threaded(
-              dsa, scope, bs, ms, src, dst, iterations);
-        }
-
-        async_scope_threaded_results.push_back(result);
-        fmt::println("  Batch {:>2}, Size {:>7}: done", bs, ms);
-      }
-    }
+  if (config.run_sliding_window && config.run_threaded) {
+    fmt::println("Running sliding_window + threaded polling...");
+    auto results = run_all_queues(config, src, dst, true,
+        [](auto &dsa, auto &scope, size_t c, size_t m, size_t t, auto &s, auto &d, auto &l) {
+          run_sliding_window_threaded(dsa, scope, c, m, t, s, d, l);
+        }, "sliding_window");
+    all_results.emplace_back("sliding_window_threaded", std::move(results));
     fmt::println("");
   }
 
-  // scoped_workers pattern + inline polling
+  // Batch pattern
+  if (config.run_batch && config.run_inline) {
+    fmt::println("Running batch + inline polling...");
+    auto results = run_all_queues(config, src, dst, false,
+        [](auto &dsa, auto &scope, size_t c, size_t m, size_t t, auto &s, auto &d, auto &l) {
+          run_batch_inline(dsa, scope, c, m, t, s, d, l);
+        }, "batch");
+    all_results.emplace_back("batch_inline", std::move(results));
+    fmt::println("");
+  }
+
+  if (config.run_batch && config.run_threaded) {
+    fmt::println("Running batch + threaded polling...");
+    auto results = run_all_queues(config, src, dst, true,
+        [](auto &dsa, auto &scope, size_t c, size_t m, size_t t, auto &s, auto &d, auto &l) {
+          run_batch_threaded(dsa, scope, c, m, t, s, d, l);
+        }, "batch");
+    all_results.emplace_back("batch_threaded", std::move(results));
+    fmt::println("");
+  }
+
+  // Scoped workers pattern
   if (config.run_scoped_workers && config.run_inline) {
     fmt::println("Running scoped_workers + inline polling...");
-    for (auto bs : batch_sizes) {
-      for (auto ms : msg_sizes) {
-        size_t batch_bytes = bs * ms;
-        if (batch_bytes > 2ULL * 1024 * 1024 * 1024)
-          continue;
-
-        int iterations = static_cast<int>(total_bytes_target / batch_bytes);
-        if (iterations < 1) iterations = 1;
-
-        BenchmarkResult result{bs, ms, {}, {}, {}, {}, {}, {}};
-
-        if (config.run_nolock) {
-          exec::async_scope scope;
-          DsaSingleThread dsa(false);
-          result.single_thread = benchmark_scoped_workers_inline(
-              dsa, scope, bs, ms, src, dst, iterations);
-        }
-        if (config.run_mutex) {
-          exec::async_scope scope;
-          Dsa dsa(false);
-          result.mutex = benchmark_scoped_workers_inline(
-              dsa, scope, bs, ms, src, dst, iterations);
-        }
-        if (config.run_tas) {
-          exec::async_scope scope;
-          DsaTasSpinlock dsa(false);
-          result.tas_spinlock = benchmark_scoped_workers_inline(
-              dsa, scope, bs, ms, src, dst, iterations);
-        }
-        if (config.run_ttas) {
-          exec::async_scope scope;
-          DsaSpinlock dsa(false);
-          result.ttas_spinlock = benchmark_scoped_workers_inline(
-              dsa, scope, bs, ms, src, dst, iterations);
-        }
-        if (config.run_backoff) {
-          exec::async_scope scope;
-          DsaBackoffSpinlock dsa(false);
-          result.backoff_spinlock = benchmark_scoped_workers_inline(
-              dsa, scope, bs, ms, src, dst, iterations);
-        }
-        if (config.run_lockfree) {
-          exec::async_scope scope;
-          DsaLockFree dsa(false);
-          result.lockfree = benchmark_scoped_workers_inline(
-              dsa, scope, bs, ms, src, dst, iterations);
-        }
-        scoped_workers_inline_results.push_back(result);
-        fmt::println("  Batch {:>2}, Size {:>7}: done", bs, ms);
-      }
-    }
+    auto results = run_all_queues(config, src, dst, false,
+        [](auto &dsa, auto &scope, size_t c, size_t m, size_t t, auto &s, auto &d, auto &l) {
+          run_scoped_workers_inline(dsa, scope, c, m, t, s, d, l);
+        }, "scoped_workers");
+    all_results.emplace_back("scoped_workers_inline", std::move(results));
     fmt::println("");
   }
 
-  // scoped_workers pattern + threaded polling
   if (config.run_scoped_workers && config.run_threaded) {
     fmt::println("Running scoped_workers + threaded polling...");
-    for (auto bs : batch_sizes) {
-      for (auto ms : msg_sizes) {
-        size_t batch_bytes = bs * ms;
-        if (batch_bytes > 2ULL * 1024 * 1024 * 1024)
-          continue;
-
-        int iterations = static_cast<int>(total_bytes_target / batch_bytes);
-        if (iterations < 1) iterations = 1;
-
-        BenchmarkResult result{bs, ms, {-1, 0, {}}, {}, {}, {}, {}, {}};
-
-        if (config.run_mutex) {
-          exec::async_scope scope;
-          Dsa dsa(true);
-          result.mutex = benchmark_scoped_workers_threaded(
-              dsa, scope, bs, ms, src, dst, iterations);
-        }
-        if (config.run_tas) {
-          exec::async_scope scope;
-          DsaTasSpinlock dsa(true);
-          result.tas_spinlock = benchmark_scoped_workers_threaded(
-              dsa, scope, bs, ms, src, dst, iterations);
-        }
-        if (config.run_ttas) {
-          exec::async_scope scope;
-          DsaSpinlock dsa(true);
-          result.ttas_spinlock = benchmark_scoped_workers_threaded(
-              dsa, scope, bs, ms, src, dst, iterations);
-        }
-        if (config.run_backoff) {
-          exec::async_scope scope;
-          DsaBackoffSpinlock dsa(true);
-          result.backoff_spinlock = benchmark_scoped_workers_threaded(
-              dsa, scope, bs, ms, src, dst, iterations);
-        }
-        if (config.run_lockfree) {
-          exec::async_scope scope;
-          DsaLockFree dsa(true);
-          result.lockfree = benchmark_scoped_workers_threaded(
-              dsa, scope, bs, ms, src, dst, iterations);
-        }
-
-        scoped_workers_threaded_results.push_back(result);
-        fmt::println("  Batch {:>2}, Size {:>7}: done", bs, ms);
-      }
-    }
+    auto results = run_all_queues(config, src, dst, true,
+        [](auto &dsa, auto &scope, size_t c, size_t m, size_t t, auto &s, auto &d, auto &l) {
+          run_scoped_workers_threaded(dsa, scope, c, m, t, s, d, l);
+        }, "scoped_workers");
+    all_results.emplace_back("scoped_workers_threaded", std::move(results));
     fmt::println("");
   }
 
@@ -890,7 +889,7 @@ void benchmark_queues_with_dsa(const BenchmarkConfig &config) {
                "=================\n");
 
   // Helper lambda to print a results table
-  auto print_results_table = [](const char* title,
+  auto print_results_table = [](const std::string& title,
                                  const std::vector<BenchmarkResult>& results,
                                  bool include_nolock) {
     if (results.empty()) return;
@@ -898,7 +897,7 @@ void benchmark_queues_with_dsa(const BenchmarkConfig &config) {
     fmt::println("========== {} ==========\n", title);
     if (include_nolock) {
       fmt::println("{:>5} {:>10} {:>16} {:>16} {:>16} {:>16} {:>16} {:>16}",
-                   "Batch", "Size", "NoLock", "Mutex", "TAS", "TTAS", "Backoff",
+                   "Conc", "Size", "NoLock", "Mutex", "TAS", "TTAS", "Backoff",
                    "LockFree");
       fmt::println(
           "{:-^5} {:-^10} {:-^16} {:-^16} {:-^16} {:-^16} {:-^16} {:-^16}",
@@ -906,19 +905,19 @@ void benchmark_queues_with_dsa(const BenchmarkConfig &config) {
       for (const auto &r : results) {
         fmt::println(
             "{:>5} {:>10} {:>16} {:>16} {:>16} {:>16} {:>16} {:>16}",
-            r.batch_size, r.msg_size, format_metric(r.single_thread),
+            r.concurrency, r.msg_size, format_metric(r.single_thread),
             format_metric(r.mutex), format_metric(r.tas_spinlock),
             format_metric(r.ttas_spinlock), format_metric(r.backoff_spinlock),
             format_metric(r.lockfree));
       }
     } else {
       fmt::println("{:>5} {:>10} {:>16} {:>16} {:>16} {:>16} {:>16}",
-                   "Batch", "Size", "Mutex", "TAS", "TTAS", "Backoff", "LockFree");
+                   "Conc", "Size", "Mutex", "TAS", "TTAS", "Backoff", "LockFree");
       fmt::println("{:-^5} {:-^10} {:-^16} {:-^16} {:-^16} {:-^16} {:-^16}",
                    "", "", "", "", "", "", "");
       for (const auto &r : results) {
         fmt::println("{:>5} {:>10} {:>16} {:>16} {:>16} {:>16} {:>16}",
-                     r.batch_size, r.msg_size, format_metric(r.mutex),
+                     r.concurrency, r.msg_size, format_metric(r.mutex),
                      format_metric(r.tas_spinlock), format_metric(r.ttas_spinlock),
                      format_metric(r.backoff_spinlock), format_metric(r.lockfree));
       }
@@ -926,15 +925,16 @@ void benchmark_queues_with_dsa(const BenchmarkConfig &config) {
     fmt::println("");
   };
 
-  print_results_table("ASYNC_SCOPE + INLINE", async_scope_inline_results, true);
-  print_results_table("ASYNC_SCOPE + THREADED", async_scope_threaded_results, false);
-  print_results_table("SCOPED_WORKERS + INLINE", scoped_workers_inline_results, true);
-  print_results_table("SCOPED_WORKERS + THREADED", scoped_workers_threaded_results, false);
+  for (const auto &[label, results] : all_results) {
+    bool include_nolock = label.find("inline") != std::string::npos;
+    // Convert label to uppercase for display
+    std::string title = label;
+    std::transform(title.begin(), title.end(), title.begin(), ::toupper);
+    print_results_table(title, results, include_nolock);
+  }
 
   // Export results to CSV
-  export_to_csv(config.csv_file,
-                async_scope_inline_results, async_scope_threaded_results,
-                scoped_workers_inline_results, scoped_workers_threaded_results);
+  export_to_csv(config.csv_file, all_results);
 }
 
 int main(int argc, char **argv) {
