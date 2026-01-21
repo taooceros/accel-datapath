@@ -6,7 +6,6 @@
 #include <atomic>
 #include <concepts>
 #include <cstddef>
-#include <fmt/core.h>
 #include <mutex>
 
 #include <dsa_stdexec/operation_base.hpp>

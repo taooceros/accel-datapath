@@ -2,7 +2,6 @@
 #define DSA_STDEXEC_RUN_LOOP_HPP
 
 #include <exception>
-#include <fmt/core.h>
 #include <functional>
 #include <mutex>
 #include <stdexec/execution.hpp>
@@ -142,12 +141,7 @@ public:
   auto get_scheduler() noexcept -> Scheduler { return Scheduler{this}; }
 
   void run() {
-    size_t loop_count = 0;
     while (!stop_) {
-      loop_count++;
-      if (loop_count % 1000000 == 0) {
-        fmt::println("run_loop iteration {}, stop_={}", loop_count, stop_);
-      }
       Task *task = try_pop_front();
       if (task) {
         task->execute();
@@ -164,7 +158,6 @@ public:
         poll_();
       }
     }
-    fmt::println("run_loop: exiting after {} iterations", loop_count);
   }
 
   void finish() {

@@ -295,8 +295,6 @@ exec::task<void> worker_coro(DsaType &dsa,
                               size_t msg_size, size_t num_ops,
                               size_t num_workers, size_t worker_id) {
   size_t current_op = worker_id;
-  fmt::println("worker {} started, num_ops={}", worker_id, num_ops);
-  size_t ops_done = 0;
 
   while (current_op < num_ops) {
     size_t offset = current_op * msg_size;
@@ -312,13 +310,8 @@ exec::task<void> worker_coro(DsaType &dsa,
     auto end_time = std::chrono::high_resolution_clock::now();
     latency.record(std::chrono::duration<double, std::nano>(end_time - start_time).count());
     current_op += num_workers;
-    ops_done++;
-    if (ops_done % 10000 == 0) {
-      fmt::println("worker {} progress: {}/{}", worker_id, ops_done, num_ops / num_workers);
-    }
   }
 
-  fmt::println("worker {} finished after {} ops", worker_id, ops_done);
   co_return;
 }
 
