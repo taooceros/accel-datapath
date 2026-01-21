@@ -10,7 +10,6 @@
 #include <mutex>
 
 #include <dsa_stdexec/operation_base.hpp>
-#include <immintrin.h>
 
 namespace dsa {
 
@@ -160,7 +159,6 @@ public:
         // Check for completion - static dispatch via HwContext
         if (hw_ctx_.check_completion(curr)) {
           *pprev = curr->next;
-          _mm_sfence();  // Ensure list modification is visible
           curr->next = completed_head;
           completed_head = curr;
           curr = *pprev;
