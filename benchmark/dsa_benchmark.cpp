@@ -147,16 +147,15 @@ void run_sliding_window_inline(DsaType &dsa, exec::async_scope &scope,
   auto spawn_one = [&](size_t op_idx) {
     size_t offset = op_idx * msg_size;
     auto start_time = std::chrono::high_resolution_clock::now();
-    auto snd = scheduler.schedule()
-             | stdexec::let_value([&dsa, &src, &dst, offset, msg_size, &latency, start_time, &in_flight]() {
-                 return dsa_stdexec::dsa_data_move(dsa, src.data() + offset,
-                                                   dst.data() + offset, msg_size)
-                      | stdexec::then([&latency, start_time, &in_flight]() {
-                          auto end_time = std::chrono::high_resolution_clock::now();
-                          latency.record(std::chrono::duration<double, std::nano>(
-                              end_time - start_time).count());
-                          in_flight.fetch_sub(1, std::memory_order_release);
-                        });
+    // Don't use scheduler.schedule() here - it queues to the run loop which
+    // we can't process while spawning. Instead, start with dsa_data_move directly.
+    auto snd = dsa_stdexec::dsa_data_move(dsa, src.data() + offset,
+                                           dst.data() + offset, msg_size)
+             | stdexec::then([&latency, start_time, &in_flight]() {
+                 auto end_time = std::chrono::high_resolution_clock::now();
+                 latency.record(std::chrono::duration<double, std::nano>(
+                     end_time - start_time).count());
+                 in_flight.fetch_sub(1, std::memory_order_release);
                });
     in_flight.fetch_add(1, std::memory_order_relaxed);
     scope.spawn(std::move(snd));
@@ -223,7 +222,6 @@ void run_batch_inline(DsaType &dsa, exec::async_scope &scope,
                       std::vector<char> &src, std::vector<char> &dst,
                       LatencyCollector &latency) {
   dsa_stdexec::PollingRunLoop loop([&dsa] { dsa.poll(); });
-  auto scheduler = loop.get_scheduler();
 
   size_t num_ops = total_bytes / msg_size;
   size_t op_idx = 0;
@@ -234,15 +232,13 @@ void run_batch_inline(DsaType &dsa, exec::async_scope &scope,
     for (size_t i = op_idx; i < batch_end; ++i) {
       size_t offset = i * msg_size;
       auto start_time = std::chrono::high_resolution_clock::now();
-      auto snd = scheduler.schedule()
-               | stdexec::let_value([&dsa, &src, &dst, offset, msg_size, &latency, start_time]() {
-                   return dsa_stdexec::dsa_data_move(dsa, src.data() + offset,
-                                                     dst.data() + offset, msg_size)
-                        | stdexec::then([&latency, start_time]() {
-                            auto end_time = std::chrono::high_resolution_clock::now();
-                            latency.record(std::chrono::duration<double, std::nano>(
-                                end_time - start_time).count());
-                          });
+      // Start with dsa_data_move directly - no need to go through scheduler
+      auto snd = dsa_stdexec::dsa_data_move(dsa, src.data() + offset,
+                                             dst.data() + offset, msg_size)
+               | stdexec::then([&latency, start_time]() {
+                   auto end_time = std::chrono::high_resolution_clock::now();
+                   latency.record(std::chrono::duration<double, std::nano>(
+                       end_time - start_time).count());
                  });
       scope.spawn(std::move(snd));
     }
