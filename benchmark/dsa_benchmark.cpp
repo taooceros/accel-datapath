@@ -376,7 +376,8 @@ void run_scoped_workers_threaded(DsaType &dsa, exec::async_scope &scope,
 
 
 struct DsaMetric {
-  double bandwidth;
+  double bandwidth;      // GB/s
+  double msg_rate;       // Million messages/second
   uint64_t page_faults;
   LatencyCollector::Stats latency;
 };
@@ -410,7 +411,9 @@ DsaMetric run_benchmark(DsaType &dsa, size_t concurrency, size_t msg_size,
   uint64_t page_faults = dsa_stdexec::get_page_fault_retries();
   std::chrono::duration<double> diff = end - start;
   double bw = static_cast<double>(total_bytes) * iterations / (1024.0 * 1024.0 * 1024.0) / diff.count();
-  return {bw, page_faults, latency.compute_stats()};
+  size_t num_ops = total_bytes / msg_size;
+  double msg_rate = static_cast<double>(num_ops) * iterations / 1e6 / diff.count();  // Million msgs/sec
+  return {bw, msg_rate, page_faults, latency.compute_stats()};
 }
 
 
@@ -444,7 +447,7 @@ void export_to_csv(const std::string &filename,
   }
 
   // Write CSV header
-  file << "pattern,polling_mode,queue_type,concurrency,msg_size,bandwidth_gbps,page_faults,"
+  file << "pattern,polling_mode,queue_type,concurrency,msg_size,bandwidth_gbps,msg_rate_mps,page_faults,"
        << "latency_min_ns,latency_max_ns,latency_avg_ns,latency_p50_ns,latency_p99_ns,latency_count\n";
 
   // Helper to write one metric row
@@ -453,7 +456,7 @@ void export_to_csv(const std::string &filename,
                             size_t msg_size, const DsaMetric &m) {
     file << pattern << "," << polling_mode << "," << queue_type << ","
          << concurrency << "," << msg_size << "," << m.bandwidth << ","
-         << m.page_faults << "," << m.latency.min_ns << "," << m.latency.max_ns
+         << m.msg_rate << "," << m.page_faults << "," << m.latency.min_ns << "," << m.latency.max_ns
          << "," << m.latency.avg_ns << "," << m.latency.p50_ns << ","
          << m.latency.p99_ns << "," << m.latency.count << "\n";
   };
