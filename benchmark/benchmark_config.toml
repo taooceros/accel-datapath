@@ -9,7 +9,7 @@ threaded = true     # Background thread polling (dedicated polling thread)
 [scheduling]
 # Scheduling pattern - how tasks are spawned and concurrency is managed
 sliding_window = true   # Semaphore-like: spawn new op as one completes (maintains N in-flight)
-batch = false           # Spawn N ops, wait all complete, then spawn next batch
+batch =  true           # Spawn N ops, wait all complete, then spawn next batch
 scoped_workers = true  # N worker coroutines processing items sequentially
 
 [queues]
@@ -23,10 +23,13 @@ lockfree = true   # Lock-free using atomic compare-and-swap
 
 [parameters]
 # Benchmark parameters
-concurrency_levels = [2]                    # Max operations in-flight at once
-msg_sizes = [4096]  # Size of each memory operation in bytes
-total_bytes = 33554432                                  # Total bytes to copy per iteration (32 MB)
-iterations = 1                                         # Number of times to repeat the full copy
+concurrency_levels = [1, 4, 16, 64]         # Max operations in-flight at once
+# Small messages (64B-1KB): test message rate / overhead
+# Medium messages (4KB-16KB): typical use cases
+# Large messages (64KB-1MB): test bandwidth saturation
+msg_sizes = [8, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+total_bytes = 16777216                     # Total bytes to copy per iteration (16` MB)
+iterations = 3                              # Number of times to repeat the full copy
 
 [output]
 # Output configuration

@@ -39,31 +39,16 @@ DsaBase<QueueTemplate>::DsaBase(bool start_poller)
     int total_wq_count = 0;
     accfg_device_foreach(ctx.get(), device) {
       device_count++;
-      const char *devname = accfg_device_get_devname(device);
-      int dev_id = accfg_device_get_id(device);
       std::string type_str = accfg_device_get_type_str(device);
-      std::system("stty opost onlcr");
-      fmt::println("Device {0} ({1}): {2}", dev_id, devname, type_str);
-      int wq_count = 0;
 
       if (type_str != "dsa") {
         continue;
       }
 
       accfg_wq_foreach(device, wq) {
-        wq_count++;
         total_wq_count++;
-        std::string wq_name = accfg_wq_get_devname(wq);
-        std::string wq_type = accfg_wq_get_type_name(wq);
         auto mode = accfg_wq_get_mode(wq);
         auto state = accfg_wq_get_state(wq);
-        uint64_t max_xfer = accfg_wq_get_max_transfer_size(wq);
-        unsigned int max_batch = accfg_wq_get_max_batch_size(wq);
-        auto ats_disable = accfg_wq_get_ats_disable(wq);
-        fmt::println("  WQ {0} ({1}) type={2} mode={3} state={4} max_xfer={5} "
-                     "max_batch={6} ats_disable={7}",
-                     accfg_wq_get_id(wq), wq_name, wq_type, mode, state,
-                     max_xfer, max_batch, ats_disable);
 
         if (accfg_wq_get_type(wq) != ACCFG_WQT_USER) {
           continue;
@@ -72,7 +57,6 @@ DsaBase<QueueTemplate>::DsaBase(bool start_poller)
         if (state != ACCFG_WQ_ENABLED) {
           continue;
         }
-        fmt::println("  Mapping WQ portal for {0}", wq_name);
 
         void *portal = map_wq(wq);
         if (portal == MAP_FAILED) {
@@ -82,8 +66,6 @@ DsaBase<QueueTemplate>::DsaBase(bool start_poller)
         wq_ = wq;
         wq_portal_ = portal;
         mode_ = mode;
-
-        fmt::println("  Mapped WQ portal for {0} at {1}", wq_name, portal);
         break;
       }
 
@@ -92,11 +74,8 @@ DsaBase<QueueTemplate>::DsaBase(bool start_poller)
       }
     }
     if (device_count == 0) {
-      fmt::println("No DSA/IAX devices found. Ensure devices are enabled and "
+      fmt::println(stderr, "No DSA/IAX devices found. Ensure devices are enabled and "
                    "WQs configured.");
-    } else {
-      fmt::println("Total devices: {0}, total WQs: {1}", device_count,
-                   total_wq_count);
     }
 
     if (wq_portal_ == nullptr) {
@@ -212,7 +191,7 @@ template <template <typename> class QueueTemplate>
 void *DsaBase<QueueTemplate>::map_wq(accfg_wq *wq) {
   char path[PATH_MAX] = {};
   if (accfg_wq_get_user_dev_path(wq, path, sizeof(path)) != 0) {
-    fmt::println("    Failed to get user device path for WQ {0}",
+    fmt::println(stderr, "Failed to get user device path for WQ {}",
                  accfg_wq_get_id(wq));
     return MAP_FAILED;
   }
@@ -220,7 +199,7 @@ void *DsaBase<QueueTemplate>::map_wq(accfg_wq *wq) {
   int fd = open(path, O_RDWR);
   if (fd < 0) {
     std::error_code ec(errno, std::generic_category());
-    fmt::println("    Failed to open {0}: {1}", path, ec.message());
+    fmt::println(stderr, "Failed to open {}: {}", path, ec.message());
     return MAP_FAILED;
   }
 
@@ -234,7 +213,7 @@ void *DsaBase<QueueTemplate>::map_wq(accfg_wq *wq) {
   close(fd);
 
   if (portal == MAP_FAILED) {
-    fmt::println("    Failed to mmap portal {0}: {1}", path,
+    fmt::println(stderr, "Failed to mmap portal {}: {}", path,
                  mmap_error.message());
   }
 
