@@ -1,11 +1,65 @@
 #pragma once
 #include <exception>
 #include <optional>
+#include <semaphore>
 #include <stdexec/execution.hpp>
 #include <tuple>
 #include <variant>
 
 namespace dsa_stdexec {
+
+// Sync wait that works when completions happen on background threads.
+// Unlike stdexec::sync_wait, this uses a binary semaphore for signaling
+// which is guaranteed to work correctly across threads.
+template <class Sender>
+auto sync_wait_threaded(Sender &&snd) {
+  using ResultType = stdexec::value_types_of_t<Sender, stdexec::empty_env,
+                                               std::tuple, std::optional>;
+
+  return [&]<class... Values>(
+             std::optional<std::tuple<Values...>> *) -> ResultType {
+    std::optional<std::tuple<Values...>> result;
+    std::exception_ptr error;
+    std::binary_semaphore done{0};
+
+    struct Receiver {
+      using receiver_concept = stdexec::receiver_t;
+      std::optional<std::tuple<Values...>> *result_;
+      std::exception_ptr *error_;
+      std::binary_semaphore *done_;
+
+      void set_value(Values... values) && noexcept {
+        try {
+          result_->emplace(std::move(values)...);
+        } catch (...) {
+          *error_ = std::current_exception();
+        }
+        done_->release();
+      }
+
+      void set_error(std::exception_ptr e) && noexcept {
+        *error_ = std::move(e);
+        done_->release();
+      }
+
+      void set_stopped() && noexcept {
+        done_->release();
+      }
+
+      auto get_env() const noexcept { return stdexec::empty_env{}; }
+    };
+
+    auto op = stdexec::connect(std::forward<Sender>(snd),
+                               Receiver{&result, &error, &done});
+    stdexec::start(op);
+    done.acquire();
+
+    if (error) {
+      std::rethrow_exception(error);
+    }
+    return result;
+  }((ResultType *)nullptr);
+}
 
 namespace detail {
 

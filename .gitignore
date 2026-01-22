@@ -49,3 +49,8 @@ perf.data.*
 profile*
 gmon.out
 *.perfetto-trace
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo

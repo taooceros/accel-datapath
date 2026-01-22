@@ -507,6 +507,7 @@ struct BenchmarkConfig {
   std::vector<size_t> concurrency_levels = {1, 4, 16, 32};  // Max operations in-flight
   std::vector<size_t> msg_sizes = {256, 512, 1024, 2048, 4096, 8192, 16384};
   size_t total_bytes = 32ULL * 1024 * 1024;  // Total bytes to copy per iteration
+  size_t max_ops = 0;  // Max operations per iteration (0 = unlimited, use total_bytes)
   int iterations = 10;  // Number of times to repeat the full copy
 
   // Output configuration
@@ -571,6 +572,9 @@ BenchmarkConfig load_config_from_toml(const std::string &filename) {
     }
     if (auto val = params->get("total_bytes")->value<int64_t>()) {
       config.total_bytes = static_cast<size_t>(*val);
+    }
+    if (auto val = params->get("max_ops")->value<int64_t>()) {
+      config.max_ops = static_cast<size_t>(*val);
     }
   }
 
@@ -750,6 +754,13 @@ std::vector<BenchmarkResult> run_all_queues(
 
   for (auto concurrency : config.concurrency_levels) {
     for (auto msg_size : config.msg_sizes) {
+      // Calculate effective total_bytes based on max_ops limit
+      size_t effective_total_bytes = config.total_bytes;
+      if (config.max_ops > 0) {
+        size_t max_bytes = config.max_ops * msg_size;
+        effective_total_bytes = std::min(config.total_bytes, max_bytes);
+      }
+
       BenchmarkResult result{concurrency, msg_size, {}, {}, {}, {}, {}, {}};
 
       progress.set_label(fmt::format("{} c={} sz={}", pattern_name, concurrency, msg_size));
@@ -757,32 +768,32 @@ std::vector<BenchmarkResult> run_all_queues(
       if (!use_threaded_polling && config.run_nolock) {
         DsaSingleThread dsa(false);
         result.single_thread = run_benchmark(dsa, concurrency, msg_size,
-            config.total_bytes, config.iterations, src, dst, run_fn, &progress);
+            effective_total_bytes, config.iterations, src, dst, run_fn, &progress);
       }
       if (config.run_mutex) {
         Dsa dsa(use_threaded_polling);
         result.mutex = run_benchmark(dsa, concurrency, msg_size,
-            config.total_bytes, config.iterations, src, dst, run_fn, &progress);
+            effective_total_bytes, config.iterations, src, dst, run_fn, &progress);
       }
       if (config.run_tas) {
         DsaTasSpinlock dsa(use_threaded_polling);
         result.tas_spinlock = run_benchmark(dsa, concurrency, msg_size,
-            config.total_bytes, config.iterations, src, dst, run_fn, &progress);
+            effective_total_bytes, config.iterations, src, dst, run_fn, &progress);
       }
       if (config.run_ttas) {
         DsaSpinlock dsa(use_threaded_polling);
         result.ttas_spinlock = run_benchmark(dsa, concurrency, msg_size,
-            config.total_bytes, config.iterations, src, dst, run_fn, &progress);
+            effective_total_bytes, config.iterations, src, dst, run_fn, &progress);
       }
       if (config.run_backoff) {
         DsaBackoffSpinlock dsa(use_threaded_polling);
         result.backoff_spinlock = run_benchmark(dsa, concurrency, msg_size,
-            config.total_bytes, config.iterations, src, dst, run_fn, &progress);
+            effective_total_bytes, config.iterations, src, dst, run_fn, &progress);
       }
       if (config.run_lockfree) {
         DsaLockFree dsa(use_threaded_polling);
         result.lockfree = run_benchmark(dsa, concurrency, msg_size,
-            config.total_bytes, config.iterations, src, dst, run_fn, &progress);
+            effective_total_bytes, config.iterations, src, dst, run_fn, &progress);
       }
 
       results.push_back(result);

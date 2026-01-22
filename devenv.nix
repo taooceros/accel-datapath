@@ -63,6 +63,7 @@
     python3Packages.pandas
     python3Packages.matplotlib
     python3Packages.numpy
+    python3Packages.plotly
   ];
 
   # 1. Force C/C++ Compiler Flags
