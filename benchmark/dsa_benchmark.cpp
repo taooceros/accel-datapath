@@ -5,7 +5,7 @@
 #include <cstring>
 #include <dsa/dsa.hpp>
 #include <dsa/task_queue.hpp>
-#include <dsa_stdexec/data_move.hpp>
+#include <dsa_stdexec/operations/data_move.hpp>
 #include <dsa_stdexec/run_loop.hpp>
 #include <dsa_stdexec/scheduler.hpp>
 #include <dsa_stdexec/sync_wait.hpp>
@@ -244,6 +244,7 @@ void run_batch_inline(DsaType &dsa, exec::async_scope &scope,
     }
     // Wait for all operations in this batch to complete
     dsa_stdexec::wait_start(scope.on_empty(), loop);
+    loop.reset();  // Reset stop_ flag for next batch
     op_idx = batch_end;
   }
 }

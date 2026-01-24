@@ -181,10 +181,10 @@ def create_checkbox_dashboard(df: pd.DataFrame, output_path: Path):
     fig.update_xaxes(type='log', title_text='Message Size (bytes)', row=2, col=1)
     fig.update_xaxes(type='log', title_text='Message Size (bytes)', row=2, col=2)
 
-    fig.update_yaxes(title_text='Bandwidth (GB/s)', row=1, col=1)
-    fig.update_yaxes(title_text='Message Rate (M/s)', row=1, col=2)
-    fig.update_yaxes(title_text='Avg Latency (us)', row=2, col=1)
-    fig.update_yaxes(title_text='P99 Latency (us)', row=2, col=2)
+    fig.update_yaxes(title_text='Bandwidth (GB/s)', rangemode='tozero', row=1, col=1)
+    fig.update_yaxes(title_text='Message Rate (M/s)', rangemode='tozero', row=1, col=2)
+    fig.update_yaxes(title_text='Avg Latency (us)', rangemode='tozero', row=2, col=1)
+    fig.update_yaxes(title_text='P99 Latency (us)', rangemode='tozero', row=2, col=2)
 
     # Generate the plotly div
     plot_div = fig.to_html(full_html=False, include_plotlyjs='cdn', div_id='plotDiv')

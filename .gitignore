@@ -54,3 +54,5 @@ gmon.out
 __pycache__/
 *.pyc
 *.pyo
+
+*.png
