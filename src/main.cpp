@@ -1,7 +1,7 @@
 #include "dsa/dsa.hpp"
 #include "fmt/base.h"
 
-#include <dsa_stdexec/data_move.hpp>
+#include <dsa_stdexec/operations/data_move.hpp>
 #include <dsa_stdexec/run_loop.hpp>
 #include <dsa_stdexec/scheduler.hpp>
 #include <exec/async_scope.hpp>

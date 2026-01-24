@@ -66,3 +66,18 @@ target("task_queue_benchmark")
     add_files("benchmark/task_queue_benchmark.cpp")
     add_packages("fmt")
     add_packages("stdexec")
+
+-- Examples
+for _, name in ipairs({"data_move", "mem_fill", "compare", "compare_value", "dualcast", "crc_gen", "copy_crc", "cache_flush"}) do
+    target("example_" .. name)
+        set_kind("binary")
+        add_files("examples/" .. name .. ".cpp")
+        add_files("src/dsa/dsa_instantiate.cpp")
+        add_packages("libaccel-config")
+        add_packages("fmt")
+        add_packages("stdexec")
+        add_cflags("-menqcmd")
+        add_cxxflags("-menqcmd")
+        add_cflags("-movdir64b")
+        add_cxxflags("-mmovdir64b")
+end
