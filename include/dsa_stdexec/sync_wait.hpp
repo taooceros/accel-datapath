@@ -1,4 +1,7 @@
 #pragma once
+#ifndef DSA_STDEXEC_SYNC_WAIT_HPP
+#define DSA_STDEXEC_SYNC_WAIT_HPP
+
 #include <exception>
 #include <optional>
 #include <semaphore>
@@ -123,3 +126,5 @@ template <class Sender, class Loop> auto wait_start(Sender &&snd, Loop &loop) {
 }
 
 } // namespace dsa_stdexec
+
+#endif // DSA_STDEXEC_SYNC_WAIT_HPP

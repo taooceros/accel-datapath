@@ -1,3 +1,4 @@
+#pragma once
 #ifndef DSA_STDEXEC_RUN_LOOP_HPP
 #define DSA_STDEXEC_RUN_LOOP_HPP
 

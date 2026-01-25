@@ -1,4 +1,7 @@
 #pragma once
+#ifndef DSA_STDEXEC_SUBMIT_HPP
+#define DSA_STDEXEC_SUBMIT_HPP
+
 #include <exception>
 #include <stdexec/execution.hpp>
 
@@ -23,3 +26,5 @@ template <class Sender> auto submit(Sender &&snd) {
 }
 
 } // namespace dsa_stdexec
+
+#endif // DSA_STDEXEC_SUBMIT_HPP
