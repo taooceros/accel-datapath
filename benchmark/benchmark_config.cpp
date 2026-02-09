@@ -5,6 +5,33 @@
 #include <cstdlib>
 #include <toml++/toml.hpp>
 
+const char* operation_name(OperationType op) {
+  switch (op) {
+    case OperationType::DataMove:     return "data_move";
+    case OperationType::MemFill:      return "mem_fill";
+    case OperationType::Compare:      return "compare";
+    case OperationType::CompareValue: return "compare_value";
+    case OperationType::Dualcast:     return "dualcast";
+    case OperationType::CrcGen:       return "crc_gen";
+    case OperationType::CopyCrc:      return "copy_crc";
+    case OperationType::CacheFlush:   return "cache_flush";
+  }
+  return "unknown";
+}
+
+std::vector<OperationType> BenchmarkConfig::enabled_operations() const {
+  std::vector<OperationType> ops;
+  if (run_data_move)     ops.push_back(OperationType::DataMove);
+  if (run_mem_fill)      ops.push_back(OperationType::MemFill);
+  if (run_compare)       ops.push_back(OperationType::Compare);
+  if (run_compare_value) ops.push_back(OperationType::CompareValue);
+  if (run_dualcast)      ops.push_back(OperationType::Dualcast);
+  if (run_crc_gen)       ops.push_back(OperationType::CrcGen);
+  if (run_copy_crc)      ops.push_back(OperationType::CopyCrc);
+  if (run_cache_flush)   ops.push_back(OperationType::CacheFlush);
+  return ops;
+}
+
 // Load configuration from TOML file
 static BenchmarkConfig load_config_from_toml(const std::string &filename) {
   BenchmarkConfig config;
@@ -40,6 +67,18 @@ static BenchmarkConfig load_config_from_toml(const std::string &filename) {
     config.run_ttas = queues->get("ttas")->value_or(true);
     config.run_backoff = queues->get("backoff")->value_or(true);
     config.run_lockfree = queues->get("lockfree")->value_or(true);
+  }
+
+  // Operations
+  if (auto operations = tbl["operations"].as_table()) {
+    config.run_data_move = operations->get("data_move")->value_or(true);
+    config.run_mem_fill = operations->get("mem_fill")->value_or(true);
+    config.run_compare = operations->get("compare")->value_or(true);
+    config.run_compare_value = operations->get("compare_value")->value_or(true);
+    config.run_dualcast = operations->get("dualcast")->value_or(true);
+    config.run_crc_gen = operations->get("crc_gen")->value_or(true);
+    config.run_copy_crc = operations->get("copy_crc")->value_or(true);
+    config.run_cache_flush = operations->get("cache_flush")->value_or(true);
   }
 
   // Benchmark parameters
@@ -102,6 +141,11 @@ void print_usage(const char *prog) {
   fmt::println("  --queue=<type>      Run only specified queue type(s), comma-separated");
   fmt::println("                      Types: nolock, mutex, tas, ttas, backoff, lockfree");
   fmt::println("");
+  fmt::println("Operations:");
+  fmt::println("  --operation=<type>  Run only specified operation(s), comma-separated");
+  fmt::println("                      Types: data_move, mem_fill, compare, compare_value,");
+  fmt::println("                             dualcast, crc_gen, copy_crc, cache_flush");
+  fmt::println("");
   fmt::println("Examples:");
   fmt::println("  {}                                  # Default: sliding-window with inline+threaded", prog);
   fmt::println("  {} --config=benchmark_config.toml   # Load from TOML config file", prog);
@@ -118,6 +162,7 @@ BenchmarkConfig parse_args(int argc, char **argv) {
   bool polling_specified = false;
   bool pattern_specified = false;
   bool queue_specified = false;
+  bool operation_specified = false;
   std::string config_file;
 
   // First pass: check for config file
@@ -213,6 +258,47 @@ BenchmarkConfig parse_args(int argc, char **argv) {
           config.run_lockfree = true;
         else {
           fmt::println(stderr, "Unknown queue type: {}", q);
+          std::exit(1);
+        }
+        pos = end + 1;
+      }
+    } else if (arg.starts_with("--operation=")) {
+      if (!operation_specified) {
+        config.run_data_move = false;
+        config.run_mem_fill = false;
+        config.run_compare = false;
+        config.run_compare_value = false;
+        config.run_dualcast = false;
+        config.run_crc_gen = false;
+        config.run_copy_crc = false;
+        config.run_cache_flush = false;
+        operation_specified = true;
+      }
+      std::string ops = arg.substr(12);
+      size_t pos = 0;
+      while (pos < ops.size()) {
+        size_t end = ops.find(',', pos);
+        if (end == std::string::npos)
+          end = ops.size();
+        std::string o = ops.substr(pos, end - pos);
+        if (o == "data_move")
+          config.run_data_move = true;
+        else if (o == "mem_fill")
+          config.run_mem_fill = true;
+        else if (o == "compare")
+          config.run_compare = true;
+        else if (o == "compare_value")
+          config.run_compare_value = true;
+        else if (o == "dualcast")
+          config.run_dualcast = true;
+        else if (o == "crc_gen")
+          config.run_crc_gen = true;
+        else if (o == "copy_crc")
+          config.run_copy_crc = true;
+        else if (o == "cache_flush")
+          config.run_cache_flush = true;
+        else {
+          fmt::println(stderr, "Unknown operation type: {}", o);
           std::exit(1);
         }
         pos = end + 1;

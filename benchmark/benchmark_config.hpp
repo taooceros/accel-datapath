@@ -6,6 +6,12 @@
 #include <string>
 #include <vector>
 
+enum class OperationType {
+  DataMove, MemFill, Compare, CompareValue, Dualcast, CrcGen, CopyCrc, CacheFlush
+};
+
+const char* operation_name(OperationType op);
+
 // Benchmark configuration from command-line options or TOML file
 struct BenchmarkConfig {
   // Polling mode dimension
@@ -24,6 +30,18 @@ struct BenchmarkConfig {
   bool run_ttas = true;
   bool run_backoff = true;
   bool run_lockfree = true;
+
+  // Operation dimension
+  bool run_data_move = true;
+  bool run_mem_fill = true;
+  bool run_compare = true;
+  bool run_compare_value = true;
+  bool run_dualcast = true;
+  bool run_crc_gen = true;
+  bool run_copy_crc = true;
+  bool run_cache_flush = true;
+
+  std::vector<OperationType> enabled_operations() const;
 
   // Benchmark parameters
   std::vector<size_t> concurrency_levels = {1, 4, 16, 32};  // Max operations in-flight

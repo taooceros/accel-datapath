@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <fmt/format.h>
 #include <numeric>
 #include <string>
@@ -126,6 +128,40 @@ struct BenchmarkResult {
   DsaMetric ttas_spinlock;
   DsaMetric backoff_spinlock;
   DsaMetric lockfree;
+};
+
+// Buffer set for all operation types
+// Manages src/dst buffers plus special allocations for dualcast
+struct BufferSet {
+  std::vector<char> src;   // source buffer (all ops)
+  std::vector<char> dst;   // destination / second source for compare
+  char *dualcast_dst1 = nullptr;  // 4KB-aligned for dualcast
+  char *dualcast_dst2 = nullptr;  // 4KB-aligned, same bits[11:0] as dst1
+  static constexpr uint64_t fill_pattern = 0xDEADBEEFCAFEBABE;
+
+  explicit BufferSet(size_t size)
+      : src(size), dst(size) {
+    std::memset(src.data(), 1, size);
+    // dst initialized same as src so compare operations succeed
+    std::memset(dst.data(), 1, size);
+    // For compare_value: fill src with the pattern so comparisons succeed
+    // (only used when running compare_value benchmark)
+
+    // Dualcast requires both destinations to have same bits[11:0]
+    // Allocating at 4KB alignment ensures bits[11:0] are all zero for both
+    dualcast_dst1 = static_cast<char *>(std::aligned_alloc(4096, size));
+    dualcast_dst2 = static_cast<char *>(std::aligned_alloc(4096, size));
+    if (dualcast_dst1) std::memset(dualcast_dst1, 0, size);
+    if (dualcast_dst2) std::memset(dualcast_dst2, 0, size);
+  }
+
+  ~BufferSet() {
+    std::free(dualcast_dst1);
+    std::free(dualcast_dst2);
+  }
+
+  BufferSet(const BufferSet &) = delete;
+  BufferSet &operator=(const BufferSet &) = delete;
 };
 
 #endif // BENCHMARK_HELPERS_HPP
