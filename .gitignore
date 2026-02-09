@@ -40,7 +40,6 @@ devenv.local.yaml
 # claude code
 .claude/
 .claude-plugins/
-CLAUDE.md
 
 
 # profiler
