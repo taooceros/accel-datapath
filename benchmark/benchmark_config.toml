@@ -23,14 +23,8 @@ lockfree = true   # Lock-free using atomic compare-and-swap
 
 [operations]
 # DSA operations to benchmark
-data_move = true        # Memory move (src → dst)
-mem_fill = true         # Fill memory with 64-bit pattern
-compare = true          # Compare two memory regions
-compare_value = true    # Compare memory against 64-bit pattern
-dualcast = true         # Copy to two destinations simultaneously
-crc_gen = true          # CRC-32C generation
-copy_crc = true         # Copy + CRC-32C simultaneously
-cache_flush = true      # Flush CPU cache lines
+# Available: data_move, mem_fill, compare, compare_value, dualcast, crc_gen, copy_crc, cache_flush
+enabled = ["data_move", "mem_fill", "compare", "compare_value", "dualcast", "crc_gen", "copy_crc", "cache_flush"]
 
 [parameters]
 # Benchmark parameters

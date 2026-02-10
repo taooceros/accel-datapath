@@ -19,17 +19,23 @@ const char* operation_name(OperationType op) {
   return "unknown";
 }
 
-std::vector<OperationType> BenchmarkConfig::enabled_operations() const {
-  std::vector<OperationType> ops;
-  if (run_data_move)     ops.push_back(OperationType::DataMove);
-  if (run_mem_fill)      ops.push_back(OperationType::MemFill);
-  if (run_compare)       ops.push_back(OperationType::Compare);
-  if (run_compare_value) ops.push_back(OperationType::CompareValue);
-  if (run_dualcast)      ops.push_back(OperationType::Dualcast);
-  if (run_crc_gen)       ops.push_back(OperationType::CrcGen);
-  if (run_copy_crc)      ops.push_back(OperationType::CopyCrc);
-  if (run_cache_flush)   ops.push_back(OperationType::CacheFlush);
-  return ops;
+std::vector<OperationType> all_operations() {
+  return {
+    OperationType::DataMove, OperationType::MemFill, OperationType::Compare,
+    OperationType::CompareValue, OperationType::Dualcast, OperationType::CrcGen,
+    OperationType::CopyCrc, OperationType::CacheFlush
+  };
+}
+
+std::optional<OperationType> parse_operation_name(std::string_view name) {
+  for (auto op : all_operations()) {
+    if (name == operation_name(op)) return op;
+  }
+  return std::nullopt;
+}
+
+const std::vector<OperationType>& BenchmarkConfig::enabled_operations() const {
+  return operations;
 }
 
 // Load configuration from TOML file
@@ -71,14 +77,19 @@ static BenchmarkConfig load_config_from_toml(const std::string &filename) {
 
   // Operations
   if (auto operations = tbl["operations"].as_table()) {
-    config.run_data_move = operations->get("data_move")->value_or(true);
-    config.run_mem_fill = operations->get("mem_fill")->value_or(true);
-    config.run_compare = operations->get("compare")->value_or(true);
-    config.run_compare_value = operations->get("compare_value")->value_or(true);
-    config.run_dualcast = operations->get("dualcast")->value_or(true);
-    config.run_crc_gen = operations->get("crc_gen")->value_or(true);
-    config.run_copy_crc = operations->get("copy_crc")->value_or(true);
-    config.run_cache_flush = operations->get("cache_flush")->value_or(true);
+    if (auto arr = operations->get("enabled")->as_array()) {
+      config.operations.clear();
+      for (const auto &elem : *arr) {
+        if (auto name = elem.value<std::string>()) {
+          if (auto op = parse_operation_name(*name)) {
+            config.operations.push_back(*op);
+          } else {
+            fmt::println(stderr, "Unknown operation in config: {}", *name);
+            std::exit(1);
+          }
+        }
+      }
+    }
   }
 
   // Benchmark parameters
@@ -264,14 +275,7 @@ BenchmarkConfig parse_args(int argc, char **argv) {
       }
     } else if (arg.starts_with("--operation=")) {
       if (!operation_specified) {
-        config.run_data_move = false;
-        config.run_mem_fill = false;
-        config.run_compare = false;
-        config.run_compare_value = false;
-        config.run_dualcast = false;
-        config.run_crc_gen = false;
-        config.run_copy_crc = false;
-        config.run_cache_flush = false;
+        config.operations.clear();
         operation_specified = true;
       }
       std::string ops = arg.substr(12);
@@ -281,23 +285,9 @@ BenchmarkConfig parse_args(int argc, char **argv) {
         if (end == std::string::npos)
           end = ops.size();
         std::string o = ops.substr(pos, end - pos);
-        if (o == "data_move")
-          config.run_data_move = true;
-        else if (o == "mem_fill")
-          config.run_mem_fill = true;
-        else if (o == "compare")
-          config.run_compare = true;
-        else if (o == "compare_value")
-          config.run_compare_value = true;
-        else if (o == "dualcast")
-          config.run_dualcast = true;
-        else if (o == "crc_gen")
-          config.run_crc_gen = true;
-        else if (o == "copy_crc")
-          config.run_copy_crc = true;
-        else if (o == "cache_flush")
-          config.run_cache_flush = true;
-        else {
+        if (auto op = parse_operation_name(o)) {
+          config.operations.push_back(*op);
+        } else {
           fmt::println(stderr, "Unknown operation type: {}", o);
           std::exit(1);
         }

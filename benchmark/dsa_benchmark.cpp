@@ -44,14 +44,14 @@ using RunFunction = std::function<void(DsaType &, exec::async_scope &, size_t,
 template <typename DsaType>
 void spawn_op(DsaType &dsa, exec::async_scope &scope, OperationType op_type,
               BufferSet &bufs, size_t offset, size_t msg_size,
-              LatencyCollector &latency, std::atomic<size_t> &in_flight) {
+              LatencyCollector &latency, std::atomic<size_t> *in_flight = nullptr) {
   auto start_time = std::chrono::high_resolution_clock::now();
-  auto record = [&latency, start_time, &in_flight](auto&&...) {
+  auto record = [&latency, start_time, in_flight](auto&&...) {
     auto end = std::chrono::high_resolution_clock::now();
     latency.record(std::chrono::duration<double, std::nano>(end - start_time).count());
-    in_flight.fetch_sub(1, std::memory_order_release);
+    if (in_flight) in_flight->fetch_sub(1, std::memory_order_release);
   };
-  in_flight.fetch_add(1, std::memory_order_relaxed);
+  if (in_flight) in_flight->fetch_add(1, std::memory_order_relaxed);
 
   using namespace dsa_stdexec;
   switch (op_type) {
@@ -82,42 +82,63 @@ void spawn_op(DsaType &dsa, exec::async_scope &scope, OperationType op_type,
   }
 }
 
-// Variant without in_flight counter (for batch pattern)
-template <typename DsaType>
-void spawn_op(DsaType &dsa, exec::async_scope &scope, OperationType op_type,
-              BufferSet &bufs, size_t offset, size_t msg_size,
-              LatencyCollector &latency) {
+// Scheduled variant: wraps operation in scheduler.schedule() | let_value(...)
+template <typename DsaType, typename Scheduler>
+void spawn_op_scheduled(DsaType &dsa, Scheduler &scheduler,
+                        exec::async_scope &scope, OperationType op_type,
+                        BufferSet &bufs, size_t offset, size_t msg_size,
+                        LatencyCollector &latency,
+                        std::atomic<size_t> *in_flight = nullptr) {
   auto start_time = std::chrono::high_resolution_clock::now();
-  auto record = [&latency, start_time](auto&&...) {
+  if (in_flight) in_flight->fetch_add(1, std::memory_order_relaxed);
+
+  auto record = [&latency, start_time, in_flight](auto&&...) {
     auto end = std::chrono::high_resolution_clock::now();
     latency.record(std::chrono::duration<double, std::nano>(end - start_time).count());
+    if (in_flight) in_flight->fetch_sub(1, std::memory_order_release);
   };
 
   using namespace dsa_stdexec;
   switch (op_type) {
     case OperationType::DataMove:
-      scope.spawn(dsa_data_move(dsa, bufs.src.data() + offset, bufs.dst.data() + offset, msg_size) | stdexec::then(record));
+      scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
+        return dsa_data_move(dsa, bufs.src.data() + offset, bufs.dst.data() + offset, msg_size) | stdexec::then(record);
+      }));
       break;
     case OperationType::MemFill:
-      scope.spawn(dsa_mem_fill(dsa, bufs.dst.data() + offset, msg_size, BufferSet::fill_pattern) | stdexec::then(record));
+      scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
+        return dsa_mem_fill(dsa, bufs.dst.data() + offset, msg_size, BufferSet::fill_pattern) | stdexec::then(record);
+      }));
       break;
     case OperationType::Compare:
-      scope.spawn(dsa_compare(dsa, bufs.src.data() + offset, bufs.dst.data() + offset, msg_size) | stdexec::then(record));
+      scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
+        return dsa_compare(dsa, bufs.src.data() + offset, bufs.dst.data() + offset, msg_size) | stdexec::then(record);
+      }));
       break;
     case OperationType::CompareValue:
-      scope.spawn(dsa_compare_value(dsa, bufs.src.data() + offset, msg_size, BufferSet::fill_pattern) | stdexec::then(record));
+      scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
+        return dsa_compare_value(dsa, bufs.src.data() + offset, msg_size, BufferSet::fill_pattern) | stdexec::then(record);
+      }));
       break;
     case OperationType::Dualcast:
-      scope.spawn(dsa_dualcast(dsa, bufs.src.data() + offset, bufs.dualcast_dst1 + offset, bufs.dualcast_dst2 + offset, msg_size) | stdexec::then(record));
+      scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
+        return dsa_dualcast(dsa, bufs.src.data() + offset, bufs.dualcast_dst1 + offset, bufs.dualcast_dst2 + offset, msg_size) | stdexec::then(record);
+      }));
       break;
     case OperationType::CrcGen:
-      scope.spawn(dsa_crc_gen(dsa, bufs.src.data() + offset, msg_size) | stdexec::then(record));
+      scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
+        return dsa_crc_gen(dsa, bufs.src.data() + offset, msg_size) | stdexec::then(record);
+      }));
       break;
     case OperationType::CopyCrc:
-      scope.spawn(dsa_copy_crc(dsa, bufs.src.data() + offset, bufs.dst.data() + offset, msg_size) | stdexec::then(record));
+      scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
+        return dsa_copy_crc(dsa, bufs.src.data() + offset, bufs.dst.data() + offset, msg_size) | stdexec::then(record);
+      }));
       break;
     case OperationType::CacheFlush:
-      scope.spawn(dsa_cache_flush(dsa, bufs.dst.data() + offset, msg_size) | stdexec::then(record));
+      scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
+        return dsa_cache_flush(dsa, bufs.dst.data() + offset, msg_size) | stdexec::then(record);
+      }));
       break;
   }
 }
@@ -140,7 +161,7 @@ void run_sliding_window_inline(DsaType &dsa, exec::async_scope &scope,
   while (next_op < num_ops) {
     while (next_op < num_ops && in_flight.load(std::memory_order_acquire) < concurrency) {
       size_t offset = next_op * msg_size;
-      spawn_op(dsa, scope, op_type, bufs, offset, msg_size, latency, in_flight);
+      spawn_op(dsa, scope, op_type, bufs, offset, msg_size, latency, &in_flight);
       ++next_op;
     }
     dsa.poll();
@@ -165,58 +186,7 @@ void run_sliding_window_threaded(DsaType &dsa, exec::async_scope &scope,
     }
 
     size_t offset = op_idx * msg_size;
-    auto start_time = std::chrono::high_resolution_clock::now();
-    in_flight.fetch_add(1, std::memory_order_relaxed);
-
-    auto record = [&latency, start_time, &in_flight](auto&&...) {
-      auto end = std::chrono::high_resolution_clock::now();
-      latency.record(std::chrono::duration<double, std::nano>(end - start_time).count());
-      in_flight.fetch_sub(1, std::memory_order_release);
-    };
-
-    using namespace dsa_stdexec;
-    switch (op_type) {
-      case OperationType::DataMove:
-        scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
-          return dsa_data_move(dsa, bufs.src.data() + offset, bufs.dst.data() + offset, msg_size) | stdexec::then(record);
-        }));
-        break;
-      case OperationType::MemFill:
-        scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
-          return dsa_mem_fill(dsa, bufs.dst.data() + offset, msg_size, BufferSet::fill_pattern) | stdexec::then(record);
-        }));
-        break;
-      case OperationType::Compare:
-        scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
-          return dsa_compare(dsa, bufs.src.data() + offset, bufs.dst.data() + offset, msg_size) | stdexec::then(record);
-        }));
-        break;
-      case OperationType::CompareValue:
-        scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
-          return dsa_compare_value(dsa, bufs.src.data() + offset, msg_size, BufferSet::fill_pattern) | stdexec::then(record);
-        }));
-        break;
-      case OperationType::Dualcast:
-        scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
-          return dsa_dualcast(dsa, bufs.src.data() + offset, bufs.dualcast_dst1 + offset, bufs.dualcast_dst2 + offset, msg_size) | stdexec::then(record);
-        }));
-        break;
-      case OperationType::CrcGen:
-        scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
-          return dsa_crc_gen(dsa, bufs.src.data() + offset, msg_size) | stdexec::then(record);
-        }));
-        break;
-      case OperationType::CopyCrc:
-        scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
-          return dsa_copy_crc(dsa, bufs.src.data() + offset, bufs.dst.data() + offset, msg_size) | stdexec::then(record);
-        }));
-        break;
-      case OperationType::CacheFlush:
-        scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
-          return dsa_cache_flush(dsa, bufs.dst.data() + offset, msg_size) | stdexec::then(record);
-        }));
-        break;
-    }
+    spawn_op_scheduled(dsa, scheduler, scope, op_type, bufs, offset, msg_size, latency, &in_flight);
   }
   stdexec::sync_wait(scope.on_empty());
 }
@@ -261,55 +231,7 @@ void run_batch_threaded(DsaType &dsa, exec::async_scope &scope,
     size_t batch_end = std::min(op_idx + concurrency, num_ops);
     for (size_t i = op_idx; i < batch_end; ++i) {
       size_t offset = i * msg_size;
-      auto start_time = std::chrono::high_resolution_clock::now();
-      auto record = [&latency, start_time](auto&&...) {
-        auto end = std::chrono::high_resolution_clock::now();
-        latency.record(std::chrono::duration<double, std::nano>(end - start_time).count());
-      };
-
-      using namespace dsa_stdexec;
-      switch (op_type) {
-        case OperationType::DataMove:
-          scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
-            return dsa_data_move(dsa, bufs.src.data() + offset, bufs.dst.data() + offset, msg_size) | stdexec::then(record);
-          }));
-          break;
-        case OperationType::MemFill:
-          scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
-            return dsa_mem_fill(dsa, bufs.dst.data() + offset, msg_size, BufferSet::fill_pattern) | stdexec::then(record);
-          }));
-          break;
-        case OperationType::Compare:
-          scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
-            return dsa_compare(dsa, bufs.src.data() + offset, bufs.dst.data() + offset, msg_size) | stdexec::then(record);
-          }));
-          break;
-        case OperationType::CompareValue:
-          scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
-            return dsa_compare_value(dsa, bufs.src.data() + offset, msg_size, BufferSet::fill_pattern) | stdexec::then(record);
-          }));
-          break;
-        case OperationType::Dualcast:
-          scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
-            return dsa_dualcast(dsa, bufs.src.data() + offset, bufs.dualcast_dst1 + offset, bufs.dualcast_dst2 + offset, msg_size) | stdexec::then(record);
-          }));
-          break;
-        case OperationType::CrcGen:
-          scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
-            return dsa_crc_gen(dsa, bufs.src.data() + offset, msg_size) | stdexec::then(record);
-          }));
-          break;
-        case OperationType::CopyCrc:
-          scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
-            return dsa_copy_crc(dsa, bufs.src.data() + offset, bufs.dst.data() + offset, msg_size) | stdexec::then(record);
-          }));
-          break;
-        case OperationType::CacheFlush:
-          scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
-            return dsa_cache_flush(dsa, bufs.dst.data() + offset, msg_size) | stdexec::then(record);
-          }));
-          break;
-      }
+      spawn_op_scheduled(dsa, scheduler, scope, op_type, bufs, offset, msg_size, latency);
     }
     stdexec::sync_wait(scope.on_empty());
     op_idx = batch_end;
@@ -651,54 +573,30 @@ void benchmark_queues_with_dsa(const BenchmarkConfig &config) {
 
   std::vector<std::pair<std::string, std::vector<BenchmarkResult>>> all_results;
 
+  struct PatternConfig {
+    bool enabled;
+    bool threaded;
+    BenchmarkPattern pattern;
+    const char *name;
+  };
+
+  PatternConfig pattern_configs[] = {
+    {config.run_sliding_window && config.run_inline,   false, BenchmarkPattern::SlidingWindowInline,   "sliding_window"},
+    {config.run_sliding_window && config.run_threaded,  true, BenchmarkPattern::SlidingWindowThreaded, "sliding_window"},
+    {config.run_batch && config.run_inline,             false, BenchmarkPattern::BatchInline,           "batch"},
+    {config.run_batch && config.run_threaded,            true, BenchmarkPattern::BatchThreaded,         "batch"},
+    {config.run_scoped_workers && config.run_inline,    false, BenchmarkPattern::ScopedWorkersInline,   "scoped_workers"},
+    {config.run_scoped_workers && config.run_threaded,   true, BenchmarkPattern::ScopedWorkersThreaded, "scoped_workers"},
+  };
+
   for (auto op_type : enabled_ops) {
     const char *op_name = operation_name(op_type);
-
-    if (config.run_sliding_window && config.run_inline) {
-      fmt::println("Running {} sliding_window + inline polling...", op_name);
-      auto results = run_all_queues(config, bufs, false,
-          BenchmarkPattern::SlidingWindowInline, op_type, "sliding_window");
-      all_results.emplace_back(fmt::format("{}__sliding_window_inline", op_name), std::move(results));
-      fmt::println("");
-    }
-
-    if (config.run_sliding_window && config.run_threaded) {
-      fmt::println("Running {} sliding_window + threaded polling...", op_name);
-      auto results = run_all_queues(config, bufs, true,
-          BenchmarkPattern::SlidingWindowThreaded, op_type, "sliding_window");
-      all_results.emplace_back(fmt::format("{}__sliding_window_threaded", op_name), std::move(results));
-      fmt::println("");
-    }
-
-    if (config.run_batch && config.run_inline) {
-      fmt::println("Running {} batch + inline polling...", op_name);
-      auto results = run_all_queues(config, bufs, false,
-          BenchmarkPattern::BatchInline, op_type, "batch");
-      all_results.emplace_back(fmt::format("{}__batch_inline", op_name), std::move(results));
-      fmt::println("");
-    }
-
-    if (config.run_batch && config.run_threaded) {
-      fmt::println("Running {} batch + threaded polling...", op_name);
-      auto results = run_all_queues(config, bufs, true,
-          BenchmarkPattern::BatchThreaded, op_type, "batch");
-      all_results.emplace_back(fmt::format("{}__batch_threaded", op_name), std::move(results));
-      fmt::println("");
-    }
-
-    if (config.run_scoped_workers && config.run_inline) {
-      fmt::println("Running {} scoped_workers + inline polling...", op_name);
-      auto results = run_all_queues(config, bufs, false,
-          BenchmarkPattern::ScopedWorkersInline, op_type, "scoped_workers");
-      all_results.emplace_back(fmt::format("{}__scoped_workers_inline", op_name), std::move(results));
-      fmt::println("");
-    }
-
-    if (config.run_scoped_workers && config.run_threaded) {
-      fmt::println("Running {} scoped_workers + threaded polling...", op_name);
-      auto results = run_all_queues(config, bufs, true,
-          BenchmarkPattern::ScopedWorkersThreaded, op_type, "scoped_workers");
-      all_results.emplace_back(fmt::format("{}__scoped_workers_threaded", op_name), std::move(results));
+    for (auto &[enabled, threaded, pattern, name] : pattern_configs) {
+      if (!enabled) continue;
+      const char *mode = threaded ? "threaded" : "inline";
+      fmt::println("Running {} {} + {} polling...", op_name, name, mode);
+      auto results = run_all_queues(config, bufs, threaded, pattern, op_type, name);
+      all_results.emplace_back(fmt::format("{}__{}_{}", op_name, name, mode), std::move(results));
       fmt::println("");
     }
   }

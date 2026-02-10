@@ -3,7 +3,9 @@
 #define BENCHMARK_CONFIG_HPP
 
 #include <cstddef>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 enum class OperationType {
@@ -11,6 +13,8 @@ enum class OperationType {
 };
 
 const char* operation_name(OperationType op);
+std::optional<OperationType> parse_operation_name(std::string_view name);
+std::vector<OperationType> all_operations();
 
 // Benchmark configuration from command-line options or TOML file
 struct BenchmarkConfig {
@@ -32,16 +36,9 @@ struct BenchmarkConfig {
   bool run_lockfree = true;
 
   // Operation dimension
-  bool run_data_move = true;
-  bool run_mem_fill = true;
-  bool run_compare = true;
-  bool run_compare_value = true;
-  bool run_dualcast = true;
-  bool run_crc_gen = true;
-  bool run_copy_crc = true;
-  bool run_cache_flush = true;
+  std::vector<OperationType> operations = all_operations();
 
-  std::vector<OperationType> enabled_operations() const;
+  const std::vector<OperationType>& enabled_operations() const;
 
   // Benchmark parameters
   std::vector<size_t> concurrency_levels = {1, 4, 16, 32};  // Max operations in-flight
