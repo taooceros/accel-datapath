@@ -50,36 +50,41 @@ static BenchmarkConfig load_config_from_toml(const std::string &filename) {
     std::exit(1);
   }
 
+  // Helper: safely get a bool from a TOML table, returning default if key missing
+  auto get_bool = [](const toml::table* t, std::string_view key, bool def) {
+    if (auto node = t->get(key)) return node->value_or(def);
+    return def;
+  };
+
   // Polling mode
   if (auto polling = tbl["polling"].as_table()) {
-    config.run_inline = polling->get("inline")->value_or(true);
-    config.run_threaded = polling->get("threaded")->value_or(true);
+    config.run_inline = get_bool(polling, "inline", true);
+    config.run_threaded = get_bool(polling, "threaded", true);
   }
 
   // Scheduling pattern
   if (auto scheduling = tbl["scheduling"].as_table()) {
-    config.run_sliding_window =
-        scheduling->get("sliding_window")->value_or(true);
-    config.run_sliding_window_noalloc =
-        scheduling->get("sliding_window_noalloc")->value_or(true);
-    config.run_batch = scheduling->get("batch")->value_or(false);
-    config.run_scoped_workers =
-        scheduling->get("scoped_workers")->value_or(false);
+    config.run_sliding_window = get_bool(scheduling, "sliding_window", true);
+    config.run_sliding_window_noalloc = get_bool(scheduling, "sliding_window_noalloc", true);
+    config.run_batch = get_bool(scheduling, "batch", false);
+    config.run_scoped_workers = get_bool(scheduling, "scoped_workers", false);
   }
 
   // Queue types
   if (auto queues = tbl["queues"].as_table()) {
-    config.run_nolock = queues->get("nolock")->value_or(true);
-    config.run_mutex = queues->get("mutex")->value_or(true);
-    config.run_tas = queues->get("tas")->value_or(true);
-    config.run_ttas = queues->get("ttas")->value_or(true);
-    config.run_backoff = queues->get("backoff")->value_or(true);
-    config.run_lockfree = queues->get("lockfree")->value_or(true);
+    config.run_nolock = get_bool(queues, "nolock", true);
+    config.run_mutex = get_bool(queues, "mutex", true);
+    config.run_tas = get_bool(queues, "tas", true);
+    config.run_ttas = get_bool(queues, "ttas", true);
+    config.run_backoff = get_bool(queues, "backoff", true);
+    config.run_lockfree = get_bool(queues, "lockfree", true);
   }
 
   // Operations
   if (auto operations = tbl["operations"].as_table()) {
-    if (auto arr = operations->get("enabled")->as_array()) {
+    auto enabled_node = operations->get("enabled");
+    if (enabled_node && enabled_node->as_array()) {
+      auto arr = enabled_node->as_array();
       config.operations.clear();
       for (const auto &elem : *arr) {
         if (auto name = elem.value<std::string>()) {
@@ -94,9 +99,20 @@ static BenchmarkConfig load_config_from_toml(const std::string &filename) {
     }
   }
 
+  // Helper: safely get an int64 from a TOML table
+  auto get_int = [](const toml::table* t, std::string_view key) -> std::optional<int64_t> {
+    if (auto node = t->get(key)) return node->value<int64_t>();
+    return std::nullopt;
+  };
+  // Helper: safely get an array from a TOML table
+  auto get_array = [](const toml::table* t, std::string_view key) -> const toml::array* {
+    if (auto node = t->get(key)) return node->as_array();
+    return nullptr;
+  };
+
   // Benchmark parameters
   if (auto params = tbl["parameters"].as_table()) {
-    if (auto arr = params->get("concurrency_levels")->as_array()) {
+    if (auto arr = get_array(params, "concurrency_levels")) {
       config.concurrency_levels.clear();
       for (const auto &elem : *arr) {
         if (auto val = elem.value<int64_t>()) {
@@ -104,7 +120,7 @@ static BenchmarkConfig load_config_from_toml(const std::string &filename) {
         }
       }
     }
-    if (auto arr = params->get("msg_sizes")->as_array()) {
+    if (auto arr = get_array(params, "msg_sizes")) {
       config.msg_sizes.clear();
       for (const auto &elem : *arr) {
         if (auto val = elem.value<int64_t>()) {
@@ -112,21 +128,23 @@ static BenchmarkConfig load_config_from_toml(const std::string &filename) {
         }
       }
     }
-    if (auto val = params->get("iterations")->value<int64_t>()) {
+    if (auto val = get_int(params, "iterations")) {
       config.iterations = static_cast<int>(*val);
     }
-    if (auto val = params->get("total_bytes")->value<int64_t>()) {
+    if (auto val = get_int(params, "total_bytes")) {
       config.total_bytes = static_cast<size_t>(*val);
     }
-    if (auto val = params->get("max_ops")->value<int64_t>()) {
+    if (auto val = get_int(params, "max_ops")) {
       config.max_ops = static_cast<size_t>(*val);
     }
   }
 
   // Output configuration
   if (auto output = tbl["output"].as_table()) {
-    if (auto val = output->get("csv_file")->value<std::string>()) {
-      config.csv_file = *val;
+    if (auto node = output->get("csv_file")) {
+      if (auto val = node->value<std::string>()) {
+        config.csv_file = *val;
+      }
     }
   }
 
