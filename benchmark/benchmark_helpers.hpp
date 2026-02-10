@@ -3,12 +3,15 @@
 #define BENCHMARK_HELPERS_HPP
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fmt/format.h>
+#include <new>
 #include <numeric>
+#include <stdexec/execution.hpp>
 #include <string>
 #include <string_view>
 #include <unistd.h>
@@ -78,6 +81,8 @@ private:
 class LatencyCollector {
 public:
   void record(double latency_ns) { samples_.push_back(latency_ns); }
+
+  void reserve(size_t n) { samples_.reserve(n); }
 
   void clear() { samples_.clear(); }
 
@@ -162,6 +167,61 @@ struct BufferSet {
 
   BufferSet(const BufferSet &) = delete;
   BufferSet &operator=(const BufferSet &) = delete;
+};
+
+// Minimal receiver that signals a pre-allocated slot is ready for reuse.
+// Used with OperationSlot for zero-allocation sliding window.
+struct SlotReceiver {
+  using receiver_concept = stdexec::receiver_t;
+  std::atomic<bool> *slot_ready;
+
+  void set_value(auto &&...) && noexcept {
+    slot_ready->store(true, std::memory_order_release);
+  }
+  void set_error(auto &&) && noexcept {
+    slot_ready->store(true, std::memory_order_release);
+  }
+  void set_stopped() && noexcept {
+    slot_ready->store(true, std::memory_order_release);
+  }
+  auto get_env() const noexcept { return stdexec::empty_env{}; }
+};
+
+// Pre-allocated slot for a single operation state.
+// Avoids heap allocation by using placement new into fixed storage.
+// StorageSize: 448 for inline paths, 768 for threaded (schedule | let_value).
+template <size_t StorageSize = 768> struct OperationSlot {
+  alignas(64) char storage[StorageSize];
+  std::atomic<bool> ready{true};
+  void (*destroy_fn)(void *) = nullptr;
+
+  template <class Sender> void start_op(Sender &&sender) {
+    using Op = stdexec::connect_result_t<Sender, SlotReceiver>;
+    static_assert(sizeof(Op) <= StorageSize,
+                  "Operation state too large for slot; bump StorageSize");
+    static_assert(alignof(Op) <= 64);
+
+    if (destroy_fn) {
+      destroy_fn(storage);
+      destroy_fn = nullptr;
+    }
+    ready.store(false, std::memory_order_release);
+    auto *op = new (storage)
+        Op(stdexec::connect(std::forward<Sender>(sender), SlotReceiver{&ready}));
+    destroy_fn = [](void *p) { static_cast<Op *>(p)->~Op(); };
+    stdexec::start(*op);
+  }
+
+  ~OperationSlot() {
+    if (destroy_fn)
+      destroy_fn(storage);
+  }
+
+  OperationSlot() = default;
+  OperationSlot(const OperationSlot &) = delete;
+  OperationSlot &operator=(const OperationSlot &) = delete;
+  OperationSlot(OperationSlot &&) = delete;
+  OperationSlot &operator=(OperationSlot &&) = delete;
 };
 
 #endif // BENCHMARK_HELPERS_HPP

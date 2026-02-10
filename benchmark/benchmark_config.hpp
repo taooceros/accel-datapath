@@ -23,9 +23,10 @@ struct BenchmarkConfig {
   bool run_threaded = true;
 
   // Scheduling pattern dimension
-  bool run_sliding_window = true;  // Semaphore-like: spawn new op as one completes
-  bool run_batch = false;          // Spawn N ops, wait all, repeat
-  bool run_scoped_workers = false; // N workers processing sequentially (N allocations)
+  bool run_sliding_window = true;           // Semaphore-like: spawn new op as one completes
+  bool run_sliding_window_noalloc = true;   // Same but zero-allocation (nest + pre-allocated slots)
+  bool run_batch = false;                   // Spawn N ops, wait all, repeat
+  bool run_scoped_workers = false;          // N workers processing sequentially (N allocations)
 
   // Queue type dimension
   bool run_nolock = true;

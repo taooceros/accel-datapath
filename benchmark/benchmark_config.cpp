@@ -60,6 +60,8 @@ static BenchmarkConfig load_config_from_toml(const std::string &filename) {
   if (auto scheduling = tbl["scheduling"].as_table()) {
     config.run_sliding_window =
         scheduling->get("sliding_window")->value_or(true);
+    config.run_sliding_window_noalloc =
+        scheduling->get("sliding_window_noalloc")->value_or(true);
     config.run_batch = scheduling->get("batch")->value_or(false);
     config.run_scoped_workers =
         scheduling->get("scoped_workers")->value_or(false);
@@ -145,6 +147,7 @@ void print_usage(const char *prog) {
   fmt::println("");
   fmt::println("Scheduling pattern (can combine multiple):");
   fmt::println("  --sliding-window    Semaphore-like: spawn new op as one completes (default)");
+  fmt::println("  --sliding-window-noalloc  Same as sliding-window but zero-allocation (default)");
   fmt::println("  --batch             Spawn N ops, wait all complete, repeat");
   fmt::println("  --scoped-workers    N worker coroutines processing sequentially");
   fmt::println("");
@@ -217,14 +220,25 @@ BenchmarkConfig parse_args(int argc, char **argv) {
     } else if (arg == "--sliding-window") {
       if (!pattern_specified) {
         config.run_sliding_window = false;
+        config.run_sliding_window_noalloc = false;
         config.run_batch = false;
         config.run_scoped_workers = false;
         pattern_specified = true;
       }
       config.run_sliding_window = true;
+    } else if (arg == "--sliding-window-noalloc") {
+      if (!pattern_specified) {
+        config.run_sliding_window = false;
+        config.run_sliding_window_noalloc = false;
+        config.run_batch = false;
+        config.run_scoped_workers = false;
+        pattern_specified = true;
+      }
+      config.run_sliding_window_noalloc = true;
     } else if (arg == "--batch") {
       if (!pattern_specified) {
         config.run_sliding_window = false;
+        config.run_sliding_window_noalloc = false;
         config.run_batch = false;
         config.run_scoped_workers = false;
         pattern_specified = true;
@@ -233,6 +247,7 @@ BenchmarkConfig parse_args(int argc, char **argv) {
     } else if (arg == "--scoped-workers") {
       if (!pattern_specified) {
         config.run_sliding_window = false;
+        config.run_sliding_window_noalloc = false;
         config.run_batch = false;
         config.run_scoped_workers = false;
         pattern_specified = true;

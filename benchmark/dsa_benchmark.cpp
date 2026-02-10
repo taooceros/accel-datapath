@@ -1,7 +1,7 @@
-// DSA Benchmark
+// Dynamic dispatch variant of dsa_benchmark.cpp
 // Uses DsaRef type-erasure wrapper so all templates instantiate once (for DsaRef)
-// instead of 6 times (once per queue type). See dsa_benchmark_static.cpp for the
-// fully-templatized variant.
+// instead of 6 times (once per queue type). Compare results with dsa_benchmark
+// to measure overhead of dynamic dispatch.
 
 // Include fmt headers first to avoid partial specialization conflicts
 #include <fmt/format.h>
@@ -212,6 +212,208 @@ void run_sliding_window_threaded(DsaRef &dsa, exec::async_scope &scope,
 }
 
 // ============================================================================
+// SLIDING WINDOW NOALLOC STRATEGY
+// Uses scope.nest() + pre-allocated OperationSlots instead of scope.spawn()
+// to eliminate per-operation heap allocation.
+// ============================================================================
+
+// Compute the record callback type used by the noalloc sliding window.
+// All record lambdas have the same type (captures: LatencyCollector&, time_point, atomic&).
+struct NoAllocRecord {
+  LatencyCollector *latency;
+  std::chrono::high_resolution_clock::time_point start_time;
+  std::atomic<size_t> *in_flight;
+  void operator()(auto &&...) const {
+    auto end = std::chrono::high_resolution_clock::now();
+    latency->record(std::chrono::duration<double, std::nano>(end - start_time).count());
+    in_flight->fetch_sub(1, std::memory_order_release);
+  }
+};
+
+// Compute the operation state size for inline noalloc: nest(make_sender(0) | then(record))
+template <class MakeSender>
+constexpr size_t inline_noalloc_slot_size() {
+  using Sender = decltype(std::declval<MakeSender>()(size_t{0}));
+  using ThenSender = decltype(std::declval<Sender>() | stdexec::then(std::declval<NoAllocRecord>()));
+  using NestSender = exec::async_scope::nest_result_t<ThenSender>;
+  return sizeof(stdexec::connect_result_t<NestSender, SlotReceiver>);
+}
+
+template <class MakeSender>
+void sliding_window_noalloc_impl_inline(
+    DsaRef &dsa, exec::async_scope &scope,
+    size_t concurrency, size_t msg_size, size_t total_bytes,
+    BufferSet &bufs, LatencyCollector &latency,
+    MakeSender make_sender) {
+  dsa_stdexec::PollingRunLoop loop([&dsa] { dsa.poll(); });
+
+  constexpr size_t SlotSize = inline_noalloc_slot_size<MakeSender>();
+  size_t num_ops = total_bytes / msg_size;
+  std::atomic<size_t> in_flight{0};
+  std::vector<std::unique_ptr<OperationSlot<SlotSize>>> slots;
+  slots.reserve(concurrency);
+  for (size_t i = 0; i < concurrency; ++i)
+    slots.push_back(std::make_unique<OperationSlot<SlotSize>>());
+
+  size_t next_op = 0;
+  while (next_op < num_ops) {
+    for (auto &slot : slots) {
+      if (next_op >= num_ops) break;
+      if (!slot->ready.load(std::memory_order_acquire)) continue;
+      size_t offset = next_op * msg_size;
+      in_flight.fetch_add(1, std::memory_order_relaxed);
+      NoAllocRecord record{&latency, std::chrono::high_resolution_clock::now(), &in_flight};
+      slot->start_op(scope.nest(make_sender(offset) | stdexec::then(record)));
+      ++next_op;
+    }
+    dsa.poll();
+  }
+
+  dsa_stdexec::wait_start(scope.on_empty(), loop);
+}
+
+void run_sliding_window_inline_noalloc(DsaRef &dsa, exec::async_scope &scope,
+                                       size_t concurrency, size_t msg_size, size_t total_bytes,
+                                       BufferSet &bufs, LatencyCollector &latency,
+                                       OperationType op_type) {
+  using namespace dsa_stdexec;
+  switch (op_type) {
+    case OperationType::DataMove:
+      sliding_window_noalloc_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
+        [&](size_t off) { return dsa_data_move(dsa, bufs.src.data() + off, bufs.dst.data() + off, msg_size); });
+      break;
+    case OperationType::MemFill:
+      sliding_window_noalloc_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
+        [&](size_t off) { return dsa_mem_fill(dsa, bufs.dst.data() + off, msg_size, BufferSet::fill_pattern); });
+      break;
+    case OperationType::Compare:
+      sliding_window_noalloc_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
+        [&](size_t off) { return dsa_compare(dsa, bufs.src.data() + off, bufs.dst.data() + off, msg_size); });
+      break;
+    case OperationType::CompareValue:
+      sliding_window_noalloc_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
+        [&](size_t off) { return dsa_compare_value(dsa, bufs.src.data() + off, msg_size, BufferSet::fill_pattern); });
+      break;
+    case OperationType::Dualcast:
+      sliding_window_noalloc_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
+        [&](size_t off) { return dsa_dualcast(dsa, bufs.src.data() + off, bufs.dualcast_dst1 + off, bufs.dualcast_dst2 + off, msg_size); });
+      break;
+    case OperationType::CrcGen:
+      sliding_window_noalloc_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
+        [&](size_t off) { return dsa_crc_gen(dsa, bufs.src.data() + off, msg_size); });
+      break;
+    case OperationType::CopyCrc:
+      sliding_window_noalloc_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
+        [&](size_t off) { return dsa_copy_crc(dsa, bufs.src.data() + off, bufs.dst.data() + off, msg_size); });
+      break;
+    case OperationType::CacheFlush:
+      sliding_window_noalloc_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
+        [&](size_t off) { return dsa_cache_flush(dsa, bufs.dst.data() + off, msg_size); });
+      break;
+  }
+}
+
+// Compute the operation state size for threaded noalloc:
+// nest(schedule() | let_value([make_sender, offset, record]() { return make_sender(offset) | then(record); }))
+template <class MakeSender>
+constexpr size_t threaded_noalloc_slot_size() {
+  using Scheduler = dsa_stdexec::DsaScheduler<DsaRef>;
+  using SchedSender = decltype(std::declval<Scheduler>().schedule());
+  // The let_value lambda captures: MakeSender, size_t offset, NoAllocRecord
+  struct LetLambda {
+    MakeSender make_sender;
+    size_t offset;
+    NoAllocRecord record;
+    auto operator()() {
+      return make_sender(offset) | stdexec::then(record);
+    }
+  };
+  using LetSender = decltype(std::declval<SchedSender>() | stdexec::let_value(std::declval<LetLambda>()));
+  using NestSender = exec::async_scope::nest_result_t<LetSender>;
+  return sizeof(stdexec::connect_result_t<NestSender, SlotReceiver>);
+}
+
+template <class MakeSender>
+void sliding_window_noalloc_impl_threaded(
+    DsaRef &dsa, exec::async_scope &scope,
+    size_t concurrency, size_t msg_size, size_t total_bytes,
+    BufferSet &bufs, LatencyCollector &latency,
+    MakeSender make_sender) {
+  dsa_stdexec::DsaScheduler<DsaRef> scheduler(dsa);
+
+  constexpr size_t SlotSize = threaded_noalloc_slot_size<MakeSender>();
+  size_t num_ops = total_bytes / msg_size;
+  std::atomic<size_t> in_flight{0};
+  std::vector<std::unique_ptr<OperationSlot<SlotSize>>> slots;
+  slots.reserve(concurrency);
+  for (size_t i = 0; i < concurrency; ++i)
+    slots.push_back(std::make_unique<OperationSlot<SlotSize>>());
+
+  for (size_t op_idx = 0; op_idx < num_ops; ++op_idx) {
+    // Wait for a slot to become available
+    while (true) {
+      for (auto &slot : slots) {
+        if (slot->ready.load(std::memory_order_acquire)) {
+          size_t offset = op_idx * msg_size;
+          in_flight.fetch_add(1, std::memory_order_relaxed);
+          NoAllocRecord record{&latency, std::chrono::high_resolution_clock::now(), &in_flight};
+          slot->start_op(scope.nest(
+            scheduler.schedule() | stdexec::let_value([make_sender, offset, record]() {
+              return make_sender(offset) | stdexec::then(record);
+            })
+          ));
+          goto next_op;
+        }
+      }
+      std::this_thread::yield();
+    }
+    next_op:;
+  }
+  stdexec::sync_wait(scope.on_empty());
+}
+
+void run_sliding_window_threaded_noalloc(DsaRef &dsa, exec::async_scope &scope,
+                                         size_t concurrency, size_t msg_size, size_t total_bytes,
+                                         BufferSet &bufs, LatencyCollector &latency,
+                                         OperationType op_type) {
+  using namespace dsa_stdexec;
+  switch (op_type) {
+    case OperationType::DataMove:
+      sliding_window_noalloc_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
+        [&](size_t off) { return dsa_data_move(dsa, bufs.src.data() + off, bufs.dst.data() + off, msg_size); });
+      break;
+    case OperationType::MemFill:
+      sliding_window_noalloc_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
+        [&](size_t off) { return dsa_mem_fill(dsa, bufs.dst.data() + off, msg_size, BufferSet::fill_pattern); });
+      break;
+    case OperationType::Compare:
+      sliding_window_noalloc_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
+        [&](size_t off) { return dsa_compare(dsa, bufs.src.data() + off, bufs.dst.data() + off, msg_size); });
+      break;
+    case OperationType::CompareValue:
+      sliding_window_noalloc_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
+        [&](size_t off) { return dsa_compare_value(dsa, bufs.src.data() + off, msg_size, BufferSet::fill_pattern); });
+      break;
+    case OperationType::Dualcast:
+      sliding_window_noalloc_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
+        [&](size_t off) { return dsa_dualcast(dsa, bufs.src.data() + off, bufs.dualcast_dst1 + off, bufs.dualcast_dst2 + off, msg_size); });
+      break;
+    case OperationType::CrcGen:
+      sliding_window_noalloc_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
+        [&](size_t off) { return dsa_crc_gen(dsa, bufs.src.data() + off, msg_size); });
+      break;
+    case OperationType::CopyCrc:
+      sliding_window_noalloc_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
+        [&](size_t off) { return dsa_copy_crc(dsa, bufs.src.data() + off, bufs.dst.data() + off, msg_size); });
+      break;
+    case OperationType::CacheFlush:
+      sliding_window_noalloc_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
+        [&](size_t off) { return dsa_cache_flush(dsa, bufs.dst.data() + off, msg_size); });
+      break;
+  }
+}
+
+// ============================================================================
 // BATCH STRATEGY
 // ============================================================================
 
@@ -356,6 +558,8 @@ void run_scoped_workers_threaded(DsaRef &dsa, exec::async_scope &scope,
 enum class BenchmarkPattern {
   SlidingWindowInline,
   SlidingWindowThreaded,
+  SlidingWindowInlineNoAlloc,
+  SlidingWindowThreadedNoAlloc,
   BatchInline,
   BatchThreaded,
   ScopedWorkersInline,
@@ -372,6 +576,12 @@ void dispatch_run(BenchmarkPattern pattern, OperationType op_type,
       break;
     case BenchmarkPattern::SlidingWindowThreaded:
       run_sliding_window_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency, op_type);
+      break;
+    case BenchmarkPattern::SlidingWindowInlineNoAlloc:
+      run_sliding_window_inline_noalloc(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency, op_type);
+      break;
+    case BenchmarkPattern::SlidingWindowThreadedNoAlloc:
+      run_sliding_window_threaded_noalloc(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency, op_type);
       break;
     case BenchmarkPattern::BatchInline:
       run_batch_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency, op_type);
@@ -396,6 +606,10 @@ DsaMetric run_benchmark(DsaRef &dsa, size_t concurrency, size_t msg_size,
   LatencyCollector warmup_latency;
   LatencyCollector latency;
 
+  // Pre-allocate latency sample storage to avoid reallocation during measurement
+  size_t num_ops = total_bytes / msg_size;
+  latency.reserve(num_ops * iterations);
+
   // Warmup (1 full iteration)
   {
     exec::async_scope scope;
@@ -415,7 +629,6 @@ DsaMetric run_benchmark(DsaRef &dsa, size_t concurrency, size_t msg_size,
   uint64_t page_faults = dsa_stdexec::get_page_fault_retries();
   std::chrono::duration<double> diff = end - start;
   double bw = static_cast<double>(total_bytes) * iterations / (1024.0 * 1024.0 * 1024.0) / diff.count();
-  size_t num_ops = total_bytes / msg_size;
   double msg_rate = static_cast<double>(num_ops) * iterations / 1e6 / diff.count();
   return {bw, msg_rate, page_faults, latency.compute_stats()};
 }
@@ -572,7 +785,7 @@ void benchmark_queues_with_dsa(const BenchmarkConfig &config) {
     return;
   }
 
-  fmt::println("=== DSA BENCHMARK WITH DIFFERENT TASK QUEUES ===\n");
+  fmt::println("=== DSA BENCHMARK (DYNAMIC DISPATCH) WITH DIFFERENT TASK QUEUES ===\n");
   fmt::println("Configuration:");
   fmt::println("  Total bytes per iteration: {} MB", config.total_bytes / (1024 * 1024));
   fmt::println("  Iterations: {}", config.iterations);
@@ -600,12 +813,14 @@ void benchmark_queues_with_dsa(const BenchmarkConfig &config) {
   };
 
   PatternConfig pattern_configs[] = {
-    {config.run_sliding_window && config.run_inline,   false, BenchmarkPattern::SlidingWindowInline,   "sliding_window"},
-    {config.run_sliding_window && config.run_threaded,  true, BenchmarkPattern::SlidingWindowThreaded, "sliding_window"},
-    {config.run_batch && config.run_inline,             false, BenchmarkPattern::BatchInline,           "batch"},
-    {config.run_batch && config.run_threaded,            true, BenchmarkPattern::BatchThreaded,         "batch"},
-    {config.run_scoped_workers && config.run_inline,    false, BenchmarkPattern::ScopedWorkersInline,   "scoped_workers"},
-    {config.run_scoped_workers && config.run_threaded,   true, BenchmarkPattern::ScopedWorkersThreaded, "scoped_workers"},
+    {config.run_sliding_window && config.run_inline,            false, BenchmarkPattern::SlidingWindowInline,          "sliding_window"},
+    {config.run_sliding_window && config.run_threaded,           true, BenchmarkPattern::SlidingWindowThreaded,        "sliding_window"},
+    {config.run_sliding_window_noalloc && config.run_inline,    false, BenchmarkPattern::SlidingWindowInlineNoAlloc,   "sliding_window_noalloc"},
+    {config.run_sliding_window_noalloc && config.run_threaded,   true, BenchmarkPattern::SlidingWindowThreadedNoAlloc, "sliding_window_noalloc"},
+    {config.run_batch && config.run_inline,                     false, BenchmarkPattern::BatchInline,                  "batch"},
+    {config.run_batch && config.run_threaded,                    true, BenchmarkPattern::BatchThreaded,                "batch"},
+    {config.run_scoped_workers && config.run_inline,            false, BenchmarkPattern::ScopedWorkersInline,          "scoped_workers"},
+    {config.run_scoped_workers && config.run_threaded,           true, BenchmarkPattern::ScopedWorkersThreaded,        "scoped_workers"},
   };
 
   for (auto op_type : enabled_ops) {
