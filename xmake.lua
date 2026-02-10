@@ -53,9 +53,9 @@ target("dsa_benchmark")
     add_files("src/dsa/dsa_instantiate.cpp")
 
 
-target("dsa_benchmark_dynamic")
+target("dsa_benchmark_static")
     set_kind("binary")
-    add_files("benchmark/dsa_benchmark_dynamic.cpp")
+    add_files("benchmark/dsa_benchmark_static.cpp")
     add_files("benchmark/benchmark_config.cpp")
     add_packages("libaccel-config")
     add_packages("fmt")

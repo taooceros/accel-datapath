@@ -1,8 +1,3 @@
-// Dynamic dispatch variant of dsa_benchmark.cpp
-// Uses DsaRef type-erasure wrapper so all templates instantiate once (for DsaRef)
-// instead of 6 times (once per queue type). Compare results with dsa_benchmark
-// to measure overhead of dynamic dispatch.
-
 // Include fmt headers first to avoid partial specialization conflicts
 #include <fmt/format.h>
 #include <fmt/ranges.h>
@@ -33,40 +28,21 @@
 #include <utility>
 #include <vector>
 
-// ============================================================================
-// TYPE-ERASING DSA WRAPPER
-// Wraps any DsaBase<Q> type behind a uniform interface so that all downstream
-// templates instantiate only once (for DsaRef) instead of 6 times.
-// ============================================================================
-
-class DsaRef {
-public:
-  template <typename DsaType>
-  explicit DsaRef(DsaType &dsa)
-      : submit_desc_([&dsa](dsa_stdexec::OperationBase *op, dsa_hw_desc *desc) { dsa.submit(op, desc); }),
-        submit_([&dsa](dsa_stdexec::OperationBase *op) { dsa.submit(op); }),
-        poll_([&dsa] { dsa.poll(); }) {}
-
-  void submit(dsa_stdexec::OperationBase *op, dsa_hw_desc *desc) { submit_desc_(op, desc); }
-  void submit(dsa_stdexec::OperationBase *op) { submit_(op); }
-  void poll() { poll_(); }
-
-private:
-  std::function<void(dsa_stdexec::OperationBase *, dsa_hw_desc *)> submit_desc_;
-  std::function<void(dsa_stdexec::OperationBase *)> submit_;
-  std::function<void()> poll_;
-};
-
-// Type-erased run function signature (non-template, uses DsaRef)
-using RunFunction = std::function<void(DsaRef &, exec::async_scope &, size_t,
+// Type-erased run function signature for each DSA type
+template <typename DsaType>
+using RunFunction = std::function<void(DsaType &, exec::async_scope &, size_t,
                                        size_t, size_t, BufferSet &,
                                        LatencyCollector &)>;
 
 // ============================================================================
 // SPAWN HELPERS
+// Each spawn_op function creates the operation sender for the given op_type,
+// pipes it through a latency-recording then() with unified auto&&... signature,
+// and spawns it on the scope.
 // ============================================================================
 
-void spawn_op(DsaRef &dsa, exec::async_scope &scope, OperationType op_type,
+template <typename DsaType>
+void spawn_op(DsaType &dsa, exec::async_scope &scope, OperationType op_type,
               BufferSet &bufs, size_t offset, size_t msg_size,
               LatencyCollector &latency, std::atomic<size_t> *in_flight = nullptr) {
   auto start_time = std::chrono::high_resolution_clock::now();
@@ -106,7 +82,9 @@ void spawn_op(DsaRef &dsa, exec::async_scope &scope, OperationType op_type,
   }
 }
 
-void spawn_op_scheduled(DsaRef &dsa, dsa_stdexec::DsaScheduler<DsaRef> &scheduler,
+// Scheduled variant: wraps operation in scheduler.schedule() | let_value(...)
+template <typename DsaType, typename Scheduler>
+void spawn_op_scheduled(DsaType &dsa, Scheduler &scheduler,
                         exec::async_scope &scope, OperationType op_type,
                         BufferSet &bufs, size_t offset, size_t msg_size,
                         LatencyCollector &latency,
@@ -169,7 +147,8 @@ void spawn_op_scheduled(DsaRef &dsa, dsa_stdexec::DsaScheduler<DsaRef> &schedule
 // SLIDING WINDOW STRATEGY
 // ============================================================================
 
-void run_sliding_window_inline(DsaRef &dsa, exec::async_scope &scope,
+template <typename DsaType>
+void run_sliding_window_inline(DsaType &dsa, exec::async_scope &scope,
                                size_t concurrency, size_t msg_size, size_t total_bytes,
                                BufferSet &bufs, LatencyCollector &latency,
                                OperationType op_type) {
@@ -191,11 +170,12 @@ void run_sliding_window_inline(DsaRef &dsa, exec::async_scope &scope,
   dsa_stdexec::wait_start(scope.on_empty(), loop);
 }
 
-void run_sliding_window_threaded(DsaRef &dsa, exec::async_scope &scope,
+template <typename DsaType>
+void run_sliding_window_threaded(DsaType &dsa, exec::async_scope &scope,
                                  size_t concurrency, size_t msg_size, size_t total_bytes,
                                  BufferSet &bufs, LatencyCollector &latency,
                                  OperationType op_type) {
-  dsa_stdexec::DsaScheduler<DsaRef> scheduler(dsa);
+  dsa_stdexec::DsaScheduler<DsaType> scheduler(dsa);
 
   size_t num_ops = total_bytes / msg_size;
   std::atomic<size_t> in_flight{0};
@@ -215,7 +195,8 @@ void run_sliding_window_threaded(DsaRef &dsa, exec::async_scope &scope,
 // BATCH STRATEGY
 // ============================================================================
 
-void run_batch_inline(DsaRef &dsa, exec::async_scope &scope,
+template <typename DsaType>
+void run_batch_inline(DsaType &dsa, exec::async_scope &scope,
                       size_t concurrency, size_t msg_size, size_t total_bytes,
                       BufferSet &bufs, LatencyCollector &latency,
                       OperationType op_type) {
@@ -236,11 +217,12 @@ void run_batch_inline(DsaRef &dsa, exec::async_scope &scope,
   }
 }
 
-void run_batch_threaded(DsaRef &dsa, exec::async_scope &scope,
+template <typename DsaType>
+void run_batch_threaded(DsaType &dsa, exec::async_scope &scope,
                         size_t concurrency, size_t msg_size, size_t total_bytes,
                         BufferSet &bufs, LatencyCollector &latency,
                         OperationType op_type) {
-  dsa_stdexec::DsaScheduler<DsaRef> scheduler(dsa);
+  dsa_stdexec::DsaScheduler<DsaType> scheduler(dsa);
 
   size_t num_ops = total_bytes / msg_size;
   size_t op_idx = 0;
@@ -260,7 +242,8 @@ void run_batch_threaded(DsaRef &dsa, exec::async_scope &scope,
 // SCOPED WORKERS STRATEGY
 // ============================================================================
 
-exec::task<void> worker_coro(DsaRef &dsa, BufferSet &bufs,
+template <typename DsaType>
+exec::task<void> worker_coro(DsaType &dsa, BufferSet &bufs,
                               LatencyCollector &latency, OperationType op_type,
                               size_t msg_size, size_t num_ops,
                               size_t num_workers, size_t worker_id) {
@@ -306,7 +289,8 @@ exec::task<void> worker_coro(DsaRef &dsa, BufferSet &bufs,
   co_return;
 }
 
-void run_scoped_workers_inline(DsaRef &dsa, exec::async_scope &scope,
+template <typename DsaType>
+void run_scoped_workers_inline(DsaType &dsa, exec::async_scope &scope,
                                size_t concurrency, size_t msg_size, size_t total_bytes,
                                BufferSet &bufs, LatencyCollector &latency,
                                OperationType op_type) {
@@ -328,11 +312,12 @@ void run_scoped_workers_inline(DsaRef &dsa, exec::async_scope &scope,
   dsa_stdexec::wait_start(scope.on_empty(), loop);
 }
 
-void run_scoped_workers_threaded(DsaRef &dsa, exec::async_scope &scope,
+template <typename DsaType>
+void run_scoped_workers_threaded(DsaType &dsa, exec::async_scope &scope,
                                  size_t concurrency, size_t msg_size, size_t total_bytes,
                                  BufferSet &bufs, LatencyCollector &latency,
                                  OperationType op_type) {
-  dsa_stdexec::DsaScheduler<DsaRef> scheduler(dsa);
+  dsa_stdexec::DsaScheduler<DsaType> scheduler(dsa);
 
   size_t num_ops = total_bytes / msg_size;
   size_t actual_workers = std::min(concurrency, num_ops);
@@ -362,8 +347,9 @@ enum class BenchmarkPattern {
   ScopedWorkersThreaded
 };
 
+template <typename DsaType>
 void dispatch_run(BenchmarkPattern pattern, OperationType op_type,
-                  DsaRef &dsa, exec::async_scope &scope,
+                  DsaType &dsa, exec::async_scope &scope,
                   size_t concurrency, size_t msg_size, size_t total_bytes,
                   BufferSet &bufs, LatencyCollector &latency) {
   switch (pattern) {
@@ -388,10 +374,11 @@ void dispatch_run(BenchmarkPattern pattern, OperationType op_type,
   }
 }
 
-DsaMetric run_benchmark(DsaRef &dsa, size_t concurrency, size_t msg_size,
+template <typename DsaType>
+DsaMetric run_benchmark(DsaType &dsa, size_t concurrency, size_t msg_size,
                         size_t total_bytes, int iterations,
                         BufferSet &bufs,
-                        const RunFunction &run_fn,
+                        const RunFunction<DsaType> &run_fn,
                         ProgressBar *progress = nullptr) {
   LatencyCollector warmup_latency;
   LatencyCollector latency;
@@ -450,6 +437,8 @@ void export_to_csv(const std::string &filename,
   };
 
   for (const auto &[label, results] : all_results) {
+    // Label format: "operation_pattern_pollingmode" e.g. "data_move__sliding_window_inline"
+    // We use double underscore as separator between operation and pattern_polling
     size_t sep = label.find("__");
     std::string op_name = label.substr(0, sep);
     std::string rest = label.substr(sep + 2);
@@ -499,8 +488,8 @@ std::vector<BenchmarkResult> run_all_queues(
   std::string progress_label = fmt::format("{}/{}", operation_name(op_type), pattern_name);
   ProgressBar progress(total_iterations, progress_label);
 
-  auto make_run_fn = [pattern, op_type]() -> RunFunction {
-    return [pattern, op_type](DsaRef &d, exec::async_scope &scope, size_t c, size_t m, size_t t,
+  auto make_run_fn = [pattern, op_type](auto &dsa) -> RunFunction<std::remove_reference_t<decltype(dsa)>> {
+    return [pattern, op_type](auto &d, exec::async_scope &scope, size_t c, size_t m, size_t t,
                                BufferSet &b, LatencyCollector &l) {
       dispatch_run(pattern, op_type, d, scope, c, m, t, b, l);
     };
@@ -518,43 +507,35 @@ std::vector<BenchmarkResult> run_all_queues(
 
       progress.set_label(fmt::format("{}/{} c={} sz={}", operation_name(op_type), pattern_name, concurrency, msg_size));
 
-      auto run_fn = make_run_fn();
-
       if (!use_threaded_polling && config.run_nolock) {
-        DsaSingleThread concrete_dsa(false);
-        DsaRef dsa(concrete_dsa);
+        DsaSingleThread dsa(false);
         result.single_thread = run_benchmark(dsa, concurrency, msg_size,
-            effective_total_bytes, config.iterations, bufs, run_fn, &progress);
+            effective_total_bytes, config.iterations, bufs, make_run_fn(dsa), &progress);
       }
       if (config.run_mutex) {
-        Dsa concrete_dsa(use_threaded_polling);
-        DsaRef dsa(concrete_dsa);
+        Dsa dsa(use_threaded_polling);
         result.mutex = run_benchmark(dsa, concurrency, msg_size,
-            effective_total_bytes, config.iterations, bufs, run_fn, &progress);
+            effective_total_bytes, config.iterations, bufs, make_run_fn(dsa), &progress);
       }
       if (config.run_tas) {
-        DsaTasSpinlock concrete_dsa(use_threaded_polling);
-        DsaRef dsa(concrete_dsa);
+        DsaTasSpinlock dsa(use_threaded_polling);
         result.tas_spinlock = run_benchmark(dsa, concurrency, msg_size,
-            effective_total_bytes, config.iterations, bufs, run_fn, &progress);
+            effective_total_bytes, config.iterations, bufs, make_run_fn(dsa), &progress);
       }
       if (config.run_ttas) {
-        DsaSpinlock concrete_dsa(use_threaded_polling);
-        DsaRef dsa(concrete_dsa);
+        DsaSpinlock dsa(use_threaded_polling);
         result.ttas_spinlock = run_benchmark(dsa, concurrency, msg_size,
-            effective_total_bytes, config.iterations, bufs, run_fn, &progress);
+            effective_total_bytes, config.iterations, bufs, make_run_fn(dsa), &progress);
       }
       if (config.run_backoff) {
-        DsaBackoffSpinlock concrete_dsa(use_threaded_polling);
-        DsaRef dsa(concrete_dsa);
+        DsaBackoffSpinlock dsa(use_threaded_polling);
         result.backoff_spinlock = run_benchmark(dsa, concurrency, msg_size,
-            effective_total_bytes, config.iterations, bufs, run_fn, &progress);
+            effective_total_bytes, config.iterations, bufs, make_run_fn(dsa), &progress);
       }
       if (config.run_lockfree) {
-        DsaLockFree concrete_dsa(use_threaded_polling);
-        DsaRef dsa(concrete_dsa);
+        DsaLockFree dsa(use_threaded_polling);
         result.lockfree = run_benchmark(dsa, concurrency, msg_size,
-            effective_total_bytes, config.iterations, bufs, run_fn, &progress);
+            effective_total_bytes, config.iterations, bufs, make_run_fn(dsa), &progress);
       }
 
       results.push_back(result);
@@ -572,7 +553,7 @@ void benchmark_queues_with_dsa(const BenchmarkConfig &config) {
     return;
   }
 
-  fmt::println("=== DSA BENCHMARK (DYNAMIC DISPATCH) WITH DIFFERENT TASK QUEUES ===\n");
+  fmt::println("=== DSA BENCHMARK WITH DIFFERENT TASK QUEUES ===\n");
   fmt::println("Configuration:");
   fmt::println("  Total bytes per iteration: {} MB", config.total_bytes / (1024 * 1024));
   fmt::println("  Iterations: {}", config.iterations);
