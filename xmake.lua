@@ -53,6 +53,20 @@ target("dsa_benchmark")
     add_files("src/dsa/dsa_instantiate.cpp")
 
 
+target("dsa_benchmark_dynamic")
+    set_kind("binary")
+    add_files("benchmark/dsa_benchmark_dynamic.cpp")
+    add_files("benchmark/benchmark_config.cpp")
+    add_packages("libaccel-config")
+    add_packages("fmt")
+    add_packages("stdexec")
+    add_cflags("-menqcmd")
+    add_cxxflags("-menqcmd")
+    add_cflags("-movdir64b")
+    add_cxxflags("-mmovdir64b")
+    add_files("src/dsa/dsa_instantiate.cpp")
+
+
 target("dsa_launcher")
     set_kind("binary")
     set_languages("c11")
