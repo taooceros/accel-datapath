@@ -8,9 +8,10 @@ threaded = true     # Background thread polling (dedicated polling thread)
 
 [scheduling]
 # Scheduling pattern - how tasks are spawned and concurrency is managed
-sliding_window = true   # Semaphore-like: spawn new op as one completes (maintains N in-flight)
-batch =  true           # Spawn N ops, wait all complete, then spawn next batch
-scoped_workers = true  # N worker coroutines processing items sequentially
+sliding_window = true          # Semaphore-like: spawn new op as one completes (maintains N in-flight)
+sliding_window_noalloc = true  # Same as sliding-window but zero-allocation (nest + placement new)
+batch =  true                  # Spawn N ops, wait all complete, then spawn next batch
+scoped_workers = true          # N worker coroutines processing items sequentially
 
 [queues]
 # Queue types to benchmark - different synchronization strategies
