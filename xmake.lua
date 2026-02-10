@@ -54,6 +54,7 @@ target("dsa_benchmark")
 
 
 target("dsa_benchmark_static")
+    set_default(false)
     set_kind("binary")
     add_files("benchmark/dsa_benchmark_static.cpp")
     add_files("benchmark/benchmark_config.cpp")
