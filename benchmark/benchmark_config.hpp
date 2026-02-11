@@ -25,6 +25,7 @@ struct BenchmarkConfig {
   // Scheduling pattern dimension
   bool run_sliding_window = true;           // Semaphore-like: spawn new op as one completes
   bool run_sliding_window_noalloc = true;   // Same but zero-allocation (nest + pre-allocated slots)
+  bool run_sliding_window_arena = false;    // Free-list arena (ibverbs/UCX style O(1) slot recycling)
   bool run_batch = false;                   // Spawn N ops, wait all, repeat
   bool run_scoped_workers = false;          // N workers processing sequentially (N allocations)
 

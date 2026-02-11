@@ -193,6 +193,7 @@ struct SlotReceiver {
 template <size_t StorageSize = 768> struct OperationSlot {
   alignas(64) char storage[StorageSize];
   std::atomic<bool> ready{true};
+  OperationSlot *next_free = nullptr;  // intrusive free-list link for arena variant
   void (*destroy_fn)(void *) = nullptr;
 
   template <class Sender> void start_op(Sender &&sender) {
@@ -212,6 +213,22 @@ template <size_t StorageSize = 768> struct OperationSlot {
     stdexec::start(*op);
   }
 
+  template <class Sender, class Receiver> void start_op_with(Sender &&sender, Receiver &&receiver) {
+    using Op = stdexec::connect_result_t<Sender, Receiver>;
+    static_assert(sizeof(Op) <= StorageSize,
+                  "Operation state too large for slot; bump StorageSize");
+    static_assert(alignof(Op) <= 64);
+
+    if (destroy_fn) {
+      destroy_fn(storage);
+      destroy_fn = nullptr;
+    }
+    auto *op = new (storage)
+        Op(stdexec::connect(std::forward<Sender>(sender), std::forward<Receiver>(receiver)));
+    destroy_fn = [](void *p) { static_cast<Op *>(p)->~Op(); };
+    stdexec::start(*op);
+  }
+
   ~OperationSlot() {
     if (destroy_fn)
       destroy_fn(storage);
@@ -222,6 +239,59 @@ template <size_t StorageSize = 768> struct OperationSlot {
   OperationSlot &operator=(const OperationSlot &) = delete;
   OperationSlot(OperationSlot &&) = delete;
   OperationSlot &operator=(OperationSlot &&) = delete;
+};
+
+// Free-list arena for OperationSlots (ibverbs/UCX style).
+// O(1) acquire/release via intrusive singly-linked list.
+// Single-threaded: no atomics on the free list itself.
+template <size_t StorageSize> struct SlotArena {
+  using Slot = OperationSlot<StorageSize>;
+
+  std::vector<std::unique_ptr<Slot>> pool;
+  Slot *free_head = nullptr;
+
+  explicit SlotArena(size_t capacity) {
+    pool.reserve(capacity);
+    for (size_t i = 0; i < capacity; ++i) {
+      pool.push_back(std::make_unique<Slot>());
+      pool.back()->next_free = free_head;
+      free_head = pool.back().get();
+    }
+  }
+
+  Slot *acquire() {
+    if (!free_head) return nullptr;
+    Slot *s = free_head;
+    free_head = s->next_free;
+    s->next_free = nullptr;
+    return s;
+  }
+
+  void release(Slot *s) {
+    s->next_free = free_head;
+    free_head = s;
+  }
+
+  bool empty() const { return free_head == nullptr; }
+};
+
+// Receiver that returns the slot to a free-list arena on completion.
+// Used with SlotArena for O(1) slot recycling.
+template <size_t StorageSize> struct ArenaReceiver {
+  using receiver_concept = stdexec::receiver_t;
+  SlotArena<StorageSize> *arena;
+  OperationSlot<StorageSize> *slot;
+
+  void set_value(auto &&...) && noexcept {
+    arena->release(slot);
+  }
+  void set_error(auto &&) && noexcept {
+    arena->release(slot);
+  }
+  void set_stopped() && noexcept {
+    arena->release(slot);
+  }
+  auto get_env() const noexcept { return stdexec::empty_env{}; }
 };
 
 #endif // BENCHMARK_HELPERS_HPP

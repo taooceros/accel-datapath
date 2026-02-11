@@ -66,6 +66,7 @@ static BenchmarkConfig load_config_from_toml(const std::string &filename) {
   if (auto scheduling = tbl["scheduling"].as_table()) {
     config.run_sliding_window = get_bool(scheduling, "sliding_window", true);
     config.run_sliding_window_noalloc = get_bool(scheduling, "sliding_window_noalloc", true);
+    config.run_sliding_window_arena = get_bool(scheduling, "sliding_window_arena", false);
     config.run_batch = get_bool(scheduling, "batch", false);
     config.run_scoped_workers = get_bool(scheduling, "scoped_workers", false);
   }
@@ -166,6 +167,7 @@ void print_usage(const char *prog) {
   fmt::println("Scheduling pattern (can combine multiple):");
   fmt::println("  --sliding-window    Semaphore-like: spawn new op as one completes (default)");
   fmt::println("  --sliding-window-noalloc  Same as sliding-window but zero-allocation (default)");
+  fmt::println("  --sliding-window-arena    Free-list arena (ibverbs/UCX style O(1) recycling)");
   fmt::println("  --batch             Spawn N ops, wait all complete, repeat");
   fmt::println("  --scoped-workers    N worker coroutines processing sequentially");
   fmt::println("");
@@ -239,6 +241,7 @@ BenchmarkConfig parse_args(int argc, char **argv) {
       if (!pattern_specified) {
         config.run_sliding_window = false;
         config.run_sliding_window_noalloc = false;
+        config.run_sliding_window_arena = false;
         config.run_batch = false;
         config.run_scoped_workers = false;
         pattern_specified = true;
@@ -248,15 +251,27 @@ BenchmarkConfig parse_args(int argc, char **argv) {
       if (!pattern_specified) {
         config.run_sliding_window = false;
         config.run_sliding_window_noalloc = false;
+        config.run_sliding_window_arena = false;
         config.run_batch = false;
         config.run_scoped_workers = false;
         pattern_specified = true;
       }
       config.run_sliding_window_noalloc = true;
+    } else if (arg == "--sliding-window-arena") {
+      if (!pattern_specified) {
+        config.run_sliding_window = false;
+        config.run_sliding_window_noalloc = false;
+        config.run_sliding_window_arena = false;
+        config.run_batch = false;
+        config.run_scoped_workers = false;
+        pattern_specified = true;
+      }
+      config.run_sliding_window_arena = true;
     } else if (arg == "--batch") {
       if (!pattern_specified) {
         config.run_sliding_window = false;
         config.run_sliding_window_noalloc = false;
+        config.run_sliding_window_arena = false;
         config.run_batch = false;
         config.run_scoped_workers = false;
         pattern_specified = true;
@@ -266,6 +281,7 @@ BenchmarkConfig parse_args(int argc, char **argv) {
       if (!pattern_specified) {
         config.run_sliding_window = false;
         config.run_sliding_window_noalloc = false;
+        config.run_sliding_window_arena = false;
         config.run_batch = false;
         config.run_scoped_workers = false;
         pattern_specified = true;
