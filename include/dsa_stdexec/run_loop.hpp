@@ -142,7 +142,6 @@ public:
   auto get_scheduler() noexcept -> Scheduler { return Scheduler{this}; }
 
   void run() {
-    reset();  // Reset stop flag to allow re-running
     while (!stop_) {
       Task *task = try_pop_front();
       if (task) {

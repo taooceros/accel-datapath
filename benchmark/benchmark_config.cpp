@@ -2,8 +2,14 @@
 // Include fmt/format.h BEFORE toml++ to ensure std::string formatter
 // specialization is defined before toml++ can instantiate it
 #include <fmt/format.h>
+#include <algorithm>
 #include <cstdlib>
+#include <optional>
 #include <toml++/toml.hpp>
+
+// ============================================================================
+// OperationType
+// ============================================================================
 
 const char* operation_name(OperationType op) {
   switch (op) {
@@ -34,11 +40,187 @@ std::optional<OperationType> parse_operation_name(std::string_view name) {
   return std::nullopt;
 }
 
-const std::vector<OperationType>& BenchmarkConfig::enabled_operations() const {
-  return operations;
+// ============================================================================
+// PollingMode
+// ============================================================================
+
+const char* polling_mode_name(PollingMode m) {
+  switch (m) {
+    case PollingMode::Inline:   return "inline";
+    case PollingMode::Threaded: return "threaded";
+  }
+  return "unknown";
 }
 
-// Load configuration from TOML file
+std::optional<PollingMode> parse_polling_mode(std::string_view name) {
+  for (auto m : all_polling_modes()) {
+    if (name == polling_mode_name(m)) return m;
+  }
+  return std::nullopt;
+}
+
+std::vector<PollingMode> all_polling_modes() {
+  return {PollingMode::Inline, PollingMode::Threaded};
+}
+
+// ============================================================================
+// SchedulingPattern
+// ============================================================================
+
+const char* scheduling_pattern_name(SchedulingPattern p) {
+  switch (p) {
+    case SchedulingPattern::SlidingWindow:        return "sliding_window";
+    case SchedulingPattern::SlidingWindowNoAlloc: return "sliding_window_noalloc";
+    case SchedulingPattern::SlidingWindowArena:   return "sliding_window_arena";
+    case SchedulingPattern::Batch:                return "batch";
+    case SchedulingPattern::ScopedWorkers:        return "scoped_workers";
+  }
+  return "unknown";
+}
+
+std::optional<SchedulingPattern> parse_scheduling_pattern(std::string_view name) {
+  for (auto p : all_scheduling_patterns()) {
+    if (name == scheduling_pattern_name(p)) return p;
+  }
+  return std::nullopt;
+}
+
+std::vector<SchedulingPattern> default_scheduling_patterns() {
+  return {SchedulingPattern::SlidingWindow, SchedulingPattern::SlidingWindowNoAlloc};
+}
+
+std::vector<SchedulingPattern> all_scheduling_patterns() {
+  return {
+    SchedulingPattern::SlidingWindow, SchedulingPattern::SlidingWindowNoAlloc,
+    SchedulingPattern::SlidingWindowArena, SchedulingPattern::Batch,
+    SchedulingPattern::ScopedWorkers
+  };
+}
+
+// ============================================================================
+// SubmissionStrategy
+// ============================================================================
+
+const char* submission_strategy_name(SubmissionStrategy s) {
+  switch (s) {
+    case SubmissionStrategy::Immediate: return "immediate";
+    case SubmissionStrategy::HwBatch:   return "hw_batch";
+  }
+  return "unknown";
+}
+
+std::optional<SubmissionStrategy> parse_submission_strategy(std::string_view name) {
+  for (auto s : all_submission_strategies()) {
+    if (name == submission_strategy_name(s)) return s;
+  }
+  return std::nullopt;
+}
+
+std::vector<SubmissionStrategy> default_submission_strategies() {
+  return {SubmissionStrategy::Immediate};
+}
+
+std::vector<SubmissionStrategy> all_submission_strategies() {
+  return {SubmissionStrategy::Immediate, SubmissionStrategy::HwBatch};
+}
+
+// ============================================================================
+// QueueType
+// ============================================================================
+
+const char* queue_type_name(QueueType q) {
+  switch (q) {
+    case QueueType::NoLock:   return "nolock";
+    case QueueType::Mutex:    return "mutex";
+    case QueueType::TAS:      return "tas";
+    case QueueType::TTAS:     return "ttas";
+    case QueueType::Backoff:  return "backoff";
+    case QueueType::LockFree: return "lockfree";
+  }
+  return "unknown";
+}
+
+std::optional<QueueType> parse_queue_type(std::string_view name) {
+  for (auto q : all_queue_types()) {
+    if (name == queue_type_name(q)) return q;
+  }
+  return std::nullopt;
+}
+
+std::vector<QueueType> all_queue_types() {
+  return {
+    QueueType::NoLock, QueueType::Mutex, QueueType::TAS,
+    QueueType::TTAS, QueueType::Backoff, QueueType::LockFree
+  };
+}
+
+// ============================================================================
+// BenchmarkConfig helpers
+// ============================================================================
+
+template <typename T>
+static bool vec_contains(const std::vector<T> &v, T val) {
+  return std::find(v.begin(), v.end(), val) != v.end();
+}
+
+bool BenchmarkConfig::has_polling(PollingMode m) const { return vec_contains(polling_modes, m); }
+bool BenchmarkConfig::has_pattern(SchedulingPattern p) const { return vec_contains(scheduling_patterns, p); }
+bool BenchmarkConfig::has_submission(SubmissionStrategy s) const { return vec_contains(submission_strategies, s); }
+bool BenchmarkConfig::has_queue(QueueType q) const { return vec_contains(queue_types, q); }
+
+// ============================================================================
+// TOML parsing helpers
+// ============================================================================
+
+// Parse a TOML array of strings into an enum vector using a parse function.
+// If the key is missing, returns nullopt (caller keeps defaults).
+template <typename T>
+static std::optional<std::vector<T>> parse_toml_enum_array(
+    const toml::table *tbl, std::string_view key,
+    std::optional<T>(*parse_fn)(std::string_view),
+    const char *context) {
+  auto node = tbl->get(key);
+  if (!node) return std::nullopt;
+  auto arr = node->as_array();
+  if (!arr) return std::nullopt;
+
+  std::vector<T> result;
+  for (const auto &elem : *arr) {
+    if (auto name = elem.value<std::string>()) {
+      if (auto val = parse_fn(*name)) {
+        result.push_back(*val);
+      } else {
+        fmt::println(stderr, "Unknown {} in config: {}", context, *name);
+        std::exit(1);
+      }
+    }
+  }
+  return result;
+}
+
+// Parse a TOML table of bool flags into an enum vector.
+// Each key in the table maps to an enum value via parse_fn.
+// Only keys with value=true are included.
+template <typename T>
+static std::vector<T> parse_toml_bool_table(
+    const toml::table *tbl,
+    std::optional<T>(*parse_fn)(std::string_view),
+    const std::vector<T> &defaults) {
+  std::vector<T> result;
+  for (auto &[key, val] : *tbl) {
+    if (val.value_or(false)) {
+      if (auto e = parse_fn(key)) {
+        result.push_back(*e);
+      }
+    }
+  }
+  return result.empty() ? defaults : result;
+}
+
+// ============================================================================
+// TOML config loader
+// ============================================================================
+
 static BenchmarkConfig load_config_from_toml(const std::string &filename) {
   BenchmarkConfig config;
 
@@ -50,54 +232,21 @@ static BenchmarkConfig load_config_from_toml(const std::string &filename) {
     std::exit(1);
   }
 
-  // Helper: safely get a bool from a TOML table, returning default if key missing
-  auto get_bool = [](const toml::table* t, std::string_view key, bool def) {
-    if (auto node = t->get(key)) return node->value_or(def);
-    return def;
-  };
+  if (auto t = tbl["polling"].as_table())
+    config.polling_modes = parse_toml_bool_table(t, parse_polling_mode, all_polling_modes());
 
-  // Polling mode
-  if (auto polling = tbl["polling"].as_table()) {
-    config.run_inline = get_bool(polling, "inline", true);
-    config.run_threaded = get_bool(polling, "threaded", true);
-  }
+  if (auto t = tbl["scheduling"].as_table())
+    config.scheduling_patterns = parse_toml_bool_table(t, parse_scheduling_pattern, default_scheduling_patterns());
 
-  // Scheduling pattern
-  if (auto scheduling = tbl["scheduling"].as_table()) {
-    config.run_sliding_window = get_bool(scheduling, "sliding_window", true);
-    config.run_sliding_window_noalloc = get_bool(scheduling, "sliding_window_noalloc", true);
-    config.run_sliding_window_arena = get_bool(scheduling, "sliding_window_arena", false);
-    config.run_batch = get_bool(scheduling, "batch", false);
-    config.run_scoped_workers = get_bool(scheduling, "scoped_workers", false);
-  }
+  if (auto t = tbl["submission"].as_table())
+    config.submission_strategies = parse_toml_bool_table(t, parse_submission_strategy, default_submission_strategies());
 
-  // Queue types
-  if (auto queues = tbl["queues"].as_table()) {
-    config.run_nolock = get_bool(queues, "nolock", true);
-    config.run_mutex = get_bool(queues, "mutex", true);
-    config.run_tas = get_bool(queues, "tas", true);
-    config.run_ttas = get_bool(queues, "ttas", true);
-    config.run_backoff = get_bool(queues, "backoff", true);
-    config.run_lockfree = get_bool(queues, "lockfree", true);
-  }
+  if (auto t = tbl["queues"].as_table())
+    config.queue_types = parse_toml_bool_table(t, parse_queue_type, all_queue_types());
 
-  // Operations
-  if (auto operations = tbl["operations"].as_table()) {
-    auto enabled_node = operations->get("enabled");
-    if (enabled_node && enabled_node->as_array()) {
-      auto arr = enabled_node->as_array();
-      config.operations.clear();
-      for (const auto &elem : *arr) {
-        if (auto name = elem.value<std::string>()) {
-          if (auto op = parse_operation_name(*name)) {
-            config.operations.push_back(*op);
-          } else {
-            fmt::println(stderr, "Unknown operation in config: {}", *name);
-            std::exit(1);
-          }
-        }
-      }
-    }
+  if (auto ops = tbl["operations"].as_table()) {
+    if (auto v = parse_toml_enum_array(ops, "enabled", parse_operation_name, "operation"))
+      config.operations = std::move(*v);
   }
 
   // Helper: safely get an int64 from a TOML table
@@ -105,52 +254,47 @@ static BenchmarkConfig load_config_from_toml(const std::string &filename) {
     if (auto node = t->get(key)) return node->value<int64_t>();
     return std::nullopt;
   };
-  // Helper: safely get an array from a TOML table
   auto get_array = [](const toml::table* t, std::string_view key) -> const toml::array* {
     if (auto node = t->get(key)) return node->as_array();
     return nullptr;
   };
 
-  // Benchmark parameters
   if (auto params = tbl["parameters"].as_table()) {
     if (auto arr = get_array(params, "concurrency_levels")) {
       config.concurrency_levels.clear();
       for (const auto &elem : *arr) {
-        if (auto val = elem.value<int64_t>()) {
+        if (auto val = elem.value<int64_t>())
           config.concurrency_levels.push_back(static_cast<size_t>(*val));
-        }
       }
     }
     if (auto arr = get_array(params, "msg_sizes")) {
       config.msg_sizes.clear();
       for (const auto &elem : *arr) {
-        if (auto val = elem.value<int64_t>()) {
+        if (auto val = elem.value<int64_t>())
           config.msg_sizes.push_back(static_cast<size_t>(*val));
-        }
       }
     }
-    if (auto val = get_int(params, "iterations")) {
+    if (auto val = get_int(params, "iterations"))
       config.iterations = static_cast<int>(*val);
-    }
-    if (auto val = get_int(params, "total_bytes")) {
+    if (auto val = get_int(params, "total_bytes"))
       config.total_bytes = static_cast<size_t>(*val);
-    }
-    if (auto val = get_int(params, "max_ops")) {
+    if (auto val = get_int(params, "max_ops"))
       config.max_ops = static_cast<size_t>(*val);
-    }
   }
 
-  // Output configuration
   if (auto output = tbl["output"].as_table()) {
     if (auto node = output->get("csv_file")) {
-      if (auto val = node->value<std::string>()) {
+      if (auto val = node->value<std::string>())
         config.csv_file = *val;
-      }
     }
   }
 
   return config;
 }
+
+// ============================================================================
+// Usage
+// ============================================================================
 
 void print_usage(const char *prog) {
   fmt::println("Usage: {} [OPTIONS]", prog);
@@ -170,6 +314,10 @@ void print_usage(const char *prog) {
   fmt::println("  --sliding-window-arena    Free-list arena (ibverbs/UCX style O(1) recycling)");
   fmt::println("  --batch             Spawn N ops, wait all complete, repeat");
   fmt::println("  --scoped-workers    N worker coroutines processing sequentially");
+  fmt::println("");
+  fmt::println("Submission strategy (can combine multiple):");
+  fmt::println("  --immediate         1:1 doorbell per descriptor (default)");
+  fmt::println("  --hw-batch          Transparent hardware batch submission");
   fmt::println("");
   fmt::println("Queue types:");
   fmt::println("  --queue=<type>      Run only specified queue type(s), comma-separated");
@@ -191,15 +339,91 @@ void print_usage(const char *prog) {
   fmt::println("  {} --queue=mutex,lockfree           # Specific queue types", prog);
 }
 
+// ============================================================================
+// CLI parsing
+// ============================================================================
+
+static std::vector<std::string> split_csv(std::string_view s) {
+  std::vector<std::string> out;
+  size_t pos = 0;
+  while (pos < s.size()) {
+    size_t end = s.find(',', pos);
+    if (end == std::string_view::npos) end = s.size();
+    out.emplace_back(s.substr(pos, end - pos));
+    pos = end + 1;
+  }
+  return out;
+}
+
+// CLI flag-to-enum mapping for dimensions that use --flag syntax
+// (as opposed to --key=val,val syntax)
+struct FlagMapping {
+  const char *flag;                  // e.g. "--inline"
+  const char *enum_name;             // e.g. "inline" — fed to the parse function
+};
+
+static const FlagMapping polling_flags[] = {
+  {"--inline",   "inline"},
+  {"--threaded", "threaded"},
+};
+
+static const FlagMapping pattern_flags[] = {
+  {"--sliding-window",         "sliding_window"},
+  {"--sliding-window-noalloc", "sliding_window_noalloc"},
+  {"--sliding-window-arena",   "sliding_window_arena"},
+  {"--batch",                  "batch"},
+  {"--scoped-workers",         "scoped_workers"},
+};
+
+static const FlagMapping submission_flags[] = {
+  {"--immediate", "immediate"},
+  {"--hw-batch",  "hw_batch"},
+};
+
+// Try to match `arg` against a flag table. If matched, add the enum name to `collector`.
+// Returns true if matched.
+static bool try_flag(std::string_view arg, const FlagMapping *flags, size_t count,
+                     std::optional<std::vector<std::string>> &collector) {
+  for (size_t i = 0; i < count; ++i) {
+    if (arg == flags[i].flag) {
+      if (!collector) collector.emplace();
+      collector->emplace_back(flags[i].enum_name);
+      return true;
+    }
+  }
+  return false;
+}
+
+// Apply CLI overrides: parse collected string names into enum vectors.
+template <typename T>
+static void apply_override(const std::optional<std::vector<std::string>> &collected,
+                           std::vector<T> &target,
+                           std::optional<T>(*parse_fn)(std::string_view),
+                           const char *type_name) {
+  if (!collected) return;
+  target.clear();
+  for (auto &name : *collected) {
+    if (auto val = parse_fn(name)) {
+      target.push_back(*val);
+    } else {
+      fmt::println(stderr, "Unknown {}: {}", type_name, name);
+      std::exit(1);
+    }
+  }
+}
+
 BenchmarkConfig parse_args(int argc, char **argv) {
   BenchmarkConfig config;
-  bool polling_specified = false;
-  bool pattern_specified = false;
-  bool queue_specified = false;
-  bool operation_specified = false;
   std::string config_file;
 
-  // First pass: check for config file
+  // Collect CLI overrides per dimension
+  std::optional<std::vector<std::string>> cli_polling;
+  std::optional<std::vector<std::string>> cli_pattern;
+  std::optional<std::vector<std::string>> cli_submission;
+  std::optional<std::vector<std::string>> cli_queue;
+  std::optional<std::vector<std::string>> cli_operation;
+
+  // First pass: config file
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
     if (arg.starts_with("--config=")) {
@@ -207,140 +431,33 @@ BenchmarkConfig parse_args(int argc, char **argv) {
       break;
     }
   }
-
-  // Load config from file if specified
-  if (!config_file.empty()) {
+  if (!config_file.empty())
     config = load_config_from_toml(config_file);
-  }
 
-  // Second pass: override with command-line options
+  // Second pass: collect CLI overrides
   for (int i = 1; i < argc; ++i) {
-    std::string arg = argv[i];
+    std::string_view arg = argv[i];
 
     if (arg == "--help" || arg == "-h") {
       print_usage(argv[0]);
       std::exit(0);
-    } else if (arg.starts_with("--config=")) {
-      // Already handled in first pass
+    }
+    if (arg.starts_with("--config="))
       continue;
-    } else if (arg == "--inline") {
-      if (!polling_specified) {
-        config.run_inline = false;
-        config.run_threaded = false;
-        polling_specified = true;
-      }
-      config.run_inline = true;
-    } else if (arg == "--threaded") {
-      if (!polling_specified) {
-        config.run_inline = false;
-        config.run_threaded = false;
-        polling_specified = true;
-      }
-      config.run_threaded = true;
-    } else if (arg == "--sliding-window") {
-      if (!pattern_specified) {
-        config.run_sliding_window = false;
-        config.run_sliding_window_noalloc = false;
-        config.run_sliding_window_arena = false;
-        config.run_batch = false;
-        config.run_scoped_workers = false;
-        pattern_specified = true;
-      }
-      config.run_sliding_window = true;
-    } else if (arg == "--sliding-window-noalloc") {
-      if (!pattern_specified) {
-        config.run_sliding_window = false;
-        config.run_sliding_window_noalloc = false;
-        config.run_sliding_window_arena = false;
-        config.run_batch = false;
-        config.run_scoped_workers = false;
-        pattern_specified = true;
-      }
-      config.run_sliding_window_noalloc = true;
-    } else if (arg == "--sliding-window-arena") {
-      if (!pattern_specified) {
-        config.run_sliding_window = false;
-        config.run_sliding_window_noalloc = false;
-        config.run_sliding_window_arena = false;
-        config.run_batch = false;
-        config.run_scoped_workers = false;
-        pattern_specified = true;
-      }
-      config.run_sliding_window_arena = true;
-    } else if (arg == "--batch") {
-      if (!pattern_specified) {
-        config.run_sliding_window = false;
-        config.run_sliding_window_noalloc = false;
-        config.run_sliding_window_arena = false;
-        config.run_batch = false;
-        config.run_scoped_workers = false;
-        pattern_specified = true;
-      }
-      config.run_batch = true;
-    } else if (arg == "--scoped-workers") {
-      if (!pattern_specified) {
-        config.run_sliding_window = false;
-        config.run_sliding_window_noalloc = false;
-        config.run_sliding_window_arena = false;
-        config.run_batch = false;
-        config.run_scoped_workers = false;
-        pattern_specified = true;
-      }
-      config.run_scoped_workers = true;
-    } else if (arg.starts_with("--queue=")) {
-      if (!queue_specified) {
-        config.run_nolock = false;
-        config.run_mutex = false;
-        config.run_tas = false;
-        config.run_ttas = false;
-        config.run_backoff = false;
-        config.run_lockfree = false;
-        queue_specified = true;
-      }
-      std::string queues = arg.substr(8);
-      size_t pos = 0;
-      while (pos < queues.size()) {
-        size_t end = queues.find(',', pos);
-        if (end == std::string::npos)
-          end = queues.size();
-        std::string q = queues.substr(pos, end - pos);
-        if (q == "nolock")
-          config.run_nolock = true;
-        else if (q == "mutex")
-          config.run_mutex = true;
-        else if (q == "tas")
-          config.run_tas = true;
-        else if (q == "ttas")
-          config.run_ttas = true;
-        else if (q == "backoff")
-          config.run_backoff = true;
-        else if (q == "lockfree")
-          config.run_lockfree = true;
-        else {
-          fmt::println(stderr, "Unknown queue type: {}", q);
-          std::exit(1);
-        }
-        pos = end + 1;
+
+    if (try_flag(arg, polling_flags, std::size(polling_flags), cli_polling)) continue;
+    if (try_flag(arg, pattern_flags, std::size(pattern_flags), cli_pattern)) continue;
+    if (try_flag(arg, submission_flags, std::size(submission_flags), cli_submission)) continue;
+
+    if (arg.starts_with("--queue=")) {
+      for (auto &q : split_csv(arg.substr(8))) {
+        if (!cli_queue) cli_queue.emplace();
+        cli_queue->push_back(q);
       }
     } else if (arg.starts_with("--operation=")) {
-      if (!operation_specified) {
-        config.operations.clear();
-        operation_specified = true;
-      }
-      std::string ops = arg.substr(12);
-      size_t pos = 0;
-      while (pos < ops.size()) {
-        size_t end = ops.find(',', pos);
-        if (end == std::string::npos)
-          end = ops.size();
-        std::string o = ops.substr(pos, end - pos);
-        if (auto op = parse_operation_name(o)) {
-          config.operations.push_back(*op);
-        } else {
-          fmt::println(stderr, "Unknown operation type: {}", o);
-          std::exit(1);
-        }
-        pos = end + 1;
+      for (auto &o : split_csv(arg.substr(12))) {
+        if (!cli_operation) cli_operation.emplace();
+        cli_operation->push_back(o);
       }
     } else {
       fmt::println(stderr, "Unknown option: {}", arg);
@@ -348,6 +465,13 @@ BenchmarkConfig parse_args(int argc, char **argv) {
       std::exit(1);
     }
   }
+
+  // Apply: if a dimension was specified on CLI, override that dimension
+  apply_override(cli_polling,    config.polling_modes,          parse_polling_mode,          "polling mode");
+  apply_override(cli_pattern,    config.scheduling_patterns,    parse_scheduling_pattern,    "scheduling pattern");
+  apply_override(cli_submission, config.submission_strategies,  parse_submission_strategy,   "submission strategy");
+  apply_override(cli_queue,      config.queue_types,            parse_queue_type,            "queue type");
+  apply_override(cli_operation,  config.operations,             parse_operation_name,        "operation");
 
   return config;
 }

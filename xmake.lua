@@ -51,6 +51,7 @@ target("dsa_benchmark")
     add_cflags("-movdir64b")
     add_cxxflags("-mmovdir64b")
     add_files("src/dsa/dsa_instantiate.cpp")
+    add_files("src/dsa/dsa_batch_instantiate.cpp")
 
 
 target("dsa_benchmark_static")
@@ -66,6 +67,7 @@ target("dsa_benchmark_static")
     add_cflags("-movdir64b")
     add_cxxflags("-mmovdir64b")
     add_files("src/dsa/dsa_instantiate.cpp")
+    add_files("src/dsa/dsa_batch_instantiate.cpp")
 
 
 target("dsa_launcher")
@@ -73,6 +75,7 @@ target("dsa_launcher")
     set_languages("c11")
     add_files("tools/dsa_launcher.c")
     add_links("cap")
+    set_default(false)
     after_build(function (target)
         os.exec("sudo setcap cap_sys_rawio+eip " .. target:targetdir() .. "/dsa_launcher")
     end)

@@ -85,7 +85,11 @@ public:
 
   void submit(dsa_stdexec::OperationBase *op, dsa_hw_desc *desc);
   void submit(dsa_stdexec::OperationBase *op);
+  void submit_raw(dsa_hw_desc *desc);
   void poll();
+  void flush() {} // no-op for non-batch; enables uniform DsaFacade
+
+  accfg_wq *wq() const noexcept { return wq_; }
 
   Queue &task_queue() noexcept { return task_queue_; }
   const Queue &task_queue() const noexcept { return task_queue_; }

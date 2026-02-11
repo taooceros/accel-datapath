@@ -251,6 +251,25 @@ void DsaBase<QueueTemplate>::submit(dsa_stdexec::OperationBase *op) {
 }
 
 template <template <typename> class QueueTemplate>
+void DsaBase<QueueTemplate>::submit_raw(dsa_hw_desc *desc) {
+  TRACE_EVENT("dsa", "submit_raw");
+  if (wq_portal_ == nullptr) {
+    throw dsa_stdexec::DsaSubmitError("DSA work queue portal is not mapped");
+  }
+  if (desc == nullptr) {
+    return;
+  }
+  _mm_sfence();
+  if (mode_ == ACCFG_WQ_DEDICATED) {
+    _movdir64b(wq_portal_, desc);
+  } else {
+    while (_enqcmd(wq_portal_, desc) != 0) {
+      _mm_pause();
+    }
+  }
+}
+
+template <template <typename> class QueueTemplate>
 void DsaBase<QueueTemplate>::poll() {
   task_queue_.poll();
 }
