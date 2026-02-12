@@ -1,4 +1,4 @@
-#include "benchmark_config.hpp"
+#include "config.hpp"
 // Include fmt/format.h BEFORE toml++ to ensure std::string formatter
 // specialization is defined before toml++ can instantiate it
 #include <fmt/format.h>

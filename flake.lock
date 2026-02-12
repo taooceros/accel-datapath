@@ -56,7 +56,8 @@
         "idxd-config": "idxd-config",
         "nixpkgs": "nixpkgs",
         "proxy": "proxy",
-        "stdexec": "stdexec"
+        "stdexec": "stdexec",
+        "tomlplusplus": "tomlplusplus"
       }
     },
     "stdexec": {
@@ -74,6 +75,23 @@
         "rev": "7bb7b5b6d26e5ccedd88a2d7a131e86b58270108",
         "type": "git",
         "url": "https://github.com/NVIDIA/stdexec.git"
+      }
+    },
+    "tomlplusplus": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1766578845,
+        "narHash": "sha256-EFAoCQhkX9OcwdFdlA6v4C7sSeyrEwDm+OvvvmRMGGw=",
+        "ref": "master",
+        "rev": "7807a314ad1c0c9c227d9dbd68f23f187163372e",
+        "revCount": 376,
+        "type": "git",
+        "url": "https://github.com/marzer/tomlplusplus.git"
+      },
+      "original": {
+        "ref": "master",
+        "type": "git",
+        "url": "https://github.com/marzer/tomlplusplus.git"
       }
     }
   },

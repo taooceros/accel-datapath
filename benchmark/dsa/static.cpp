@@ -1,8 +1,8 @@
 // Include fmt headers first to avoid partial specialization conflicts
 #include <fmt/format.h>
 #include <fmt/ranges.h>
-#include "benchmark_config.hpp"
-#include "benchmark_helpers.hpp"
+#include "config.hpp"
+#include "helpers.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cstring>
