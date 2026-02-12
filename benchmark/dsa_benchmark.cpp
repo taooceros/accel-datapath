@@ -41,6 +41,44 @@ using RunFunction = std::function<void(DsaProxy &, exec::async_scope &, size_t,
                                        LatencyCollector &)>;
 
 // ============================================================================
+// OPERATION DISPATCH — single switch for all op_type → sender mappings
+// ============================================================================
+
+// Calls f(op_sender) where op_sender is a lambda: (size_t offset) -> Sender.
+// Each operation type produces a different sender type, so f must be generic.
+template <class F>
+void with_op_sender(OperationType op_type, DsaProxy &dsa,
+                    BufferSet &bufs, size_t msg_size, F &&f) {
+  using namespace dsa_stdexec;
+  switch (op_type) {
+    case OperationType::DataMove:
+      f([&](size_t off) { return dsa_data_move(dsa, bufs.src.data() + off, bufs.dst.data() + off, msg_size); });
+      break;
+    case OperationType::MemFill:
+      f([&](size_t off) { return dsa_mem_fill(dsa, bufs.dst.data() + off, msg_size, BufferSet::fill_pattern); });
+      break;
+    case OperationType::Compare:
+      f([&](size_t off) { return dsa_compare(dsa, bufs.src.data() + off, bufs.dst.data() + off, msg_size); });
+      break;
+    case OperationType::CompareValue:
+      f([&](size_t off) { return dsa_compare_value(dsa, bufs.src.data() + off, msg_size, BufferSet::fill_pattern); });
+      break;
+    case OperationType::Dualcast:
+      f([&](size_t off) { return dsa_dualcast(dsa, bufs.src.data() + off, bufs.dualcast_dst1 + off, bufs.dualcast_dst2 + off, msg_size); });
+      break;
+    case OperationType::CrcGen:
+      f([&](size_t off) { return dsa_crc_gen(dsa, bufs.src.data() + off, msg_size); });
+      break;
+    case OperationType::CopyCrc:
+      f([&](size_t off) { return dsa_copy_crc(dsa, bufs.src.data() + off, bufs.dst.data() + off, msg_size); });
+      break;
+    case OperationType::CacheFlush:
+      f([&](size_t off) { return dsa_cache_flush(dsa, bufs.dst.data() + off, msg_size); });
+      break;
+  }
+}
+
+// ============================================================================
 // SPAWN HELPERS
 // ============================================================================
 
@@ -55,33 +93,9 @@ void spawn_op(DsaProxy &dsa, exec::async_scope &scope, OperationType op_type,
   };
   if (in_flight) in_flight->fetch_add(1, std::memory_order_relaxed);
 
-  using namespace dsa_stdexec;
-  switch (op_type) {
-    case OperationType::DataMove:
-      scope.spawn(dsa_data_move(dsa, bufs.src.data() + offset, bufs.dst.data() + offset, msg_size) | stdexec::then(record));
-      break;
-    case OperationType::MemFill:
-      scope.spawn(dsa_mem_fill(dsa, bufs.dst.data() + offset, msg_size, BufferSet::fill_pattern) | stdexec::then(record));
-      break;
-    case OperationType::Compare:
-      scope.spawn(dsa_compare(dsa, bufs.src.data() + offset, bufs.dst.data() + offset, msg_size) | stdexec::then(record));
-      break;
-    case OperationType::CompareValue:
-      scope.spawn(dsa_compare_value(dsa, bufs.src.data() + offset, msg_size, BufferSet::fill_pattern) | stdexec::then(record));
-      break;
-    case OperationType::Dualcast:
-      scope.spawn(dsa_dualcast(dsa, bufs.src.data() + offset, bufs.dualcast_dst1 + offset, bufs.dualcast_dst2 + offset, msg_size) | stdexec::then(record));
-      break;
-    case OperationType::CrcGen:
-      scope.spawn(dsa_crc_gen(dsa, bufs.src.data() + offset, msg_size) | stdexec::then(record));
-      break;
-    case OperationType::CopyCrc:
-      scope.spawn(dsa_copy_crc(dsa, bufs.src.data() + offset, bufs.dst.data() + offset, msg_size) | stdexec::then(record));
-      break;
-    case OperationType::CacheFlush:
-      scope.spawn(dsa_cache_flush(dsa, bufs.dst.data() + offset, msg_size) | stdexec::then(record));
-      break;
-  }
+  with_op_sender(op_type, dsa, bufs, msg_size, [&](auto op_sender) {
+    scope.spawn(op_sender(offset) | stdexec::then(record));
+  });
 }
 
 void spawn_op_scheduled(DsaProxy &dsa, dsa_stdexec::DsaScheduler<DsaProxy> &scheduler,
@@ -98,49 +112,11 @@ void spawn_op_scheduled(DsaProxy &dsa, dsa_stdexec::DsaScheduler<DsaProxy> &sche
     if (in_flight) in_flight->fetch_sub(1, std::memory_order_release);
   };
 
-  using namespace dsa_stdexec;
-  switch (op_type) {
-    case OperationType::DataMove:
-      scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
-        return dsa_data_move(dsa, bufs.src.data() + offset, bufs.dst.data() + offset, msg_size) | stdexec::then(record);
-      }));
-      break;
-    case OperationType::MemFill:
-      scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
-        return dsa_mem_fill(dsa, bufs.dst.data() + offset, msg_size, BufferSet::fill_pattern) | stdexec::then(record);
-      }));
-      break;
-    case OperationType::Compare:
-      scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
-        return dsa_compare(dsa, bufs.src.data() + offset, bufs.dst.data() + offset, msg_size) | stdexec::then(record);
-      }));
-      break;
-    case OperationType::CompareValue:
-      scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
-        return dsa_compare_value(dsa, bufs.src.data() + offset, msg_size, BufferSet::fill_pattern) | stdexec::then(record);
-      }));
-      break;
-    case OperationType::Dualcast:
-      scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
-        return dsa_dualcast(dsa, bufs.src.data() + offset, bufs.dualcast_dst1 + offset, bufs.dualcast_dst2 + offset, msg_size) | stdexec::then(record);
-      }));
-      break;
-    case OperationType::CrcGen:
-      scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
-        return dsa_crc_gen(dsa, bufs.src.data() + offset, msg_size) | stdexec::then(record);
-      }));
-      break;
-    case OperationType::CopyCrc:
-      scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
-        return dsa_copy_crc(dsa, bufs.src.data() + offset, bufs.dst.data() + offset, msg_size) | stdexec::then(record);
-      }));
-      break;
-    case OperationType::CacheFlush:
-      scope.spawn(scheduler.schedule() | stdexec::let_value([&dsa, &bufs, offset, msg_size, record]() {
-        return dsa_cache_flush(dsa, bufs.dst.data() + offset, msg_size) | stdexec::then(record);
-      }));
-      break;
-  }
+  with_op_sender(op_type, dsa, bufs, msg_size, [&](auto op_sender) {
+    scope.spawn(scheduler.schedule() | stdexec::let_value([op_sender, offset, record]() {
+      return op_sender(offset) | stdexec::then(record);
+    }));
+  });
 }
 
 // ============================================================================
@@ -256,41 +232,9 @@ void run_sliding_window_inline_noalloc(DsaProxy &dsa, exec::async_scope &scope,
                                        size_t concurrency, size_t msg_size, size_t total_bytes,
                                        BufferSet &bufs, LatencyCollector &latency,
                                        OperationType op_type) {
-  using namespace dsa_stdexec;
-  switch (op_type) {
-    case OperationType::DataMove:
-      sliding_window_noalloc_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_data_move(dsa, bufs.src.data() + off, bufs.dst.data() + off, msg_size); });
-      break;
-    case OperationType::MemFill:
-      sliding_window_noalloc_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_mem_fill(dsa, bufs.dst.data() + off, msg_size, BufferSet::fill_pattern); });
-      break;
-    case OperationType::Compare:
-      sliding_window_noalloc_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_compare(dsa, bufs.src.data() + off, bufs.dst.data() + off, msg_size); });
-      break;
-    case OperationType::CompareValue:
-      sliding_window_noalloc_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_compare_value(dsa, bufs.src.data() + off, msg_size, BufferSet::fill_pattern); });
-      break;
-    case OperationType::Dualcast:
-      sliding_window_noalloc_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_dualcast(dsa, bufs.src.data() + off, bufs.dualcast_dst1 + off, bufs.dualcast_dst2 + off, msg_size); });
-      break;
-    case OperationType::CrcGen:
-      sliding_window_noalloc_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_crc_gen(dsa, bufs.src.data() + off, msg_size); });
-      break;
-    case OperationType::CopyCrc:
-      sliding_window_noalloc_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_copy_crc(dsa, bufs.src.data() + off, bufs.dst.data() + off, msg_size); });
-      break;
-    case OperationType::CacheFlush:
-      sliding_window_noalloc_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_cache_flush(dsa, bufs.dst.data() + off, msg_size); });
-      break;
-  }
+  with_op_sender(op_type, dsa, bufs, msg_size, [&](auto op_sender) {
+    sliding_window_noalloc_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency, op_sender);
+  });
 }
 
 // Compute the operation state size for threaded noalloc:
@@ -356,41 +300,9 @@ void run_sliding_window_threaded_noalloc(DsaProxy &dsa, exec::async_scope &scope
                                          size_t concurrency, size_t msg_size, size_t total_bytes,
                                          BufferSet &bufs, LatencyCollector &latency,
                                          OperationType op_type) {
-  using namespace dsa_stdexec;
-  switch (op_type) {
-    case OperationType::DataMove:
-      sliding_window_noalloc_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_data_move(dsa, bufs.src.data() + off, bufs.dst.data() + off, msg_size); });
-      break;
-    case OperationType::MemFill:
-      sliding_window_noalloc_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_mem_fill(dsa, bufs.dst.data() + off, msg_size, BufferSet::fill_pattern); });
-      break;
-    case OperationType::Compare:
-      sliding_window_noalloc_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_compare(dsa, bufs.src.data() + off, bufs.dst.data() + off, msg_size); });
-      break;
-    case OperationType::CompareValue:
-      sliding_window_noalloc_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_compare_value(dsa, bufs.src.data() + off, msg_size, BufferSet::fill_pattern); });
-      break;
-    case OperationType::Dualcast:
-      sliding_window_noalloc_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_dualcast(dsa, bufs.src.data() + off, bufs.dualcast_dst1 + off, bufs.dualcast_dst2 + off, msg_size); });
-      break;
-    case OperationType::CrcGen:
-      sliding_window_noalloc_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_crc_gen(dsa, bufs.src.data() + off, msg_size); });
-      break;
-    case OperationType::CopyCrc:
-      sliding_window_noalloc_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_copy_crc(dsa, bufs.src.data() + off, bufs.dst.data() + off, msg_size); });
-      break;
-    case OperationType::CacheFlush:
-      sliding_window_noalloc_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_cache_flush(dsa, bufs.dst.data() + off, msg_size); });
-      break;
-  }
+  with_op_sender(op_type, dsa, bufs, msg_size, [&](auto op_sender) {
+    sliding_window_noalloc_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency, op_sender);
+  });
 }
 
 // ============================================================================
@@ -449,41 +361,9 @@ void run_sliding_window_inline_arena(DsaProxy &dsa, exec::async_scope &scope,
                                      size_t concurrency, size_t msg_size, size_t total_bytes,
                                      BufferSet &bufs, LatencyCollector &latency,
                                      OperationType op_type) {
-  using namespace dsa_stdexec;
-  switch (op_type) {
-    case OperationType::DataMove:
-      sliding_window_arena_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_data_move(dsa, bufs.src.data() + off, bufs.dst.data() + off, msg_size); });
-      break;
-    case OperationType::MemFill:
-      sliding_window_arena_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_mem_fill(dsa, bufs.dst.data() + off, msg_size, BufferSet::fill_pattern); });
-      break;
-    case OperationType::Compare:
-      sliding_window_arena_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_compare(dsa, bufs.src.data() + off, bufs.dst.data() + off, msg_size); });
-      break;
-    case OperationType::CompareValue:
-      sliding_window_arena_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_compare_value(dsa, bufs.src.data() + off, msg_size, BufferSet::fill_pattern); });
-      break;
-    case OperationType::Dualcast:
-      sliding_window_arena_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_dualcast(dsa, bufs.src.data() + off, bufs.dualcast_dst1 + off, bufs.dualcast_dst2 + off, msg_size); });
-      break;
-    case OperationType::CrcGen:
-      sliding_window_arena_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_crc_gen(dsa, bufs.src.data() + off, msg_size); });
-      break;
-    case OperationType::CopyCrc:
-      sliding_window_arena_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_copy_crc(dsa, bufs.src.data() + off, bufs.dst.data() + off, msg_size); });
-      break;
-    case OperationType::CacheFlush:
-      sliding_window_arena_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_cache_flush(dsa, bufs.dst.data() + off, msg_size); });
-      break;
-  }
+  with_op_sender(op_type, dsa, bufs, msg_size, [&](auto op_sender) {
+    sliding_window_arena_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency, op_sender);
+  });
 }
 
 template <class MakeSender>
@@ -541,41 +421,9 @@ void run_sliding_window_threaded_arena(DsaProxy &dsa, exec::async_scope &scope,
                                        size_t concurrency, size_t msg_size, size_t total_bytes,
                                        BufferSet &bufs, LatencyCollector &latency,
                                        OperationType op_type) {
-  using namespace dsa_stdexec;
-  switch (op_type) {
-    case OperationType::DataMove:
-      sliding_window_arena_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_data_move(dsa, bufs.src.data() + off, bufs.dst.data() + off, msg_size); });
-      break;
-    case OperationType::MemFill:
-      sliding_window_arena_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_mem_fill(dsa, bufs.dst.data() + off, msg_size, BufferSet::fill_pattern); });
-      break;
-    case OperationType::Compare:
-      sliding_window_arena_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_compare(dsa, bufs.src.data() + off, bufs.dst.data() + off, msg_size); });
-      break;
-    case OperationType::CompareValue:
-      sliding_window_arena_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_compare_value(dsa, bufs.src.data() + off, msg_size, BufferSet::fill_pattern); });
-      break;
-    case OperationType::Dualcast:
-      sliding_window_arena_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_dualcast(dsa, bufs.src.data() + off, bufs.dualcast_dst1 + off, bufs.dualcast_dst2 + off, msg_size); });
-      break;
-    case OperationType::CrcGen:
-      sliding_window_arena_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_crc_gen(dsa, bufs.src.data() + off, msg_size); });
-      break;
-    case OperationType::CopyCrc:
-      sliding_window_arena_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_copy_crc(dsa, bufs.src.data() + off, bufs.dst.data() + off, msg_size); });
-      break;
-    case OperationType::CacheFlush:
-      sliding_window_arena_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency,
-        [&](size_t off) { return dsa_cache_flush(dsa, bufs.dst.data() + off, msg_size); });
-      break;
-  }
+  with_op_sender(op_type, dsa, bufs, msg_size, [&](auto op_sender) {
+    sliding_window_arena_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency, op_sender);
+  });
 }
 
 // ============================================================================
@@ -721,55 +569,25 @@ void run_scoped_workers_threaded(DsaProxy &dsa, exec::async_scope &scope,
 // BENCHMARK INFRASTRUCTURE
 // ============================================================================
 
-enum class BenchmarkPattern {
-  SlidingWindowInline,
-  SlidingWindowThreaded,
-  SlidingWindowInlineNoAlloc,
-  SlidingWindowThreadedNoAlloc,
-  SlidingWindowInlineArena,
-  SlidingWindowThreadedArena,
-  BatchInline,
-  BatchThreaded,
-  ScopedWorkersInline,
-  ScopedWorkersThreaded
+// All run_* functions share this signature.
+using StrategyFn = void(*)(DsaProxy &, exec::async_scope &, size_t, size_t, size_t,
+                           BufferSet &, LatencyCollector &, OperationType);
+
+// Indexed by [SchedulingPattern][PollingMode]: {inline, threaded}
+static constexpr StrategyFn strategy_table[][2] = {
+  /* SlidingWindow       */ { run_sliding_window_inline,          run_sliding_window_threaded },
+  /* SlidingWindowNoAlloc*/ { run_sliding_window_inline_noalloc,  run_sliding_window_threaded_noalloc },
+  /* SlidingWindowArena  */ { run_sliding_window_inline_arena,    run_sliding_window_threaded_arena },
+  /* Batch              */  { run_batch_inline,                   run_batch_threaded },
+  /* ScopedWorkers      */  { run_scoped_workers_inline,          run_scoped_workers_threaded },
 };
 
-void dispatch_run(BenchmarkPattern pattern, OperationType op_type,
+void dispatch_run(SchedulingPattern sp, PollingMode pm, OperationType op_type,
                   DsaProxy &dsa, exec::async_scope &scope,
                   size_t concurrency, size_t msg_size, size_t total_bytes,
                   BufferSet &bufs, LatencyCollector &latency) {
-  switch (pattern) {
-    case BenchmarkPattern::SlidingWindowInline:
-      run_sliding_window_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency, op_type);
-      break;
-    case BenchmarkPattern::SlidingWindowThreaded:
-      run_sliding_window_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency, op_type);
-      break;
-    case BenchmarkPattern::SlidingWindowInlineNoAlloc:
-      run_sliding_window_inline_noalloc(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency, op_type);
-      break;
-    case BenchmarkPattern::SlidingWindowThreadedNoAlloc:
-      run_sliding_window_threaded_noalloc(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency, op_type);
-      break;
-    case BenchmarkPattern::SlidingWindowInlineArena:
-      run_sliding_window_inline_arena(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency, op_type);
-      break;
-    case BenchmarkPattern::SlidingWindowThreadedArena:
-      run_sliding_window_threaded_arena(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency, op_type);
-      break;
-    case BenchmarkPattern::BatchInline:
-      run_batch_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency, op_type);
-      break;
-    case BenchmarkPattern::BatchThreaded:
-      run_batch_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency, op_type);
-      break;
-    case BenchmarkPattern::ScopedWorkersInline:
-      run_scoped_workers_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency, op_type);
-      break;
-    case BenchmarkPattern::ScopedWorkersThreaded:
-      run_scoped_workers_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency, op_type);
-      break;
-  }
+  strategy_table[static_cast<int>(sp)][static_cast<int>(pm)](
+      dsa, scope, concurrency, msg_size, total_bytes, bufs, latency, op_type);
 }
 
 DsaMetric run_benchmark(DsaProxy &dsa, size_t concurrency, size_t msg_size,
@@ -910,16 +728,17 @@ static DsaMetric& result_field(BenchmarkResult &r, QueueType qt) {
   return r.mutex;  // unreachable
 }
 
-// Run benchmarks for all queue types with a given pattern and operation
+// Run benchmarks for all queue types with a given scheduling pattern, polling mode, and operation
 std::vector<BenchmarkResult> run_all_queues(
     const BenchmarkConfig &config,
     BufferSet &bufs,
-    bool use_threaded_polling,
-    BenchmarkPattern pattern,
+    SchedulingPattern sp,
+    PollingMode pm,
     OperationType op_type,
     const char *pattern_name,
     bool use_hw_batch = false) {
 
+  bool use_threaded_polling = (pm == PollingMode::Threaded);
   std::vector<BenchmarkResult> results;
 
   // Count enabled queues for progress tracking
@@ -935,9 +754,9 @@ std::vector<BenchmarkResult> run_all_queues(
   std::string progress_label = fmt::format("{}/{}", operation_name(op_type), pattern_name);
   ProgressBar progress(total_iterations, progress_label);
 
-  auto run_fn = [pattern, op_type](DsaProxy &d, exec::async_scope &scope, size_t c, size_t m, size_t t,
-                                    BufferSet &b, LatencyCollector &l) {
-    dispatch_run(pattern, op_type, d, scope, c, m, t, b, l);
+  auto run_fn = [sp, pm, op_type](DsaProxy &d, exec::async_scope &scope, size_t c, size_t m, size_t t,
+                                   BufferSet &b, LatencyCollector &l) {
+    dispatch_run(sp, pm, op_type, d, scope, c, m, t, b, l);
   };
 
   for (auto concurrency : config.concurrency_levels) {
@@ -967,24 +786,6 @@ std::vector<BenchmarkResult> run_all_queues(
 
   progress.finish();
   return results;
-}
-
-// Map (SchedulingPattern, PollingMode) to the internal BenchmarkPattern enum
-static BenchmarkPattern to_benchmark_pattern(SchedulingPattern sp, PollingMode pm) {
-  bool threaded = (pm == PollingMode::Threaded);
-  switch (sp) {
-    case SchedulingPattern::SlidingWindow:
-      return threaded ? BenchmarkPattern::SlidingWindowThreaded : BenchmarkPattern::SlidingWindowInline;
-    case SchedulingPattern::SlidingWindowNoAlloc:
-      return threaded ? BenchmarkPattern::SlidingWindowThreadedNoAlloc : BenchmarkPattern::SlidingWindowInlineNoAlloc;
-    case SchedulingPattern::SlidingWindowArena:
-      return threaded ? BenchmarkPattern::SlidingWindowThreadedArena : BenchmarkPattern::SlidingWindowInlineArena;
-    case SchedulingPattern::Batch:
-      return threaded ? BenchmarkPattern::BatchThreaded : BenchmarkPattern::BatchInline;
-    case SchedulingPattern::ScopedWorkers:
-      return threaded ? BenchmarkPattern::ScopedWorkersThreaded : BenchmarkPattern::ScopedWorkersInline;
-  }
-  return BenchmarkPattern::SlidingWindowInline;  // unreachable
 }
 
 void benchmark_queues_with_dsa(const BenchmarkConfig &config) {
@@ -1018,9 +819,7 @@ void benchmark_queues_with_dsa(const BenchmarkConfig &config) {
     for (auto sp : config.scheduling_patterns) {
       for (auto pm : config.polling_modes) {
         for (auto ss : config.submission_strategies) {
-          bool threaded = (pm == PollingMode::Threaded);
           bool hw_batch = (ss == SubmissionStrategy::HwBatch);
-          auto pattern = to_benchmark_pattern(sp, pm);
           const char *sp_name = scheduling_pattern_name(sp);
           const char *pm_name = polling_mode_name(pm);
           std::string label_name = sp_name;
@@ -1028,7 +827,7 @@ void benchmark_queues_with_dsa(const BenchmarkConfig &config) {
 
           fmt::println("Running {} {} + {} polling{}...", op_name, sp_name, pm_name,
                        hw_batch ? " (hw batch)" : "");
-          auto results = run_all_queues(config, bufs, threaded, pattern, op_type,
+          auto results = run_all_queues(config, bufs, sp, pm, op_type,
                                          label_name.c_str(), hw_batch);
           all_results.emplace_back(fmt::format("{}__{}_{}", op_name, label_name, pm_name),
                                     std::move(results));
