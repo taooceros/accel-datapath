@@ -6,14 +6,12 @@
 #align(center)[
   #text(size: 16pt, weight: "bold")[DSA Completion Record Alignment Bug]
   #v(0.3em)
-  #text(size: 10pt, fill: gray)[dsa-stdexec / January 2026]
+  #text(size: 10pt, fill: gray)[dsa-stdexec -- January 2026]
 ]
 
 = Summary
 
-- *Bug*: DSA operations hang when using scoped workers with inline polling
-- *Cause*: Completion records misaligned in coroutine frames
-- *Fix*: Runtime alignment via over-allocated buffers
+DSA operations hang when using scoped workers with inline polling. The root cause is misaligned completion records within coroutine frames. The fix uses runtime alignment via over-allocated buffers.
 
 = Symptoms
 
@@ -64,10 +62,10 @@ class DataMoveOperation : public dsa::DsaOperationBase {
 └─────────────────────────────────────────────────────────┘
 ```
 
-*Key points*:
-- Frame allocated via `operator new(size_t)` → returns 16B aligned memory
+*Key points:*
+- Frame allocated via `operator new(size_t)` -- returns 16B aligned memory
 - Objects crossing `co_await` are stored in frame (not stack)
-- Compiler ignores `alignas()` when laying out frame → *the bug*
+- Compiler ignores `alignas()` when laying out frame -- *the bug*
 ]
 
 #block(breakable: false)[
@@ -101,7 +99,7 @@ worker_coro() called
   [Completion record], [32B], [32-byte],
 )
 
-*Critical*: Misaligned completion records cause silent failure. Hardware completes but never writes status.
+*Critical*: Misaligned completion records cause silent failure -- hardware completes but never writes status.
 
 = Root Cause
 
@@ -113,7 +111,7 @@ worker_coro() called
   [1], [`0x...990`], [No (off by 16)],
 )
 
-*Why?* Coroutine frame allocators ignore `alignas()`. This is a known compiler bug.
+Coroutine frame allocators ignore `alignas()`. This is a known compiler bug (see @compiler-bugs).
 
 = Memory Layout
 
@@ -179,25 +177,27 @@ Alignment computed at runtime: `(addr + N-1) & ~(N-1)`
 ]
 ]
 
-= Compiler Bug References
+= Compiler Bug References <compiler-bugs>
 
-*LLVM/Clang*:
-- \#53148: Coroutine frame wrong alignment \
-  #text(size: 8pt)[#link("https://github.com/llvm/llvm-project/issues/53148")]
-- \#56671: Misaligned variables in coroutine frames \
-  #text(size: 8pt)[#link("https://github.com/llvm/llvm-project/issues/56671")]
-- D97915: Handle overaligned frame allocation \
-  #text(size: 8pt)[#link("https://reviews.llvm.org/D97915")]
+#figure(
+  table(
+    columns: (auto, auto, auto),
+    stroke: 0.5pt,
+    inset: 6pt,
+    [*Compiler*], [*Issue*], [*Description*],
+    [LLVM/Clang], [#link("https://github.com/llvm/llvm-project/issues/53148")[\#53148]], [Coroutine frame wrong alignment],
+    [LLVM/Clang], [#link("https://github.com/llvm/llvm-project/issues/56671")[\#56671]], [Misaligned variables in coroutine frames],
+    [LLVM/Clang], [#link("https://reviews.llvm.org/D97915")[D97915]], [Handle overaligned frame allocation],
+    [GCC], [#link("https://gcc.gnu.org/bugzilla/show_bug.cgi?id=104177")[Bug 104177]], [Coroutine frame alignment],
+  ),
+  caption: [Related compiler bugs.],
+)
 
-*GCC*:
-- Bug 104177: Coroutine frame alignment \
-  #text(size: 8pt)[#link("https://gcc.gnu.org/bugzilla/show_bug.cgi?id=104177")]
-
-*Root cause*: `malloc` returns 16-byte aligned memory. Compilers don't use `operator new(size_t, align_val_t)` for coroutine frames.
+*Root cause*: `malloc` returns 16-byte aligned memory; compilers don't use `operator new(size_t, align_val_t)` for coroutine frames.
 
 = Files Changed
 
-- `src/dsa/dsa_operation_base.hpp` - over-allocated buffers + runtime alignment
-- `src/dsa/dsa.hpp` - use `comp_ptr()`
-- `include/dsa_stdexec/data_move.hpp` - use `desc_ptr()`, `comp_ptr()`
-- `include/dsa_stdexec/scheduler.hpp` - use `comp_ptr()`
+- `src/dsa/dsa_operation_base.hpp` -- over-allocated buffers + runtime alignment
+- `src/dsa/dsa.hpp` -- use `comp_ptr()`
+- `include/dsa_stdexec/data_move.hpp` -- use `desc_ptr()`, `comp_ptr()`
+- `include/dsa_stdexec/scheduler.hpp` -- use `comp_ptr()`

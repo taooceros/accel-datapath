@@ -53,7 +53,7 @@ DSA processes work by receiving 64-byte descriptors through MMIO. Each doorbell 
     [Ring-Buffer],     [$ceil(N\/B)$],  [16],   [No],  [Shared descriptor ring + batch metadata ring],
   ),
   caption: [Strategy overview. $N$ = operations, $B$ = max batch size (typically 32).]
-) <overview>
+) <overview-fig>
 
 #keypoint[
   *Key result:* Ring-buffer batching achieves *1.2--2.0x* higher message rates than double-buffered batching across all 8 DSA operations, by eliminating submission blocking and improving batch utilization. Fixed-ring batching (ablation study) confirms that most of the gain comes from deeper in-flight capacity (16 vs. 2 batches), not memory packing.
@@ -198,8 +198,8 @@ Hardware constraints for the batch opcode:
 ) <double-buf-fig>
 
 *Limitations:*
-- *Submission blocks* on the previous batch (only 2 buffers)
-- *Effective batch size driven by poll frequency* --- at low concurrency, most batches are size 1--4
+- *Submission blocks* on previous batch (only 2 buffers)
+- *Effective batch size driven by poll frequency* -- at low concurrency, most batches are size 1--4
 - *Fixed-size buffers* waste space (32 slots reserved regardless of usage)
 
 == Fixed-Ring (`DsaFixedRingBatchBase`) <fixed-ring>
@@ -287,10 +287,10 @@ Hardware constraints for the batch opcode:
 - No wrap-around logic needed --- each entry's descriptor array is independent.
 
 *Trade-offs:*
-- *No blocking* (same as ring-buffer) --- 16 batch slots provide sufficient depth to avoid submission stalls.
-- *Simpler state management* --- only `batch_fill_` and `batch_head_`, no `desc_head_`/`desc_tail_` tracking.
-- *Wastes descriptor space* --- each entry reserves $B$ slots ($32 times 64$ B = 2 KB) even when the actual batch is small. Total: $16 times 2$ KB = 32 KB.
-- *No contiguity requirement across batches* --- each entry is self-contained.
+- *No blocking* (same as ring-buffer) -- 16 batch slots provide sufficient depth
+- *Simpler state management* -- only `batch_fill_` and `batch_head_`, no `desc_head_`/`desc_tail_`
+- *Wastes descriptor space* -- each entry reserves $B$ slots ($32 times 64$ B = 2 KB) even for small batches; total $16 times 2$ KB = 32 KB
+- *No contiguity requirement* across batches -- each entry is self-contained
 
 This strategy serves as an ablation baseline: it isolates the benefit of having 16 in-flight batches (vs. double-buffered's 2) from the ring-buffer's tighter memory packing.
 
@@ -413,9 +413,9 @@ This strategy serves as an ablation baseline: it isolates the benefit of having 
 - *Wrap-around:* if the next slot crosses the ring boundary, the current batch is sealed early and a new one starts at index 0 (ensures contiguity for DMA).
 
 *Advantages over double-buffered:*
-- *No blocking* --- 16 batch slots vs. 2
-- *Better utilization* --- consistently full batches instead of partial ones from frequent `poll()`
-- *No wasted space* --- batches use exactly the descriptor slots they need
+- *No blocking* -- 16 batch slots vs. 2
+- *Better utilization* -- consistently full batches instead of partial ones from frequent `poll()`
+- *No wasted space* -- batches use exactly the descriptor slots they need
 
 === Wrap-Around
 
@@ -547,7 +547,7 @@ This strategy serves as an ablation baseline: it isolates the benefit of having 
 // ══════════════════════════════════════════════════════════════
 = Benchmark Results
 
-All benchmarks: sliding window, inline polling, NoLock queue, concurrency 16, 8-byte messages, 75k ops/iter, 3 iterations.
+All benchmarks: sliding window, inline polling, NoLock queue, concurrency 16, 8-byte messages, 75k ops/iter, 3 iterations. Platform: Intel 4th Gen Xeon Scalable, DSA configured via `accel-config`.
 
 == Message Rate
 
@@ -598,7 +598,7 @@ Largest gains on lightweight ops (mem\_fill, compare) where software overhead do
 Average latency drops 30--46% for lightweight ops. The p99 for copy\_crc and cache\_flush shows slight regression, likely from occasional wrap-around batch splits.
 
 // ══════════════════════════════════════════════════════════════
-= Why Ring-Buffer Is Faster
+= Performance Analysis
 
 #keypoint[
   Three factors explain the 1.2--2.0x speedup:
@@ -681,6 +681,6 @@ All classes are templated on queue type (`SingleThreadTaskQueue`, `MutexTaskQueu
 = Future Work
 
 - *Higher concurrency benchmarks* at 32--64 to validate ring depth sufficiency
-- *Shared WQ contention* measurements --- batching reduces `ENQCMD` retries on multi-tenant systems
+- *Shared WQ contention* measurements -- batching reduces `ENQCMD` retries on multi-tenant systems
 - *Adaptive batch sizing* based on submission rate and hardware queue depth
 - *Explicit batch sender* API: `dsa_batch(sender1, sender2, ...)` for application-level ordering

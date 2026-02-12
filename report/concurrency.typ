@@ -55,7 +55,7 @@ The dsa-stdexec framework implements five scheduling strategies for dispatching 
     [Scoped Workers],     [$approx$0], [---],          [Full],  [$N$ coroutines with `co_await`],
   ),
   caption: [Strategy overview. $C$ = concurrency level. "Overlap" indicates whether new operations can start before previous ones complete.]
-) <overview>
+) <overview-fig>
 
 All five strategies share the same function signature and are dispatched through a $5 times 2$ strategy table (5 patterns $times$ 2 polling modes):
 
@@ -238,11 +238,11 @@ for each operation:
 ```
 
 *Trade-offs:*
-- Simplest strategy (~30 lines). Full pipeline overlap.
-- One heap allocation per `scope.spawn()` call. At >1M ops/sec, allocation cost becomes visible.
+- Simplest strategy (~30 lines); full pipeline overlap
+- One heap allocation per `scope.spawn()` call; at >1M ops/sec, allocation cost becomes visible
 
 // ──────────────────────────────────────────────────────────────
-== Sliding Window --- No-Alloc <noalloc>
+== Sliding Window: No-Alloc <noalloc>
 
 #keypoint[
   *Idea:* Pre-allocate $C$ operation slots at startup, each sized at compile time to exactly fit `connect_result_t<Sender, SlotReceiver>`. Use placement `new` instead of heap allocation. A `ready` flag gates reuse.
@@ -305,12 +305,12 @@ constexpr size_t SlotSize = sizeof(connect_result_t<
 `SlotReceiver` is a minimal receiver that sets `slot->ready = true` on any completion signal (`set_value`, `set_error`, `set_stopped`).
 
 *Trade-offs:*
-- Zero heap allocations in the hot path.
-- $O(C)$ linear scan to find a free slot. At $C <= 32$, this is a few atomic loads.
-- Different slot sizes for inline vs. threaded (threaded wraps in `schedule() | let_value(...)`).
+- Zero heap allocations in the hot path
+- $O(C)$ linear scan to find a free slot; at $C <= 32$, this is a few atomic loads
+- Different slot sizes for inline vs. threaded (threaded wraps in `schedule() | let_value(...)`)
 
 // ──────────────────────────────────────────────────────────────
-== Sliding Window --- Arena <arena>
+== Sliding Window: Arena <arena>
 
 #keypoint[
   *Idea:* Replace the $O(C)$ scan with an $O(1)$ intrusive free-list. On completion, `ArenaReceiver` pushes the slot back onto the list. Inspired by RDMA (ibverbs) and UCX buffer pool designs.
@@ -381,9 +381,9 @@ struct ArenaReceiver {
 ```
 
 *Trade-offs:*
-- $O(1)$ slot acquisition and release via pointer manipulation.
-- No atomics on the free list itself (single-threaded).
-- Slightly different slot size than No-Alloc (different receiver type in `connect_result_t`).
+- $O(1)$ slot acquisition and release via pointer manipulation
+- No atomics on the free list itself (single-threaded)
+- Slightly different slot size than No-Alloc (different receiver type in `connect_result_t`)
 
 // ──────────────────────────────────────────────────────────────
 == Batch <batch>
@@ -445,9 +445,9 @@ for op_idx = 0 to num_ops step C:
 ```
 
 *Trade-offs:*
-- Simplest mental model: submit $N$, wait, repeat.
-- No pipeline overlap --- hardware idles at barriers while waiting for the slowest operation.
-- Requires `loop.reset()` between batches (inline mode sets a stop flag).
+- Simplest mental model: submit $N$, wait, repeat
+- No pipeline overlap -- hardware idles at barriers waiting for the slowest operation
+- Requires `loop.reset()` between batches (inline mode sets a stop flag)
 
 // ──────────────────────────────────────────────────────────────
 == Scoped Workers <scoped-workers>
@@ -519,9 +519,9 @@ exec::task<void> worker(DsaProxy &dsa, ..., size_t worker_id) {
 ```
 
 *Trade-offs:*
-- Most natural code --- a simple sequential loop with `co_await`.
-- One coroutine frame allocation per worker (amortized over all ops, not per-op).
-- Only strategy that directly `co_await`s DSA senders; all others use `scope.spawn()`.
+- Most natural code -- a simple sequential loop with `co_await`
+- One coroutine frame allocation per worker (amortized over all ops, not per-op)
+- Only strategy that directly `co_await`s DSA senders; all others use `scope.spawn()`
 
 // ══════════════════════════════════════════════════════════════
 = Pipeline Overlap
@@ -672,7 +672,7 @@ This pattern applies to any P2300 sender pipeline where allocation overhead matt
 // ══════════════════════════════════════════════════════════════
 = Future Work
 
-- *Lock-free arena* --- A Treiber stack variant of `SlotArena` for safe use when submission and completion run on different threads.
-- *Adaptive concurrency* --- Dynamically adjust the window size based on observed throughput, similar to TCP congestion control.
-- *Work stealing* --- Replace round-robin partitioning in scoped workers with a work-stealing scheduler for uneven operation latencies.
-- *Hybrid coroutine + arena* --- Combine the ergonomics of `co_await` with pre-allocated coroutine frames to achieve zero allocation and natural syntax simultaneously.
+- *Lock-free arena* -- Treiber stack variant of `SlotArena` for safe use when submission and completion run on different threads
+- *Adaptive concurrency* -- dynamically adjust window size based on observed throughput, similar to TCP congestion control
+- *Work stealing* -- replace round-robin partitioning in scoped workers with a work-stealing scheduler for uneven operation latencies
+- *Hybrid coroutine + arena* -- combine `co_await` ergonomics with pre-allocated coroutine frames for zero allocation and natural syntax
