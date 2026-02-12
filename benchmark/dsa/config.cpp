@@ -103,8 +103,9 @@ std::vector<SchedulingPattern> all_scheduling_patterns() {
 
 const char* submission_strategy_name(SubmissionStrategy s) {
   switch (s) {
-    case SubmissionStrategy::Immediate: return "immediate";
-    case SubmissionStrategy::HwBatch:   return "hw_batch";
+    case SubmissionStrategy::Immediate:  return "immediate";
+    case SubmissionStrategy::HwBatch:    return "hw_batch";
+    case SubmissionStrategy::RingBatch:  return "ring_batch";
   }
   return "unknown";
 }
@@ -121,7 +122,7 @@ std::vector<SubmissionStrategy> default_submission_strategies() {
 }
 
 std::vector<SubmissionStrategy> all_submission_strategies() {
-  return {SubmissionStrategy::Immediate, SubmissionStrategy::HwBatch};
+  return {SubmissionStrategy::Immediate, SubmissionStrategy::HwBatch, SubmissionStrategy::RingBatch};
 }
 
 // ============================================================================
@@ -318,6 +319,7 @@ void print_usage(const char *prog) {
   fmt::println("Submission strategy (can combine multiple):");
   fmt::println("  --immediate         1:1 doorbell per descriptor (default)");
   fmt::println("  --hw-batch          Transparent hardware batch submission");
+  fmt::println("  --ring-batch        Ring-buffer based hardware batch submission");
   fmt::println("");
   fmt::println("Queue types:");
   fmt::println("  --queue=<type>      Run only specified queue type(s), comma-separated");
@@ -376,8 +378,9 @@ static const FlagMapping pattern_flags[] = {
 };
 
 static const FlagMapping submission_flags[] = {
-  {"--immediate", "immediate"},
-  {"--hw-batch",  "hw_batch"},
+  {"--immediate",   "immediate"},
+  {"--hw-batch",    "hw_batch"},
+  {"--ring-batch",  "ring_batch"},
 };
 
 // Try to match `arg` against a flag table. If matched, add the enum name to `collector`.

@@ -12,6 +12,7 @@
 #include <cstring>
 #include <dsa/dsa.hpp>
 #include <dsa/dsa_batch.hpp>
+#include <dsa/dsa_ring_batch.hpp>
 #include <dsa/task_queue.hpp>
 #include <dsa_stdexec/dsa_facade.hpp>
 #include <dsa_stdexec/operations/data_move.hpp>
@@ -121,11 +122,12 @@ void export_to_csv(const std::string &filename,
 }
 
 // Run a single queue type benchmark, creating the right concrete DSA type.
-static DsaProxy make_dsa(QueueType qt, bool use_hw_batch, bool use_threaded_polling) {
+static DsaProxy make_dsa(QueueType qt, SubmissionStrategy ss, bool use_threaded_polling) {
   using dsa_stdexec::make_dsa_proxy;
   bool poller = (qt == QueueType::NoLock) ? false : use_threaded_polling;
 
-  if (use_hw_batch) {
+  switch (ss) {
+  case SubmissionStrategy::HwBatch:
     switch (qt) {
       case QueueType::NoLock:   return make_dsa_proxy<DsaBatchSingleThread>(poller);
       case QueueType::Mutex:    return make_dsa_proxy<DsaBatch>(poller);
@@ -134,7 +136,18 @@ static DsaProxy make_dsa(QueueType qt, bool use_hw_batch, bool use_threaded_poll
       case QueueType::Backoff:  return make_dsa_proxy<DsaBatchBackoffSpinlock>(poller);
       case QueueType::LockFree: return make_dsa_proxy<DsaBatchLockFree>(poller);
     }
-  } else {
+    break;
+  case SubmissionStrategy::RingBatch:
+    switch (qt) {
+      case QueueType::NoLock:   return make_dsa_proxy<DsaRingBatchSingleThread>(poller);
+      case QueueType::Mutex:    return make_dsa_proxy<DsaRingBatch>(poller);
+      case QueueType::TAS:      return make_dsa_proxy<DsaRingBatchTasSpinlock>(poller);
+      case QueueType::TTAS:     return make_dsa_proxy<DsaRingBatchSpinlock>(poller);
+      case QueueType::Backoff:  return make_dsa_proxy<DsaRingBatchBackoffSpinlock>(poller);
+      case QueueType::LockFree: return make_dsa_proxy<DsaRingBatchLockFree>(poller);
+    }
+    break;
+  case SubmissionStrategy::Immediate:
     switch (qt) {
       case QueueType::NoLock:   return make_dsa_proxy<DsaSingleThread>(poller);
       case QueueType::Mutex:    return make_dsa_proxy<Dsa>(poller);
@@ -143,15 +156,16 @@ static DsaProxy make_dsa(QueueType qt, bool use_hw_batch, bool use_threaded_poll
       case QueueType::Backoff:  return make_dsa_proxy<DsaBackoffSpinlock>(poller);
       case QueueType::LockFree: return make_dsa_proxy<DsaLockFree>(poller);
     }
+    break;
   }
   __builtin_unreachable();
 }
 
-static DsaMetric run_one_queue(QueueType qt, bool use_hw_batch, bool use_threaded_polling,
+static DsaMetric run_one_queue(QueueType qt, SubmissionStrategy ss, bool use_threaded_polling,
                                size_t concurrency, size_t msg_size, size_t total_bytes,
                                int iterations, BufferSet &bufs,
                                const RunFunction &run_fn, ProgressBar *progress) {
-  auto dsa = make_dsa(qt, use_hw_batch, use_threaded_polling);
+  auto dsa = make_dsa(qt, ss, use_threaded_polling);
   return run_benchmark(dsa, concurrency, msg_size, total_bytes, iterations, bufs, run_fn, progress);
 }
 
@@ -174,7 +188,7 @@ std::vector<BenchmarkResult> run_all_queues(
     PollingMode pm,
     OperationType op_type,
     const char *pattern_name,
-    bool use_hw_batch = false) {
+    SubmissionStrategy ss = SubmissionStrategy::Immediate) {
 
   bool use_threaded_polling = (pm == PollingMode::Threaded);
   std::vector<BenchmarkResult> results;
@@ -211,7 +225,7 @@ std::vector<BenchmarkResult> run_all_queues(
         if (qt == QueueType::NoLock && use_threaded_polling) continue;
 
         result_field(result, qt) = run_one_queue(
-            qt, use_hw_batch, use_threaded_polling,
+            qt, ss, use_threaded_polling,
             concurrency, msg_size, effective_total_bytes,
             config.iterations, bufs, run_fn, &progress);
       }
@@ -255,16 +269,18 @@ void benchmark_queues_with_dsa(const BenchmarkConfig &config) {
     for (auto sp : config.scheduling_patterns) {
       for (auto pm : config.polling_modes) {
         for (auto ss : config.submission_strategies) {
-          bool hw_batch = (ss == SubmissionStrategy::HwBatch);
           const char *sp_name = scheduling_pattern_name(sp);
           const char *pm_name = polling_mode_name(pm);
+          const char *ss_name = submission_strategy_name(ss);
           std::string label_name = sp_name;
-          if (hw_batch) label_name += "_hwbatch";
+          if (ss != SubmissionStrategy::Immediate) {
+            label_name += "_";
+            label_name += ss_name;
+          }
 
-          fmt::println("Running {} {} + {} polling{}...", op_name, sp_name, pm_name,
-                       hw_batch ? " (hw batch)" : "");
+          fmt::println("Running {} {} + {} polling ({})...", op_name, sp_name, pm_name, ss_name);
           auto results = run_all_queues(config, bufs, sp, pm, op_type,
-                                         label_name.c_str(), hw_batch);
+                                         label_name.c_str(), ss);
           all_results.emplace_back(fmt::format("{}__{}_{}", op_name, label_name, pm_name),
                                     std::move(results));
           fmt::println("");
