@@ -4,7 +4,7 @@ void run_sliding_window_inline(DsaProxy &dsa, exec::async_scope &scope,
                                size_t concurrency, size_t msg_size, size_t total_bytes,
                                BufferSet &bufs, LatencyCollector &latency,
                                OperationType op_type) {
-  dsa_stdexec::PollingRunLoop loop([&dsa] { dsa.flush(); dsa.poll(); });
+  dsa_stdexec::PollingRunLoop loop([&dsa] { dsa.poll(); });
 
   size_t num_ops = total_bytes / msg_size;
   std::atomic<size_t> in_flight{0};
@@ -16,7 +16,6 @@ void run_sliding_window_inline(DsaProxy &dsa, exec::async_scope &scope,
       spawn_op(dsa, scope, op_type, bufs, offset, msg_size, latency, &in_flight);
       ++next_op;
     }
-    dsa.flush();
     dsa.poll();
   }
 

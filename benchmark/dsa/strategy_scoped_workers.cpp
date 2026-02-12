@@ -51,7 +51,7 @@ void run_scoped_workers_inline(DsaProxy &dsa, exec::async_scope &scope,
                                size_t concurrency, size_t msg_size, size_t total_bytes,
                                BufferSet &bufs, LatencyCollector &latency,
                                OperationType op_type) {
-  dsa_stdexec::PollingRunLoop loop([&dsa] { dsa.flush(); dsa.poll(); });
+  dsa_stdexec::PollingRunLoop loop([&dsa] { dsa.poll(); });
   auto scheduler = loop.get_scheduler();
 
   size_t num_ops = total_bytes / msg_size;

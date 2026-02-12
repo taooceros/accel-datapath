@@ -16,7 +16,7 @@ static void sliding_window_arena_impl_inline(
     size_t concurrency, size_t msg_size, size_t total_bytes,
     BufferSet &bufs, LatencyCollector &latency,
     MakeSender make_sender) {
-  dsa_stdexec::PollingRunLoop loop([&dsa] { dsa.flush(); dsa.poll(); });
+  dsa_stdexec::PollingRunLoop loop([&dsa] { dsa.poll(); });
 
   constexpr size_t SlotSize = inline_arena_slot_size<MakeSender>();
   size_t num_ops = total_bytes / msg_size;
@@ -36,7 +36,6 @@ static void sliding_window_arena_impl_inline(
         ArenaReceiver<SlotSize>{&arena, slot});
       ++next_op;
     }
-    dsa.flush();
     dsa.poll();
   }
 

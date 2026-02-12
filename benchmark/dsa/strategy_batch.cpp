@@ -4,7 +4,7 @@ void run_batch_inline(DsaProxy &dsa, exec::async_scope &scope,
                       size_t concurrency, size_t msg_size, size_t total_bytes,
                       BufferSet &bufs, LatencyCollector &latency,
                       OperationType op_type) {
-  dsa_stdexec::PollingRunLoop loop([&dsa] { dsa.flush(); dsa.poll(); });
+  dsa_stdexec::PollingRunLoop loop([&dsa] { dsa.poll(); });
 
   size_t num_ops = total_bytes / msg_size;
   size_t op_idx = 0;
@@ -15,7 +15,6 @@ void run_batch_inline(DsaProxy &dsa, exec::async_scope &scope,
       size_t offset = i * msg_size;
       spawn_op(dsa, scope, op_type, bufs, offset, msg_size, latency);
     }
-    dsa.flush();
     dsa_stdexec::wait_start(scope.on_empty(), loop);
     loop.reset();
     op_idx = batch_end;

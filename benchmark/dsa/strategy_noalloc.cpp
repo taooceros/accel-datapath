@@ -6,7 +6,7 @@ static void sliding_window_noalloc_impl_inline(
     size_t concurrency, size_t msg_size, size_t total_bytes,
     BufferSet &bufs, LatencyCollector &latency,
     MakeSender make_sender) {
-  dsa_stdexec::PollingRunLoop loop([&dsa] { dsa.flush(); dsa.poll(); });
+  dsa_stdexec::PollingRunLoop loop([&dsa] { dsa.poll(); });
 
   constexpr size_t SlotSize = inline_noalloc_slot_size<MakeSender>();
   size_t num_ops = total_bytes / msg_size;
@@ -27,7 +27,6 @@ static void sliding_window_noalloc_impl_inline(
       slot->start_op(scope.nest(make_sender(offset) | stdexec::then(record)));
       ++next_op;
     }
-    dsa.flush();
     dsa.poll();
   }
 
