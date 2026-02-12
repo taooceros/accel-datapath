@@ -17,6 +17,7 @@ scoped_workers = false          # N worker coroutines processing items sequentia
 # Submission strategy - how descriptors are sent to hardware
 immediate = false    # DsaBase: 1:1 doorbell per descriptor (existing behavior)
 hw_batch = true     # DsaBatchBase: stage descriptors, submit as hardware batch (opcode 0x01)
+fixed_ring_batch = true  # DsaFixedRingBatchBase: fixed-size ring batch (ablation study)
 ring_batch = true    # DsaRingBatchBase: ring-buffer based hardware batch
 
 [queues]

@@ -49,16 +49,17 @@ DSA processes work by receiving 64-byte descriptors through MMIO. Each doorbell 
     table.header[*Strategy*][*Doorbells/$N$*][*In-flight*][*Blocks?*][*Key idea*],
     [Immediate],       [$N$],           [N/A],  [No],  [1 doorbell per descriptor],
     [Double-Buffered], [$ceil(N\/B)$],  [2],    [Yes], [Two fixed arrays, swap on submit],
+    [Fixed-Ring],      [$ceil(N\/B)$],  [16],   [No],  [Ring of fixed-size batch entries],
     [Ring-Buffer],     [$ceil(N\/B)$],  [16],   [No],  [Shared descriptor ring + batch metadata ring],
   ),
   caption: [Strategy overview. $N$ = operations, $B$ = max batch size (typically 32).]
 ) <overview>
 
 #keypoint[
-  *Key result:* Ring-buffer batching achieves *1.2--2.0x* higher message rates than double-buffered batching across all 8 DSA operations, by eliminating submission blocking and improving batch utilization.
+  *Key result:* Ring-buffer batching achieves *1.2--2.0x* higher message rates than double-buffered batching across all 8 DSA operations, by eliminating submission blocking and improving batch utilization. Fixed-ring batching (ablation study) confirms that most of the gain comes from deeper in-flight capacity (16 vs. 2 batches), not memory packing.
 ]
 
-All three strategies present the same interface through `DsaProxy` type erasure --- scheduling strategies work identically across all backends.
+All four strategies present the same interface through `DsaProxy` type erasure --- scheduling strategies work identically across all backends.
 
 // ══════════════════════════════════════════════════════════════
 = How Batching Works
@@ -200,6 +201,98 @@ Hardware constraints for the batch opcode:
 - *Submission blocks* on the previous batch (only 2 buffers)
 - *Effective batch size driven by poll frequency* --- at low concurrency, most batches are size 1--4
 - *Fixed-size buffers* waste space (32 slots reserved regardless of usage)
+
+== Fixed-Ring (`DsaFixedRingBatchBase`) <fixed-ring>
+
+#keypoint[
+  *Idea:* A ring of 16 fixed-size batch entries, each owning a contiguous 32-slot descriptor array plus a batch completion record. Eliminates the double-buffered blocking problem (16 slots vs. 2) without the wrap-around complexity of a shared descriptor ring.
+]
+
+#figure(
+  cetz.canvas(length: 1cm, {
+    import cetz.draw: *
+
+    content((6, 6.5), text(size: 9pt, weight: "bold")[Fixed-Ring Batch Architecture])
+
+    // ── Batch entry ring ──
+    content((-1.8, 5.0), text(size: 8pt, weight: "bold")[Batch\ Entry Ring])
+    content((-1.8, 4.4), text(size: 6pt, fill: luma(100))[16 entries])
+
+    let bw = 2.2
+    let bh = 2.2
+    let entries = (
+      ("InFlight", col-inflt.lighten(30%), "3/32 used"),
+      ("InFlight", col-inflt.lighten(50%), "4/32 used"),
+      ("Filling",  col-fill,               "2/32 used"),
+      ("Free",     col-idle,               "32 reserved"),
+      ("Free",     col-idle,               "32 reserved"),
+    )
+
+    for (i, (state, fill_c, info)) in entries.enumerate() {
+      let x = i * (bw + 0.2)
+      rect((x, 3.0), (x + bw, 3.0 + bh), fill: fill_c, stroke: 0.3pt, radius: 3pt)
+      content((x + bw/2, 4.8), text(size: 6.5pt, weight: "bold", fill: if state == "Free" { luma(160) } else { white })[#state])
+
+      // Draw descriptor slots inside each entry
+      let sw = 0.22
+      let rows = 2
+      let cols = 4
+      for r in range(rows) {
+        for c in range(cols) {
+          let sx = x + 0.2 + c * (sw + 0.05)
+          let sy = 4.0 + r * (sw + 0.05)
+          let slot_fill = if state == "Free" {
+            col-idle.lighten(30%)
+          } else if state == "Filling" and (r * cols + c) >= 2 {
+            col-idle
+          } else {
+            if state == "Filling" { col-fill.lighten(20%) } else { fill_c.lighten(20%) }
+          }
+          rect((sx, sy), (sx + sw, sy + sw), fill: slot_fill, stroke: 0.2pt, radius: 1pt)
+        }
+      }
+
+      content((x + bw/2, 3.6), text(size: 5.5pt, fill: if state == "Free" { luma(160) } else { white.darken(10%) })[#info])
+
+      if state != "Free" {
+        rect((x + 0.2, 3.1), (x + bw - 0.2, 3.35), fill: white.transparentize(70%), stroke: 0.2pt, radius: 2pt)
+        content((x + bw/2, 3.22), text(size: 5pt)[batch\_comp])
+      }
+    }
+
+    line((0, 2.8), (0, 3.0), stroke: (paint: col-done, thickness: 1pt))
+    content((0, 2.6), text(size: 6pt, fill: col-done, weight: "bold")[batch\_head])
+
+    line((2 * (bw + 0.2) + bw/2, 2.8), (2 * (bw + 0.2) + bw/2, 3.0), stroke: (paint: col-fill, thickness: 1pt))
+    content((2 * (bw + 0.2) + bw/2, 2.6), text(size: 6pt, fill: col-fill, weight: "bold")[batch\_fill])
+
+    let ly = 2.0
+    rect((0, ly), (0.6, ly + 0.3), fill: col-inflt.lighten(30%), radius: 2pt)
+    content((1.4, ly + 0.15), text(size: 6pt)[in-flight])
+    rect((2.3, ly), (2.9, ly + 0.3), fill: col-fill, radius: 2pt)
+    content((3.6, ly + 0.15), text(size: 6pt)[filling])
+    rect((4.4, ly), (5.0, ly + 0.3), fill: col-idle, radius: 2pt)
+    content((5.6, ly + 0.15), text(size: 6pt)[free])
+
+    content((6, 1.5), text(size: 6.5pt, fill: col-alloc)[
+      Each entry reserves 32 descriptor slots\ regardless of actual batch size.
+    ])
+  }),
+  caption: [Fixed-ring architecture. Each batch entry owns a private 32-slot descriptor array. Unused slots (grey) are wasted when batches are small.]
+) <fixed-ring-fig>
+
+*How it works:*
+- `submit()` copies the descriptor into the current Filling entry's private array. When `count >= max_batch_size_`, the entry is sealed and submitted as a hardware batch.
+- `poll()` seals any partial Filling entry, then reclaims completed InFlight entries in order.
+- No wrap-around logic needed --- each entry's descriptor array is independent.
+
+*Trade-offs:*
+- *No blocking* (same as ring-buffer) --- 16 batch slots provide sufficient depth to avoid submission stalls.
+- *Simpler state management* --- only `batch_fill_` and `batch_head_`, no `desc_head_`/`desc_tail_` tracking.
+- *Wastes descriptor space* --- each entry reserves $B$ slots ($32 times 64$ B = 2 KB) even when the actual batch is small. Total: $16 times 2$ KB = 32 KB.
+- *No contiguity requirement across batches* --- each entry is self-contained.
+
+This strategy serves as an ablation baseline: it isolates the benefit of having 16 in-flight batches (vs. double-buffered's 2) from the ring-buffer's tighter memory packing.
 
 == Ring-Buffer (`DsaRingBatchBase`) <ring-buffer>
 
@@ -410,8 +503,8 @@ Hardware constraints for the batch opcode:
     content((tw + 0.3, 2.35), text(size: 7pt, fill: col-hw, weight: "bold")[3])
     content((8.5, 2.35), text(size: 6pt, fill: luma(130))[(partial batches from poll)])
 
-    // ── Ring-Buffer ──
-    content((-2.0, 0.9), text(size: 8pt, weight: "bold")[Ring-\ Buffer])
+    // ── Fixed-Ring ──
+    content((-2.0, 0.9), text(size: 8pt, weight: "bold")[Fixed-\ Ring])
     for i in range(4) {
       let x = i * 0.75
       rect((x, 0.4), (x + 0.7, 0.9), fill: col-desc, radius: 2pt)
@@ -427,9 +520,28 @@ Hardware constraints for the batch opcode:
     rect((6.65, 0.4), (6.95, 0.9), fill: col-hw, radius: 2pt)
     content((6.8, 0.65), text(fill: white, size: 5pt)[!])
     content((tw + 0.3, 0.65), text(size: 7pt, fill: col-done, weight: "bold")[2])
-    content((8.0, 0.65), text(size: 6pt, fill: luma(130))[(always full batches)])
+    content((8.0, 0.65), text(size: 6pt, fill: luma(130))[(same as ring-buffer)])
+
+    // ── Ring-Buffer ──
+    content((-2.0, -0.8), text(size: 8pt, weight: "bold")[Ring-\ Buffer])
+    for i in range(4) {
+      let x = i * 0.75
+      rect((x, -1.3), (x + 0.7, -0.8), fill: col-desc, radius: 2pt)
+      content((x + 0.35, -1.05), text(fill: white, size: 5.5pt)[d#str(i)])
+    }
+    rect((3.05, -1.3), (3.35, -0.8), fill: col-hw, radius: 2pt)
+    content((3.2, -1.05), text(fill: white, size: 5pt)[!])
+    for i in range(4) {
+      let x = 3.6 + i * 0.75
+      rect((x, -1.3), (x + 0.7, -0.8), fill: col-desc, radius: 2pt)
+      content((x + 0.35, -1.05), text(fill: white, size: 5.5pt)[d#str(i+4)])
+    }
+    rect((6.65, -1.3), (6.95, -0.8), fill: col-hw, radius: 2pt)
+    content((6.8, -1.05), text(fill: white, size: 5pt)[!])
+    content((tw + 0.3, -1.05), text(size: 7pt, fill: col-done, weight: "bold")[2])
+    content((8.0, -1.05), text(size: 6pt, fill: luma(130))[(always full batches)])
   }),
-  caption: [Doorbell count comparison for 8 operations. Immediate: 8. Double-buffered: 3 (partial batches from `poll()`). Ring-buffer: 2 (always full batches of $B$).]
+  caption: [Doorbell count comparison for 8 operations. Immediate: 8. Double-buffered: 3 (partial batches from `poll()`). Fixed-ring and ring-buffer: 2 (always full batches of $B$).]
 ) <doorbell-cost-fig>
 
 // ══════════════════════════════════════════════════════════════
@@ -493,6 +605,8 @@ Average latency drops 30--46% for lightweight ops. The p99 for copy\_crc and cac
   + *No submission blocking* --- 16 batch slots vs. 2. Back-pressure is extremely rare.
   + *Better batch utilization* --- auto-submit at `max_batch_size_` yields consistently full batches, whereas double-buffered submits partials on every `poll()`.
   + *No wasted descriptor space* --- tightly packed ring vs. $2 times 32$ fixed slots.
+
+  The fixed-ring ablation (@fixed-ring) shares factors 1 and 2 but not 3: it also uses 16 in-flight batches with auto-submit, yet wastes descriptor space like double-buffered. Its performance closely matches ring-buffer, confirming that in-flight depth --- not memory packing --- is the dominant factor.
 ]
 
 // ══════════════════════════════════════════════════════════════
@@ -500,18 +614,19 @@ Average latency drops 30--46% for lightweight ops. The p99 for copy\_crc and cac
 
 #figure(
   table(
-    columns: 4,
-    align: (left, center, center, center),
+    columns: 5,
+    align: (left, center, center, center, center),
     stroke: 0.5pt,
     inset: 6pt,
     fill: (_, y) => if y == 0 { rgb("#f8fafc") },
-    table.header[*Property*][*Immediate*][*Double-Buffered*][*Ring-Buffer*],
-    [Doorbells per $N$ ops], [$N$], [$ceil(N \/ B)$], [$ceil(N \/ B)$],
-    [Staging buffers], [None], [2 fixed arrays], [1 shared ring],
-    [Max in-flight batches], [N/A], [2], [16],
-    [Submit blocks?], [No], [Yes (on prev batch)], [No],
-    [Descriptor waste], [None], [Up to $2 times 32$ slots], [Only at wrap],
-    [Memory footprint], [0], [$approx$4 KB], [$approx$16 KB],
+    table.header[*Property*][*Immediate*][*Double-Buffered*][*Fixed-Ring*][*Ring-Buffer*],
+    [Doorbells per $N$ ops], [$N$], [$ceil(N \/ B)$], [$ceil(N \/ B)$], [$ceil(N \/ B)$],
+    [Staging buffers], [None], [2 fixed arrays], [16 fixed arrays], [1 shared ring],
+    [Max in-flight batches], [N/A], [2], [16], [16],
+    [Submit blocks?], [No], [Yes (on prev batch)], [No], [No],
+    [Descriptor waste], [None], [Up to $2 times 32$ slots], [Up to $16 times 32$ slots], [Only at wrap],
+    [Memory footprint], [0], [$approx$4 KB], [$approx$32 KB], [$approx$17 KB],
+    [Wrap-around handling], [N/A], [N/A], [N/A], [Early batch seal],
   ),
   caption: [Comparison of submission strategies. $B$ = max batch size (typically 32).]
 ) <comparison-table>
@@ -535,12 +650,28 @@ Average latency drops 30--46% for lightweight ops. The p99 for copy\_crc and cac
   caption: [Ring-buffer sizing parameters.]
 )
 
+#figure(
+  table(
+    columns: 3,
+    align: (left, right, left),
+    stroke: 0.5pt,
+    inset: 6pt,
+    fill: (_, y) => if y == 0 { rgb("#f8fafc") },
+    table.header[*Parameter*][*Value*][*Rationale*],
+    [`kMaxBatches`], [16], [Same depth as ring-buffer],
+    [`kBatchCapacity`], [32], [Per-entry descriptor array size],
+    [`max_batch_size_`], [min(hw, 32)], [Per-batch limit from hardware],
+    [Total memory], [$approx$34 KB], [16 #sym.times (32 #sym.times 64 B + 32 B comp)],
+  ),
+  caption: [Fixed-ring sizing parameters. Higher memory footprint than ring-buffer due to per-entry fixed arrays.]
+)
+
 // ══════════════════════════════════════════════════════════════
 = Implementation
 
 == Type Erasure and Composition
 
-All three strategies satisfy the `DsaFacade` interface via Microsoft's proxy library. `DsaProxy` wraps any concrete DSA type, enabling runtime strategy selection. Both `DsaBatchBase` and `DsaRingBatchBase` use composition (contain a `DsaBase` inner instance) rather than inheritance.
+All four strategies satisfy the `DsaFacade` interface via Microsoft's proxy library. `DsaProxy` wraps any concrete DSA type, enabling runtime strategy selection. `DsaBatchBase`, `DsaFixedRingBatchBase`, and `DsaRingBatchBase` all use composition (contain a `DsaBase` inner instance) rather than inheritance.
 
 == Template Parameterization
 

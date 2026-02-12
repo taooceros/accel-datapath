@@ -58,8 +58,8 @@ target("dsa_benchmark")
     add_cxxflags("-mmovdir64b")
     add_files("src/dsa/dsa_instantiate.cpp")
     add_files("src/dsa/dsa_batch_instantiate.cpp")
-    add_files("src/dsa/dsa_ring_batch_instantiate.cpp")
     add_files("src/dsa/dsa_fixed_ring_batch_instantiate.cpp")
+    add_files("src/dsa/dsa_ring_batch_instantiate.cpp")
 
 
 target("dsa_benchmark_static")
@@ -77,8 +77,8 @@ target("dsa_benchmark_static")
     add_cxxflags("-mmovdir64b")
     add_files("src/dsa/dsa_instantiate.cpp")
     add_files("src/dsa/dsa_batch_instantiate.cpp")
-    add_files("src/dsa/dsa_ring_batch_instantiate.cpp")
     add_files("src/dsa/dsa_fixed_ring_batch_instantiate.cpp")
+    add_files("src/dsa/dsa_ring_batch_instantiate.cpp")
 
 
 target("dsa_launcher")

@@ -31,7 +31,7 @@ std::optional<SchedulingPattern> parse_scheduling_pattern(std::string_view name)
 std::vector<SchedulingPattern> default_scheduling_patterns();
 std::vector<SchedulingPattern> all_scheduling_patterns();
 
-enum class SubmissionStrategy { Immediate, HwBatch, RingBatch, FixedRingBatch };
+enum class SubmissionStrategy { Immediate, HwBatch, FixedRingBatch, RingBatch };
 
 const char* submission_strategy_name(SubmissionStrategy s);
 std::optional<SubmissionStrategy> parse_submission_strategy(std::string_view name);
