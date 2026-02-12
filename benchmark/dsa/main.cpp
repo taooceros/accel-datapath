@@ -12,6 +12,7 @@
 #include <cstring>
 #include <dsa/dsa.hpp>
 #include <dsa/dsa_batch.hpp>
+#include <dsa/dsa_fixed_ring_batch.hpp>
 #include <dsa/dsa_ring_batch.hpp>
 #include <dsa/task_queue.hpp>
 #include <dsa_stdexec/dsa_facade.hpp>
@@ -145,6 +146,16 @@ static DsaProxy make_dsa(QueueType qt, SubmissionStrategy ss, bool use_threaded_
       case QueueType::TTAS:     return make_dsa_proxy<DsaRingBatchSpinlock>(poller);
       case QueueType::Backoff:  return make_dsa_proxy<DsaRingBatchBackoffSpinlock>(poller);
       case QueueType::LockFree: return make_dsa_proxy<DsaRingBatchLockFree>(poller);
+    }
+    break;
+  case SubmissionStrategy::FixedRingBatch:
+    switch (qt) {
+      case QueueType::NoLock:   return make_dsa_proxy<DsaFixedRingBatchSingleThread>(poller);
+      case QueueType::Mutex:    return make_dsa_proxy<DsaFixedRingBatch>(poller);
+      case QueueType::TAS:      return make_dsa_proxy<DsaFixedRingBatchTasSpinlock>(poller);
+      case QueueType::TTAS:     return make_dsa_proxy<DsaFixedRingBatchSpinlock>(poller);
+      case QueueType::Backoff:  return make_dsa_proxy<DsaFixedRingBatchBackoffSpinlock>(poller);
+      case QueueType::LockFree: return make_dsa_proxy<DsaFixedRingBatchLockFree>(poller);
     }
     break;
   case SubmissionStrategy::Immediate:
