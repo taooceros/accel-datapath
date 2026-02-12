@@ -104,6 +104,27 @@
     exec "$LAUNCHER" "$BENCHMARK" "$@"
   '';
 
+  # https://devenv.sh/scripts/
+  scripts.profile.exec = ''
+    MODE=$(xmake show 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep 'mode:' | awk '{print $2}')
+    BUILD_DIR="./build/linux/x86_64/$MODE"
+    LAUNCHER="$BUILD_DIR/dsa_launcher"
+    BENCHMARK="$BUILD_DIR/dsa_benchmark"
+
+    if [ ! -f "$LAUNCHER" ]; then
+      echo "Launcher not found. Building dsa_launcher..."
+      xmake build dsa_launcher
+    fi
+
+    if [ ! -f "$BENCHMARK" ]; then
+      echo "Benchmark not found. Building dsa_benchmark..."
+      xmake build dsa_benchmark
+    fi
+
+    echo "Running: $LAUNCHER samply record $BENCHMARK $@"
+    exec "$LAUNCHER" samply record "$BENCHMARK" "$@"
+  '';
+
   # https://devenv.sh/basics/
   enterShell = ''
     # 1. Ask the wrapped GCC where its headers are
