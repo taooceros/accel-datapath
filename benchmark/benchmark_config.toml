@@ -4,7 +4,7 @@
 [polling]
 # Polling mode - how DSA completion is detected
 inline = true       # Inline polling using PollingRunLoop (dsa.poll() in task execution)
-threaded = false     # Background thread polling (dedicated polling thread)
+threaded = false      # Background thread polling (dedicated polling thread)
 
 [scheduling]
 # Scheduling pattern - how tasks are spawned and concurrency is managed
@@ -15,9 +15,9 @@ scoped_workers = false          # N worker coroutines processing items sequentia
 
 [submission]
 # Submission strategy - how descriptors are sent to hardware
-immediate = false    # DsaBase: 1:1 doorbell per descriptor (existing behavior)
-hw_batch = true     # DsaBatchBase: stage descriptors, submit as hardware batch (opcode 0x01)
-fixed_ring_batch = true  # DsaFixedRingBatchBase: fixed-size ring batch (ablation study)
+immediate = true     # DsaBase: 1:1 doorbell per descriptor (existing behavior)
+double_buf_batch = true   # DsaBatchBase: double-buffered staging, submit as hardware batch (opcode 0x01)
+fixed_ring_batch = true   # DsaFixedRingBatchBase: fixed-size ring batch (ablation study)
 ring_batch = true    # DsaRingBatchBase: ring-buffer based hardware batch
 
 [queues]
@@ -32,15 +32,13 @@ lockfree = false   # Lock-free using atomic compare-and-swap
 [operations]
 # DSA operations to benchmark
 # Available: data_move, mem_fill, compare, compare_value, dualcast, crc_gen, copy_crc, cache_flush
-enabled = ["data_move", "mem_fill", "compare", "compare_value", "dualcast", "crc_gen", "copy_crc", "cache_flush"]
+enabled = ["data_move"]
 
 [parameters]
 # Benchmark parameters
-concurrency_levels = [16]         # Max operations in-flight at once
-# Small messages (64B-1KB): test message rate / overhead
-# Medium messages (4KB-16KB): typical use cases
-# Large messages (64KB-1MB): test bandwidth saturation
-msg_sizes = [8]
+concurrency_levels = [1, 2, 4, 8, 16, 32]         # Max operations in-flight at once
+# Focus on message rate: small messages to stress per-op overhead
+msg_sizes = [64, 256, 1024, 4096]
 total_bytes = 16777216                     # Total bytes to copy per iteration (16 MB)
 max_ops = 75000                            # Max operations per iteration (0 = unlimited)
 iterations = 3                              # Number of times to repeat the full copy

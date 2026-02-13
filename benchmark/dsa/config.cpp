@@ -104,7 +104,7 @@ std::vector<SchedulingPattern> all_scheduling_patterns() {
 const char* submission_strategy_name(SubmissionStrategy s) {
   switch (s) {
     case SubmissionStrategy::Immediate:      return "immediate";
-    case SubmissionStrategy::HwBatch:        return "hw_batch";
+    case SubmissionStrategy::DoubleBufBatch: return "double_buf_batch";
     case SubmissionStrategy::FixedRingBatch: return "fixed_ring_batch";
     case SubmissionStrategy::RingBatch:      return "ring_batch";
   }
@@ -123,7 +123,7 @@ std::vector<SubmissionStrategy> default_submission_strategies() {
 }
 
 std::vector<SubmissionStrategy> all_submission_strategies() {
-  return {SubmissionStrategy::Immediate, SubmissionStrategy::HwBatch,
+  return {SubmissionStrategy::Immediate, SubmissionStrategy::DoubleBufBatch,
           SubmissionStrategy::FixedRingBatch, SubmissionStrategy::RingBatch};
 }
 
@@ -320,7 +320,7 @@ void print_usage(const char *prog) {
   fmt::println("");
   fmt::println("Submission strategy (can combine multiple):");
   fmt::println("  --immediate         1:1 doorbell per descriptor (default)");
-  fmt::println("  --hw-batch          Transparent hardware batch submission");
+  fmt::println("  --double-buf-batch  Double-buffered transparent batch submission");
   fmt::println("  --fixed-ring-batch  Fixed-size ring batch (ablation study)");
   fmt::println("  --ring-batch        Ring-buffer based hardware batch submission");
   fmt::println("");
@@ -382,7 +382,7 @@ static const FlagMapping pattern_flags[] = {
 
 static const FlagMapping submission_flags[] = {
   {"--immediate",        "immediate"},
-  {"--hw-batch",         "hw_batch"},
+  {"--double-buf-batch", "double_buf_batch"},
   {"--fixed-ring-batch", "fixed_ring_batch"},
   {"--ring-batch",       "ring_batch"},
 };

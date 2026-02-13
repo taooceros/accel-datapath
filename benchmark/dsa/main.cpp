@@ -128,7 +128,7 @@ static DsaProxy make_dsa(QueueType qt, SubmissionStrategy ss, bool use_threaded_
   bool poller = (qt == QueueType::NoLock) ? false : use_threaded_polling;
 
   switch (ss) {
-  case SubmissionStrategy::HwBatch:
+  case SubmissionStrategy::DoubleBufBatch:
     switch (qt) {
       case QueueType::NoLock:   return make_dsa_proxy<DsaBatchSingleThread>(poller);
       case QueueType::Mutex:    return make_dsa_proxy<DsaBatch>(poller);
