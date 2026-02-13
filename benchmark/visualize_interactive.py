@@ -4,19 +4,34 @@ Interactive visualization for DSA benchmark results using Plotly.
 Generates a single HTML file with checkbox filters for all dimensions.
 """
 
+import argparse
+import json
+from pathlib import Path
+
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import json
-import argparse
-from pathlib import Path
 
-# Colorblind-friendly palette (for queue types)
-COLORS = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
-# Line styles for patterns
-LINE_STYLES = ['solid', 'dash', 'dot', 'dashdot']
+COLORS = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2"]
+# Line styles for submission strategies
+LINE_STYLES = ["solid", "dash", "dot", "dashdot"]
 # Marker symbols for concurrency
-MARKERS = ['circle', 'square', 'diamond', 'triangle-up', 'cross', 'x']
+MARKERS = ["circle", "square", "diamond", "triangle-up", "cross", "x"]
+
+SUBMISSION_SUFFIXES = ["_double_buf_batch", "_fixed_ring_batch", "_ring_batch"]
+
+
+def split_pattern(pattern: str) -> tuple[str, str]:
+    """Split combined pattern column into (scheduling_pattern, submission_strategy).
+
+    The CSV 'pattern' column encodes both dimensions:
+      'sliding_window'                  -> ('sliding_window', 'immediate')
+      'sliding_window_double_buf_batch' -> ('sliding_window', 'double_buf_batch')
+    """
+    for suffix in SUBMISSION_SUFFIXES:
+        if pattern.endswith(suffix):
+            return pattern[: -len(suffix)], suffix[1:]  # strip leading '_'
+    return pattern, "immediate"
 
 
 def format_size(size: int) -> str:
@@ -32,165 +47,207 @@ def format_size(size: int) -> str:
 def load_data(csv_path: str) -> pd.DataFrame:
     """Load benchmark results from CSV."""
     df = pd.read_csv(csv_path)
-    df['msg_size_label'] = df['msg_size'].apply(format_size)
+    df["msg_size_label"] = df["msg_size"].apply(format_size)
+    # Split combined 'pattern' into separate scheduling and submission columns
+    split = df["pattern"].apply(split_pattern)
+    df["scheduling"] = split.apply(lambda x: x[0])
+    df["submission"] = split.apply(lambda x: x[1])
     return df
 
 
 def create_checkbox_dashboard(df: pd.DataFrame, output_path: Path):
     """Create an interactive HTML dashboard with checkbox filters."""
 
-    patterns = sorted(df['pattern'].unique().tolist())
-    modes = sorted(df['polling_mode'].unique().tolist())
-    concurrencies = sorted(df['concurrency'].unique().tolist())
-    queue_types = sorted(df['queue_type'].unique().tolist())
+    scheduling_patterns = sorted(df["scheduling"].unique().tolist())
+    submissions = sorted(df["submission"].unique().tolist())
+    modes = sorted(df["polling_mode"].unique().tolist())
+    concurrencies = sorted(df["concurrency"].unique().tolist())
+    queue_types = sorted(df["queue_type"].unique().tolist())
 
     # Create figure with subplots
     fig = make_subplots(
-        rows=2, cols=2,
+        rows=2,
+        cols=2,
         subplot_titles=(
-            'Bandwidth vs Message Size',
-            'Message Rate vs Message Size',
-            'Average Latency vs Message Size',
-            'P99 Latency vs Message Size'
+            "Bandwidth vs Message Size",
+            "Message Rate vs Message Size",
+            "Average Latency vs Message Size",
+            "P99 Latency vs Message Size",
         ),
         vertical_spacing=0.12,
-        horizontal_spacing=0.1
+        horizontal_spacing=0.1,
     )
 
     # Track trace metadata for JavaScript filtering
     trace_metadata = []
 
-    for pi, pattern in enumerate(patterns):
-        for mi, mode in enumerate(modes):
-            for ci, conc in enumerate(concurrencies):
-                filtered = df[(df['pattern'] == pattern) &
-                             (df['polling_mode'] == mode) &
-                             (df['concurrency'] == conc)]
+    for si, sched in enumerate(scheduling_patterns):
+        for ssi, sub in enumerate(submissions):
+            for mi, mode in enumerate(modes):
+                for ci, conc in enumerate(concurrencies):
+                    filtered = df[
+                        (df["scheduling"] == sched)
+                        & (df["submission"] == sub)
+                        & (df["polling_mode"] == mode)
+                        & (df["concurrency"] == conc)
+                    ]
 
-                for qi, qt in enumerate(queue_types):
-                    qt_data = filtered[filtered['queue_type'] == qt].sort_values('msg_size')
-                    if len(qt_data) == 0:
-                        continue
+                    for qi, qt in enumerate(queue_types):
+                        qt_data = filtered[filtered["queue_type"] == qt].sort_values(
+                            "msg_size"
+                        )
+                        if len(qt_data) == 0:
+                            continue
 
-                    # Color by queue type
-                    color = COLORS[qi % len(COLORS)]
-                    # Line style by pattern
-                    line_style = LINE_STYLES[pi % len(LINE_STYLES)]
-                    # Marker by concurrency
-                    marker_symbol = MARKERS[ci % len(MARKERS)]
-                    # Opacity by mode (inline=1.0, threaded=0.6)
-                    opacity = 1.0 if mi == 0 else 0.7
+                        # Color by queue type
+                        color = COLORS[qi % len(COLORS)]
+                        # Line style by submission strategy
+                        line_style = LINE_STYLES[ssi % len(LINE_STYLES)]
+                        # Marker by concurrency
+                        marker_symbol = MARKERS[ci % len(MARKERS)]
+                        # Opacity by mode (inline=1.0, threaded=0.6)
+                        opacity = 1.0 if mi == 0 else 0.7
 
-                    # Create unique label for this trace
-                    trace_label = f'{qt} ({pattern}/{mode}/c={conc})'
+                        # Create unique label for this trace
+                        trace_label = f"{qt} ({sched}/{sub}/{mode}/c={conc})"
 
-                    # Start with first combination visible
-                    visible = bool(pattern == patterns[0] and
-                                   mode == modes[0] and
-                                   conc == concurrencies[0])
+                        # Start with first combination visible
+                        visible = bool(
+                            sched == scheduling_patterns[0]
+                            and sub == submissions[0]
+                            and mode == modes[0]
+                            and conc == concurrencies[0]
+                        )
 
-                    meta = {
-                        'pattern': pattern,
-                        'mode': mode,
-                        'concurrency': int(conc),
-                        'queue_type': qt,
-                        'label': trace_label
-                    }
+                        meta = {
+                            "scheduling": sched,
+                            "submission": sub,
+                            "mode": mode,
+                            "concurrency": int(conc),
+                            "queue_type": qt,
+                            "label": trace_label,
+                        }
 
-                    # Bandwidth
-                    fig.add_trace(go.Scatter(
-                        x=qt_data['msg_size'].tolist(),
-                        y=qt_data['bandwidth_gbps'].tolist(),
-                        mode='lines+markers',
-                        name=trace_label,
-                        line=dict(color=color, dash=line_style, width=2),
-                        marker=dict(size=7, symbol=marker_symbol, opacity=opacity),
-                        opacity=opacity,
-                        visible=visible,
-                        showlegend=visible,
-                        legendgroup=trace_label,
-                        hovertemplate=f'{trace_label}<br>%{{x}}B: %{{y:.2f}} GB/s<extra></extra>'
-                    ), row=1, col=1)
-                    trace_metadata.append({**meta, 'subplot': 'bandwidth'})
+                        # Bandwidth
+                        fig.add_trace(
+                            go.Scatter(
+                                x=qt_data["msg_size"].tolist(),
+                                y=qt_data["bandwidth_gbps"].tolist(),
+                                mode="lines+markers",
+                                name=trace_label,
+                                line=dict(color=color, dash=line_style, width=2),
+                                marker=dict(
+                                    size=7, symbol=marker_symbol, opacity=opacity
+                                ),
+                                opacity=opacity,
+                                visible=visible,
+                                showlegend=visible,
+                                legendgroup=trace_label,
+                                hovertemplate=f"{trace_label}<br>%{{x}}B: %{{y:.2f}} GB/s<extra></extra>",
+                            ),
+                            row=1,
+                            col=1,
+                        )
+                        trace_metadata.append({**meta, "subplot": "bandwidth"})
 
-                    # Message Rate
-                    fig.add_trace(go.Scatter(
-                        x=qt_data['msg_size'].tolist(),
-                        y=qt_data['msg_rate_mps'].tolist(),
-                        mode='lines+markers',
-                        name=trace_label,
-                        line=dict(color=color, dash=line_style, width=2),
-                        marker=dict(size=7, symbol=marker_symbol, opacity=opacity),
-                        opacity=opacity,
-                        visible=visible,
-                        showlegend=False,
-                        legendgroup=trace_label,
-                        hovertemplate=f'{trace_label}<br>%{{x}}B: %{{y:.2f}} M/s<extra></extra>'
-                    ), row=1, col=2)
-                    trace_metadata.append({**meta, 'subplot': 'msg_rate'})
+                        # Message Rate
+                        fig.add_trace(
+                            go.Scatter(
+                                x=qt_data["msg_size"].tolist(),
+                                y=qt_data["msg_rate_mps"].tolist(),
+                                mode="lines+markers",
+                                name=trace_label,
+                                line=dict(color=color, dash=line_style, width=2),
+                                marker=dict(
+                                    size=7, symbol=marker_symbol, opacity=opacity
+                                ),
+                                opacity=opacity,
+                                visible=visible,
+                                showlegend=False,
+                                legendgroup=trace_label,
+                                hovertemplate=f"{trace_label}<br>%{{x}}B: %{{y:.2f}} M/s<extra></extra>",
+                            ),
+                            row=1,
+                            col=2,
+                        )
+                        trace_metadata.append({**meta, "subplot": "msg_rate"})
 
-                    # Avg Latency
-                    fig.add_trace(go.Scatter(
-                        x=qt_data['msg_size'].tolist(),
-                        y=(qt_data['latency_avg_ns'] / 1000).tolist(),
-                        mode='lines+markers',
-                        name=trace_label,
-                        line=dict(color=color, dash=line_style, width=2),
-                        marker=dict(size=7, symbol=marker_symbol, opacity=opacity),
-                        opacity=opacity,
-                        visible=visible,
-                        showlegend=False,
-                        legendgroup=trace_label,
-                        hovertemplate=f'{trace_label}<br>%{{x}}B: %{{y:.2f}} us<extra></extra>'
-                    ), row=2, col=1)
-                    trace_metadata.append({**meta, 'subplot': 'latency_avg'})
+                        # Avg Latency
+                        fig.add_trace(
+                            go.Scatter(
+                                x=qt_data["msg_size"].tolist(),
+                                y=(qt_data["latency_avg_ns"] / 1000).tolist(),
+                                mode="lines+markers",
+                                name=trace_label,
+                                line=dict(color=color, dash=line_style, width=2),
+                                marker=dict(
+                                    size=7, symbol=marker_symbol, opacity=opacity
+                                ),
+                                opacity=opacity,
+                                visible=visible,
+                                showlegend=False,
+                                legendgroup=trace_label,
+                                hovertemplate=f"{trace_label}<br>%{{x}}B: %{{y:.2f}} us<extra></extra>",
+                            ),
+                            row=2,
+                            col=1,
+                        )
+                        trace_metadata.append({**meta, "subplot": "latency_avg"})
 
-                    # P99 Latency
-                    fig.add_trace(go.Scatter(
-                        x=qt_data['msg_size'].tolist(),
-                        y=(qt_data['latency_p99_ns'] / 1000).tolist(),
-                        mode='lines+markers',
-                        name=trace_label,
-                        line=dict(color=color, dash=line_style, width=2),
-                        marker=dict(size=7, symbol=marker_symbol, opacity=opacity),
-                        opacity=opacity,
-                        visible=visible,
-                        showlegend=False,
-                        legendgroup=trace_label,
-                        hovertemplate=f'{trace_label}<br>%{{x}}B: %{{y:.2f}} us<extra></extra>'
-                    ), row=2, col=2)
-                    trace_metadata.append({**meta, 'subplot': 'latency_p99'})
+                        # P99 Latency
+                        fig.add_trace(
+                            go.Scatter(
+                                x=qt_data["msg_size"].tolist(),
+                                y=(qt_data["latency_p99_ns"] / 1000).tolist(),
+                                mode="lines+markers",
+                                name=trace_label,
+                                line=dict(color=color, dash=line_style, width=2),
+                                marker=dict(
+                                    size=7, symbol=marker_symbol, opacity=opacity
+                                ),
+                                opacity=opacity,
+                                visible=visible,
+                                showlegend=False,
+                                legendgroup=trace_label,
+                                hovertemplate=f"{trace_label}<br>%{{x}}B: %{{y:.2f}} us<extra></extra>",
+                            ),
+                            row=2,
+                            col=2,
+                        )
+                        trace_metadata.append({**meta, "subplot": "latency_p99"})
 
     fig.update_layout(
-        title=dict(text='DSA Benchmark Results', x=0.5, xanchor='center'),
+        title=dict(text="DSA Benchmark Results", x=0.5, xanchor="center"),
         height=700,
         legend=dict(
-            orientation='v',
-            yanchor='top', y=1,
-            xanchor='left', x=1.02,
+            orientation="v",
+            yanchor="top",
+            y=1,
+            xanchor="left",
+            x=1.02,
             font=dict(size=10),
-            bgcolor='rgba(255,255,255,0.8)'
+            bgcolor="rgba(255,255,255,0.8)",
         ),
-        hovermode='x unified',
-        margin=dict(t=80, b=80, r=200)
+        hovermode="x unified",
+        margin=dict(t=80, b=80, r=200),
     )
 
     # Update axes
-    fig.update_xaxes(type='log', title_text='Message Size (bytes)', row=1, col=1)
-    fig.update_xaxes(type='log', title_text='Message Size (bytes)', row=1, col=2)
-    fig.update_xaxes(type='log', title_text='Message Size (bytes)', row=2, col=1)
-    fig.update_xaxes(type='log', title_text='Message Size (bytes)', row=2, col=2)
+    fig.update_xaxes(type="log", title_text="Message Size (bytes)", row=1, col=1)
+    fig.update_xaxes(type="log", title_text="Message Size (bytes)", row=1, col=2)
+    fig.update_xaxes(type="log", title_text="Message Size (bytes)", row=2, col=1)
+    fig.update_xaxes(type="log", title_text="Message Size (bytes)", row=2, col=2)
 
-    fig.update_yaxes(title_text='Bandwidth (GB/s)', rangemode='tozero', row=1, col=1)
-    fig.update_yaxes(title_text='Message Rate (M/s)', rangemode='tozero', row=1, col=2)
-    fig.update_yaxes(title_text='Avg Latency (us)', rangemode='tozero', row=2, col=1)
-    fig.update_yaxes(title_text='P99 Latency (us)', rangemode='tozero', row=2, col=2)
+    fig.update_yaxes(title_text="Bandwidth (GB/s)", rangemode="tozero", row=1, col=1)
+    fig.update_yaxes(title_text="Message Rate (M/s)", rangemode="tozero", row=1, col=2)
+    fig.update_yaxes(title_text="Avg Latency (us)", rangemode="tozero", row=2, col=1)
+    fig.update_yaxes(title_text="P99 Latency (us)", rangemode="tozero", row=2, col=2)
 
     # Generate the plotly div
-    plot_div = fig.to_html(full_html=False, include_plotlyjs='cdn', div_id='plotDiv')
+    plot_div = fig.to_html(full_html=False, include_plotlyjs="cdn", div_id="plotDiv")
 
     # Create HTML with checkbox controls
-    html_content = f'''<!DOCTYPE html>
+    html_content = f"""<!DOCTYPE html>
 <html>
 <head>
     <title>DSA Benchmark Dashboard</title>
@@ -271,17 +328,26 @@ def create_checkbox_dashboard(df: pd.DataFrame, output_path: Path):
 
         <div class="controls">
             <div class="filter-group">
-                <h3>Pattern</h3>
-                {generate_checkboxes('pattern', patterns)}
+                <h3>Scheduling</h3>
+                {generate_checkboxes("scheduling", scheduling_patterns)}
                 <div class="btn-group">
-                    <button onclick="selectAll('pattern')">All</button>
-                    <button onclick="selectNone('pattern')">None</button>
+                    <button onclick="selectAll('scheduling')">All</button>
+                    <button onclick="selectNone('scheduling')">None</button>
+                </div>
+            </div>
+
+            <div class="filter-group">
+                <h3>Submission</h3>
+                {generate_checkboxes("submission", submissions)}
+                <div class="btn-group">
+                    <button onclick="selectAll('submission')">All</button>
+                    <button onclick="selectNone('submission')">None</button>
                 </div>
             </div>
 
             <div class="filter-group">
                 <h3>Polling Mode</h3>
-                {generate_checkboxes('mode', modes)}
+                {generate_checkboxes("mode", modes)}
                 <div class="btn-group">
                     <button onclick="selectAll('mode')">All</button>
                     <button onclick="selectNone('mode')">None</button>
@@ -290,7 +356,7 @@ def create_checkbox_dashboard(df: pd.DataFrame, output_path: Path):
 
             <div class="filter-group">
                 <h3>Concurrency</h3>
-                {generate_checkboxes('concurrency', [str(c) for c in concurrencies])}
+                {generate_checkboxes("concurrency", [str(c) for c in concurrencies])}
                 <div class="btn-group">
                     <button onclick="selectAll('concurrency')">All</button>
                     <button onclick="selectNone('concurrency')">None</button>
@@ -299,7 +365,7 @@ def create_checkbox_dashboard(df: pd.DataFrame, output_path: Path):
 
             <div class="filter-group">
                 <h3>Queue Type</h3>
-                {generate_checkboxes('queue_type', queue_types)}
+                {generate_checkboxes("queue_type", queue_types)}
                 <div class="btn-group">
                     <button onclick="selectAll('queue_type')">All</button>
                     <button onclick="selectNone('queue_type')">None</button>
@@ -333,13 +399,15 @@ def create_checkbox_dashboard(df: pd.DataFrame, output_path: Path):
         }}
 
         function updatePlot() {{
-            const selectedPatterns = getCheckedValues('pattern');
+            const selectedScheduling = getCheckedValues('scheduling');
+            const selectedSubmission = getCheckedValues('submission');
             const selectedModes = getCheckedValues('mode');
             const selectedConcurrencies = getCheckedValues('concurrency').map(Number);
             const selectedQueueTypes = getCheckedValues('queue_type');
 
             const visibility = traceMetadata.map(meta => {{
-                return selectedPatterns.includes(meta.pattern) &&
+                return selectedScheduling.includes(meta.scheduling) &&
+                       selectedSubmission.includes(meta.submission) &&
                        selectedModes.includes(meta.mode) &&
                        selectedConcurrencies.includes(meta.concurrency) &&
                        selectedQueueTypes.includes(meta.queue_type);
@@ -368,9 +436,9 @@ def create_checkbox_dashboard(df: pd.DataFrame, output_path: Path):
     </script>
 </body>
 </html>
-'''
+"""
 
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         f.write(html_content)
 
     print(f"Saved interactive dashboard to: {output_path}")
@@ -380,73 +448,90 @@ def generate_checkboxes(name: str, values: list, default_first: bool = True) -> 
     """Generate HTML checkbox inputs."""
     html = []
     for i, val in enumerate(values):
-        checked = 'checked' if (default_first and i == 0) else ''
-        html.append(f'<label><input type="checkbox" name="{name}" value="{val}" {checked}> {val}</label>')
-    return '\n                '.join(html)
+        checked = "checked" if (default_first and i == 0) else ""
+        html.append(
+            f'<label><input type="checkbox" name="{name}" value="{val}" {checked}> {val}</label>'
+        )
+    return "\n                ".join(html)
 
 
 def create_heatmap_dashboard(df: pd.DataFrame, output_path: Path):
     """Create an interactive heatmap dashboard with checkbox filters."""
 
-    patterns = sorted(df['pattern'].unique().tolist())
-    modes = sorted(df['polling_mode'].unique().tolist())
-    queue_types = sorted(df['queue_type'].unique().tolist())
+    scheduling_patterns = sorted(df["scheduling"].unique().tolist())
+    submissions = sorted(df["submission"].unique().tolist())
+    modes = sorted(df["polling_mode"].unique().tolist())
+    queue_types = sorted(df["queue_type"].unique().tolist())
 
     metrics = [
-        ('bandwidth_gbps', 'Bandwidth (GB/s)', 1),
-        ('msg_rate_mps', 'Message Rate (M/s)', 1),
-        ('latency_avg_ns', 'Avg Latency (us)', 1/1000),
+        ("bandwidth_gbps", "Bandwidth (GB/s)", 1),
+        ("msg_rate_mps", "Message Rate (M/s)", 1),
+        ("latency_avg_ns", "Avg Latency (us)", 1 / 1000),
     ]
 
     fig = go.Figure()
     trace_metadata = []
 
-    for pattern in patterns:
-        for mode in modes:
-            for qt in queue_types:
-                for metric, label, scale in metrics:
-                    filtered = df[(df['pattern'] == pattern) &
-                                 (df['polling_mode'] == mode) &
-                                 (df['queue_type'] == qt)]
+    for sched in scheduling_patterns:
+        for sub in submissions:
+            for mode in modes:
+                for qt in queue_types:
+                    for metric, label, scale in metrics:
+                        filtered = df[
+                            (df["scheduling"] == sched)
+                            & (df["submission"] == sub)
+                            & (df["polling_mode"] == mode)
+                            & (df["queue_type"] == qt)
+                        ]
 
-                    if len(filtered) == 0:
-                        continue
+                        if len(filtered) == 0:
+                            continue
 
-                    pivot = filtered.pivot(index='concurrency', columns='msg_size', values=metric)
-                    pivot = pivot * scale
+                        pivot = filtered.pivot(
+                            index="concurrency", columns="msg_size", values=metric
+                        )
+                        pivot = pivot * scale
 
-                    visible = bool(pattern == patterns[0] and
-                                   mode == modes[0] and
-                                   qt == queue_types[0] and
-                                   metric == 'bandwidth_gbps')
+                        visible = bool(
+                            sched == scheduling_patterns[0]
+                            and sub == submissions[0]
+                            and mode == modes[0]
+                            and qt == queue_types[0]
+                            and metric == "bandwidth_gbps"
+                        )
 
-                    fig.add_trace(go.Heatmap(
-                        z=pivot.values.tolist(),
-                        x=[format_size(int(c)) for c in pivot.columns],
-                        y=[f'c={int(c)}' for c in pivot.index],
-                        colorscale='Viridis',
-                        visible=visible,
-                        hovertemplate='msg=%{x}<br>%{y}<br>value=%{z:.2f}<extra></extra>',
-                        colorbar=dict(title=label)
-                    ))
-                    trace_metadata.append({
-                        'pattern': pattern,
-                        'mode': mode,
-                        'queue_type': qt,
-                        'metric': metric,
-                        'metric_label': label
-                    })
+                        fig.add_trace(
+                            go.Heatmap(
+                                z=pivot.values.tolist(),
+                                x=[format_size(int(c)) for c in pivot.columns],
+                                y=[f"c={int(c)}" for c in pivot.index],
+                                colorscale="Viridis",
+                                visible=visible,
+                                hovertemplate="msg=%{x}<br>%{y}<br>value=%{z:.2f}<extra></extra>",
+                                colorbar=dict(title=label),
+                            )
+                        )
+                        trace_metadata.append(
+                            {
+                                "scheduling": sched,
+                                "submission": sub,
+                                "mode": mode,
+                                "queue_type": qt,
+                                "metric": metric,
+                                "metric_label": label,
+                            }
+                        )
 
     fig.update_layout(
-        title=dict(text='DSA Benchmark Heatmap', x=0.5, xanchor='center'),
-        xaxis_title='Message Size',
-        yaxis_title='Concurrency',
-        height=500
+        title=dict(text="DSA Benchmark Heatmap", x=0.5, xanchor="center"),
+        xaxis_title="Message Size",
+        yaxis_title="Concurrency",
+        height=500,
     )
 
-    plot_div = fig.to_html(full_html=False, include_plotlyjs='cdn', div_id='heatmapDiv')
+    plot_div = fig.to_html(full_html=False, include_plotlyjs="cdn", div_id="heatmapDiv")
 
-    html_content = f'''<!DOCTYPE html>
+    html_content = f"""<!DOCTYPE html>
 <html>
 <head>
     <title>DSA Benchmark Heatmap</title>
@@ -511,23 +596,28 @@ def create_heatmap_dashboard(df: pd.DataFrame, output_path: Path):
 
         <div class="controls">
             <div class="filter-group">
-                <h3>Pattern</h3>
-                {generate_radios('pattern', patterns)}
+                <h3>Scheduling</h3>
+                {generate_radios("scheduling", scheduling_patterns)}
+            </div>
+
+            <div class="filter-group">
+                <h3>Submission</h3>
+                {generate_radios("submission", submissions)}
             </div>
 
             <div class="filter-group">
                 <h3>Polling Mode</h3>
-                {generate_radios('mode', modes)}
+                {generate_radios("mode", modes)}
             </div>
 
             <div class="filter-group">
                 <h3>Queue Type</h3>
-                {generate_radios('queue_type', queue_types)}
+                {generate_radios("queue_type", queue_types)}
             </div>
 
             <div class="filter-group">
                 <h3>Metric</h3>
-                {generate_radios('metric', [m[0] for m in metrics], [m[1] for m in metrics])}
+                {generate_radios("metric", [m[0] for m in metrics], [m[1] for m in metrics])}
             </div>
         </div>
 
@@ -545,22 +635,24 @@ def create_heatmap_dashboard(df: pd.DataFrame, output_path: Path):
         }}
 
         function updateHeatmap() {{
-            const selectedPattern = getSelectedValue('pattern');
+            const selectedScheduling = getSelectedValue('scheduling');
+            const selectedSubmission = getSelectedValue('submission');
             const selectedMode = getSelectedValue('mode');
             const selectedQueueType = getSelectedValue('queue_type');
             const selectedMetric = getSelectedValue('metric');
 
             const visibility = traceMetadata.map(meta => {{
-                return meta.pattern === selectedPattern &&
+                return meta.scheduling === selectedScheduling &&
+                       meta.submission === selectedSubmission &&
                        meta.mode === selectedMode &&
                        meta.queue_type === selectedQueueType &&
                        meta.metric === selectedMetric;
             }});
 
-            // Find the selected metric label for colorbar
+            // Find the selected metric label for title
             const selectedMeta = traceMetadata.find((meta, i) => visibility[i]);
             const title = selectedMeta ?
-                `${{selectedPattern}} / ${{selectedMode}} / ${{selectedQueueType}} - ${{selectedMeta.metric_label}}` :
+                `${{selectedScheduling}} / ${{selectedSubmission}} / ${{selectedMode}} / ${{selectedQueueType}} - ${{selectedMeta.metric_label}}` :
                 'DSA Benchmark Heatmap';
 
             Plotly.restyle('heatmapDiv', {{ visible: visibility }});
@@ -574,9 +666,9 @@ def create_heatmap_dashboard(df: pd.DataFrame, output_path: Path):
     </script>
 </body>
 </html>
-'''
+"""
 
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         f.write(html_content)
 
     print(f"Saved heatmap dashboard to: {output_path}")
@@ -588,17 +680,26 @@ def generate_radios(name: str, values: list, labels: list = None) -> str:
         labels = values
     html = []
     for i, (val, label) in enumerate(zip(values, labels)):
-        checked = 'checked' if i == 0 else ''
-        html.append(f'<label><input type="radio" name="{name}" value="{val}" {checked}> {label}</label>')
-    return '\n                '.join(html)
+        checked = "checked" if i == 0 else ""
+        html.append(
+            f'<label><input type="radio" name="{name}" value="{val}" {checked}> {label}</label>'
+        )
+    return "\n                ".join(html)
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Interactive DSA benchmark visualization')
-    parser.add_argument('csv_file', nargs='?', default='dsa_benchmark_results.csv',
-                        help='Path to CSV file')
-    parser.add_argument('-o', '--output-dir', default='benchmark_plots',
-                        help='Output directory')
+    parser = argparse.ArgumentParser(
+        description="Interactive DSA benchmark visualization"
+    )
+    parser.add_argument(
+        "csv_file",
+        nargs="?",
+        default="dsa_benchmark_results.csv",
+        help="Path to CSV file",
+    )
+    parser.add_argument(
+        "-o", "--output-dir", default="benchmark_plots", help="Output directory"
+    )
     args = parser.parse_args()
 
     csv_path = Path(args.csv_file)
@@ -613,8 +714,8 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(exist_ok=True)
 
-    create_checkbox_dashboard(df, output_dir / 'dashboard.html')
-    create_heatmap_dashboard(df, output_dir / 'heatmap.html')
+    create_checkbox_dashboard(df, output_dir / "dashboard.html")
+    create_heatmap_dashboard(df, output_dir / "heatmap.html")
 
     print(f"\nOpen in browser:")
     print(f"  {output_dir / 'dashboard.html'}")
@@ -622,5 +723,5 @@ def main():
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     exit(main())

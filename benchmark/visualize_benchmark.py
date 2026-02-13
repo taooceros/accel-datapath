@@ -34,11 +34,31 @@ def get_style(idx: int) -> dict:
     }
 
 
+SUBMISSION_SUFFIXES = ["_double_buf_batch", "_fixed_ring_batch", "_ring_batch"]
+
+
+def split_pattern(pattern: str) -> tuple[str, str]:
+    """Split combined pattern column into (scheduling_pattern, submission_strategy).
+
+    The CSV 'pattern' column encodes both dimensions:
+      'sliding_window'                  -> ('sliding_window', 'immediate')
+      'sliding_window_double_buf_batch' -> ('sliding_window', 'double_buf_batch')
+    """
+    for suffix in SUBMISSION_SUFFIXES:
+        if pattern.endswith(suffix):
+            return pattern[: -len(suffix)], suffix[1:]
+    return pattern, "immediate"
+
+
 def load_data(csv_path: str) -> pd.DataFrame:
     """Load benchmark results from CSV."""
     df = pd.read_csv(csv_path)
     # Convert msg_size to human-readable format for labels
     df["msg_size_label"] = df["msg_size"].apply(format_size)
+    # Split combined 'pattern' into separate scheduling and submission columns
+    split = df["pattern"].apply(split_pattern)
+    df["scheduling"] = split.apply(lambda x: x[0])
+    df["submission"] = split.apply(lambda x: x[1])
     return df
 
 
@@ -662,7 +682,8 @@ def generate_interactive(df: pd.DataFrame, output_path: Path):
     operations = sorted(df["operation"].unique())
     queue_types = sorted(df["queue_type"].unique())
     modes = sorted(df["polling_mode"].unique())
-    patterns = sorted(df["pattern"].unique())
+    scheduling_patterns = sorted(df["scheduling"].unique())
+    submissions = sorted(df["submission"].unique())
     concurrency_levels = sorted(int(c) for c in df["concurrency"].unique())
 
     qt_colors = {qt: COLORS[i % len(COLORS)] for i, qt in enumerate(queue_types)}
@@ -692,13 +713,20 @@ def generate_interactive(df: pd.DataFrame, output_path: Path):
     }
 
     # Pre-aggregate data into a JSON-friendly structure keyed by
-    # (operation, mode, pattern, concurrency, queue_type) -> {x:[], bw:[], rate:[], lat_avg:[], lat_p99:[]}
+    # (operation, mode, scheduling, submission, concurrency, queue_type) -> {x:[], bw:[], rate:[], lat_avg:[], lat_p99:[]}
     records = {}
-    for (op, mode, pat, conc, qt), grp in df.groupby(
-        ["operation", "polling_mode", "pattern", "concurrency", "queue_type"]
+    for (op, mode, sched, sub, conc, qt), grp in df.groupby(
+        [
+            "operation",
+            "polling_mode",
+            "scheduling",
+            "submission",
+            "concurrency",
+            "queue_type",
+        ]
     ):
         grp = grp.sort_values("msg_size")
-        records[f"{op}|{mode}|{pat}|{int(conc)}|{qt}"] = {
+        records[f"{op}|{mode}|{sched}|{sub}|{int(conc)}|{qt}"] = {
             "x": grp["msg_size"].tolist(),
             "bw": grp["bandwidth_gbps"].tolist(),
             "rate": grp["msg_rate_mps"].tolist(),
@@ -736,8 +764,12 @@ body {{ font-family: system-ui, sans-serif; margin: 0; padding: 16px 20px; backg
     <div id="cb-polling_mode">{_checkboxes_html("polling_mode", modes, checked=True)}</div>
   </div>
   <div class="ctrl-group">
-    <div class="ctrl-header"><h4>Pattern</h4><span class="sel-links"><a onclick="selAll('pattern')">all</a> / <a onclick="selNone('pattern')">none</a></span></div>
-    <div id="cb-pattern">{_checkboxes_html("pattern", patterns, first_only=True)}</div>
+    <div class="ctrl-header"><h4>Scheduling</h4><span class="sel-links"><a onclick="selAll('scheduling')">all</a> / <a onclick="selNone('scheduling')">none</a></span></div>
+    <div id="cb-scheduling">{_checkboxes_html("scheduling", scheduling_patterns, first_only=True)}</div>
+  </div>
+  <div class="ctrl-group">
+    <div class="ctrl-header"><h4>Submission</h4><span class="sel-links"><a onclick="selAll('submission')">all</a> / <a onclick="selNone('submission')">none</a></span></div>
+    <div id="cb-submission">{_checkboxes_html("submission", submissions, first_only=True)}</div>
   </div>
   <div class="ctrl-group">
     <div class="ctrl-header"><h4>Concurrency</h4><span class="sel-links"><a onclick="selAll('concurrency')">all</a> / <a onclick="selNone('concurrency')">none</a></span></div>
@@ -774,7 +806,8 @@ function getChecked(name) {{
 function rebuild() {{
   const ops = getChecked("operation");
   const modes = getChecked("polling_mode");
-  const pats = getChecked("pattern");
+  const scheds = getChecked("scheduling");
+  const subs = getChecked("submission");
   const concs = getChecked("concurrency");
   const qts = getChecked("queue_type");
 
@@ -785,9 +818,10 @@ function rebuild() {{
 
   const combos = [];
   for (const m of modes)
-    for (const p of pats)
-      for (const c of concs)
-        combos.push([m, p, c]);
+    for (const sc of scheds)
+      for (const sb of subs)
+        for (const c of concs)
+          combos.push([m, sc, sb, c]);
 
   if (combos.length === 0) return;
 
@@ -813,15 +847,15 @@ function rebuild() {{
     ];
 
     for (let ci = 0; ci < combos.length; ci++) {{
-      const [mode, pat, conc] = combos[ci];
-      const comboSuffix = combos.length > 1 ? ` [${{mode}}/${{pat}}/c=${{conc}}]` : "";
+      const [mode, sched, sub, conc] = combos[ci];
+      const comboSuffix = combos.length > 1 ? ` [${{mode}}/${{sched}}/${{sub}}/c=${{conc}}]` : "";
       const comboDash = COMBO_DASHES[ci % COMBO_DASHES.length];
 
       for (let mi = 0; mi < 4; mi++) {{
         const metric = METRICS[mi];
         for (let qi = 0; qi < qts.length; qi++) {{
           const qt = qts[qi];
-          const key = `${{op}}|${{mode}}|${{pat}}|${{conc}}|${{qt}}`;
+          const key = `${{op}}|${{mode}}|${{sched}}|${{sub}}|${{conc}}|${{qt}}`;
           const d = DATA[key];
           if (!d) continue;
 
