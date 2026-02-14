@@ -101,7 +101,8 @@
     fi
 
     echo "Running: $LAUNCHER $BENCHMARK $@"
-    exec "$LAUNCHER" "$BENCHMARK" "$@"
+    $LAUNCHER "$BENCHMARK" "$@"
+    python3 "benchmark/visualize_interactive.py"
   '';
 
   # https://devenv.sh/scripts/
@@ -123,6 +124,7 @@
 
     echo "Running: $LAUNCHER samply record $BENCHMARK $@"
     exec "$LAUNCHER" samply record "$BENCHMARK" "$@"
+    exec "python3" "benchmark/visualize_interactive.py"
   '';
 
   # https://devenv.sh/basics/
