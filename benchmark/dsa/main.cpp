@@ -37,9 +37,10 @@ DsaMetric run_benchmark(DsaProxy &dsa, size_t concurrency, size_t msg_size,
                         size_t total_bytes, int iterations,
                         BufferSet &bufs,
                         const RunFunction &run_fn,
-                        ProgressBar *progress = nullptr) {
-  LatencyCollector warmup_latency;
-  LatencyCollector latency;
+                        ProgressBar *progress = nullptr,
+                        bool sample_latency = true) {
+  LatencyCollector warmup_latency(false);  // always discard warmup
+  LatencyCollector latency(sample_latency);
 
   // Pre-allocate latency sample storage to avoid reallocation during measurement
   size_t num_ops = total_bytes / msg_size;
@@ -175,9 +176,10 @@ static DsaProxy make_dsa(QueueType qt, SubmissionStrategy ss, bool use_threaded_
 static DsaMetric run_one_queue(QueueType qt, SubmissionStrategy ss, bool use_threaded_polling,
                                size_t concurrency, size_t msg_size, size_t total_bytes,
                                int iterations, BufferSet &bufs,
-                               const RunFunction &run_fn, ProgressBar *progress) {
+                               const RunFunction &run_fn, ProgressBar *progress,
+                               bool sample_latency = true) {
   auto dsa = make_dsa(qt, ss, use_threaded_polling);
-  return run_benchmark(dsa, concurrency, msg_size, total_bytes, iterations, bufs, run_fn, progress);
+  return run_benchmark(dsa, concurrency, msg_size, total_bytes, iterations, bufs, run_fn, progress, sample_latency);
 }
 
 static DsaMetric& result_field(BenchmarkResult &r, QueueType qt) {
@@ -238,7 +240,8 @@ std::vector<BenchmarkResult> run_all_queues(
         result_field(result, qt) = run_one_queue(
             qt, ss, use_threaded_polling,
             concurrency, msg_size, effective_total_bytes,
-            config.iterations, bufs, run_fn, &progress);
+            config.iterations, bufs, run_fn, &progress,
+            config.sample_latency);
       }
 
       results.push_back(result);
@@ -261,6 +264,7 @@ void benchmark_queues_with_dsa(const BenchmarkConfig &config) {
   fmt::println("  Iterations: {}", config.iterations);
   fmt::println("  Concurrency levels: {}", fmt::join(config.concurrency_levels, ", "));
   fmt::println("  Message sizes: {}", fmt::join(config.msg_sizes, ", "));
+  fmt::println("  Latency sampling: {}", config.sample_latency ? "enabled" : "disabled");
   fmt::println("  Operations: {}", [&] {
     std::string s;
     for (size_t i = 0; i < config.operations.size(); ++i) {

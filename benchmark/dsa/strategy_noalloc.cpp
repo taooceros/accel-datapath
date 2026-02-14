@@ -23,7 +23,7 @@ static void sliding_window_noalloc_impl_inline(
       if (!slot->ready.load(std::memory_order_acquire)) continue;
       size_t offset = next_op * msg_size;
       in_flight.fetch_add(1, std::memory_order_relaxed);
-      NoAllocRecord record{&latency, std::chrono::high_resolution_clock::now(), &in_flight};
+      auto record = CompletionRecord::make(latency, &in_flight);
       slot->start_op(scope.nest(make_sender(offset) | stdexec::then(record)));
       ++next_op;
     }
@@ -64,7 +64,7 @@ static void sliding_window_noalloc_impl_threaded(
         if (slot->ready.load(std::memory_order_acquire)) {
           size_t offset = op_idx * msg_size;
           in_flight.fetch_add(1, std::memory_order_relaxed);
-          NoAllocRecord record{&latency, std::chrono::high_resolution_clock::now(), &in_flight};
+          auto record = CompletionRecord::make(latency, &in_flight);
           slot->start_op(scope.nest(
             scheduler.schedule() | stdexec::let_value([make_sender, offset, record]() {
               return make_sender(offset) | stdexec::then(record);

@@ -3,7 +3,7 @@
 template <class MakeSender>
 constexpr size_t inline_arena_slot_size() {
   using Sender = decltype(std::declval<MakeSender>()(size_t{0}));
-  using ThenSender = decltype(std::declval<Sender>() | stdexec::then(std::declval<NoAllocRecord>()));
+  using ThenSender = decltype(std::declval<Sender>() | stdexec::then(std::declval<CompletionRecord>()));
   using NestSender = exec::async_scope::nest_result_t<ThenSender>;
   constexpr size_t SlotSize = inline_noalloc_slot_size<MakeSender>();
   using Receiver = ArenaReceiver<SlotSize>;
@@ -30,7 +30,7 @@ static void sliding_window_arena_impl_inline(
       if (!slot) break;
       size_t offset = next_op * msg_size;
       in_flight.fetch_add(1, std::memory_order_relaxed);
-      NoAllocRecord record{&latency, std::chrono::high_resolution_clock::now(), &in_flight};
+      auto record = CompletionRecord::make(latency, &in_flight);
       slot->start_op_with(
         scope.nest(make_sender(offset) | stdexec::then(record)),
         ArenaReceiver<SlotSize>{&arena, slot});
@@ -58,7 +58,7 @@ constexpr size_t threaded_arena_slot_size() {
   struct LetLambda {
     MakeSender make_sender;
     size_t offset;
-    NoAllocRecord record;
+    CompletionRecord record;
     auto operator()() {
       return make_sender(offset) | stdexec::then(record);
     }
@@ -90,7 +90,7 @@ static void sliding_window_arena_impl_threaded(
     auto *slot = arena.acquire();
     size_t offset = op_idx * msg_size;
     in_flight.fetch_add(1, std::memory_order_relaxed);
-    NoAllocRecord record{&latency, std::chrono::high_resolution_clock::now(), &in_flight};
+    auto record = CompletionRecord::make(latency, &in_flight);
     slot->start_op_with(
       scope.nest(
         scheduler.schedule() | stdexec::let_value([make_sender, offset, record]() {

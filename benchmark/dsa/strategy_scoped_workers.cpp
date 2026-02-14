@@ -7,9 +7,11 @@ static exec::task<void> worker_coro(DsaProxy &dsa, BufferSet &bufs,
                                     size_t num_workers, size_t worker_id) {
   size_t current_op = worker_id;
 
+  bool sample = latency.enabled();
   while (current_op < num_ops) {
     size_t offset = current_op * msg_size;
-    auto start_time = std::chrono::high_resolution_clock::now();
+    std::chrono::high_resolution_clock::time_point start_time;
+    if (sample) start_time = std::chrono::high_resolution_clock::now();
 
     using namespace dsa_stdexec;
     switch (op_type) {
@@ -39,8 +41,10 @@ static exec::task<void> worker_coro(DsaProxy &dsa, BufferSet &bufs,
         break;
     }
 
-    auto end_time = std::chrono::high_resolution_clock::now();
-    latency.record(std::chrono::duration<double, std::nano>(end_time - start_time).count());
+    if (sample) {
+      auto end_time = std::chrono::high_resolution_clock::now();
+      latency.record(std::chrono::duration<double, std::nano>(end_time - start_time).count());
+    }
     current_op += num_workers;
   }
 

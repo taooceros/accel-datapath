@@ -80,11 +80,21 @@ private:
 // Latency collector (single-threaded, no locking needed)
 class LatencyCollector {
 public:
-  void record(double latency_ns) { samples_.push_back(latency_ns); }
+  explicit LatencyCollector(bool enabled = true) : enabled_(enabled) {}
 
-  void reserve(size_t n) { samples_.reserve(n); }
+  void record(double latency_ns) {
+    if (!enabled_) return;
+    samples_.push_back(latency_ns);
+  }
+
+  void reserve(size_t n) {
+    if (!enabled_) return;
+    samples_.reserve(n);
+  }
 
   void clear() { samples_.clear(); }
+
+  bool enabled() const { return enabled_; }
 
   struct Stats {
     double min_ns = 0;
@@ -113,6 +123,7 @@ public:
 
 private:
   std::vector<double> samples_;
+  bool enabled_ = true;
 };
 
 // Metric result structure

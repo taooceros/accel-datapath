@@ -59,6 +59,9 @@ struct BenchmarkConfig {
   size_t max_ops = 0;
   int iterations = 10;
 
+  // Latency sampling
+  bool sample_latency = true;
+
   // Output configuration
   std::string csv_file = "dsa_benchmark_results.csv";
 

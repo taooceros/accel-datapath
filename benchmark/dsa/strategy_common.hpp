@@ -2,7 +2,7 @@
 #ifndef STRATEGY_COMMON_HPP
 #define STRATEGY_COMMON_HPP
 
-// Shared utilities for all strategy TUs: with_op_sender, spawn helpers, NoAllocRecord.
+// Shared utilities for all strategy TUs: with_op_sender, spawn helpers, CompletionRecord.
 // All functions are static inline or templates to avoid ODR issues across TUs.
 
 #include "strategies.hpp"
@@ -54,16 +54,36 @@ static void with_op_sender(OperationType op_type, DsaProxy &dsa,
   }
 }
 
+// Completion record used by all strategies.
+// When latency sampling is enabled, records start/end timestamps.
+// When disabled, skips all chrono::now() calls — zero timing overhead.
+struct CompletionRecord {
+  LatencyCollector *latency;
+  std::chrono::high_resolution_clock::time_point start_time;
+  std::atomic<size_t> *in_flight;
+
+  // Factory: only calls now() when latency is enabled
+  static CompletionRecord make(LatencyCollector &lat, std::atomic<size_t> *inf) {
+    return {&lat,
+            lat.enabled() ? std::chrono::high_resolution_clock::now()
+                          : std::chrono::high_resolution_clock::time_point{},
+            inf};
+  }
+
+  void operator()(auto &&...) const {
+    if (latency->enabled()) {
+      auto end = std::chrono::high_resolution_clock::now();
+      latency->record(std::chrono::duration<double, std::nano>(end - start_time).count());
+    }
+    if (in_flight) in_flight->fetch_sub(1, std::memory_order_release);
+  }
+};
+
 static inline void spawn_op(DsaProxy &dsa, exec::async_scope &scope, OperationType op_type,
                             BufferSet &bufs, size_t offset, size_t msg_size,
                             LatencyCollector &latency, std::atomic<size_t> *in_flight = nullptr) {
-  auto start_time = std::chrono::high_resolution_clock::now();
-  auto record = [&latency, start_time, in_flight](auto&&...) {
-    auto end = std::chrono::high_resolution_clock::now();
-    latency.record(std::chrono::duration<double, std::nano>(end - start_time).count());
-    if (in_flight) in_flight->fetch_sub(1, std::memory_order_release);
-  };
   if (in_flight) in_flight->fetch_add(1, std::memory_order_relaxed);
+  auto record = CompletionRecord::make(latency, in_flight);
 
   with_op_sender(op_type, dsa, bufs, msg_size, [&](auto op_sender) {
     scope.spawn(op_sender(offset) | stdexec::then(record));
@@ -75,14 +95,8 @@ static inline void spawn_op_scheduled(DsaProxy &dsa, dsa_stdexec::DsaScheduler<D
                                       BufferSet &bufs, size_t offset, size_t msg_size,
                                       LatencyCollector &latency,
                                       std::atomic<size_t> *in_flight = nullptr) {
-  auto start_time = std::chrono::high_resolution_clock::now();
   if (in_flight) in_flight->fetch_add(1, std::memory_order_relaxed);
-
-  auto record = [&latency, start_time, in_flight](auto&&...) {
-    auto end = std::chrono::high_resolution_clock::now();
-    latency.record(std::chrono::duration<double, std::nano>(end - start_time).count());
-    if (in_flight) in_flight->fetch_sub(1, std::memory_order_release);
-  };
+  auto record = CompletionRecord::make(latency, in_flight);
 
   with_op_sender(op_type, dsa, bufs, msg_size, [&](auto op_sender) {
     scope.spawn(scheduler.schedule() | stdexec::let_value([op_sender, offset, record]() {
@@ -91,23 +105,12 @@ static inline void spawn_op_scheduled(DsaProxy &dsa, dsa_stdexec::DsaScheduler<D
   });
 }
 
-struct NoAllocRecord {
-  LatencyCollector *latency;
-  std::chrono::high_resolution_clock::time_point start_time;
-  std::atomic<size_t> *in_flight;
-  void operator()(auto &&...) const {
-    auto end = std::chrono::high_resolution_clock::now();
-    latency->record(std::chrono::duration<double, std::nano>(end - start_time).count());
-    in_flight->fetch_sub(1, std::memory_order_release);
-  }
-};
-
 // Noalloc slot size helpers — used by both noalloc and arena strategies.
 
 template <class MakeSender>
 constexpr size_t inline_noalloc_slot_size() {
   using Sender = decltype(std::declval<MakeSender>()(size_t{0}));
-  using ThenSender = decltype(std::declval<Sender>() | stdexec::then(std::declval<NoAllocRecord>()));
+  using ThenSender = decltype(std::declval<Sender>() | stdexec::then(std::declval<CompletionRecord>()));
   using NestSender = exec::async_scope::nest_result_t<ThenSender>;
   return sizeof(stdexec::connect_result_t<NestSender, SlotReceiver>);
 }
@@ -119,7 +122,7 @@ constexpr size_t threaded_noalloc_slot_size() {
   struct LetLambda {
     MakeSender make_sender;
     size_t offset;
-    NoAllocRecord record;
+    CompletionRecord record;
     auto operator()() {
       return make_sender(offset) | stdexec::then(record);
     }

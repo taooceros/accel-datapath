@@ -283,6 +283,10 @@ static BenchmarkConfig load_config_from_toml(const std::string &filename) {
       config.total_bytes = static_cast<size_t>(*val);
     if (auto val = get_int(params, "max_ops"))
       config.max_ops = static_cast<size_t>(*val);
+    if (auto node = params->get("sample_latency")) {
+      if (auto val = node->value<bool>())
+        config.sample_latency = *val;
+    }
   }
 
   if (auto output = tbl["output"].as_table()) {
@@ -332,6 +336,9 @@ void print_usage(const char *prog) {
   fmt::println("  --operation=<type>  Run only specified operation(s), comma-separated");
   fmt::println("                      Types: data_move, mem_fill, compare, compare_value,");
   fmt::println("                             dualcast, crc_gen, copy_crc, cache_flush");
+  fmt::println("");
+  fmt::println("Latency:");
+  fmt::println("  --no-latency        Disable per-operation latency sampling");
   fmt::println("");
   fmt::println("Examples:");
   fmt::println("  {}                                  # Default: sliding-window with inline+threaded", prog);
@@ -455,6 +462,11 @@ BenchmarkConfig parse_args(int argc, char **argv) {
     if (try_flag(arg, polling_flags, std::size(polling_flags), cli_polling)) continue;
     if (try_flag(arg, pattern_flags, std::size(pattern_flags), cli_pattern)) continue;
     if (try_flag(arg, submission_flags, std::size(submission_flags), cli_submission)) continue;
+
+    if (arg == "--no-latency") {
+      config.sample_latency = false;
+      continue;
+    }
 
     if (arg.starts_with("--queue=")) {
       for (auto &q : split_csv(arg.substr(8))) {
