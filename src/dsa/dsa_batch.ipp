@@ -120,6 +120,10 @@ void DsaBatchBase<QueueTemplate>::flush() {
 
 template <template <typename> class QueueTemplate>
 void DsaBatchBase<QueueTemplate>::poll() {
+  // Flush any staged descriptors so hardware receives them.
+  // Without this, inline polling (no poller thread) deadlocks:
+  // descriptors sit in the staging buffer and never reach hardware.
+  flush();
   inner_.poll();
 }
 

@@ -192,6 +192,15 @@ public:
   HwCtx &hw_context() { return hw_ctx_; }
   const HwCtx &hw_context() const { return hw_ctx_; }
 
+#ifndef NDEBUG
+  template <typename F>
+  void for_each_debug(F &&f) {
+    lock_.lock();
+    for (auto *curr = head_; curr; curr = curr->next) f(curr);
+    lock_.unlock();
+  }
+#endif
+
 private:
   dsa_stdexec::OperationBase *head_ = nullptr;
   Lock lock_;
@@ -347,6 +356,13 @@ public:
   HwCtx &hw_context() { return hw_ctx_; }
   const HwCtx &hw_context() const { return hw_ctx_; }
 
+#ifndef NDEBUG
+  template <typename F>
+  void for_each_debug(F &&f) {
+    for (auto *curr = pending_head_; curr; curr = curr->next) f(curr);
+  }
+#endif
+
 private:
   alignas(64) std::atomic<std::size_t> head_{0};
   alignas(64) std::atomic<std::size_t> tail_{0};
@@ -446,6 +462,13 @@ public:
 
   HwCtx &hw_context() { return hw_ctx_; }
   const HwCtx &hw_context() const { return hw_ctx_; }
+
+#ifndef NDEBUG
+  template <typename F>
+  void for_each_debug(F &&f) {
+    for (auto *curr = head_.load(std::memory_order_relaxed); curr; curr = curr->next) f(curr);
+  }
+#endif
 
 private:
   std::atomic<dsa_stdexec::OperationBase *> head_{nullptr};

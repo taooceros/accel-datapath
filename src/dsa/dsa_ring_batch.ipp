@@ -21,7 +21,6 @@ DsaRingBatchBase<QueueTemplate>::DsaRingBatchBase(bool start_poller)
     max_batch_size_ = std::min(static_cast<size_t>(wq_max),
                                static_cast<size_t>(32));
   }
-
   memset(desc_ring_, 0, sizeof(desc_ring_));
   for (auto &b : batches_) {
     memset(&b.batch_comp, 0, sizeof(b.batch_comp));
@@ -69,6 +68,16 @@ void DsaRingBatchBase<QueueTemplate>::submit(dsa_stdexec::OperationBase *op,
     // Ensure descriptor ring has space
     while (desc_available() == 0) {
       reclaim_completed();
+      inner_.poll();
+      _mm_pause();
+    }
+
+    // Ensure the current batch slot is available (Free or Filling).
+    // With a small batch ring, batch_fill_ can wrap and alias an InFlight slot.
+    // We must wait for it to be reclaimed before using it.
+    while (batches_[batch_index(batch_fill_)].state == BatchState::InFlight) {
+      reclaim_completed();
+      inner_.poll();
       _mm_pause();
     }
 
@@ -89,8 +98,9 @@ void DsaRingBatchBase<QueueTemplate>::submit(dsa_stdexec::OperationBase *op,
       seal_and_submit_current();
 
       // Ensure the new batch slot is available
-      while (batches_[batch_index(batch_fill_)].state != BatchState::Free) {
+      while (batches_[batch_index(batch_fill_)].state == BatchState::InFlight) {
         reclaim_completed();
+        inner_.poll();
         _mm_pause();
       }
 
@@ -163,13 +173,16 @@ void DsaRingBatchBase<QueueTemplate>::submit_batch(BatchEntry &batch) {
 
   if (batch.count == 1) {
     // Single descriptor — submit directly, no batch opcode overhead.
-    // _movdir64b copies the 64-byte descriptor atomically into the portal,
-    // so the source is free immediately — mark slot as Free.
+    // _movdir64b copies the descriptor atomically into the portal.
+    // Mark as InFlight with artificial completion so reclaim_completed()
+    // advances desc_head_ in order (not out-of-order which corrupts the ring).
     inner_.submit_raw(&desc_ring_[batch.start]);
-    desc_head_ += 1;
-    batch.state = BatchState::Free;
+    batch.batch_comp.status = 1; // artificially mark complete
+    batch.state = BatchState::InFlight;
   } else {
     // Build hardware batch descriptor (opcode 0x01)
+    // The sub-descriptors must be contiguous — wrap-around is prevented
+    // by seal_and_submit_current() in submit() when desc_index wraps to 0.
     dsa_hw_desc bd{};
     memset(&bd, 0, sizeof(bd));
     bd.opcode = DSA_OPCODE_BATCH;
