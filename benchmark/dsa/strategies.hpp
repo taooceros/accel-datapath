@@ -53,6 +53,16 @@ void run_batch_threaded(DsaProxy &dsa, exec::async_scope &scope,
                         BufferSet &bufs, LatencyCollector &latency,
                         OperationType op_type);
 
+// Batch noalloc
+void run_batch_noalloc_inline(DsaProxy &dsa, exec::async_scope &scope,
+                              size_t concurrency, size_t msg_size, size_t total_bytes,
+                              BufferSet &bufs, LatencyCollector &latency,
+                              OperationType op_type);
+void run_batch_noalloc_threaded(DsaProxy &dsa, exec::async_scope &scope,
+                                size_t concurrency, size_t msg_size, size_t total_bytes,
+                                BufferSet &bufs, LatencyCollector &latency,
+                                OperationType op_type);
+
 // Scoped workers
 void run_scoped_workers_inline(DsaProxy &dsa, exec::async_scope &scope,
                                size_t concurrency, size_t msg_size, size_t total_bytes,
@@ -69,6 +79,7 @@ inline constexpr StrategyFn strategy_table[][2] = {
   /* SlidingWindowNoAlloc*/ { run_sliding_window_inline_noalloc,  run_sliding_window_threaded_noalloc },
   /* SlidingWindowArena  */ { run_sliding_window_inline_arena,    run_sliding_window_threaded_arena },
   /* Batch              */  { run_batch_inline,                   run_batch_threaded },
+  /* BatchNoAlloc       */  { run_batch_noalloc_inline,           run_batch_noalloc_threaded },
   /* ScopedWorkers      */  { run_scoped_workers_inline,          run_scoped_workers_threaded },
 };
 

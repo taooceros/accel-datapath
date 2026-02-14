@@ -73,6 +73,7 @@ const char* scheduling_pattern_name(SchedulingPattern p) {
     case SchedulingPattern::SlidingWindowNoAlloc: return "sliding_window_noalloc";
     case SchedulingPattern::SlidingWindowArena:   return "sliding_window_arena";
     case SchedulingPattern::Batch:                return "batch";
+    case SchedulingPattern::BatchNoAlloc:         return "batch_noalloc";
     case SchedulingPattern::ScopedWorkers:        return "scoped_workers";
   }
   return "unknown";
@@ -93,7 +94,7 @@ std::vector<SchedulingPattern> all_scheduling_patterns() {
   return {
     SchedulingPattern::SlidingWindow, SchedulingPattern::SlidingWindowNoAlloc,
     SchedulingPattern::SlidingWindowArena, SchedulingPattern::Batch,
-    SchedulingPattern::ScopedWorkers
+    SchedulingPattern::BatchNoAlloc, SchedulingPattern::ScopedWorkers
   };
 }
 
@@ -320,6 +321,7 @@ void print_usage(const char *prog) {
   fmt::println("  --sliding-window-noalloc  Same as sliding-window but zero-allocation (default)");
   fmt::println("  --sliding-window-arena    Free-list arena (ibverbs/UCX style O(1) recycling)");
   fmt::println("  --batch             Spawn N ops, wait all complete, repeat");
+  fmt::println("  --batch-noalloc     Batch pattern with zero-allocation slots");
   fmt::println("  --scoped-workers    N worker coroutines processing sequentially");
   fmt::println("");
   fmt::println("Submission strategy (can combine multiple):");
@@ -384,6 +386,7 @@ static const FlagMapping pattern_flags[] = {
   {"--sliding-window-noalloc", "sliding_window_noalloc"},
   {"--sliding-window-arena",   "sliding_window_arena"},
   {"--batch",                  "batch"},
+  {"--batch-noalloc",          "batch_noalloc"},
   {"--scoped-workers",         "scoped_workers"},
 };
 
