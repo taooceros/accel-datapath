@@ -7,6 +7,7 @@
 
 #include "strategies.hpp"
 #include <chrono>
+#include <dsa_stdexec/batch.hpp>
 #include <dsa_stdexec/operations/cache_flush.hpp>
 #include <dsa_stdexec/operations/compare.hpp>
 #include <dsa_stdexec/operations/compare_value.hpp>
@@ -130,6 +131,45 @@ constexpr size_t threaded_noalloc_slot_size() {
   using LetSender = decltype(std::declval<SchedSender>() | stdexec::let_value(std::declval<LetLambda>()));
   using NestSender = exec::async_scope::nest_result_t<LetSender>;
   return sizeof(stdexec::connect_result_t<NestSender, SlotReceiver>);
+}
+
+// Fill a single descriptor for the given operation type.
+// Used by batch_raw strategy to populate sub-descriptors in a hardware batch.
+static inline void fill_for_op(dsa_hw_desc &desc, OperationType op_type,
+                               BufferSet &bufs, size_t offset, size_t msg_size) {
+  switch (op_type) {
+  case OperationType::DataMove:
+    dsa::fill_data_move(desc, bufs.src.data() + offset,
+                        bufs.dst.data() + offset, msg_size);
+    break;
+  case OperationType::MemFill:
+    dsa::fill_mem_fill(desc, bufs.dst.data() + offset, msg_size,
+                       BufferSet::fill_pattern);
+    break;
+  case OperationType::Compare:
+    dsa::fill_compare(desc, bufs.src.data() + offset,
+                      bufs.dst.data() + offset, msg_size);
+    break;
+  case OperationType::CompareValue:
+    dsa::fill_compare_value(desc, bufs.src.data() + offset, msg_size,
+                            BufferSet::fill_pattern);
+    break;
+  case OperationType::Dualcast:
+    dsa::fill_dualcast(desc, bufs.src.data() + offset,
+                       bufs.dualcast_dst1 + offset,
+                       bufs.dualcast_dst2 + offset, msg_size);
+    break;
+  case OperationType::CrcGen:
+    dsa::fill_crc_gen(desc, bufs.src.data() + offset, msg_size);
+    break;
+  case OperationType::CopyCrc:
+    dsa::fill_copy_crc(desc, bufs.src.data() + offset,
+                       bufs.dst.data() + offset, msg_size);
+    break;
+  case OperationType::CacheFlush:
+    dsa::fill_cache_flush(desc, bufs.dst.data() + offset, msg_size);
+    break;
+  }
 }
 
 #endif // STRATEGY_COMMON_HPP

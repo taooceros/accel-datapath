@@ -75,6 +75,7 @@ const char* scheduling_pattern_name(SchedulingPattern p) {
     case SchedulingPattern::Batch:                return "batch";
     case SchedulingPattern::BatchNoAlloc:         return "batch_noalloc";
     case SchedulingPattern::ScopedWorkers:        return "scoped_workers";
+    case SchedulingPattern::BatchRaw:             return "batch_raw";
   }
   return "unknown";
 }
@@ -94,7 +95,8 @@ std::vector<SchedulingPattern> all_scheduling_patterns() {
   return {
     SchedulingPattern::SlidingWindow, SchedulingPattern::SlidingWindowNoAlloc,
     SchedulingPattern::SlidingWindowArena, SchedulingPattern::Batch,
-    SchedulingPattern::BatchNoAlloc, SchedulingPattern::ScopedWorkers
+    SchedulingPattern::BatchNoAlloc, SchedulingPattern::ScopedWorkers,
+    SchedulingPattern::BatchRaw
   };
 }
 
@@ -323,6 +325,7 @@ void print_usage(const char *prog) {
   fmt::println("  --batch             Spawn N ops, wait all complete, repeat");
   fmt::println("  --batch-noalloc     Batch pattern with zero-allocation slots");
   fmt::println("  --scoped-workers    N worker coroutines processing sequentially");
+  fmt::println("  --batch-raw         Hardware batch descriptor via dsa_batch sender (inline only)");
   fmt::println("");
   fmt::println("Submission strategy (can combine multiple):");
   fmt::println("  --immediate         1:1 doorbell per descriptor (default)");
@@ -388,6 +391,7 @@ static const FlagMapping pattern_flags[] = {
   {"--batch",                  "batch"},
   {"--batch-noalloc",          "batch_noalloc"},
   {"--scoped-workers",         "scoped_workers"},
+  {"--batch-raw",              "batch_raw"},
 };
 
 static const FlagMapping submission_flags[] = {

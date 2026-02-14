@@ -10,9 +10,10 @@ threaded = false      # Background thread polling (dedicated polling thread)
 # Scheduling pattern - how tasks are spawned and concurrency is managed
 sliding_window = false          # Semaphore-like: spawn new op as one completes (maintains N in-flight)
 sliding_window_noalloc = true # Same as sliding-window but zero-allocation (nest + placement new)
-batch = false                  # Spawn N ops, wait all complete, then spawn next batch
+batch = true                  # Spawn N ops, wait all complete, then spawn next batch
 batch_noalloc = true          # Batch pattern with zero-allocation slots
 scoped_workers = false          # N worker coroutines processing items sequentially
+batch_raw = false               # Hardware batch descriptor via dsa_batch sender (inline only)
 
 [submission]
 # Submission strategy - how descriptors are sent to hardware

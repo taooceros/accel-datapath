@@ -73,6 +73,12 @@ void run_scoped_workers_threaded(DsaProxy &dsa, exec::async_scope &scope,
                                  BufferSet &bufs, LatencyCollector &latency,
                                  OperationType op_type);
 
+// Batch raw (hardware batch descriptor via dsa_batch sender, inline only)
+void run_batch_raw_inline(DsaProxy &dsa, exec::async_scope &scope,
+                          size_t concurrency, size_t msg_size, size_t total_bytes,
+                          BufferSet &bufs, LatencyCollector &latency,
+                          OperationType op_type);
+
 // Indexed by [SchedulingPattern][PollingMode]: {inline, threaded}
 inline constexpr StrategyFn strategy_table[][2] = {
   /* SlidingWindow       */ { run_sliding_window_inline,          run_sliding_window_threaded },
@@ -81,14 +87,16 @@ inline constexpr StrategyFn strategy_table[][2] = {
   /* Batch              */  { run_batch_inline,                   run_batch_threaded },
   /* BatchNoAlloc       */  { run_batch_noalloc_inline,           run_batch_noalloc_threaded },
   /* ScopedWorkers      */  { run_scoped_workers_inline,          run_scoped_workers_threaded },
+  /* BatchRaw           */  { run_batch_raw_inline,               nullptr },
 };
 
 inline void dispatch_run(SchedulingPattern sp, PollingMode pm, OperationType op_type,
                          DsaProxy &dsa, exec::async_scope &scope,
                          size_t concurrency, size_t msg_size, size_t total_bytes,
                          BufferSet &bufs, LatencyCollector &latency) {
-  strategy_table[static_cast<int>(sp)][static_cast<int>(pm)](
-      dsa, scope, concurrency, msg_size, total_bytes, bufs, latency, op_type);
+  auto fn = strategy_table[static_cast<int>(sp)][static_cast<int>(pm)];
+  if (!fn) return; // unsupported combination (e.g. batch_raw + threaded)
+  fn(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency, op_type);
 }
 
 #endif // BENCHMARK_STRATEGIES_HPP

@@ -23,7 +23,7 @@ std::optional<PollingMode> parse_polling_mode(std::string_view name);
 std::vector<PollingMode> all_polling_modes();
 
 enum class SchedulingPattern {
-  SlidingWindow, SlidingWindowNoAlloc, SlidingWindowArena, Batch, BatchNoAlloc, ScopedWorkers
+  SlidingWindow, SlidingWindowNoAlloc, SlidingWindowArena, Batch, BatchNoAlloc, ScopedWorkers, BatchRaw
 };
 
 const char* scheduling_pattern_name(SchedulingPattern p);
