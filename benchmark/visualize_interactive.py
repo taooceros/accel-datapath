@@ -52,6 +52,10 @@ def load_data(csv_path: str) -> pd.DataFrame:
     split = df["pattern"].apply(split_pattern)
     df["scheduling"] = split.apply(lambda x: x[0])
     df["submission"] = split.apply(lambda x: x[1])
+    # Drop rows where all metric columns are zero (no actual data)
+    metric_cols = ["bandwidth_gbps", "msg_rate_mps", "latency_avg_ns", "latency_p99_ns"]
+    existing = [c for c in metric_cols if c in df.columns]
+    df = df[df[existing].abs().sum(axis=1) > 0].reset_index(drop=True)
     return df
 
 
@@ -382,10 +386,42 @@ def create_checkbox_dashboard(df: pd.DataFrame, output_path: Path):
         const traceMetadata = {json.dumps(trace_metadata)};
         const queueTypes = {json.dumps(queue_types)};
         const colors = {json.dumps(COLORS)};
+        const STORAGE_KEY = 'dsa_dashboard_filters';
 
         function getCheckedValues(name) {{
             const checkboxes = document.querySelectorAll(`input[name="${{name}}"]:checked`);
             return Array.from(checkboxes).map(cb => cb.value);
+        }}
+
+        function saveSelections() {{
+            const state = {{}};
+            document.querySelectorAll('.filter-group').forEach(group => {{
+                const checkboxes = group.querySelectorAll('input[type="checkbox"]');
+                if (checkboxes.length === 0) return;
+                const name = checkboxes[0].name;
+                state[name] = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+            }});
+            try {{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }} catch(e) {{}}
+        }}
+
+        function restoreSelections() {{
+            try {{
+                const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+                if (!saved) return false;
+                let restored = false;
+                for (const [name, values] of Object.entries(saved)) {{
+                    const checkboxes = document.querySelectorAll(`input[name="${{name}}"]`);
+                    if (checkboxes.length === 0) continue;
+                    // Only restore if the saved values are still valid options
+                    const available = new Set(Array.from(checkboxes).map(cb => cb.value));
+                    const validValues = values.filter(v => available.has(v));
+                    if (validValues.length > 0) {{
+                        checkboxes.forEach(cb => cb.checked = validValues.includes(cb.value));
+                        restored = true;
+                    }}
+                }}
+                return restored;
+            }} catch(e) {{ return false; }}
         }}
 
         function selectAll(name) {{
@@ -399,6 +435,8 @@ def create_checkbox_dashboard(df: pd.DataFrame, output_path: Path):
         }}
 
         function updatePlot() {{
+            saveSelections();
+
             const selectedScheduling = getCheckedValues('scheduling');
             const selectedSubmission = getCheckedValues('submission');
             const selectedModes = getCheckedValues('mode');
@@ -433,6 +471,11 @@ def create_checkbox_dashboard(df: pd.DataFrame, output_path: Path):
         document.querySelectorAll('.controls input[type="checkbox"]').forEach(cb => {{
             cb.addEventListener('change', updatePlot);
         }});
+
+        // Restore saved selections and update plot
+        if (restoreSelections()) {{
+            updatePlot();
+        }}
     </script>
 </body>
 </html>
@@ -628,13 +671,41 @@ def create_heatmap_dashboard(df: pd.DataFrame, output_path: Path):
 
     <script>
         const traceMetadata = {json.dumps(trace_metadata)};
+        const STORAGE_KEY = 'dsa_heatmap_filters';
 
         function getSelectedValue(name) {{
             const radio = document.querySelector(`input[name="${{name}}"]:checked`);
             return radio ? radio.value : null;
         }}
 
+        function saveSelections() {{
+            const state = {{}};
+            const names = new Set();
+            document.querySelectorAll('.controls input[type="radio"]').forEach(r => names.add(r.name));
+            names.forEach(name => {{ state[name] = getSelectedValue(name); }});
+            try {{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }} catch(e) {{}}
+        }}
+
+        function restoreSelections() {{
+            try {{
+                const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+                if (!saved) return false;
+                let restored = false;
+                for (const [name, value] of Object.entries(saved)) {{
+                    if (!value) continue;
+                    const radio = document.querySelector(`input[name="${{name}}"][value="${{CSS.escape(value)}}"]`);
+                    if (radio) {{
+                        radio.checked = true;
+                        restored = true;
+                    }}
+                }}
+                return restored;
+            }} catch(e) {{ return false; }}
+        }}
+
         function updateHeatmap() {{
+            saveSelections();
+
             const selectedScheduling = getSelectedValue('scheduling');
             const selectedSubmission = getSelectedValue('submission');
             const selectedMode = getSelectedValue('mode');
@@ -663,6 +734,11 @@ def create_heatmap_dashboard(df: pd.DataFrame, output_path: Path):
         document.querySelectorAll('.controls input[type="radio"]').forEach(r => {{
             r.addEventListener('change', updateHeatmap);
         }});
+
+        // Restore saved selections and update
+        if (restoreSelections()) {{
+            updateHeatmap();
+        }}
     </script>
 </body>
 </html>
