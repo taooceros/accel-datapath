@@ -11,9 +11,6 @@
 #include <chrono>
 #include <cstring>
 #include <dsa/dsa.hpp>
-#include <dsa/dsa_batch.hpp>
-#include <dsa/dsa_fixed_ring_batch.hpp>
-#include <dsa/dsa_ring_batch.hpp>
 #include <dsa/task_queue.hpp>
 #include <dsa_stdexec/dsa_facade.hpp>
 #include <dsa_stdexec/operations/data_move.hpp>

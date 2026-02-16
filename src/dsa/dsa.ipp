@@ -10,7 +10,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <dsa_stdexec/error.hpp>
-#include <dsa_stdexec/trace.hpp>
 #include <fcntl.h>
 #include <fmt/format.h>
 #include <sys/mman.h>
@@ -28,8 +27,8 @@ inline uint8_t op_status(uint8_t status) {
 
 } // namespace detail
 
-template <template <typename> class QueueTemplate>
-DsaBase<QueueTemplate>::DsaBase(bool start_poller)
+template <DescriptorSubmitter Submitter, template <typename> class QueueTemplate>
+DsaEngine<Submitter, QueueTemplate>::DsaEngine(bool start_poller)
     : ctx_(), wq_(nullptr), wq_portal_(nullptr), task_queue_(DsaHwContext{}) {
   try {
     auto &ctx = context();
@@ -86,6 +85,14 @@ DsaBase<QueueTemplate>::DsaBase(bool start_poller)
     // Set up hardware context for the task queue
     task_queue_.hw_context().set_context(wq_portal_, mode_);
 
+    // Initialize the descriptor submitter
+    submitter_.init(wq_portal_, mode_, wq_);
+
+    // Provide poll callback for submitters that need backpressure support
+    if constexpr (requires { submitter_.set_poll_fn(std::function<void()>{}); }) {
+      submitter_.set_poll_fn([this] { task_queue_.poll(); });
+    }
+
     if (start_poller) {
       running_ = true;
       poller_ = std::thread([this] {
@@ -101,12 +108,15 @@ DsaBase<QueueTemplate>::DsaBase(bool start_poller)
   }
 }
 
-template <template <typename> class QueueTemplate>
-DsaBase<QueueTemplate>::~DsaBase() {
+template <DescriptorSubmitter Submitter, template <typename> class QueueTemplate>
+DsaEngine<Submitter, QueueTemplate>::~DsaEngine() {
   running_ = false;
   if (poller_.joinable()) {
     poller_.join();
   }
+
+  // Drain any staged/in-flight descriptors before unmapping the portal
+  submitter_.drain();
 
   if (wq_portal_ != nullptr) {
     munmap(wq_portal_, kWqPortalSize);
@@ -114,9 +124,8 @@ DsaBase<QueueTemplate>::~DsaBase() {
   }
 }
 
-template <template <typename> class QueueTemplate>
-void DsaBase<QueueTemplate>::data_move(void *src, void *dst, size_t size) {
-  TRACE_EVENT("dsa", "data_move", "size", size);
+template <DescriptorSubmitter Submitter, template <typename> class QueueTemplate>
+void DsaEngine<Submitter, QueueTemplate>::data_move(void *src, void *dst, size_t size) {
   if (size == 0) {
     return;
   }
@@ -187,8 +196,8 @@ retry:
   }
 }
 
-template <template <typename> class QueueTemplate>
-void *DsaBase<QueueTemplate>::map_wq(accfg_wq *wq) {
+template <DescriptorSubmitter Submitter, template <typename> class QueueTemplate>
+void *DsaEngine<Submitter, QueueTemplate>::map_wq(accfg_wq *wq) {
   char path[PATH_MAX] = {};
   if (accfg_wq_get_user_dev_path(wq, path, sizeof(path)) != 0) {
     fmt::println(stderr, "Failed to get user device path for WQ {}",
@@ -220,39 +229,26 @@ void *DsaBase<QueueTemplate>::map_wq(accfg_wq *wq) {
   return portal;
 }
 
-template <template <typename> class QueueTemplate>
-void DsaBase<QueueTemplate>::submit(dsa_stdexec::OperationBase *op, dsa_hw_desc *desc) {
-  TRACE_EVENT("dsa", "submit", "op", (uintptr_t)op);
+template <DescriptorSubmitter Submitter, template <typename> class QueueTemplate>
+void DsaEngine<Submitter, QueueTemplate>::submit(dsa_stdexec::OperationBase *op, dsa_hw_desc *desc) {
   if (wq_portal_ == nullptr) {
     throw dsa_stdexec::DsaSubmitError("DSA work queue portal is not mapped");
   }
-  
-  // Submit to hardware immediately if descriptor provided
+
   if (desc != nullptr) {
-    _mm_sfence();
-    if (mode_ == ACCFG_WQ_DEDICATED) {
-      _movdir64b(wq_portal_, desc);
-    } else {
-      // Spin retry for shared WQ
-      while (_enqcmd(wq_portal_, desc) != 0) {
-        _mm_pause();
-      }
-    }
+    submitter_.submit_descriptor(desc);
   }
-  
-  // Queue for completion polling
+
   task_queue_.push(op);
 }
 
-template <template <typename> class QueueTemplate>
-void DsaBase<QueueTemplate>::submit(dsa_stdexec::OperationBase *op) {
-  TRACE_EVENT("dsa", "submit", "op", (uintptr_t)op);
+template <DescriptorSubmitter Submitter, template <typename> class QueueTemplate>
+void DsaEngine<Submitter, QueueTemplate>::submit(dsa_stdexec::OperationBase *op) {
   task_queue_.push(op);
 }
 
-template <template <typename> class QueueTemplate>
-void DsaBase<QueueTemplate>::submit_raw(dsa_hw_desc *desc) {
-  TRACE_EVENT("dsa", "submit_raw");
+template <DescriptorSubmitter Submitter, template <typename> class QueueTemplate>
+void DsaEngine<Submitter, QueueTemplate>::submit_raw(dsa_hw_desc *desc) {
   if (wq_portal_ == nullptr) {
     throw dsa_stdexec::DsaSubmitError("DSA work queue portal is not mapped");
   }
@@ -269,8 +265,9 @@ void DsaBase<QueueTemplate>::submit_raw(dsa_hw_desc *desc) {
   }
 }
 
-template <template <typename> class QueueTemplate>
-void DsaBase<QueueTemplate>::poll() {
+template <DescriptorSubmitter Submitter, template <typename> class QueueTemplate>
+void DsaEngine<Submitter, QueueTemplate>::poll() {
+  submitter_.pre_poll();
   task_queue_.poll();
 }
 

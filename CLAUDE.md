@@ -124,7 +124,6 @@ Benchmarks are configured via `benchmark/benchmark_config.toml` with dimensions:
 - **libaccel-config**: Intel accelerator configuration library for DSA/IAX
 - **fmt**: Formatting library
 - **proxy**: Microsoft's proxy library for polymorphic programming
-- **perfetto**: Performance tracing (enabled with `DSA_ENABLE_TRACING` define)
 - **tomlplusplus**: TOML parsing for benchmark config
 
 All dependencies are managed via Nix flake (`flake.nix` / `devenv.nix`).

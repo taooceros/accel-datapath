@@ -1,12 +1,9 @@
-// Explicit template instantiations for DsaBase
-// This file ensures the template is compiled only once
-
 #include "dsa.hpp"
 
-// Instantiate all Dsa variants
-template class DsaBase<dsa::MutexTaskQueue>;
-template class DsaBase<dsa::SingleThreadTaskQueue>;
-template class DsaBase<dsa::TasSpinlockTaskQueue>;
-template class DsaBase<dsa::SpinlockTaskQueue>;
-template class DsaBase<dsa::BackoffSpinlockTaskQueue>;
-template class DsaBase<dsa::LockFreeTaskQueue>;
+// Direct submission (was DsaBase)
+template class DsaEngine<DirectSubmitter, dsa::MutexTaskQueue>;
+template class DsaEngine<DirectSubmitter, dsa::SingleThreadTaskQueue>;
+template class DsaEngine<DirectSubmitter, dsa::TasSpinlockTaskQueue>;
+template class DsaEngine<DirectSubmitter, dsa::SpinlockTaskQueue>;
+template class DsaEngine<DirectSubmitter, dsa::BackoffSpinlockTaskQueue>;
+template class DsaEngine<DirectSubmitter, dsa::LockFreeTaskQueue>;

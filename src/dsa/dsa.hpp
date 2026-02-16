@@ -13,6 +13,7 @@ extern "C" {
 #include <linux/idxd.h>
 }
 
+#include "descriptor_submitter.hpp"
 #include "dsa_operation_base.hpp"
 #include "task_queue.hpp"
 #include <dsa_stdexec/operation_base.hpp>
@@ -23,7 +24,6 @@ struct AccfgCtxDeleter {
 
 // Hardware context for DSA accelerator
 // Satisfies the HwContext concept (check_completion) for task queue polling
-// Also provides submit() for use by DsaBase::submit()
 class DsaHwContext {
 public:
   DsaHwContext() = default;
@@ -71,13 +71,17 @@ private:
 template <template <typename> class QueueTemplate>
 using DsaTaskQueue = QueueTemplate<DsaHwContext>;
 
-template <template <typename> class QueueTemplate = dsa::MutexTaskQueue>
-class DsaBase {
+// Unified DSA engine parameterized by descriptor submission strategy and queue type.
+// Submitter controls how descriptors reach hardware (direct MMIO, staged batch, ring).
+// QueueTemplate controls completion tracking synchronization (mutex, spinlock, etc).
+template <DescriptorSubmitter Submitter = DirectSubmitter,
+          template <typename> class QueueTemplate = dsa::MutexTaskQueue>
+class DsaEngine {
 public:
   using Queue = DsaTaskQueue<QueueTemplate>;
 
-  explicit DsaBase(bool start_poller = true);
-  ~DsaBase();
+  explicit DsaEngine(bool start_poller = true);
+  ~DsaEngine();
 
   void data_move(void *src, void *dst, size_t size);
 
@@ -87,7 +91,7 @@ public:
   void submit(dsa_stdexec::OperationBase *op);
   void submit_raw(dsa_hw_desc *desc);
   void poll();
-  void flush() {} // no-op for non-batch; enables uniform DsaFacade
+  void flush() { submitter_.flush(); }
 
   accfg_wq *wq() const noexcept { return wq_; }
 
@@ -107,23 +111,52 @@ private:
 
   void *map_wq(accfg_wq *wq);
 
+  Submitter submitter_;
   Queue task_queue_;
   std::thread poller_;
   std::atomic<bool> running_{false};
 
-  DsaBase(const DsaBase &) = delete;
-  DsaBase &operator=(const DsaBase &) = delete;
+  DsaEngine(const DsaEngine &) = delete;
+  DsaEngine &operator=(const DsaEngine &) = delete;
 };
 
+// Backwards-compatible alias: DsaBase<Q> = DsaEngine<DirectSubmitter, Q>
+template <template <typename> class QueueTemplate = dsa::MutexTaskQueue>
+using DsaBase = DsaEngine<DirectSubmitter, QueueTemplate>;
+
 // Default Dsa type using mutex-based queue
-using Dsa = DsaBase<dsa::MutexTaskQueue>;
+using Dsa = DsaEngine<DirectSubmitter, dsa::MutexTaskQueue>;
 
 // Convenience aliases for different queue strategies
-using DsaSingleThread = DsaBase<dsa::SingleThreadTaskQueue>;
-using DsaTasSpinlock = DsaBase<dsa::TasSpinlockTaskQueue>;
-using DsaSpinlock = DsaBase<dsa::SpinlockTaskQueue>;  // TTAS
-using DsaBackoffSpinlock = DsaBase<dsa::BackoffSpinlockTaskQueue>;
-using DsaLockFree = DsaBase<dsa::LockFreeTaskQueue>;
+using DsaSingleThread = DsaEngine<DirectSubmitter, dsa::SingleThreadTaskQueue>;
+using DsaTasSpinlock = DsaEngine<DirectSubmitter, dsa::TasSpinlockTaskQueue>;
+using DsaSpinlock = DsaEngine<DirectSubmitter, dsa::SpinlockTaskQueue>;  // TTAS
+using DsaBackoffSpinlock = DsaEngine<DirectSubmitter, dsa::BackoffSpinlockTaskQueue>;
+using DsaLockFree = DsaEngine<DirectSubmitter, dsa::LockFreeTaskQueue>;
+
+// Double-buffered batch submission (was DsaBatchBase)
+using DsaBatch = DsaEngine<StagingSubmitter, dsa::MutexTaskQueue>;
+using DsaBatchSingleThread = DsaEngine<StagingSubmitter, dsa::SingleThreadTaskQueue>;
+using DsaBatchTasSpinlock = DsaEngine<StagingSubmitter, dsa::TasSpinlockTaskQueue>;
+using DsaBatchSpinlock = DsaEngine<StagingSubmitter, dsa::SpinlockTaskQueue>;
+using DsaBatchBackoffSpinlock = DsaEngine<StagingSubmitter, dsa::BackoffSpinlockTaskQueue>;
+using DsaBatchLockFree = DsaEngine<StagingSubmitter, dsa::LockFreeTaskQueue>;
+
+// Fixed ring batch submission (was DsaFixedRingBatchBase)
+using DsaFixedRingBatch = DsaEngine<FixedRingSubmitter, dsa::MutexTaskQueue>;
+using DsaFixedRingBatchSingleThread = DsaEngine<FixedRingSubmitter, dsa::SingleThreadTaskQueue>;
+using DsaFixedRingBatchTasSpinlock = DsaEngine<FixedRingSubmitter, dsa::TasSpinlockTaskQueue>;
+using DsaFixedRingBatchSpinlock = DsaEngine<FixedRingSubmitter, dsa::SpinlockTaskQueue>;
+using DsaFixedRingBatchBackoffSpinlock = DsaEngine<FixedRingSubmitter, dsa::BackoffSpinlockTaskQueue>;
+using DsaFixedRingBatchLockFree = DsaEngine<FixedRingSubmitter, dsa::LockFreeTaskQueue>;
+
+// Ring batch submission (was DsaRingBatchBase)
+using DsaRingBatch = DsaEngine<RingSubmitter, dsa::MutexTaskQueue>;
+using DsaRingBatchSingleThread = DsaEngine<RingSubmitter, dsa::SingleThreadTaskQueue>;
+using DsaRingBatchTasSpinlock = DsaEngine<RingSubmitter, dsa::TasSpinlockTaskQueue>;
+using DsaRingBatchSpinlock = DsaEngine<RingSubmitter, dsa::SpinlockTaskQueue>;
+using DsaRingBatchBackoffSpinlock = DsaEngine<RingSubmitter, dsa::BackoffSpinlockTaskQueue>;
+using DsaRingBatchLockFree = DsaEngine<RingSubmitter, dsa::LockFreeTaskQueue>;
 
 #include "dsa.ipp"
 
