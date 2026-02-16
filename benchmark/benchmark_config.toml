@@ -21,6 +21,8 @@ immediate = true     # DsaBase: 1:1 doorbell per descriptor (existing behavior)
 double_buf_batch = false   # DsaBatchBase: double-buffered staging, submit as hardware batch (opcode 0x01)
 fixed_ring_batch = true   # DsaFixedRingBatchBase: fixed-size ring batch (ablation study)
 ring_batch = true    # DsaRingBatchBase: ring-buffer based hardware batch
+mirrored_ring_batch = true  # MirroredRingSubmitter: wrap-free ring via VM mirroring
+
 
 [queues]
 # Queue types to benchmark - different synchronization strategies

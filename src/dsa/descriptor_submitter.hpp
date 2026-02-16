@@ -10,6 +10,8 @@
 #include <functional>
 #include <x86intrin.h>
 
+#include "mirrored_ring.hpp"
+
 extern "C" {
 #include <accel-config/libaccel_config.h>
 #include <linux/idxd.h>
@@ -514,5 +516,192 @@ private:
 };
 
 static_assert(DescriptorSubmitter<RingSubmitter>);
+
+// ============================================================================
+// MirroredRingSubmitter — wrap-free ring via virtual memory mirroring
+// ============================================================================
+// Same architecture as RingSubmitter (shared descriptor ring + batch metadata
+// ring) but the descriptor ring is backed by a MirroredRing: the same physical
+// pages are mapped twice contiguously in virtual memory. This eliminates the
+// wrap-around check entirely — a batch that starts near the end of the ring
+// and extends past it sees contiguous memory via the mirror region.
+
+class MirroredRingSubmitter {
+public:
+  MirroredRingSubmitter() = default;
+
+  void init(void *portal, accfg_wq_mode mode, accfg_wq *wq) {
+    direct_.init(portal, mode, wq);
+
+    int wq_max = accfg_wq_get_max_batch_size(wq);
+    if (wq_max > 0) {
+      max_batch_size_ =
+          std::min(static_cast<size_t>(wq_max), static_cast<size_t>(32));
+    }
+
+    desc_ring_ = static_cast<dsa_hw_desc *>(ring_.data());
+
+    for (auto &b : batches_) {
+      memset(&b.batch_comp, 0, sizeof(b.batch_comp));
+      b.start = 0;
+      b.count = 0;
+      b.state = BatchState::Free;
+    }
+  }
+
+  void set_poll_fn(std::function<void()> fn) { poll_fn_ = std::move(fn); }
+
+  void submit_descriptor(dsa_hw_desc *desc) {
+    // Ensure descriptor ring has space
+    while (desc_available() == 0) {
+      reclaim_completed();
+      if (poll_fn_) poll_fn_();
+      _mm_pause();
+    }
+
+    // Ensure the current batch slot is available
+    while (batches_[batch_index(batch_fill_)].state == BatchState::InFlight) {
+      reclaim_completed();
+      if (poll_fn_) poll_fn_();
+      _mm_pause();
+    }
+
+    BatchEntry &batch = batches_[batch_index(batch_fill_)];
+
+    if (batch.state == BatchState::Free) {
+      batch.state = BatchState::Filling;
+      batch.start = desc_index(desc_tail_);
+      batch.count = 0;
+      memset(&batch.batch_comp, 0, sizeof(batch.batch_comp));
+    }
+
+    // No wrap-around check needed — mirror region makes ring contiguous
+    memcpy(&desc_ring_[desc_index(desc_tail_)], desc, sizeof(dsa_hw_desc));
+    desc_tail_++;
+    batch.count++;
+
+    if (batch.count >= max_batch_size_) {
+      seal_and_submit_current();
+    }
+  }
+
+  void flush() {}
+
+  void pre_poll() {
+    BatchEntry &current = batches_[batch_index(batch_fill_)];
+    if (current.state == BatchState::Filling && current.count > 0) {
+      seal_and_submit_current();
+    }
+    reclaim_completed();
+  }
+
+  void drain() {
+    BatchEntry &current = batches_[batch_index(batch_fill_)];
+    if (current.state == BatchState::Filling && current.count > 0) {
+      seal_and_submit_current();
+    }
+    for (auto &b : batches_) {
+      while (b.state == BatchState::InFlight) {
+        _mm_pause();
+        reclaim_completed();
+      }
+    }
+  }
+
+private:
+  DirectSubmitter direct_;
+  std::function<void()> poll_fn_;
+
+  // Descriptor ring — mirrored virtual memory mapping
+  static constexpr size_t kDescRingSize = 256;
+  static_assert((kDescRingSize & (kDescRingSize - 1)) == 0,
+                "kDescRingSize must be power of 2");
+  MirroredRing ring_{kDescRingSize, sizeof(dsa_hw_desc)};
+  dsa_hw_desc *desc_ring_ = nullptr;
+  size_t desc_head_ = 0;
+  size_t desc_tail_ = 0;
+
+  // Batch metadata ring
+  static constexpr size_t kMaxBatches = 16;
+  static_assert((kMaxBatches & (kMaxBatches - 1)) == 0,
+                "kMaxBatches must be power of 2");
+
+  enum class BatchState : uint8_t { Free, Filling, InFlight };
+
+  struct BatchEntry {
+    alignas(32) dsa_completion_record batch_comp;
+    size_t start;
+    uint32_t count;
+    BatchState state;
+  };
+
+  BatchEntry batches_[kMaxBatches];
+  size_t batch_fill_ = 0;
+  size_t batch_head_ = 0;
+
+  size_t max_batch_size_ = 32;
+
+  size_t desc_index(size_t pos) const { return pos & (kDescRingSize - 1); }
+  size_t batch_index(size_t pos) const { return pos & (kMaxBatches - 1); }
+  size_t desc_available() const { return kDescRingSize - (desc_tail_ - desc_head_); }
+
+  void reclaim_completed() {
+    while (batch_head_ != batch_fill_) {
+      BatchEntry &b = batches_[batch_index(batch_head_)];
+      if (b.state == BatchState::Free) {
+        batch_head_++;
+        continue;
+      }
+      if (b.state != BatchState::InFlight) {
+        break;
+      }
+      if (b.batch_comp.status == 0) {
+        break;
+      }
+      desc_head_ += b.count;
+      b.state = BatchState::Free;
+      batch_head_++;
+    }
+  }
+
+  void submit_batch(BatchEntry &batch) {
+    // batch.start is already a masked index in [0, kDescRingSize).
+    // The mirror region guarantees contiguous access even if the batch
+    // spans the ring boundary (e.g. start=250, count=32 → slots 250..281
+    // are contiguous in virtual memory, wrapping to physical slots 0..25).
+    if (batch.count == 1) {
+      direct_.submit_descriptor(&desc_ring_[batch.start]);
+      batch.batch_comp.status = 1;
+      batch.state = BatchState::InFlight;
+    } else {
+      dsa_hw_desc bd{};
+      memset(&bd, 0, sizeof(bd));
+      bd.opcode = DSA_OPCODE_BATCH;
+      bd.flags = IDXD_OP_FLAG_RCR | IDXD_OP_FLAG_CRAV;
+      bd.desc_list_addr = reinterpret_cast<uint64_t>(&desc_ring_[batch.start]);
+      bd.desc_count = static_cast<uint32_t>(batch.count);
+      bd.completion_addr = reinterpret_cast<uint64_t>(&batch.batch_comp);
+
+      direct_.submit_descriptor(&bd);
+      batch.state = BatchState::InFlight;
+    }
+  }
+
+  void seal_and_submit_current() {
+    BatchEntry &batch = batches_[batch_index(batch_fill_)];
+    if (batch.state != BatchState::Filling || batch.count == 0) {
+      return;
+    }
+
+    submit_batch(batch);
+    batch_fill_++;
+
+    if (batches_[batch_index(batch_fill_)].state != BatchState::Free) {
+      reclaim_completed();
+    }
+  }
+};
+
+static_assert(DescriptorSubmitter<MirroredRingSubmitter>);
 
 #endif

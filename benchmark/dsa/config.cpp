@@ -106,10 +106,11 @@ std::vector<SchedulingPattern> all_scheduling_patterns() {
 
 const char* submission_strategy_name(SubmissionStrategy s) {
   switch (s) {
-    case SubmissionStrategy::Immediate:      return "immediate";
-    case SubmissionStrategy::DoubleBufBatch: return "double_buf_batch";
-    case SubmissionStrategy::FixedRingBatch: return "fixed_ring_batch";
-    case SubmissionStrategy::RingBatch:      return "ring_batch";
+    case SubmissionStrategy::Immediate:         return "immediate";
+    case SubmissionStrategy::DoubleBufBatch:    return "double_buf_batch";
+    case SubmissionStrategy::FixedRingBatch:    return "fixed_ring_batch";
+    case SubmissionStrategy::RingBatch:         return "ring_batch";
+    case SubmissionStrategy::MirroredRingBatch: return "mirrored_ring_batch";
   }
   return "unknown";
 }
@@ -127,7 +128,8 @@ std::vector<SubmissionStrategy> default_submission_strategies() {
 
 std::vector<SubmissionStrategy> all_submission_strategies() {
   return {SubmissionStrategy::Immediate, SubmissionStrategy::DoubleBufBatch,
-          SubmissionStrategy::FixedRingBatch, SubmissionStrategy::RingBatch};
+          SubmissionStrategy::FixedRingBatch, SubmissionStrategy::RingBatch,
+          SubmissionStrategy::MirroredRingBatch};
 }
 
 // ============================================================================
@@ -328,10 +330,11 @@ void print_usage(const char *prog) {
   fmt::println("  --batch-raw         Hardware batch descriptor via dsa_batch sender (inline only)");
   fmt::println("");
   fmt::println("Submission strategy (can combine multiple):");
-  fmt::println("  --immediate         1:1 doorbell per descriptor (default)");
-  fmt::println("  --double-buf-batch  Double-buffered transparent batch submission");
-  fmt::println("  --fixed-ring-batch  Fixed-size ring batch (ablation study)");
-  fmt::println("  --ring-batch        Ring-buffer based hardware batch submission");
+  fmt::println("  --immediate             1:1 doorbell per descriptor (default)");
+  fmt::println("  --double-buf-batch      Double-buffered transparent batch submission");
+  fmt::println("  --fixed-ring-batch      Fixed-size ring batch (ablation study)");
+  fmt::println("  --ring-batch            Ring-buffer based hardware batch submission");
+  fmt::println("  --mirrored-ring-batch   Mirrored ring batch (wrap-free via VM mirroring)");
   fmt::println("");
   fmt::println("Queue types:");
   fmt::println("  --queue=<type>      Run only specified queue type(s), comma-separated");
@@ -395,10 +398,11 @@ static const FlagMapping pattern_flags[] = {
 };
 
 static const FlagMapping submission_flags[] = {
-  {"--immediate",        "immediate"},
-  {"--double-buf-batch", "double_buf_batch"},
-  {"--fixed-ring-batch", "fixed_ring_batch"},
-  {"--ring-batch",       "ring_batch"},
+  {"--immediate",            "immediate"},
+  {"--double-buf-batch",     "double_buf_batch"},
+  {"--fixed-ring-batch",     "fixed_ring_batch"},
+  {"--ring-batch",           "ring_batch"},
+  {"--mirrored-ring-batch",  "mirrored_ring_batch"},
 };
 
 // Try to match `arg` against a flag table. If matched, add the enum name to `collector`.

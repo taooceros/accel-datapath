@@ -158,6 +158,14 @@ using DsaRingBatchSpinlock = DsaEngine<RingSubmitter, dsa::SpinlockTaskQueue>;
 using DsaRingBatchBackoffSpinlock = DsaEngine<RingSubmitter, dsa::BackoffSpinlockTaskQueue>;
 using DsaRingBatchLockFree = DsaEngine<RingSubmitter, dsa::LockFreeTaskQueue>;
 
+// Mirrored ring batch submission (wrap-free via virtual memory mirroring)
+using DsaMirroredRingBatch = DsaEngine<MirroredRingSubmitter, dsa::MutexTaskQueue>;
+using DsaMirroredRingBatchSingleThread = DsaEngine<MirroredRingSubmitter, dsa::SingleThreadTaskQueue>;
+using DsaMirroredRingBatchTasSpinlock = DsaEngine<MirroredRingSubmitter, dsa::TasSpinlockTaskQueue>;
+using DsaMirroredRingBatchSpinlock = DsaEngine<MirroredRingSubmitter, dsa::SpinlockTaskQueue>;
+using DsaMirroredRingBatchBackoffSpinlock = DsaEngine<MirroredRingSubmitter, dsa::BackoffSpinlockTaskQueue>;
+using DsaMirroredRingBatchLockFree = DsaEngine<MirroredRingSubmitter, dsa::LockFreeTaskQueue>;
+
 #include "dsa.ipp"
 
 #endif

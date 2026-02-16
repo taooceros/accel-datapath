@@ -18,7 +18,12 @@ LINE_STYLES = ["solid", "dash", "dot", "dashdot"]
 # Marker symbols for concurrency
 MARKERS = ["circle", "square", "diamond", "triangle-up", "cross", "x"]
 
-SUBMISSION_SUFFIXES = ["_double_buf_batch", "_fixed_ring_batch", "_ring_batch"]
+SUBMISSION_SUFFIXES = [
+    "_double_buf_batch",
+    "_fixed_ring_batch",
+    "_mirrored_ring_batch",
+    "_ring_batch",
+]
 
 
 def split_pattern(pattern: str) -> tuple[str, str]:

@@ -156,6 +156,16 @@ static DsaProxy make_dsa(QueueType qt, SubmissionStrategy ss, bool use_threaded_
       case QueueType::LockFree: return make_dsa_proxy<DsaRingBatchLockFree>(poller);
     }
     break;
+  case SubmissionStrategy::MirroredRingBatch:
+    switch (qt) {
+      case QueueType::NoLock:   return make_dsa_proxy<DsaMirroredRingBatchSingleThread>(poller);
+      case QueueType::Mutex:    return make_dsa_proxy<DsaMirroredRingBatch>(poller);
+      case QueueType::TAS:      return make_dsa_proxy<DsaMirroredRingBatchTasSpinlock>(poller);
+      case QueueType::TTAS:     return make_dsa_proxy<DsaMirroredRingBatchSpinlock>(poller);
+      case QueueType::Backoff:  return make_dsa_proxy<DsaMirroredRingBatchBackoffSpinlock>(poller);
+      case QueueType::LockFree: return make_dsa_proxy<DsaMirroredRingBatchLockFree>(poller);
+    }
+    break;
   case SubmissionStrategy::Immediate:
     switch (qt) {
       case QueueType::NoLock:   return make_dsa_proxy<DsaSingleThread>(poller);

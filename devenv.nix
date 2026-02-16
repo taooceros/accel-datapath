@@ -59,6 +59,7 @@
     pkgs.glibc.debug
     numactl
     libcap
+    doctest
     # Python packages for benchmark visualization
     python3Packages.pandas
     python3Packages.matplotlib
