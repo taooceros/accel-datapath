@@ -16,7 +16,7 @@ namespace dsa_stdexec {
 // which is guaranteed to work correctly across threads.
 template <class Sender>
 auto sync_wait_threaded(Sender &&snd) {
-  using ResultType = stdexec::value_types_of_t<Sender, stdexec::empty_env,
+  using ResultType = stdexec::value_types_of_t<Sender, stdexec::env<>,
                                                std::tuple, std::optional>;
 
   return [&]<class... Values>(
@@ -49,7 +49,7 @@ auto sync_wait_threaded(Sender &&snd) {
         done_->release();
       }
 
-      auto get_env() const noexcept { return stdexec::empty_env{}; }
+      auto get_env() const noexcept { return stdexec::env<>{}; }
     };
 
     auto op = stdexec::connect(std::forward<Sender>(snd),
@@ -91,7 +91,7 @@ template <class Loop, class... Values> struct SyncWaitReceiver {
   }
 
   auto get_env() const noexcept {
-    return stdexec::empty_env{};
+    return stdexec::env<>{};
   }
 };
 
@@ -102,7 +102,7 @@ template <class Sender, class Loop> auto wait_start(Sender &&snd, Loop &loop) {
   // If stdexec::value_types_of_t is not available, we might need a fallback.
   // But let's assume it is available or we can use completion_signatures.
 
-  using ResultType = stdexec::value_types_of_t<Sender, stdexec::empty_env,
+  using ResultType = stdexec::value_types_of_t<Sender, stdexec::env<>,
                                                std::tuple, std::optional>;
 
   // Helper lambda to instantiate receiver with deduced types

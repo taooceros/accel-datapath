@@ -176,7 +176,7 @@ retry:
       int wr = comp.status & DSA_COMP_STATUS_WRITE;
       volatile char *t;
       t = (char *)comp.fault_addr;
-      wr ? *t = *t : *t;
+      if (wr) { *t = *t; } else { (void)*t; }
       desc.src_addr += comp.bytes_completed;
       desc.dst_addr += comp.bytes_completed;
       desc.xfer_size -= comp.bytes_completed;
