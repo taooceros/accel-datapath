@@ -35,25 +35,20 @@ struct alignas(64) DsaOperationBase : dsa_stdexec::OperationBase {
   alignas(32) char comp_buffer_[32 + 31] = {};
   bool has_descriptor = true;  // Static dispatch flag for get_descriptor
 
-  // Get 64-byte aligned descriptor pointer
-  dsa_hw_desc* desc_ptr() noexcept {
-    auto addr = reinterpret_cast<uintptr_t>(desc_buffer_);
-    auto aligned = (addr + 63) & ~uintptr_t{63};
-    return reinterpret_cast<dsa_hw_desc*>(aligned);
-  }
+  // Cached aligned pointers — computed once at construction to avoid
+  // repeated alignment arithmetic in the hot poll path.
+  dsa_hw_desc* const desc_cached_;
+  dsa_completion_record* const comp_cached_;
 
-  // Get 32-byte aligned completion record pointer
-  dsa_completion_record* comp_ptr() noexcept {
-    auto addr = reinterpret_cast<uintptr_t>(comp_buffer_);
-    auto aligned = (addr + 31) & ~uintptr_t{31};
-    return reinterpret_cast<dsa_completion_record*>(aligned);
-  }
+  DsaOperationBase()
+      : desc_cached_(reinterpret_cast<dsa_hw_desc*>(
+            (reinterpret_cast<uintptr_t>(desc_buffer_) + 63) & ~uintptr_t{63})),
+        comp_cached_(reinterpret_cast<dsa_completion_record*>(
+            (reinterpret_cast<uintptr_t>(comp_buffer_) + 31) & ~uintptr_t{31})) {}
 
-  const dsa_completion_record* comp_ptr() const noexcept {
-    auto addr = reinterpret_cast<uintptr_t>(comp_buffer_);
-    auto aligned = (addr + 31) & ~uintptr_t{31};
-    return reinterpret_cast<const dsa_completion_record*>(aligned);
-  }
+  dsa_hw_desc* desc_ptr() noexcept { return desc_cached_; }
+  dsa_completion_record* comp_ptr() noexcept { return comp_cached_; }
+  const dsa_completion_record* comp_ptr() const noexcept { return comp_cached_; }
 };
 
 } // namespace dsa

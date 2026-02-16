@@ -10,17 +10,17 @@ threaded = false      # Background thread polling (dedicated polling thread)
 # Scheduling pattern - how tasks are spawned and concurrency is managed
 sliding_window = false          # Semaphore-like: spawn new op as one completes (maintains N in-flight)
 sliding_window_noalloc = true # Same as sliding-window but zero-allocation (nest + placement new)
-batch = true                  # Spawn N ops, wait all complete, then spawn next batch
-batch_noalloc = true          # Batch pattern with zero-allocation slots
+batch = false                  # Spawn N ops, wait all complete, then spawn next batch
+batch_noalloc = false          # Batch pattern with zero-allocation slots
 scoped_workers = false          # N worker coroutines processing items sequentially
 batch_raw = false               # Hardware batch descriptor via dsa_batch sender (inline only)
 
 [submission]
 # Submission strategy - how descriptors are sent to hardware
-immediate = true     # DsaBase: 1:1 doorbell per descriptor (existing behavior)
+immediate = false     # DsaBase: 1:1 doorbell per descriptor (existing behavior)
 double_buf_batch = false   # DsaBatchBase: double-buffered staging, submit as hardware batch (opcode 0x01)
-fixed_ring_batch = true   # DsaFixedRingBatchBase: fixed-size ring batch (ablation study)
-ring_batch = true    # DsaRingBatchBase: ring-buffer based hardware batch
+fixed_ring_batch = false   # DsaFixedRingBatchBase: fixed-size ring batch (ablation study)
+ring_batch = false    # DsaRingBatchBase: ring-buffer based hardware batch
 mirrored_ring_batch = true  # MirroredRingSubmitter: wrap-free ring via VM mirroring
 
 
@@ -40,9 +40,9 @@ enabled = ["data_move"]
 
 [parameters]
 # Benchmark parameters
-concurrency_levels = [16, 128]         # Max operations in-flight at once
+concurrency_levels = [16, 32, 64, 128]         # Max operations in-flight at once
 # Focus on message rate: small messages to stress per-op overhead
-msg_sizes = [8, 64]
+msg_sizes = [64]
 total_bytes = 16777216                     # Total bytes to copy per iteration (16 MB)
 max_ops = 150000                            # Max operations per iteration (0 = unlimited)
 iterations = 3                              # Number of times to repeat the full copy
