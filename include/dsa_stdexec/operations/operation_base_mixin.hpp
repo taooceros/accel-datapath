@@ -10,11 +10,11 @@
 #include <type_traits>
 #include <utility>
 
-#include <dsa/dsa.hpp>
 #include <dsa/dsa_operation_base.hpp>
+#include <dsa_stdexec/descriptor_fill.hpp>
+#include <dsa_stdexec/dsa_sink.hpp>
 #include <dsa_stdexec/error.hpp>
 #include <dsa_stdexec/operation_base.hpp>
-#include <dsa_stdexec/batch.hpp>
 #include <fmt/base.h>
 #include <stdexec/execution.hpp>
 
@@ -95,11 +95,11 @@ inline void adjust_for_page_fault(dsa_hw_desc &desc,
 template <typename T>
 concept DsaOperation =
     std::derived_from<T, dsa::DsaOperationBase> &&
+    DsaSink<std::remove_reference_t<decltype(std::declval<T &>().dsa_)>> &&
     requires(T &op, dsa_hw_desc &desc) {
       typename T::result_type;
       { T::op_name } -> std::convertible_to<std::string_view>;
       { op.fill_descriptor(desc) } -> std::same_as<void>;
-      op.dsa_;
       op.r_;
     };
 
