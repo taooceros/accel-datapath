@@ -75,21 +75,24 @@ std::string format_metric(const DsaMetric &m) {
 }
 
 void export_to_csv(const std::string &filename,
-                   const std::vector<std::pair<std::string, std::vector<BenchmarkResult>>> &all_results) {
+                   const std::vector<std::pair<std::string, std::vector<BenchmarkResult>>> &all_results,
+                   size_t batch_size) {
   std::ofstream file(filename);
   if (!file.is_open()) {
     fmt::println(stderr, "Failed to open {} for writing", filename);
     return;
   }
 
-  file << "operation,pattern,polling_mode,queue_type,concurrency,msg_size,bandwidth_gbps,msg_rate_mps,page_faults,"
+  size_t effective_batch_size = batch_size == 0 ? 32 : batch_size;
+
+  file << "operation,pattern,polling_mode,queue_type,concurrency,msg_size,batch_size,bandwidth_gbps,msg_rate_mps,page_faults,"
        << "latency_min_ns,latency_max_ns,latency_avg_ns,latency_p50_ns,latency_p99_ns,latency_count\n";
 
-  auto write_row = [&file](const char *operation, const char *pattern, const char *polling_mode,
+  auto write_row = [&file, effective_batch_size](const char *operation, const char *pattern, const char *polling_mode,
                             const char *queue_type, size_t concurrency,
                             size_t msg_size, const DsaMetric &m) {
     file << operation << "," << pattern << "," << polling_mode << "," << queue_type << ","
-         << concurrency << "," << msg_size << "," << m.bandwidth << ","
+         << concurrency << "," << msg_size << "," << effective_batch_size << "," << m.bandwidth << ","
          << m.msg_rate << "," << m.page_faults << "," << m.latency.min_ns << "," << m.latency.max_ns
          << "," << m.latency.avg_ns << "," << m.latency.p50_ns << ","
          << m.latency.p99_ns << "," << m.latency.count << "\n";
@@ -121,59 +124,60 @@ void export_to_csv(const std::string &filename,
 }
 
 // Run a single queue type benchmark, creating the right concrete DSA type.
-static DsaProxy make_dsa(QueueType qt, SubmissionStrategy ss, bool use_threaded_polling) {
+static DsaProxy make_dsa(QueueType qt, SubmissionStrategy ss, bool use_threaded_polling,
+                         size_t batch_size = 0) {
   using dsa_stdexec::make_dsa_proxy;
   bool poller = (qt == QueueType::NoLock) ? false : use_threaded_polling;
 
   switch (ss) {
   case SubmissionStrategy::DoubleBufBatch:
     switch (qt) {
-      case QueueType::NoLock:   return make_dsa_proxy<DsaBatchSingleThread>(poller);
-      case QueueType::Mutex:    return make_dsa_proxy<DsaBatch>(poller);
-      case QueueType::TAS:      return make_dsa_proxy<DsaBatchTasSpinlock>(poller);
-      case QueueType::TTAS:     return make_dsa_proxy<DsaBatchSpinlock>(poller);
-      case QueueType::Backoff:  return make_dsa_proxy<DsaBatchBackoffSpinlock>(poller);
-      case QueueType::LockFree: return make_dsa_proxy<DsaBatchLockFree>(poller);
+      case QueueType::NoLock:   return make_dsa_proxy<DsaBatchSingleThread>(poller, batch_size);
+      case QueueType::Mutex:    return make_dsa_proxy<DsaBatch>(poller, batch_size);
+      case QueueType::TAS:      return make_dsa_proxy<DsaBatchTasSpinlock>(poller, batch_size);
+      case QueueType::TTAS:     return make_dsa_proxy<DsaBatchSpinlock>(poller, batch_size);
+      case QueueType::Backoff:  return make_dsa_proxy<DsaBatchBackoffSpinlock>(poller, batch_size);
+      case QueueType::LockFree: return make_dsa_proxy<DsaBatchLockFree>(poller, batch_size);
     }
     break;
   case SubmissionStrategy::FixedRingBatch:
     switch (qt) {
-      case QueueType::NoLock:   return make_dsa_proxy<DsaFixedRingBatchSingleThread>(poller);
-      case QueueType::Mutex:    return make_dsa_proxy<DsaFixedRingBatch>(poller);
-      case QueueType::TAS:      return make_dsa_proxy<DsaFixedRingBatchTasSpinlock>(poller);
-      case QueueType::TTAS:     return make_dsa_proxy<DsaFixedRingBatchSpinlock>(poller);
-      case QueueType::Backoff:  return make_dsa_proxy<DsaFixedRingBatchBackoffSpinlock>(poller);
-      case QueueType::LockFree: return make_dsa_proxy<DsaFixedRingBatchLockFree>(poller);
+      case QueueType::NoLock:   return make_dsa_proxy<DsaFixedRingBatchSingleThread>(poller, batch_size);
+      case QueueType::Mutex:    return make_dsa_proxy<DsaFixedRingBatch>(poller, batch_size);
+      case QueueType::TAS:      return make_dsa_proxy<DsaFixedRingBatchTasSpinlock>(poller, batch_size);
+      case QueueType::TTAS:     return make_dsa_proxy<DsaFixedRingBatchSpinlock>(poller, batch_size);
+      case QueueType::Backoff:  return make_dsa_proxy<DsaFixedRingBatchBackoffSpinlock>(poller, batch_size);
+      case QueueType::LockFree: return make_dsa_proxy<DsaFixedRingBatchLockFree>(poller, batch_size);
     }
     break;
   case SubmissionStrategy::RingBatch:
     switch (qt) {
-      case QueueType::NoLock:   return make_dsa_proxy<DsaRingBatchSingleThread>(poller);
-      case QueueType::Mutex:    return make_dsa_proxy<DsaRingBatch>(poller);
-      case QueueType::TAS:      return make_dsa_proxy<DsaRingBatchTasSpinlock>(poller);
-      case QueueType::TTAS:     return make_dsa_proxy<DsaRingBatchSpinlock>(poller);
-      case QueueType::Backoff:  return make_dsa_proxy<DsaRingBatchBackoffSpinlock>(poller);
-      case QueueType::LockFree: return make_dsa_proxy<DsaRingBatchLockFree>(poller);
+      case QueueType::NoLock:   return make_dsa_proxy<DsaRingBatchSingleThread>(poller, batch_size);
+      case QueueType::Mutex:    return make_dsa_proxy<DsaRingBatch>(poller, batch_size);
+      case QueueType::TAS:      return make_dsa_proxy<DsaRingBatchTasSpinlock>(poller, batch_size);
+      case QueueType::TTAS:     return make_dsa_proxy<DsaRingBatchSpinlock>(poller, batch_size);
+      case QueueType::Backoff:  return make_dsa_proxy<DsaRingBatchBackoffSpinlock>(poller, batch_size);
+      case QueueType::LockFree: return make_dsa_proxy<DsaRingBatchLockFree>(poller, batch_size);
     }
     break;
   case SubmissionStrategy::MirroredRingBatch:
     switch (qt) {
-      case QueueType::NoLock:   return make_dsa_proxy<DsaMirroredRingBatchSingleThread>(poller);
-      case QueueType::Mutex:    return make_dsa_proxy<DsaMirroredRingBatch>(poller);
-      case QueueType::TAS:      return make_dsa_proxy<DsaMirroredRingBatchTasSpinlock>(poller);
-      case QueueType::TTAS:     return make_dsa_proxy<DsaMirroredRingBatchSpinlock>(poller);
-      case QueueType::Backoff:  return make_dsa_proxy<DsaMirroredRingBatchBackoffSpinlock>(poller);
-      case QueueType::LockFree: return make_dsa_proxy<DsaMirroredRingBatchLockFree>(poller);
+      case QueueType::NoLock:   return make_dsa_proxy<DsaMirroredRingBatchSingleThread>(poller, batch_size);
+      case QueueType::Mutex:    return make_dsa_proxy<DsaMirroredRingBatch>(poller, batch_size);
+      case QueueType::TAS:      return make_dsa_proxy<DsaMirroredRingBatchTasSpinlock>(poller, batch_size);
+      case QueueType::TTAS:     return make_dsa_proxy<DsaMirroredRingBatchSpinlock>(poller, batch_size);
+      case QueueType::Backoff:  return make_dsa_proxy<DsaMirroredRingBatchBackoffSpinlock>(poller, batch_size);
+      case QueueType::LockFree: return make_dsa_proxy<DsaMirroredRingBatchLockFree>(poller, batch_size);
     }
     break;
   case SubmissionStrategy::Immediate:
     switch (qt) {
-      case QueueType::NoLock:   return make_dsa_proxy<DsaSingleThread>(poller);
-      case QueueType::Mutex:    return make_dsa_proxy<Dsa>(poller);
-      case QueueType::TAS:      return make_dsa_proxy<DsaTasSpinlock>(poller);
-      case QueueType::TTAS:     return make_dsa_proxy<DsaSpinlock>(poller);
-      case QueueType::Backoff:  return make_dsa_proxy<DsaBackoffSpinlock>(poller);
-      case QueueType::LockFree: return make_dsa_proxy<DsaLockFree>(poller);
+      case QueueType::NoLock:   return make_dsa_proxy<DsaSingleThread>(poller, batch_size);
+      case QueueType::Mutex:    return make_dsa_proxy<Dsa>(poller, batch_size);
+      case QueueType::TAS:      return make_dsa_proxy<DsaTasSpinlock>(poller, batch_size);
+      case QueueType::TTAS:     return make_dsa_proxy<DsaSpinlock>(poller, batch_size);
+      case QueueType::Backoff:  return make_dsa_proxy<DsaBackoffSpinlock>(poller, batch_size);
+      case QueueType::LockFree: return make_dsa_proxy<DsaLockFree>(poller, batch_size);
     }
     break;
   }
@@ -184,8 +188,8 @@ static DsaMetric run_one_queue(QueueType qt, SubmissionStrategy ss, bool use_thr
                                size_t concurrency, size_t msg_size, size_t total_bytes,
                                int iterations, BufferSet &bufs,
                                const RunFunction &run_fn, ProgressBar *progress,
-                               bool sample_latency = true) {
-  auto dsa = make_dsa(qt, ss, use_threaded_polling);
+                               bool sample_latency = true, size_t batch_size = 0) {
+  auto dsa = make_dsa(qt, ss, use_threaded_polling, batch_size);
   return run_benchmark(dsa, concurrency, msg_size, total_bytes, iterations, bufs, run_fn, progress, sample_latency);
 }
 
@@ -248,7 +252,7 @@ std::vector<BenchmarkResult> run_all_queues(
             qt, ss, use_threaded_polling,
             concurrency, msg_size, effective_total_bytes,
             config.iterations, bufs, run_fn, &progress,
-            config.sample_latency);
+            config.sample_latency, config.batch_size);
       }
 
       results.push_back(result);
@@ -271,6 +275,7 @@ void benchmark_queues_with_dsa(const BenchmarkConfig &config) {
   fmt::println("  Iterations: {}", config.iterations);
   fmt::println("  Concurrency levels: {}", fmt::join(config.concurrency_levels, ", "));
   fmt::println("  Message sizes: {}", fmt::join(config.msg_sizes, ", "));
+  fmt::println("  Batch size: {}", config.batch_size == 0 ? 32 : config.batch_size);
   fmt::println("  Latency sampling: {}", config.sample_latency ? "enabled" : "disabled");
   fmt::println("  Operations: {}", [&] {
     std::string s;
@@ -361,7 +366,7 @@ void benchmark_queues_with_dsa(const BenchmarkConfig &config) {
     print_results_table(title, results, include_nolock);
   }
 
-  export_to_csv(config.csv_file, all_results);
+  export_to_csv(config.csv_file, all_results, config.batch_size);
 }
 
 int main(int argc, char **argv) {

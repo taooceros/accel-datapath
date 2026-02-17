@@ -246,8 +246,13 @@ static BenchmarkConfig load_config_from_toml(const std::string &filename) {
   if (auto t = tbl["scheduling"].as_table())
     config.scheduling_patterns = parse_toml_bool_table(t, parse_scheduling_pattern, default_scheduling_patterns());
 
-  if (auto t = tbl["submission"].as_table())
+  if (auto t = tbl["submission"].as_table()) {
     config.submission_strategies = parse_toml_bool_table(t, parse_submission_strategy, default_submission_strategies());
+    if (auto node = t->get("batch_size")) {
+      if (auto val = node->value<int64_t>())
+        config.batch_size = static_cast<size_t>(*val);
+    }
+  }
 
   if (auto t = tbl["queues"].as_table())
     config.queue_types = parse_toml_bool_table(t, parse_queue_type, all_queue_types());
@@ -344,6 +349,9 @@ void print_usage(const char *prog) {
   fmt::println("  --operation=<type>  Run only specified operation(s), comma-separated");
   fmt::println("                      Types: data_move, mem_fill, compare, compare_value,");
   fmt::println("                             dualcast, crc_gen, copy_crc, cache_flush");
+  fmt::println("");
+  fmt::println("Submission tuning:");
+  fmt::println("  --batch-size=N      Set descriptor batch size for batch submitters (default: 32)");
   fmt::println("");
   fmt::println("Latency:");
   fmt::println("  --no-latency        Disable per-operation latency sampling");
@@ -489,6 +497,8 @@ BenchmarkConfig parse_args(int argc, char **argv) {
         if (!cli_operation) cli_operation.emplace();
         cli_operation->push_back(o);
       }
+    } else if (arg.starts_with("--batch-size=")) {
+      config.batch_size = static_cast<size_t>(std::atol(std::string(arg.substr(13)).c_str()));
     } else {
       fmt::println(stderr, "Unknown option: {}", arg);
       print_usage(argv[0]);

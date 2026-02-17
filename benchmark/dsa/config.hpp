@@ -58,6 +58,7 @@ struct BenchmarkConfig {
   size_t total_bytes = 32ULL * 1024 * 1024;
   size_t max_ops = 0;
   int iterations = 10;
+  size_t batch_size = 0;  // 0 = use submitter default (32)
 
   // Latency sampling
   bool sample_latency = true;

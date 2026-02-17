@@ -80,7 +80,7 @@ class DsaEngine {
 public:
   using Queue = DsaTaskQueue<QueueTemplate>;
 
-  explicit DsaEngine(bool start_poller = true);
+  explicit DsaEngine(bool start_poller = true, size_t batch_size = 0);
   ~DsaEngine();
 
   void data_move(void *src, void *dst, size_t size);

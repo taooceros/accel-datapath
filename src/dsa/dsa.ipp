@@ -28,7 +28,7 @@ inline uint8_t op_status(uint8_t status) {
 } // namespace detail
 
 template <DescriptorSubmitter Submitter, template <typename> class QueueTemplate>
-DsaEngine<Submitter, QueueTemplate>::DsaEngine(bool start_poller)
+DsaEngine<Submitter, QueueTemplate>::DsaEngine(bool start_poller, size_t batch_size)
     : ctx_(), wq_(nullptr), wq_portal_(nullptr), task_queue_(DsaHwContext{}) {
   try {
     auto &ctx = context();
@@ -86,7 +86,7 @@ DsaEngine<Submitter, QueueTemplate>::DsaEngine(bool start_poller)
     task_queue_.hw_context().set_context(wq_portal_, mode_);
 
     // Initialize the descriptor submitter
-    submitter_.init(wq_portal_, mode_, wq_);
+    submitter_.init(wq_portal_, mode_, wq_, batch_size);
 
     // Provide poll callback for submitters that need backpressure support
     if constexpr (requires { submitter_.set_poll_fn(std::function<void()>{}); }) {
