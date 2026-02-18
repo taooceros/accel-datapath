@@ -2,9 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Workflow Rules
+
+- **Plans**: Before implementing non-trivial changes, write a plan to `plan/YYYY-MM-DD/<topic>.md` first. This captures intent, alternatives considered, and expected outcomes before code is touched.
+- **Reports**: When discovering interesting findings during analysis (performance insights, architectural observations, surprising benchmark results, etc.), write them to `report/<descriptive_name>.md`. These build a persistent knowledge base for the project.
+
 ## Project Overview
 
-This project provides C++ sender/receiver (stdexec) bindings for Intel Data Streaming Accelerator (DSA). It enables asynchronous hardware-accelerated memory operations using the P2300 (std::execution) programming model.
+C++ sender/receiver (stdexec) bindings for Intel Data Streaming Accelerator (DSA). The primary goal is **maximizing message rate** (ops/sec) for small transfers using inline polling — the calling thread drives both submission and completion in a tight loop with no cross-thread coordination.
 
 ## Hardware Reference
 
@@ -67,6 +72,7 @@ C++23 with GCC 15, mold linker. Hardware instruction flags `-menqcmd` and `-mmov
 
 ```
 examples/ & src/main.cpp          Application layer
+benchmark/dsa/                    Multi-dimensional benchmark suite
 include/dsa_stdexec/              stdexec sender/receiver integration
 src/dsa/                          Low-level DSA hardware interface
 ```
@@ -77,12 +83,12 @@ src/dsa/                          Low-level DSA hardware interface
 
 **`DsaBase<QueueTemplate>`** (`dsa.hpp`): Generic DSA class templated on queue type. Handles device discovery via libaccel-config, work queue mapping, submit, and poll. Explicit instantiations live in `dsa_instantiate.cpp` to avoid redundant compilation.
 
-Type aliases for common configurations:
-- `Dsa` — `DsaBase<MutexTaskQueue>` (default, thread-safe)
-- `DsaSingleThread` — `DsaBase<SingleThreadTaskQueue>` (no locks)
-- `DsaSpinlock` — `DsaBase<SpinlockTaskQueue>` (TTAS)
-- `DsaBackoffSpinlock` — `DsaBase<BackoffSpinlockTaskQueue>`
-- `DsaLockFree` — `DsaBase<LockFreeTaskQueue>` (atomic CAS)
+Type aliases (preferred for inline polling — no lock contention on the hot path):
+- `DsaSingleThread` — `DsaBase<SingleThreadTaskQueue>` (no locks, best for single-thread inline)
+- `DsaIndexed` — `DsaBase<IndexedTaskQueue>` (per-slot, no head contention, inline only)
+
+Other queue types (for threaded polling or comparative benchmarks):
+- `Dsa` — `DsaBase<MutexTaskQueue>`, `DsaTasSpinlock`, `DsaSpinlock` (TTAS), `DsaBackoffSpinlock`, `DsaLockFree`
 
 **Task Queues** (`task_queue.hpp`): Concept-based design (`TaskQueue` concept). Intrusive linked list of `OperationBase*`. Implementations: `LockedTaskQueue<Lock, HwCtx>` (parameterized by lock type), `RingBufferTaskQueue`, `LockFreeTaskQueue`.
 
@@ -99,13 +105,9 @@ Supported operations: `data_move`, `mem_fill`, `compare`, `compare_value`, `dual
 
 **`OperationBase`** (`operation_base.hpp`): Type-erased operation using `pro::proxy<OperationFacade>`. Stores intrusive `next` pointer for queue linking. Proxy dispatches `notify()` and `get_descriptor()`.
 
-**`PollingRunLoop`** (`run_loop.hpp`): Custom run loop that interleaves stdexec task execution with DSA polling. Takes a poll function (typically `[&dsa] { dsa.poll(); }`).
+**`PollingRunLoop`** (`run_loop.hpp`): Custom run loop that interleaves stdexec task execution with DSA polling. Takes a poll function (typically `[&dsa] { dsa.poll(); }`). This is the primary execution model for maximizing message rate.
 
-**`DsaScheduler`** (`scheduler.hpp`): stdexec scheduler whose `schedule()` returns a sender that completes immediately on DSA poll (sets completion status to 1, no hardware descriptor).
-
-**Sync Helpers** (`sync_wait.hpp`):
-- `sync_wait_threaded(sender)` — for background-thread polling mode (uses binary semaphore)
-- `wait_start(sender, loop)` — for inline polling mode (runs the polling loop until completion)
+**`wait_start(sender, loop)`** (`sync_wait.hpp`): Runs the polling loop until the sender completes. Used by inline strategies.
 
 ### Key Design Decisions
 
@@ -114,9 +116,73 @@ Supported operations: `data_move`, `mem_fill`, `compare`, `compare_value`, `dual
 - **Static dispatch for completion**: `HwContext::check_completion()` avoids virtual calls in the hot poll loop
 - **Over-alignment**: Runtime alignment computation in `DsaOperationBase` instead of `alignas()` for coroutine frame compatibility
 
-## Benchmark Configuration
+## Benchmark Architecture (`benchmark/dsa/`)
 
-Benchmarks are configured via `benchmark/benchmark_config.toml` with dimensions: polling mode (inline/threaded), scheduling pattern (sliding_window/batch/scoped_workers), queue type (6 variants), concurrency levels, and message sizes. Results output to CSV; visualize with `benchmark/visualize_benchmark.py`.
+### Directory Layout
+
+```
+benchmark/dsa/
+├── main.cpp                  Entry point, run_benchmark, make_dsa, CSV export
+├── config.hpp / config.cpp   Enums, BenchmarkConfig, TOML + CLI parsing
+├── helpers.hpp               ProgressBar, LatencyCollector, BufferSet,
+│                               OperationSlot, SlotArena, SlotReceiver,
+│                               ArenaReceiver, DirectBenchReceiver
+├── strategies.hpp            StrategyParams, StrategyFn, strategy_table, dispatch_run
+├── strategy_common.hpp       with_op_sender, spawn_op, CompletionRecord, slot-size helpers
+├── static.cpp                Legacy monolithic benchmark (separate target)
+└── strategies/
+    ├── README.md             Strategy docs, decision guide, perf reference
+    ├── sliding_window/       Sustained throughput (N ops always in flight)
+    │   ├── sliding_window.cpp  Baseline: heap alloc per op (~35 ns/op)
+    │   ├── noalloc.cpp         Placement-new into pre-allocated slots
+    │   ├── arena.cpp           Free-list SlotArena (O(1) recycle)
+    │   ├── direct.cpp          Bypasses async_scope (~13 ns/op)
+    │   └── reusable.cpp        Bypasses stdexec entirely (~8 ns/op)
+    ├── batch/                Barrier-synchronized groups
+    │   ├── heap_alloc.cpp      Baseline batch
+    │   ├── noalloc.cpp         Pre-allocated batch slots
+    │   └── raw.cpp             Hardware batch descriptor (dsa_batch sender)
+    └── scoped_workers/       N coroutine workers, sequential processing
+        └── scoped_workers.cpp
+```
+
+### StrategyParams
+
+All strategy functions share a unified signature via `StrategyParams` struct (`strategies.hpp`):
+
+```cpp
+struct StrategyParams {
+  DsaProxy &dsa;
+  exec::async_scope &scope;
+  size_t concurrency, msg_size, total_bytes, batch_size;
+  BufferSet &bufs;
+  LatencyCollector &latency;
+  OperationType op_type;
+};
+using StrategyFn = void(*)(const StrategyParams &);
+```
+
+Strategies destructure at the top: `auto &[dsa, scope, concurrency, ...] = params;`
+
+### Strategy Taxonomy (inline polling focus)
+
+```
+├── SlidingWindow family       Sustained throughput, N ops always in flight
+│   ├── sliding_window           stdexec baseline (~35 ns/op)
+│   ├── noalloc / arena          zero-alloc variants
+│   ├── direct                   bypass async_scope (~13 ns/op)
+│   └── reusable                 bypass stdexec entirely (~8 ns/op)
+├── Batch family               Barrier-synchronized groups
+│   ├── heap_alloc / noalloc     stdexec-based batching
+│   └── raw                      hardware batch descriptor
+└── ScopedWorkers              N coroutine workers, sequential co_await
+```
+
+Threaded polling variants exist for comparison but are not the optimization target. The `strategy_table[SchedulingPattern][PollingMode]` dispatches via function pointer; order must match `SchedulingPattern` enum in `config.hpp`.
+
+### Benchmark Configuration
+
+Configured via `benchmark/benchmark_config.toml` with dimensions: scheduling pattern, submission strategy, queue type, concurrency levels, and message sizes. Results output to CSV; visualize with `benchmark/visualize_interactive.py`.
 
 ## Dependencies
 
