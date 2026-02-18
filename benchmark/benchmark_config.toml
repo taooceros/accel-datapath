@@ -22,7 +22,7 @@ double_buf_batch = false   # DsaBatchBase: double-buffered staging, submit as ha
 fixed_ring_batch = false   # DsaFixedRingBatchBase: fixed-size ring batch (ablation study)
 ring_batch = false    # DsaRingBatchBase: ring-buffer based hardware batch
 mirrored_ring_batch = true  # MirroredRingSubmitter: wrap-free ring via VM mirroring
-
+batch_size = 32              # Descriptors per batch (0 = submitter default of 32)
 
 [queues]
 # Queue types to benchmark - different synchronization strategies
@@ -40,11 +40,11 @@ enabled = ["data_move"]
 
 [parameters]
 # Benchmark parameters
-concurrency_levels = [16, 32, 64, 128]         # Max operations in-flight at once
+concurrency_levels = [1024, 2048, 4096]         # Max operations in-flight at once
 # Focus on message rate: small messages to stress per-op overhead
-msg_sizes = [64]
-total_bytes = 16777216                     # Total bytes to copy per iteration (16 MB)
-max_ops = 150000                            # Max operations per iteration (0 = unlimited)
+msg_sizes = [8, 64]
+total_bytes = 33554432                     # Total bytes to copy per iteration (16 MB)
+max_ops = 3000000                            # Max operations per iteration (0 = unlimited)
 iterations = 3                              # Number of times to repeat the full copy
 sample_latency = false                       # Record per-operation latency (disable to reduce overhead)
 

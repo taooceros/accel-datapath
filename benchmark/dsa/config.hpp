@@ -60,6 +60,9 @@ struct BenchmarkConfig {
   int iterations = 10;
   size_t batch_size = 0;  // 0 = use submitter default (32)
 
+  // Hardware
+  bool use_mock = false;  // Use MockDsaBase instead of real DSA
+
   // Latency sampling
   bool sample_latency = true;
 

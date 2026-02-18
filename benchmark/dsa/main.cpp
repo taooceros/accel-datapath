@@ -11,6 +11,7 @@
 #include <chrono>
 #include <cstring>
 #include <dsa/dsa.hpp>
+#include <dsa/mock_dsa.hpp>
 #include <dsa/task_queue.hpp>
 #include <dsa_stdexec/dsa_facade.hpp>
 #include <dsa_stdexec/operations/data_move.hpp>
@@ -184,12 +185,29 @@ static DsaProxy make_dsa(QueueType qt, SubmissionStrategy ss, bool use_threaded_
   __builtin_unreachable();
 }
 
+// Factory for mock DSA types (instant completion, no hardware).
+static DsaProxy make_mock_dsa(QueueType qt) {
+  using dsa_stdexec::make_dsa_proxy;
+  switch (qt) {
+    case QueueType::NoLock:   return make_dsa_proxy<MockDsaSingleThread>();
+    case QueueType::Mutex:    return make_dsa_proxy<MockDsa>();
+    case QueueType::TAS:      return make_dsa_proxy<MockDsaTasSpinlock>();
+    case QueueType::TTAS:     return make_dsa_proxy<MockDsaSpinlock>();
+    case QueueType::Backoff:  return make_dsa_proxy<MockDsaBackoffSpinlock>();
+    case QueueType::LockFree: return make_dsa_proxy<MockDsaLockFree>();
+  }
+  __builtin_unreachable();
+}
+
 static DsaMetric run_one_queue(QueueType qt, SubmissionStrategy ss, bool use_threaded_polling,
                                size_t concurrency, size_t msg_size, size_t total_bytes,
                                int iterations, BufferSet &bufs,
                                const RunFunction &run_fn, ProgressBar *progress,
-                               bool sample_latency = true, size_t batch_size = 0) {
-  auto dsa = make_dsa(qt, ss, use_threaded_polling, batch_size);
+                               bool sample_latency = true, size_t batch_size = 0,
+                               bool use_mock = false) {
+  auto dsa = use_mock
+      ? make_mock_dsa(qt)
+      : make_dsa(qt, ss, use_threaded_polling, batch_size);
   return run_benchmark(dsa, concurrency, msg_size, total_bytes, iterations, bufs, run_fn, progress, sample_latency);
 }
 
@@ -212,7 +230,8 @@ std::vector<BenchmarkResult> run_all_queues(
     PollingMode pm,
     OperationType op_type,
     const char *pattern_name,
-    SubmissionStrategy ss = SubmissionStrategy::Immediate) {
+    SubmissionStrategy ss = SubmissionStrategy::Immediate,
+    bool use_mock = false) {
 
   bool use_threaded_polling = (pm == PollingMode::Threaded);
   std::vector<BenchmarkResult> results;
@@ -252,7 +271,7 @@ std::vector<BenchmarkResult> run_all_queues(
             qt, ss, use_threaded_polling,
             concurrency, msg_size, effective_total_bytes,
             config.iterations, bufs, run_fn, &progress,
-            config.sample_latency, config.batch_size);
+            config.sample_latency, config.batch_size, use_mock);
       }
 
       results.push_back(result);
@@ -271,6 +290,7 @@ void benchmark_queues_with_dsa(const BenchmarkConfig &config) {
 
   fmt::println("=== DSA BENCHMARK (DYNAMIC DISPATCH) WITH DIFFERENT TASK QUEUES ===\n");
   fmt::println("Configuration:");
+  fmt::println("  Hardware: {}", config.use_mock ? "MOCK (instant completion)" : "real DSA");
   fmt::println("  Total bytes per iteration: {} MB", config.total_bytes / (1024 * 1024));
   fmt::println("  Iterations: {}", config.iterations);
   fmt::println("  Concurrency levels: {}", fmt::join(config.concurrency_levels, ", "));
@@ -307,7 +327,7 @@ void benchmark_queues_with_dsa(const BenchmarkConfig &config) {
 
           fmt::println("Running {} {} + {} polling ({})...", op_name, sp_name, pm_name, ss_name);
           auto results = run_all_queues(config, bufs, sp, pm, op_type,
-                                         label_name.c_str(), ss);
+                                         label_name.c_str(), ss, config.use_mock);
           all_results.emplace_back(fmt::format("{}__{}_{}", op_name, label_name, pm_name),
                                     std::move(results));
           fmt::println("");

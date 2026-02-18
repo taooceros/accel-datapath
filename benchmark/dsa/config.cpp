@@ -299,6 +299,13 @@ static BenchmarkConfig load_config_from_toml(const std::string &filename) {
     }
   }
 
+  if (auto hw = tbl["hardware"].as_table()) {
+    if (auto node = hw->get("mock")) {
+      if (auto val = node->value<bool>())
+        config.use_mock = *val;
+    }
+  }
+
   if (auto output = tbl["output"].as_table()) {
     if (auto node = output->get("csv_file")) {
       if (auto val = node->value<std::string>())
@@ -352,6 +359,9 @@ void print_usage(const char *prog) {
   fmt::println("");
   fmt::println("Submission tuning:");
   fmt::println("  --batch-size=N      Set descriptor batch size for batch submitters (default: 32)");
+  fmt::println("");
+  fmt::println("Hardware:");
+  fmt::println("  --mock              Use mock DSA (instant completion, no hardware needed)");
   fmt::println("");
   fmt::println("Latency:");
   fmt::println("  --no-latency        Disable per-operation latency sampling");
@@ -484,6 +494,11 @@ BenchmarkConfig parse_args(int argc, char **argv) {
 
     if (arg == "--no-latency") {
       config.sample_latency = false;
+      continue;
+    }
+
+    if (arg == "--mock") {
+      config.use_mock = true;
       continue;
     }
 

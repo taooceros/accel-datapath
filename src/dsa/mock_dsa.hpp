@@ -133,6 +133,15 @@ public:
     }
   }
 
+  void submit(dsa_stdexec::OperationBase *op, dsa_hw_desc *desc) {
+    // Simulate immediate hardware completion by writing success status
+    if (desc && desc->completion_addr) {
+      auto *comp = reinterpret_cast<dsa_completion_record *>(desc->completion_addr);
+      comp->status = DSA_COMP_SUCCESS;
+    }
+    task_queue_.push(op);
+  }
+
   void submit(dsa_stdexec::OperationBase *op) {
     task_queue_.push(op);
   }
@@ -140,6 +149,8 @@ public:
   std::size_t poll() {
     return task_queue_.poll();
   }
+
+  void flush() {} // no-op: mock has no batched submitter to flush
 
   Queue &task_queue() noexcept { return task_queue_; }
   const Queue &task_queue() const noexcept { return task_queue_; }
