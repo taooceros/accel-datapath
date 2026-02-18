@@ -42,10 +42,9 @@ static void sliding_window_arena_impl_inline(
   dsa_stdexec::wait_start(scope.on_empty(), loop);
 }
 
-void run_sliding_window_inline_arena(DsaProxy &dsa, exec::async_scope &scope,
-                                     size_t concurrency, size_t msg_size, size_t total_bytes,
-                                     BufferSet &bufs, LatencyCollector &latency,
-                                     OperationType op_type) {
+void run_sliding_window_inline_arena(const StrategyParams &params) {
+  auto &[dsa, scope, concurrency, msg_size, total_bytes, batch_size, bufs, latency, op_type] = params;
+  (void)batch_size;
   with_op_sender(op_type, dsa, bufs, msg_size, [&](auto op_sender) {
     sliding_window_arena_impl_inline(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency, op_sender);
   });
@@ -102,10 +101,9 @@ static void sliding_window_arena_impl_threaded(
   stdexec::sync_wait(scope.on_empty());
 }
 
-void run_sliding_window_threaded_arena(DsaProxy &dsa, exec::async_scope &scope,
-                                       size_t concurrency, size_t msg_size, size_t total_bytes,
-                                       BufferSet &bufs, LatencyCollector &latency,
-                                       OperationType op_type) {
+void run_sliding_window_threaded_arena(const StrategyParams &params) {
+  auto &[dsa, scope, concurrency, msg_size, total_bytes, batch_size, bufs, latency, op_type] = params;
+  (void)batch_size;
   with_op_sender(op_type, dsa, bufs, msg_size, [&](auto op_sender) {
     sliding_window_arena_impl_threaded(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency, op_sender);
   });

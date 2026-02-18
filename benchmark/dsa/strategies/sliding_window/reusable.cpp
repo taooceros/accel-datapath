@@ -257,12 +257,10 @@ static void sliding_window_reusable_impl_inline(
 // Strategy entry point
 // ============================================================================
 
-void run_sliding_window_inline_reusable(DsaProxy &dsa, exec::async_scope &scope,
-                                        size_t concurrency, size_t msg_size,
-                                        size_t total_bytes, BufferSet &bufs,
-                                        LatencyCollector &latency,
-                                        OperationType op_type) {
-  (void)scope;  // Reusable strategy bypasses stdexec entirely
+void run_sliding_window_inline_reusable(const StrategyParams &params) {
+  auto &[dsa, scope, concurrency, msg_size, total_bytes, batch_size, bufs, latency, op_type] = params;
+  (void)scope;      // Reusable strategy bypasses stdexec entirely
+  (void)batch_size;
   with_reusable_fill(op_type, bufs, msg_size, [&](auto fill_fn) {
     sliding_window_reusable_impl_inline(dsa, concurrency, msg_size, total_bytes,
                                         latency, fill_fn);

@@ -9,87 +9,54 @@
 
 using DsaProxy = dsa_stdexec::DsaProxy;
 
+// Bundle of all arguments passed to strategy functions.
+struct StrategyParams {
+  DsaProxy &dsa;
+  exec::async_scope &scope;
+  size_t concurrency;
+  size_t msg_size;
+  size_t total_bytes;
+  size_t batch_size;   // NEW: hardware submitter batch size (0 = default)
+  BufferSet &bufs;
+  LatencyCollector &latency;
+  OperationType op_type;
+};
+
 // All strategy functions share this signature.
-using StrategyFn = void(*)(DsaProxy &, exec::async_scope &, size_t, size_t, size_t,
-                           BufferSet &, LatencyCollector &, OperationType);
+using StrategyFn = void(*)(const StrategyParams &);
 
 // Sliding window
-void run_sliding_window_inline(DsaProxy &dsa, exec::async_scope &scope,
-                               size_t concurrency, size_t msg_size, size_t total_bytes,
-                               BufferSet &bufs, LatencyCollector &latency,
-                               OperationType op_type);
-void run_sliding_window_threaded(DsaProxy &dsa, exec::async_scope &scope,
-                                 size_t concurrency, size_t msg_size, size_t total_bytes,
-                                 BufferSet &bufs, LatencyCollector &latency,
-                                 OperationType op_type);
+void run_sliding_window_inline(const StrategyParams &params);
+void run_sliding_window_threaded(const StrategyParams &params);
 
 // Sliding window noalloc
-void run_sliding_window_inline_noalloc(DsaProxy &dsa, exec::async_scope &scope,
-                                       size_t concurrency, size_t msg_size, size_t total_bytes,
-                                       BufferSet &bufs, LatencyCollector &latency,
-                                       OperationType op_type);
-void run_sliding_window_threaded_noalloc(DsaProxy &dsa, exec::async_scope &scope,
-                                         size_t concurrency, size_t msg_size, size_t total_bytes,
-                                         BufferSet &bufs, LatencyCollector &latency,
-                                         OperationType op_type);
+void run_sliding_window_inline_noalloc(const StrategyParams &params);
+void run_sliding_window_threaded_noalloc(const StrategyParams &params);
 
 // Sliding window arena
-void run_sliding_window_inline_arena(DsaProxy &dsa, exec::async_scope &scope,
-                                     size_t concurrency, size_t msg_size, size_t total_bytes,
-                                     BufferSet &bufs, LatencyCollector &latency,
-                                     OperationType op_type);
-void run_sliding_window_threaded_arena(DsaProxy &dsa, exec::async_scope &scope,
-                                       size_t concurrency, size_t msg_size, size_t total_bytes,
-                                       BufferSet &bufs, LatencyCollector &latency,
-                                       OperationType op_type);
+void run_sliding_window_inline_arena(const StrategyParams &params);
+void run_sliding_window_threaded_arena(const StrategyParams &params);
 
 // Batch
-void run_batch_inline(DsaProxy &dsa, exec::async_scope &scope,
-                      size_t concurrency, size_t msg_size, size_t total_bytes,
-                      BufferSet &bufs, LatencyCollector &latency,
-                      OperationType op_type);
-void run_batch_threaded(DsaProxy &dsa, exec::async_scope &scope,
-                        size_t concurrency, size_t msg_size, size_t total_bytes,
-                        BufferSet &bufs, LatencyCollector &latency,
-                        OperationType op_type);
+void run_batch_inline(const StrategyParams &params);
+void run_batch_threaded(const StrategyParams &params);
 
 // Batch noalloc
-void run_batch_noalloc_inline(DsaProxy &dsa, exec::async_scope &scope,
-                              size_t concurrency, size_t msg_size, size_t total_bytes,
-                              BufferSet &bufs, LatencyCollector &latency,
-                              OperationType op_type);
-void run_batch_noalloc_threaded(DsaProxy &dsa, exec::async_scope &scope,
-                                size_t concurrency, size_t msg_size, size_t total_bytes,
-                                BufferSet &bufs, LatencyCollector &latency,
-                                OperationType op_type);
+void run_batch_noalloc_inline(const StrategyParams &params);
+void run_batch_noalloc_threaded(const StrategyParams &params);
 
 // Scoped workers
-void run_scoped_workers_inline(DsaProxy &dsa, exec::async_scope &scope,
-                               size_t concurrency, size_t msg_size, size_t total_bytes,
-                               BufferSet &bufs, LatencyCollector &latency,
-                               OperationType op_type);
-void run_scoped_workers_threaded(DsaProxy &dsa, exec::async_scope &scope,
-                                 size_t concurrency, size_t msg_size, size_t total_bytes,
-                                 BufferSet &bufs, LatencyCollector &latency,
-                                 OperationType op_type);
+void run_scoped_workers_inline(const StrategyParams &params);
+void run_scoped_workers_threaded(const StrategyParams &params);
 
 // Batch raw (hardware batch descriptor via dsa_batch sender, inline only)
-void run_batch_raw_inline(DsaProxy &dsa, exec::async_scope &scope,
-                          size_t concurrency, size_t msg_size, size_t total_bytes,
-                          BufferSet &bufs, LatencyCollector &latency,
-                          OperationType op_type);
+void run_batch_raw_inline(const StrategyParams &params);
 
 // Sliding window direct (no scope.nest, no then — inline only)
-void run_sliding_window_inline_direct(DsaProxy &dsa, exec::async_scope &scope,
-                                      size_t concurrency, size_t msg_size, size_t total_bytes,
-                                      BufferSet &bufs, LatencyCollector &latency,
-                                      OperationType op_type);
+void run_sliding_window_inline_direct(const StrategyParams &params);
 
 // Sliding window reusable (bypass stdexec connect/start — inline only)
-void run_sliding_window_inline_reusable(DsaProxy &dsa, exec::async_scope &scope,
-                                        size_t concurrency, size_t msg_size, size_t total_bytes,
-                                        BufferSet &bufs, LatencyCollector &latency,
-                                        OperationType op_type);
+void run_sliding_window_inline_reusable(const StrategyParams &params);
 
 // Strategy taxonomy:
 //
@@ -127,13 +94,10 @@ inline constexpr StrategyFn strategy_table[][2] = {
   /* SlidingWindowReusable*/ { run_sliding_window_inline_reusable,  nullptr },
 };
 
-inline void dispatch_run(SchedulingPattern sp, PollingMode pm, OperationType op_type,
-                         DsaProxy &dsa, exec::async_scope &scope,
-                         size_t concurrency, size_t msg_size, size_t total_bytes,
-                         BufferSet &bufs, LatencyCollector &latency) {
+inline void dispatch_run(SchedulingPattern sp, PollingMode pm, const StrategyParams &params) {
   auto fn = strategy_table[static_cast<int>(sp)][static_cast<int>(pm)];
-  if (!fn) return; // unsupported combination (e.g. batch_raw + threaded)
-  fn(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency, op_type);
+  if (!fn) return;
+  fn(params);
 }
 
 #endif // BENCHMARK_STRATEGIES_HPP

@@ -18,14 +18,9 @@
 #include <dsa_stdexec/sync_wait.hpp>
 #include <exec/async_scope.hpp>
 #include <fstream>
-#include <functional>
 #include <stdexec/execution.hpp>
 #include <vector>
 
-// Type-erased run function signature
-using RunFunction = std::function<void(DsaProxy &, exec::async_scope &, size_t,
-                                       size_t, size_t, BufferSet &,
-                                       LatencyCollector &)>;
 
 // ============================================================================
 // BENCHMARK INFRASTRUCTURE
@@ -33,8 +28,8 @@ using RunFunction = std::function<void(DsaProxy &, exec::async_scope &, size_t,
 
 DsaMetric run_benchmark(DsaProxy &dsa, size_t concurrency, size_t msg_size,
                         size_t total_bytes, int iterations,
-                        BufferSet &bufs,
-                        const RunFunction &run_fn,
+                        BufferSet &bufs, size_t batch_size,
+                        SchedulingPattern sp, PollingMode pm, OperationType op_type,
                         ProgressBar *progress = nullptr,
                         bool sample_latency = true) {
   LatencyCollector warmup_latency(false);  // always discard warmup
@@ -47,7 +42,8 @@ DsaMetric run_benchmark(DsaProxy &dsa, size_t concurrency, size_t msg_size,
   // Warmup (1 full iteration)
   {
     exec::async_scope scope;
-    run_fn(dsa, scope, concurrency, msg_size, total_bytes, bufs, warmup_latency);
+    StrategyParams params{dsa, scope, concurrency, msg_size, total_bytes, batch_size, bufs, warmup_latency, op_type};
+    dispatch_run(sp, pm, params);
   }
 
   dsa_stdexec::reset_page_fault_retries();
@@ -55,7 +51,8 @@ DsaMetric run_benchmark(DsaProxy &dsa, size_t concurrency, size_t msg_size,
   auto start = std::chrono::high_resolution_clock::now();
   for (int i = 0; i < iterations; ++i) {
     exec::async_scope scope;
-    run_fn(dsa, scope, concurrency, msg_size, total_bytes, bufs, latency);
+    StrategyParams params{dsa, scope, concurrency, msg_size, total_bytes, batch_size, bufs, latency, op_type};
+    dispatch_run(sp, pm, params);
     if (progress) progress->increment();
   }
   auto end = std::chrono::high_resolution_clock::now();
@@ -211,13 +208,15 @@ static DsaProxy make_mock_dsa(QueueType qt) {
 static DsaMetric run_one_queue(QueueType qt, SubmissionStrategy ss, bool use_threaded_polling,
                                size_t concurrency, size_t msg_size, size_t total_bytes,
                                int iterations, BufferSet &bufs,
-                               const RunFunction &run_fn, ProgressBar *progress,
+                               SchedulingPattern sp, PollingMode pm, OperationType op_type,
+                               ProgressBar *progress,
                                bool sample_latency = true, size_t batch_size = 0,
                                bool use_mock = false) {
   auto dsa = use_mock
       ? make_mock_dsa(qt)
       : make_dsa(qt, ss, use_threaded_polling, batch_size);
-  return run_benchmark(dsa, concurrency, msg_size, total_bytes, iterations, bufs, run_fn, progress, sample_latency);
+  return run_benchmark(dsa, concurrency, msg_size, total_bytes, iterations, bufs,
+                       batch_size, sp, pm, op_type, progress, sample_latency);
 }
 
 static DsaMetric& result_field(BenchmarkResult &r, QueueType qt) {
@@ -258,11 +257,6 @@ std::vector<BenchmarkResult> run_all_queues(
   std::string progress_label = fmt::format("{}/{}", operation_name(op_type), pattern_name);
   ProgressBar progress(total_iterations, progress_label);
 
-  auto run_fn = [sp, pm, op_type](DsaProxy &d, exec::async_scope &scope, size_t c, size_t m, size_t t,
-                                   BufferSet &b, LatencyCollector &l) {
-    dispatch_run(sp, pm, op_type, d, scope, c, m, t, b, l);
-  };
-
   for (auto concurrency : config.concurrency_levels) {
     for (auto msg_size : config.msg_sizes) {
       size_t effective_total_bytes = config.total_bytes;
@@ -280,7 +274,7 @@ std::vector<BenchmarkResult> run_all_queues(
         result_field(result, qt) = run_one_queue(
             qt, ss, use_threaded_polling,
             concurrency, msg_size, effective_total_bytes,
-            config.iterations, bufs, run_fn, &progress,
+            config.iterations, bufs, sp, pm, op_type, &progress,
             config.sample_latency, config.batch_size, use_mock);
       }
 

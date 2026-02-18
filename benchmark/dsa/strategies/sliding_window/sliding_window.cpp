@@ -1,9 +1,8 @@
 #include "strategy_common.hpp"
 
-void run_sliding_window_inline(DsaProxy &dsa, exec::async_scope &scope,
-                               size_t concurrency, size_t msg_size, size_t total_bytes,
-                               BufferSet &bufs, LatencyCollector &latency,
-                               OperationType op_type) {
+void run_sliding_window_inline(const StrategyParams &params) {
+  auto &[dsa, scope, concurrency, msg_size, total_bytes, batch_size, bufs, latency, op_type] = params;
+  (void)batch_size;
   dsa_stdexec::PollingRunLoop loop([&dsa] { dsa.poll(); });
 
   size_t num_ops = total_bytes / msg_size;
@@ -22,10 +21,9 @@ void run_sliding_window_inline(DsaProxy &dsa, exec::async_scope &scope,
   dsa_stdexec::wait_start(scope.on_empty(), loop);
 }
 
-void run_sliding_window_threaded(DsaProxy &dsa, exec::async_scope &scope,
-                                 size_t concurrency, size_t msg_size, size_t total_bytes,
-                                 BufferSet &bufs, LatencyCollector &latency,
-                                 OperationType op_type) {
+void run_sliding_window_threaded(const StrategyParams &params) {
+  auto &[dsa, scope, concurrency, msg_size, total_bytes, batch_size, bufs, latency, op_type] = params;
+  (void)batch_size;
   dsa_stdexec::DsaScheduler<DsaProxy> scheduler(dsa);
 
   size_t num_ops = total_bytes / msg_size;

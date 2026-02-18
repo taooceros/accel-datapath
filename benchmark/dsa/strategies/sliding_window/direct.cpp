@@ -34,11 +34,10 @@ static void sliding_window_direct_impl_inline(
   }
 }
 
-void run_sliding_window_inline_direct(DsaProxy &dsa, exec::async_scope &scope,
-                                      size_t concurrency, size_t msg_size, size_t total_bytes,
-                                      BufferSet &bufs, LatencyCollector &latency,
-                                      OperationType op_type) {
-  (void)scope;  // Direct strategy bypasses async_scope entirely
+void run_sliding_window_inline_direct(const StrategyParams &params) {
+  auto &[dsa, scope, concurrency, msg_size, total_bytes, batch_size, bufs, latency, op_type] = params;
+  (void)scope;      // Direct strategy bypasses async_scope entirely
+  (void)batch_size;
   with_op_sender(op_type, dsa, bufs, msg_size, [&](auto op_sender) {
     sliding_window_direct_impl_inline(dsa, concurrency, msg_size, total_bytes, bufs, latency, op_sender);
   });
