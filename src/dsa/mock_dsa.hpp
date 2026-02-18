@@ -178,5 +178,6 @@ using MockDsaSpinlock = MockDsaBase<dsa::SpinlockTaskQueue>;
 using MockDsaBackoffSpinlock = MockDsaBase<dsa::BackoffSpinlockTaskQueue>;
 using MockDsaLockFree = MockDsaBase<dsa::LockFreeTaskQueue>;
 using MockDsaRingBuffer = MockDsaBase<RingBufferTaskQueue>;
+using MockDsaIndexed = MockDsaBase<dsa::IndexedSingleThreadTaskQueue>;
 
 #endif

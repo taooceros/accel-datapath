@@ -79,6 +79,18 @@ void run_batch_raw_inline(DsaProxy &dsa, exec::async_scope &scope,
                           BufferSet &bufs, LatencyCollector &latency,
                           OperationType op_type);
 
+// Sliding window direct (no scope.nest, no then — inline only)
+void run_sliding_window_inline_direct(DsaProxy &dsa, exec::async_scope &scope,
+                                      size_t concurrency, size_t msg_size, size_t total_bytes,
+                                      BufferSet &bufs, LatencyCollector &latency,
+                                      OperationType op_type);
+
+// Sliding window reusable (bypass stdexec connect/start — inline only)
+void run_sliding_window_inline_reusable(DsaProxy &dsa, exec::async_scope &scope,
+                                        size_t concurrency, size_t msg_size, size_t total_bytes,
+                                        BufferSet &bufs, LatencyCollector &latency,
+                                        OperationType op_type);
+
 // Indexed by [SchedulingPattern][PollingMode]: {inline, threaded}
 inline constexpr StrategyFn strategy_table[][2] = {
   /* SlidingWindow       */ { run_sliding_window_inline,          run_sliding_window_threaded },
@@ -88,6 +100,8 @@ inline constexpr StrategyFn strategy_table[][2] = {
   /* BatchNoAlloc       */  { run_batch_noalloc_inline,           run_batch_noalloc_threaded },
   /* ScopedWorkers      */  { run_scoped_workers_inline,          run_scoped_workers_threaded },
   /* BatchRaw           */  { run_batch_raw_inline,               nullptr },
+  /* SlidingWindowDirect*/  { run_sliding_window_inline_direct,   nullptr },
+  /* SlidingWindowReusable*/ { run_sliding_window_inline_reusable, nullptr },
 };
 
 inline void dispatch_run(SchedulingPattern sp, PollingMode pm, OperationType op_type,

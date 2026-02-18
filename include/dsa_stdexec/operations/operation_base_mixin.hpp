@@ -135,14 +135,14 @@ struct DsaOperationMixin : dsa::DsaOperationBase {
     self.fill_descriptor(*desc);
     desc->completion_addr = reinterpret_cast<uint64_t>(comp);
 
-    // Wrapper for type-erased proxy callbacks
+    // Set up function pointers (no allocation, just pointer assignment)
     using Self = std::remove_reference_t<decltype(self)>;
-    struct Wrapper {
-      Self *op;
-      void notify() { op->notify(); }
-      dsa_hw_desc *get_descriptor() { return op->desc_ptr(); }
+    self.notify_fn = [](OperationBase *base) {
+      static_cast<Self *>(static_cast<dsa::DsaOperationBase *>(base))->notify();
     };
-    self.proxy = pro::make_proxy<OperationFacade>(Wrapper{&self});
+    self.get_descriptor_fn = [](OperationBase *base) {
+      return static_cast<Self *>(static_cast<dsa::DsaOperationBase *>(base))->desc_ptr();
+    };
 
     try {
       self.dsa_.submit(&self, desc);

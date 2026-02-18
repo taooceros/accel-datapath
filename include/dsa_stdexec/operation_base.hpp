@@ -3,7 +3,6 @@
 #define DSA_STDEXEC_OPERATION_BASE_HPP
 
 #include <concepts>
-#include <proxy/proxy.h>
 
 extern "C" {
 #include <linux/idxd.h>
@@ -11,19 +10,13 @@ extern "C" {
 
 namespace dsa_stdexec {
 
-// Proxy dispatch definitions for operation callbacks
-// Note: check_completion is NOT here - it's handled by HwContext with static dispatch
-PRO_DEF_MEM_DISPATCH(Notify, notify);
-PRO_DEF_MEM_DISPATCH(GetDescriptor, get_descriptor);
-
-struct OperationFacade
-    : pro::facade_builder::add_convention<Notify, void()>
-          ::add_convention<GetDescriptor, dsa_hw_desc *()>
-          ::build {};
-
 struct OperationBase {
-  pro::proxy<OperationFacade> proxy;
+  void (*notify_fn)(OperationBase *self) = nullptr;
+  dsa_hw_desc *(*get_descriptor_fn)(OperationBase *self) = nullptr;
   OperationBase *next = nullptr;
+
+  void notify() { notify_fn(this); }
+  dsa_hw_desc *get_descriptor() { return get_descriptor_fn(this); }
 };
 
 // Concept for hardware context types used by task queues.

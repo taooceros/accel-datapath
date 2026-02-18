@@ -23,7 +23,8 @@ std::optional<PollingMode> parse_polling_mode(std::string_view name);
 std::vector<PollingMode> all_polling_modes();
 
 enum class SchedulingPattern {
-  SlidingWindow, SlidingWindowNoAlloc, SlidingWindowArena, Batch, BatchNoAlloc, ScopedWorkers, BatchRaw
+  SlidingWindow, SlidingWindowNoAlloc, SlidingWindowArena, Batch, BatchNoAlloc, ScopedWorkers, BatchRaw,
+  SlidingWindowDirect, SlidingWindowReusable
 };
 
 const char* scheduling_pattern_name(SchedulingPattern p);
@@ -38,7 +39,7 @@ std::optional<SubmissionStrategy> parse_submission_strategy(std::string_view nam
 std::vector<SubmissionStrategy> default_submission_strategies();
 std::vector<SubmissionStrategy> all_submission_strategies();
 
-enum class QueueType { NoLock, Mutex, TAS, TTAS, Backoff, LockFree };
+enum class QueueType { NoLock, Mutex, TAS, TTAS, Backoff, LockFree, Indexed };
 
 const char* queue_type_name(QueueType q);
 std::optional<QueueType> parse_queue_type(std::string_view name);

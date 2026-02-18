@@ -144,6 +144,7 @@ struct BenchmarkResult {
   DsaMetric ttas_spinlock;
   DsaMetric backoff_spinlock;
   DsaMetric lockfree;
+  DsaMetric indexed;
 };
 
 // Buffer set for all operation types
@@ -300,6 +301,37 @@ template <size_t StorageSize> struct ArenaReceiver {
     arena->release(slot);
   }
   void set_stopped() && noexcept {
+    arena->release(slot);
+  }
+  auto get_env() const noexcept { return stdexec::empty_env{}; }
+};
+
+// Direct receiver: combines ArenaReceiver + CompletionRecord into one.
+// Used by SlidingWindowDirect to eliminate scope.nest() + stdexec::then() overhead.
+// The receiver directly handles latency recording and remaining-op counting,
+// removing the need for a separate CompletionRecord + then() wrapper.
+template <size_t StorageSize> struct DirectBenchReceiver {
+  using receiver_concept = stdexec::receiver_t;
+  SlotArena<StorageSize> *arena;
+  OperationSlot<StorageSize> *slot;
+  std::atomic<size_t> *remaining;
+  LatencyCollector *latency;
+  std::chrono::high_resolution_clock::time_point start_time;
+
+  void set_value(auto &&...) && noexcept {
+    if (latency->enabled()) {
+      auto end = std::chrono::high_resolution_clock::now();
+      latency->record(std::chrono::duration<double, std::nano>(end - start_time).count());
+    }
+    remaining->fetch_sub(1, std::memory_order_release);
+    arena->release(slot);
+  }
+  void set_error(auto &&) && noexcept {
+    remaining->fetch_sub(1, std::memory_order_release);
+    arena->release(slot);
+  }
+  void set_stopped() && noexcept {
+    remaining->fetch_sub(1, std::memory_order_release);
     arena->release(slot);
   }
   auto get_env() const noexcept { return stdexec::empty_env{}; }

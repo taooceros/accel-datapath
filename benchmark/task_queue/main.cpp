@@ -56,21 +56,20 @@ class MockScheduleOperation : public dsa_stdexec::OperationBase {
 public:
   using operation_state_concept = stdexec::operation_state_t;
 
-  struct Wrapper {
-    MockScheduleOperation *op;
-    bool check_completion() { return op->check_completion(); }
-    void notify() { op->notify(); }
-    dsa_hw_desc *get_descriptor() { return nullptr; }
-  };
-
   MockScheduleOperation(MockDsaBase<QueueTemplate> &dsa, Receiver r)
       : dsa_(dsa), r_(std::move(r)) {
-    this->proxy = pro::make_proxy<dsa_stdexec::OperationFacade>(Wrapper{this});
+    this->notify_fn = [](dsa_stdexec::OperationBase *base) {
+      static_cast<MockScheduleOperation *>(base)->notify();
+    };
+    this->get_descriptor_fn = [](dsa_stdexec::OperationBase *) -> dsa_hw_desc * { return nullptr; };
   }
 
   MockScheduleOperation(MockScheduleOperation &&other) noexcept
       : dsa_stdexec::OperationBase(), dsa_(other.dsa_), r_(std::move(other.r_)) {
-    this->proxy = pro::make_proxy<dsa_stdexec::OperationFacade>(Wrapper{this});
+    this->notify_fn = [](dsa_stdexec::OperationBase *base) {
+      static_cast<MockScheduleOperation *>(base)->notify();
+    };
+    this->get_descriptor_fn = [](dsa_stdexec::OperationBase *) -> dsa_hw_desc * { return nullptr; };
   }
 
   void start() noexcept { dsa_.submit(this); }

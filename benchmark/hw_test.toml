@@ -1,0 +1,30 @@
+# Real DSA hardware test config
+[polling]
+inline = true
+threaded = false
+
+[scheduling]
+sliding_window_noalloc = true
+sliding_window_direct = true
+sliding_window_reusable = true
+
+[submission]
+mirrored_ring_batch = true
+batch_size = 32
+
+[queues]
+nolock = true
+
+[operations]
+enabled = ["data_move"]
+
+[parameters]
+concurrency_levels = [32, 1024, 2048, 4096]
+msg_sizes = [8, 64]
+total_bytes = 33554432
+max_ops = 3000000
+iterations = 10
+sample_latency = false
+
+[output]
+csv_file = "hw_test_results.csv"

@@ -23,25 +23,25 @@ class ScheduleOperation : public dsa::DsaOperationBase {
 
 public:
   using operation_state_concept = stdexec::operation_state_t;
-  struct Wrapper {
-    ScheduleOperation *op;
-    void notify() { op->notify(); }
-    dsa_hw_desc *get_descriptor() { return nullptr; }  // No HW descriptor for schedule
-  };
-
   ScheduleOperation(DsaType &dsa, Receiver r) : dsa_(dsa), r_(std::move(r)) {
     // Pre-set completion status so check_completion returns true immediately
     comp_ptr()->status = 1;
     // No hardware descriptor for schedule operations
     has_descriptor = false;
-    proxy = pro::make_proxy<OperationFacade>(Wrapper{this});
+    notify_fn = [](OperationBase *base) {
+      static_cast<ScheduleOperation *>(static_cast<dsa::DsaOperationBase *>(base))->notify();
+    };
+    get_descriptor_fn = [](OperationBase *) -> dsa_hw_desc * { return nullptr; };
   }
 
   ScheduleOperation(ScheduleOperation &&other) noexcept
       : dsa::DsaOperationBase(), dsa_(other.dsa_), r_(std::move(other.r_)) {
     comp_ptr()->status = 1;
     has_descriptor = false;
-    proxy = pro::make_proxy<OperationFacade>(Wrapper{this});
+    notify_fn = [](OperationBase *base) {
+      static_cast<ScheduleOperation *>(static_cast<dsa::DsaOperationBase *>(base))->notify();
+    };
+    get_descriptor_fn = [](OperationBase *) -> dsa_hw_desc * { return nullptr; };
   }
 
   void start() noexcept {

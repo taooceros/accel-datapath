@@ -133,6 +133,19 @@ constexpr size_t threaded_noalloc_slot_size() {
   return sizeof(stdexec::connect_result_t<NestSender, SlotReceiver>);
 }
 
+// Direct connect slot size: sender connected directly to DirectBenchReceiver.
+// No nest wrapper, no then wrapper — just raw sender -> receiver.
+// DirectBenchReceiver<N> is the same size regardless of N (all pointers/scalars),
+// so we bootstrap from the SlotReceiver-based size to break the circular dependency.
+
+template <class MakeSender>
+constexpr size_t direct_arena_slot_size() {
+  using Sender = decltype(std::declval<MakeSender>()(size_t{0}));
+  constexpr size_t Bootstrap = inline_noalloc_slot_size<MakeSender>();
+  using Receiver = DirectBenchReceiver<Bootstrap>;
+  return sizeof(stdexec::connect_result_t<Sender, Receiver>);
+}
+
 // Fill a single descriptor for the given operation type.
 // Used by batch_raw strategy to populate sub-descriptors in a hardware batch.
 static inline void fill_for_op(dsa_hw_desc &desc, OperationType op_type,

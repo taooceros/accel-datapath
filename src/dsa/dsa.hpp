@@ -133,6 +133,7 @@ using DsaTasSpinlock = DsaEngine<DirectSubmitter, dsa::TasSpinlockTaskQueue>;
 using DsaSpinlock = DsaEngine<DirectSubmitter, dsa::SpinlockTaskQueue>;  // TTAS
 using DsaBackoffSpinlock = DsaEngine<DirectSubmitter, dsa::BackoffSpinlockTaskQueue>;
 using DsaLockFree = DsaEngine<DirectSubmitter, dsa::LockFreeTaskQueue>;
+using DsaIndexed = DsaEngine<DirectSubmitter, dsa::IndexedSingleThreadTaskQueue>;
 
 // Double-buffered batch submission (was DsaBatchBase)
 using DsaBatch = DsaEngine<StagingSubmitter, dsa::MutexTaskQueue>;
@@ -141,6 +142,7 @@ using DsaBatchTasSpinlock = DsaEngine<StagingSubmitter, dsa::TasSpinlockTaskQueu
 using DsaBatchSpinlock = DsaEngine<StagingSubmitter, dsa::SpinlockTaskQueue>;
 using DsaBatchBackoffSpinlock = DsaEngine<StagingSubmitter, dsa::BackoffSpinlockTaskQueue>;
 using DsaBatchLockFree = DsaEngine<StagingSubmitter, dsa::LockFreeTaskQueue>;
+using DsaBatchIndexed = DsaEngine<StagingSubmitter, dsa::IndexedSingleThreadTaskQueue>;
 
 // Fixed ring batch submission (was DsaFixedRingBatchBase)
 using DsaFixedRingBatch = DsaEngine<FixedRingSubmitter, dsa::MutexTaskQueue>;
@@ -149,6 +151,7 @@ using DsaFixedRingBatchTasSpinlock = DsaEngine<FixedRingSubmitter, dsa::TasSpinl
 using DsaFixedRingBatchSpinlock = DsaEngine<FixedRingSubmitter, dsa::SpinlockTaskQueue>;
 using DsaFixedRingBatchBackoffSpinlock = DsaEngine<FixedRingSubmitter, dsa::BackoffSpinlockTaskQueue>;
 using DsaFixedRingBatchLockFree = DsaEngine<FixedRingSubmitter, dsa::LockFreeTaskQueue>;
+using DsaFixedRingBatchIndexed = DsaEngine<FixedRingSubmitter, dsa::IndexedSingleThreadTaskQueue>;
 
 // Ring batch submission (was DsaRingBatchBase)
 using DsaRingBatch = DsaEngine<RingSubmitter, dsa::MutexTaskQueue>;
@@ -157,6 +160,7 @@ using DsaRingBatchTasSpinlock = DsaEngine<RingSubmitter, dsa::TasSpinlockTaskQue
 using DsaRingBatchSpinlock = DsaEngine<RingSubmitter, dsa::SpinlockTaskQueue>;
 using DsaRingBatchBackoffSpinlock = DsaEngine<RingSubmitter, dsa::BackoffSpinlockTaskQueue>;
 using DsaRingBatchLockFree = DsaEngine<RingSubmitter, dsa::LockFreeTaskQueue>;
+using DsaRingBatchIndexed = DsaEngine<RingSubmitter, dsa::IndexedSingleThreadTaskQueue>;
 
 // Mirrored ring batch submission (wrap-free via virtual memory mirroring)
 using DsaMirroredRingBatch = DsaEngine<MirroredRingSubmitter, dsa::MutexTaskQueue>;
@@ -165,6 +169,7 @@ using DsaMirroredRingBatchTasSpinlock = DsaEngine<MirroredRingSubmitter, dsa::Ta
 using DsaMirroredRingBatchSpinlock = DsaEngine<MirroredRingSubmitter, dsa::SpinlockTaskQueue>;
 using DsaMirroredRingBatchBackoffSpinlock = DsaEngine<MirroredRingSubmitter, dsa::BackoffSpinlockTaskQueue>;
 using DsaMirroredRingBatchLockFree = DsaEngine<MirroredRingSubmitter, dsa::LockFreeTaskQueue>;
+using DsaMirroredRingBatchIndexed = DsaEngine<MirroredRingSubmitter, dsa::IndexedSingleThreadTaskQueue>;
 
 #include "dsa.ipp"
 

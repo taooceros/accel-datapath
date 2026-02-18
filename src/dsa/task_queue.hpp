@@ -7,6 +7,7 @@
 #include <concepts>
 #include <cstddef>
 #include <mutex>
+#include <vector>
 
 #include <dsa_stdexec/operation_base.hpp>
 
@@ -175,7 +176,7 @@ public:
     while (completed_head != nullptr) {
       dsa_stdexec::OperationBase *op = completed_head;
       completed_head = op->next;
-      op->proxy->notify();
+      op->notify();
       ++count;
     }
 
@@ -336,7 +337,7 @@ public:
     while (completed_head != nullptr) {
       dsa_stdexec::OperationBase *op = completed_head;
       completed_head = op->next;
-      op->proxy->notify();
+      op->notify();
       ++count;
     }
 
@@ -451,7 +452,7 @@ public:
     while (completed_head != nullptr) {
       dsa_stdexec::OperationBase *op = completed_head;
       completed_head = op->next;
-      op->proxy->notify();
+      op->notify();
       ++count;
     }
 
@@ -474,6 +475,90 @@ private:
   std::atomic<dsa_stdexec::OperationBase *> head_{nullptr};
   [[no_unique_address]] HwCtx hw_ctx_;
 };
+
+// Flat vector task queue — O(1) push, cache-friendly O(active) poll.
+// Stores active OperationBase* pointers in a flat vector instead of an
+// intrusive linked list, giving sequential memory access during poll.
+// Swap-and-pop for O(1) removal of completed entries.
+// Single-consumer: poll() must be externally synchronized (or single-threaded).
+// Push can be called from the poll notification path (re-entrant safe because
+// notifications happen after iteration completes).
+template <dsa_stdexec::HwContext HwCtx>
+class IndexedTaskQueue {
+public:
+  explicit IndexedTaskQueue(HwCtx hw_ctx, std::size_t initial_capacity = 4096)
+      : hw_ctx_(std::move(hw_ctx)) {
+    active_.reserve(initial_capacity);
+  }
+  ~IndexedTaskQueue() = default;
+
+  IndexedTaskQueue(const IndexedTaskQueue &) = delete;
+  IndexedTaskQueue &operator=(const IndexedTaskQueue &) = delete;
+  IndexedTaskQueue(IndexedTaskQueue &&) = delete;
+  IndexedTaskQueue &operator=(IndexedTaskQueue &&) = delete;
+
+  void push(dsa_stdexec::OperationBase *op) {
+    active_.push_back(op);
+  }
+
+  std::size_t poll() {
+    // Collect completed ops via intrusive next-pointer chain.
+    // Notifications are deferred until after the active_ iteration so that
+    // re-entrant push() from notify callbacks doesn't invalidate the loop.
+    dsa_stdexec::OperationBase *completed_head = nullptr;
+    std::size_t completed = 0;
+    std::size_t i = 0;
+
+    while (i < active_.size()) {
+      auto *op = active_[i];
+      // Prefetch the OperationBase *object* that the next pointer targets.
+      // The vector of pointers is contiguous (hardware-prefetched), but the
+      // pointed-to OperationBase objects may be scattered in memory.
+      if (i + 4 < active_.size()) {
+        __builtin_prefetch(active_[i + 4], 0, 0);
+      }
+      if (hw_ctx_.check_completion(op)) {
+        // Swap-and-pop: O(1) removal from active list
+        active_[i] = active_.back();
+        active_.pop_back();
+        op->next = completed_head;
+        completed_head = op;
+        ++completed;
+      } else {
+        ++i;
+      }
+    }
+
+    // Notify outside the iteration
+    while (completed_head != nullptr) {
+      auto *op = completed_head;
+      completed_head = op->next;
+      op->notify();
+    }
+
+    return completed;
+  }
+
+  bool empty() const { return active_.empty(); }
+
+  HwCtx &hw_context() { return hw_ctx_; }
+  const HwCtx &hw_context() const { return hw_ctx_; }
+
+#ifndef NDEBUG
+  template <typename F>
+  void for_each_debug(F &&f) {
+    for (auto *op : active_) f(op);
+  }
+#endif
+
+private:
+  std::vector<dsa_stdexec::OperationBase *> active_;
+  [[no_unique_address]] HwCtx hw_ctx_;
+};
+
+// Template alias for indexed queue (single-thread, no lock)
+template <typename HwCtx>
+using IndexedSingleThreadTaskQueue = IndexedTaskQueue<HwCtx>;
 
 } // namespace dsa
 

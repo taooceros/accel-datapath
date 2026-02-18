@@ -117,6 +117,9 @@ void export_to_csv(const std::string &filename,
       write_row(op_name.c_str(), pattern.c_str(), polling_mode.c_str(), "TTAS", r.concurrency, r.msg_size, r.ttas_spinlock);
       write_row(op_name.c_str(), pattern.c_str(), polling_mode.c_str(), "Backoff", r.concurrency, r.msg_size, r.backoff_spinlock);
       write_row(op_name.c_str(), pattern.c_str(), polling_mode.c_str(), "LockFree", r.concurrency, r.msg_size, r.lockfree);
+      if (include_nolock) {
+        write_row(op_name.c_str(), pattern.c_str(), polling_mode.c_str(), "Indexed", r.concurrency, r.msg_size, r.indexed);
+      }
     }
   }
 
@@ -128,7 +131,7 @@ void export_to_csv(const std::string &filename,
 static DsaProxy make_dsa(QueueType qt, SubmissionStrategy ss, bool use_threaded_polling,
                          size_t batch_size = 0) {
   using dsa_stdexec::make_dsa_proxy;
-  bool poller = (qt == QueueType::NoLock) ? false : use_threaded_polling;
+  bool poller = (qt == QueueType::NoLock || qt == QueueType::Indexed) ? false : use_threaded_polling;
 
   switch (ss) {
   case SubmissionStrategy::DoubleBufBatch:
@@ -139,6 +142,7 @@ static DsaProxy make_dsa(QueueType qt, SubmissionStrategy ss, bool use_threaded_
       case QueueType::TTAS:     return make_dsa_proxy<DsaBatchSpinlock>(poller, batch_size);
       case QueueType::Backoff:  return make_dsa_proxy<DsaBatchBackoffSpinlock>(poller, batch_size);
       case QueueType::LockFree: return make_dsa_proxy<DsaBatchLockFree>(poller, batch_size);
+      case QueueType::Indexed:  return make_dsa_proxy<DsaBatchIndexed>(poller, batch_size);
     }
     break;
   case SubmissionStrategy::FixedRingBatch:
@@ -149,6 +153,7 @@ static DsaProxy make_dsa(QueueType qt, SubmissionStrategy ss, bool use_threaded_
       case QueueType::TTAS:     return make_dsa_proxy<DsaFixedRingBatchSpinlock>(poller, batch_size);
       case QueueType::Backoff:  return make_dsa_proxy<DsaFixedRingBatchBackoffSpinlock>(poller, batch_size);
       case QueueType::LockFree: return make_dsa_proxy<DsaFixedRingBatchLockFree>(poller, batch_size);
+      case QueueType::Indexed:  return make_dsa_proxy<DsaFixedRingBatchIndexed>(poller, batch_size);
     }
     break;
   case SubmissionStrategy::RingBatch:
@@ -159,6 +164,7 @@ static DsaProxy make_dsa(QueueType qt, SubmissionStrategy ss, bool use_threaded_
       case QueueType::TTAS:     return make_dsa_proxy<DsaRingBatchSpinlock>(poller, batch_size);
       case QueueType::Backoff:  return make_dsa_proxy<DsaRingBatchBackoffSpinlock>(poller, batch_size);
       case QueueType::LockFree: return make_dsa_proxy<DsaRingBatchLockFree>(poller, batch_size);
+      case QueueType::Indexed:  return make_dsa_proxy<DsaRingBatchIndexed>(poller, batch_size);
     }
     break;
   case SubmissionStrategy::MirroredRingBatch:
@@ -169,6 +175,7 @@ static DsaProxy make_dsa(QueueType qt, SubmissionStrategy ss, bool use_threaded_
       case QueueType::TTAS:     return make_dsa_proxy<DsaMirroredRingBatchSpinlock>(poller, batch_size);
       case QueueType::Backoff:  return make_dsa_proxy<DsaMirroredRingBatchBackoffSpinlock>(poller, batch_size);
       case QueueType::LockFree: return make_dsa_proxy<DsaMirroredRingBatchLockFree>(poller, batch_size);
+      case QueueType::Indexed:  return make_dsa_proxy<DsaMirroredRingBatchIndexed>(poller, batch_size);
     }
     break;
   case SubmissionStrategy::Immediate:
@@ -179,6 +186,7 @@ static DsaProxy make_dsa(QueueType qt, SubmissionStrategy ss, bool use_threaded_
       case QueueType::TTAS:     return make_dsa_proxy<DsaSpinlock>(poller, batch_size);
       case QueueType::Backoff:  return make_dsa_proxy<DsaBackoffSpinlock>(poller, batch_size);
       case QueueType::LockFree: return make_dsa_proxy<DsaLockFree>(poller, batch_size);
+      case QueueType::Indexed:  return make_dsa_proxy<DsaIndexed>(poller, batch_size);
     }
     break;
   }
@@ -195,6 +203,7 @@ static DsaProxy make_mock_dsa(QueueType qt) {
     case QueueType::TTAS:     return make_dsa_proxy<MockDsaSpinlock>();
     case QueueType::Backoff:  return make_dsa_proxy<MockDsaBackoffSpinlock>();
     case QueueType::LockFree: return make_dsa_proxy<MockDsaLockFree>();
+    case QueueType::Indexed:  return make_dsa_proxy<MockDsaIndexed>();
   }
   __builtin_unreachable();
 }
@@ -219,6 +228,7 @@ static DsaMetric& result_field(BenchmarkResult &r, QueueType qt) {
     case QueueType::TTAS:     return r.ttas_spinlock;
     case QueueType::Backoff:  return r.backoff_spinlock;
     case QueueType::LockFree: return r.lockfree;
+    case QueueType::Indexed:  return r.indexed;
   }
   return r.mutex;  // unreachable
 }
@@ -238,7 +248,7 @@ std::vector<BenchmarkResult> run_all_queues(
 
   size_t queue_count = 0;
   for (auto qt : config.queue_types) {
-    if (qt == QueueType::NoLock && use_threaded_polling) continue;
+    if ((qt == QueueType::NoLock || qt == QueueType::Indexed) && use_threaded_polling) continue;
     queue_count++;
   }
 
@@ -261,11 +271,11 @@ std::vector<BenchmarkResult> run_all_queues(
         effective_total_bytes = std::min(config.total_bytes, max_bytes);
       }
 
-      BenchmarkResult result{concurrency, msg_size, {}, {}, {}, {}, {}, {}};
+      BenchmarkResult result{concurrency, msg_size, {}, {}, {}, {}, {}, {}, {}};
       progress.set_label(fmt::format("{}/{} c={} sz={}", operation_name(op_type), pattern_name, concurrency, msg_size));
 
       for (auto qt : config.queue_types) {
-        if (qt == QueueType::NoLock && use_threaded_polling) continue;
+        if ((qt == QueueType::NoLock || qt == QueueType::Indexed) && use_threaded_polling) continue;
 
         result_field(result, qt) = run_one_queue(
             qt, ss, use_threaded_polling,
@@ -350,19 +360,19 @@ void benchmark_queues_with_dsa(const BenchmarkConfig &config) {
 
     fmt::println("========== {} ==========\n", title);
     if (include_nolock) {
-      fmt::println("{:>5} {:>10} {:>16} {:>16} {:>16} {:>16} {:>16} {:>16}",
+      fmt::println("{:>5} {:>10} {:>16} {:>16} {:>16} {:>16} {:>16} {:>16} {:>16}",
                    "Conc", "Size", "NoLock", "Mutex", "TAS", "TTAS", "Backoff",
-                   "LockFree");
+                   "LockFree", "Indexed");
       fmt::println(
-          "{:-^5} {:-^10} {:-^16} {:-^16} {:-^16} {:-^16} {:-^16} {:-^16}",
-          "", "", "", "", "", "", "", "");
+          "{:-^5} {:-^10} {:-^16} {:-^16} {:-^16} {:-^16} {:-^16} {:-^16} {:-^16}",
+          "", "", "", "", "", "", "", "", "");
       for (const auto &r : results) {
         fmt::println(
-            "{:>5} {:>10} {:>16} {:>16} {:>16} {:>16} {:>16} {:>16}",
+            "{:>5} {:>10} {:>16} {:>16} {:>16} {:>16} {:>16} {:>16} {:>16}",
             r.concurrency, r.msg_size, format_metric(r.single_thread),
             format_metric(r.mutex), format_metric(r.tas_spinlock),
             format_metric(r.ttas_spinlock), format_metric(r.backoff_spinlock),
-            format_metric(r.lockfree));
+            format_metric(r.lockfree), format_metric(r.indexed));
       }
     } else {
       fmt::println("{:>5} {:>10} {:>16} {:>16} {:>16} {:>16} {:>16}",

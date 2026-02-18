@@ -65,8 +65,13 @@ public:
 
     memset(comp, 0, sizeof(*comp));
 
-    // Initialize proxy for notify/get_descriptor callbacks
-    proxy = pro::make_proxy<OperationFacade>(Wrapper{this});
+    // Set up function pointers for notify/get_descriptor callbacks
+    notify_fn = [](OperationBase *base) {
+      static_cast<BatchOperation *>(static_cast<dsa::DsaOperationBase *>(base))->notify();
+    };
+    get_descriptor_fn = [](OperationBase *base) {
+      return static_cast<BatchOperation *>(static_cast<dsa::DsaOperationBase *>(base))->desc_ptr();
+    };
 
     try {
       dsa_.submit(this, desc);
@@ -86,12 +91,6 @@ public:
   }
 
 private:
-  struct Wrapper {
-    BatchOperation *op;
-    void notify() { op->notify(); }
-    dsa_hw_desc *get_descriptor() { return op->desc_ptr(); }
-  };
-
   void notify() {
     uint8_t status = comp_ptr()->status & DSA_COMP_STATUS_MASK;
     if (status == DSA_COMP_SUCCESS) {

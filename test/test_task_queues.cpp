@@ -11,22 +11,19 @@
 #include <dsa/mock_dsa.hpp>
 #include <dsa/task_queue.hpp>
 #include <dsa_stdexec/operation_base.hpp>
-#include <proxy/proxy.h>
 
 // Helper: wraps a MockOperation in an OperationBase for task queue testing.
-// The proxy dispatches notify() and get_descriptor() to the mock.
-struct TestOpWrapper {
+// Inherits from OperationBase so function pointers can recover the concrete type.
+struct TestOpWrapper : dsa_stdexec::OperationBase {
   MockOperation mock;
-  dsa_stdexec::OperationBase base;
 
   TestOpWrapper() {
-    struct ProxyAdapter {
-      MockOperation *op;
-      void notify() { op->notify(); }
-      dsa_hw_desc *get_descriptor() { return op->get_descriptor(); }
+    notify_fn = [](dsa_stdexec::OperationBase *base) {
+      static_cast<TestOpWrapper *>(base)->mock.notify();
     };
-    base.proxy =
-        pro::make_proxy<dsa_stdexec::OperationFacade>(ProxyAdapter{&mock});
+    get_descriptor_fn = [](dsa_stdexec::OperationBase *base) {
+      return static_cast<TestOpWrapper *>(base)->mock.get_descriptor();
+    };
   }
 
   TestOpWrapper(const TestOpWrapper &) = delete;
@@ -56,7 +53,7 @@ TEST_CASE("SingleThreadTaskQueue - basic push and poll") {
   REQUIRE(queue.empty());
 
   TestOpWrapper op;
-  queue.push(&op.base);
+  queue.push(&op);
 
   REQUIRE_FALSE(queue.empty());
   REQUIRE_FALSE(op.mock.was_notified());
@@ -75,7 +72,7 @@ TEST_CASE("MutexTaskQueue - basic push and poll") {
   REQUIRE(queue.empty());
 
   TestOpWrapper op;
-  queue.push(&op.base);
+  queue.push(&op);
 
   REQUIRE_FALSE(queue.empty());
   std::size_t completed = queue.poll();
@@ -90,7 +87,7 @@ TEST_CASE("TasSpinlockTaskQueue - basic push and poll") {
   TasSpinlockTaskQueue<MockHwContext> queue(hw);
 
   TestOpWrapper op;
-  queue.push(&op.base);
+  queue.push(&op);
   CHECK(queue.poll() == 1);
   CHECK(op.mock.was_notified());
 }
@@ -100,7 +97,7 @@ TEST_CASE("SpinlockTaskQueue (TTAS) - basic push and poll") {
   SpinlockTaskQueue<MockHwContext> queue(hw);
 
   TestOpWrapper op;
-  queue.push(&op.base);
+  queue.push(&op);
   CHECK(queue.poll() == 1);
   CHECK(op.mock.was_notified());
 }
@@ -110,7 +107,7 @@ TEST_CASE("BackoffSpinlockTaskQueue - basic push and poll") {
   BackoffSpinlockTaskQueue<MockHwContext> queue(hw);
 
   TestOpWrapper op;
-  queue.push(&op.base);
+  queue.push(&op);
   CHECK(queue.poll() == 1);
   CHECK(op.mock.was_notified());
 }
@@ -122,7 +119,7 @@ TEST_CASE("RingBufferTaskQueue - basic push and poll") {
   REQUIRE(queue.empty());
 
   TestOpWrapper op;
-  queue.push(&op.base);
+  queue.push(&op);
 
   REQUIRE_FALSE(queue.empty());
   CHECK(queue.poll() == 1);
@@ -137,7 +134,7 @@ TEST_CASE("LockFreeTaskQueue - basic push and poll") {
   REQUIRE(queue.empty());
 
   TestOpWrapper op;
-  queue.push(&op.base);
+  queue.push(&op);
 
   REQUIRE_FALSE(queue.empty());
   CHECK(queue.poll() == 1);
@@ -189,7 +186,7 @@ TEST_CASE("Multiple operations - all notified") {
     SingleThreadTaskQueue<MockHwContext> queue(hw);
 
     std::vector<TestOpWrapper> ops(kNumOps);
-    for (auto &op : ops) queue.push(&op.base);
+    for (auto &op : ops) queue.push(&op);
 
     CHECK(queue.poll() == kNumOps);
     for (const auto &op : ops) CHECK(op.mock.was_notified());
@@ -200,7 +197,7 @@ TEST_CASE("Multiple operations - all notified") {
     MutexTaskQueue<MockHwContext> queue(hw);
 
     std::vector<TestOpWrapper> ops(kNumOps);
-    for (auto &op : ops) queue.push(&op.base);
+    for (auto &op : ops) queue.push(&op);
 
     CHECK(queue.poll() == kNumOps);
     for (const auto &op : ops) CHECK(op.mock.was_notified());
@@ -210,7 +207,7 @@ TEST_CASE("Multiple operations - all notified") {
     dsa::RingBufferTaskQueue<MockHwContext, 64> queue(hw);
 
     std::vector<TestOpWrapper> ops(kNumOps);
-    for (auto &op : ops) queue.push(&op.base);
+    for (auto &op : ops) queue.push(&op);
 
     CHECK(queue.poll() == kNumOps);
     for (const auto &op : ops) CHECK(op.mock.was_notified());
@@ -220,7 +217,7 @@ TEST_CASE("Multiple operations - all notified") {
     LockFreeTaskQueue<MockHwContext> queue(hw);
 
     std::vector<TestOpWrapper> ops(kNumOps);
-    for (auto &op : ops) queue.push(&op.base);
+    for (auto &op : ops) queue.push(&op);
 
     CHECK(queue.poll() == kNumOps);
     for (const auto &op : ops) CHECK(op.mock.was_notified());
@@ -247,7 +244,7 @@ TEST_CASE("Concurrent push from multiple threads") {
       threads.emplace_back([&, t] {
         sync.arrive_and_wait();
         for (std::size_t i = 0; i < kOpsPerThread; ++i)
-          queue.push(&ops[t * kOpsPerThread + i].base);
+          queue.push(&ops[t * kOpsPerThread + i]);
       });
     }
     for (auto &th : threads) th.join();
@@ -269,7 +266,7 @@ TEST_CASE("Concurrent push from multiple threads") {
       threads.emplace_back([&, t] {
         sync.arrive_and_wait();
         for (std::size_t i = 0; i < kOpsPerThread; ++i)
-          queue.push(&ops[t * kOpsPerThread + i].base);
+          queue.push(&ops[t * kOpsPerThread + i]);
       });
     }
     for (auto &th : threads) th.join();
@@ -291,7 +288,7 @@ TEST_CASE("Concurrent push from multiple threads") {
       threads.emplace_back([&, t] {
         sync.arrive_and_wait();
         for (std::size_t i = 0; i < kOpsPerThread; ++i)
-          queue.push(&ops[t * kOpsPerThread + i].base);
+          queue.push(&ops[t * kOpsPerThread + i]);
       });
     }
     for (auto &th : threads) th.join();
@@ -313,7 +310,7 @@ TEST_CASE("Concurrent push from multiple threads") {
       threads.emplace_back([&, t] {
         sync.arrive_and_wait();
         for (std::size_t i = 0; i < kOpsPerThread; ++i)
-          queue.push(&ops[t * kOpsPerThread + i].base);
+          queue.push(&ops[t * kOpsPerThread + i]);
       });
     }
     for (auto &th : threads) th.join();
@@ -335,7 +332,7 @@ TEST_CASE("Concurrent push from multiple threads") {
       threads.emplace_back([&, t] {
         sync.arrive_and_wait();
         for (std::size_t i = 0; i < kOpsPerThread; ++i)
-          queue.push(&ops[t * kOpsPerThread + i].base);
+          queue.push(&ops[t * kOpsPerThread + i]);
       });
     }
     for (auto &th : threads) th.join();
@@ -368,7 +365,7 @@ TEST_CASE("Concurrent push and poll") {
         while (true) {
           auto idx = push_idx.fetch_add(1, std::memory_order_relaxed);
           if (idx >= kNumOps) break;
-          queue.push(&ops[idx].base);
+          queue.push(&ops[idx]);
           std::this_thread::sleep_for(std::chrono::microseconds(1));
         }
       });
@@ -401,7 +398,7 @@ TEST_CASE("Concurrent push and poll") {
         while (true) {
           auto idx = push_idx.fetch_add(1, std::memory_order_relaxed);
           if (idx >= kNumOps) break;
-          queue.push(&ops[idx].base);
+          queue.push(&ops[idx]);
           std::this_thread::sleep_for(std::chrono::microseconds(1));
         }
       });
@@ -433,7 +430,7 @@ TEST_CASE("RingBufferTaskQueue capacity limits") {
 
   std::vector<TestOpWrapper> ops(kCapacity);
   for (std::size_t i = 0; i < kCapacity; ++i)
-    queue.push(&ops[i].base);
+    queue.push(&ops[i]);
 
   std::size_t total = 0;
   while (total < kCapacity) total += queue.poll();
@@ -460,7 +457,7 @@ TEST_CASE("LockFreeTaskQueue notifies all operations") {
     ops[i].mock.set_callback([&order, i] { order.push_back(i); });
 
   for (std::size_t i = 0; i < kNumOps; ++i)
-    queue.push(&ops[i].base);
+    queue.push(&ops[i]);
 
   CHECK(queue.poll() == kNumOps);
   CHECK(order.size() == kNumOps);
@@ -485,7 +482,7 @@ TEST_CASE("Multiple poll cycles") {
 
     for (int cycle = 0; cycle < 3; ++cycle) {
       std::vector<TestOpWrapper> ops(kOpsPerCycle);
-      for (auto &op : ops) queue.push(&op.base);
+      for (auto &op : ops) queue.push(&op);
       CHECK(queue.poll() == kOpsPerCycle);
       for (const auto &op : ops) CHECK(op.mock.was_notified());
       CHECK(queue.empty());
@@ -497,7 +494,7 @@ TEST_CASE("Multiple poll cycles") {
 
     for (int cycle = 0; cycle < 3; ++cycle) {
       std::vector<TestOpWrapper> ops(kOpsPerCycle);
-      for (auto &op : ops) queue.push(&op.base);
+      for (auto &op : ops) queue.push(&op);
       CHECK(queue.poll() == kOpsPerCycle);
       for (const auto &op : ops) CHECK(op.mock.was_notified());
     }
@@ -516,7 +513,7 @@ TEST_CASE("Operation callback invocation") {
   std::atomic<bool> callback_invoked{false};
   op.mock.set_callback([&] { callback_invoked.store(true); });
 
-  queue.push(&op.base);
+  queue.push(&op);
   queue.poll();
 
   CHECK(op.mock.was_notified());
@@ -537,7 +534,7 @@ TEST_CASE("Stress test - rapid push/poll cycles") {
 
     for (std::size_t c = 0; c < kCycles; ++c) {
       std::vector<TestOpWrapper> ops(kOpsPerCycle);
-      for (auto &op : ops) queue.push(&op.base);
+      for (auto &op : ops) queue.push(&op);
 
       std::size_t total = 0;
       while (total < kOpsPerCycle) total += queue.poll();
@@ -550,7 +547,7 @@ TEST_CASE("Stress test - rapid push/poll cycles") {
 
     for (std::size_t c = 0; c < kCycles; ++c) {
       std::vector<TestOpWrapper> ops(kOpsPerCycle);
-      for (auto &op : ops) queue.push(&op.base);
+      for (auto &op : ops) queue.push(&op);
 
       std::size_t total = 0;
       while (total < kOpsPerCycle) total += queue.poll();

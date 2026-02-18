@@ -76,6 +76,8 @@ const char* scheduling_pattern_name(SchedulingPattern p) {
     case SchedulingPattern::BatchNoAlloc:         return "batch_noalloc";
     case SchedulingPattern::ScopedWorkers:        return "scoped_workers";
     case SchedulingPattern::BatchRaw:             return "batch_raw";
+    case SchedulingPattern::SlidingWindowDirect:   return "sliding_window_direct";
+    case SchedulingPattern::SlidingWindowReusable: return "sliding_window_reusable";
   }
   return "unknown";
 }
@@ -96,7 +98,8 @@ std::vector<SchedulingPattern> all_scheduling_patterns() {
     SchedulingPattern::SlidingWindow, SchedulingPattern::SlidingWindowNoAlloc,
     SchedulingPattern::SlidingWindowArena, SchedulingPattern::Batch,
     SchedulingPattern::BatchNoAlloc, SchedulingPattern::ScopedWorkers,
-    SchedulingPattern::BatchRaw
+    SchedulingPattern::BatchRaw, SchedulingPattern::SlidingWindowDirect,
+    SchedulingPattern::SlidingWindowReusable
   };
 }
 
@@ -144,6 +147,7 @@ const char* queue_type_name(QueueType q) {
     case QueueType::TTAS:     return "ttas";
     case QueueType::Backoff:  return "backoff";
     case QueueType::LockFree: return "lockfree";
+    case QueueType::Indexed:  return "indexed";
   }
   return "unknown";
 }
@@ -158,7 +162,8 @@ std::optional<QueueType> parse_queue_type(std::string_view name) {
 std::vector<QueueType> all_queue_types() {
   return {
     QueueType::NoLock, QueueType::Mutex, QueueType::TAS,
-    QueueType::TTAS, QueueType::Backoff, QueueType::LockFree
+    QueueType::TTAS, QueueType::Backoff, QueueType::LockFree,
+    QueueType::Indexed
   };
 }
 
@@ -340,6 +345,9 @@ void print_usage(const char *prog) {
   fmt::println("  --batch-noalloc     Batch pattern with zero-allocation slots");
   fmt::println("  --scoped-workers    N worker coroutines processing sequentially");
   fmt::println("  --batch-raw         Hardware batch descriptor via dsa_batch sender (inline only)");
+  fmt::println("  --sliding-window-direct  Direct connect: no scope.nest, no then (inline only)");
+  fmt::println("  --sliding-window-reusable  Reusable ops: bypass stdexec connect/start (inline only)");
+  fmt::println("  --pattern=<type>    Run only specified pattern(s), comma-separated");
   fmt::println("");
   fmt::println("Submission strategy (can combine multiple):");
   fmt::println("  --immediate             1:1 doorbell per descriptor (default)");
@@ -350,7 +358,7 @@ void print_usage(const char *prog) {
   fmt::println("");
   fmt::println("Queue types:");
   fmt::println("  --queue=<type>      Run only specified queue type(s), comma-separated");
-  fmt::println("                      Types: nolock, mutex, tas, ttas, backoff, lockfree");
+  fmt::println("                      Types: nolock, mutex, tas, ttas, backoff, lockfree, indexed");
   fmt::println("");
   fmt::println("Operations:");
   fmt::println("  --operation=<type>  Run only specified operation(s), comma-separated");
@@ -413,6 +421,8 @@ static const FlagMapping pattern_flags[] = {
   {"--batch-noalloc",          "batch_noalloc"},
   {"--scoped-workers",         "scoped_workers"},
   {"--batch-raw",              "batch_raw"},
+  {"--sliding-window-direct",   "sliding_window_direct"},
+  {"--sliding-window-reusable", "sliding_window_reusable"},
 };
 
 static const FlagMapping submission_flags[] = {
@@ -512,8 +522,23 @@ BenchmarkConfig parse_args(int argc, char **argv) {
         if (!cli_operation) cli_operation.emplace();
         cli_operation->push_back(o);
       }
+    } else if (arg.starts_with("--pattern=")) {
+      for (auto &p : split_csv(arg.substr(10))) {
+        if (!cli_pattern) cli_pattern.emplace();
+        cli_pattern->push_back(p);
+      }
     } else if (arg.starts_with("--batch-size=")) {
       config.batch_size = static_cast<size_t>(std::atol(std::string(arg.substr(13)).c_str()));
+    } else if (arg.starts_with("--concurrency=")) {
+      config.concurrency_levels.clear();
+      for (auto &c : split_csv(arg.substr(14)))
+        config.concurrency_levels.push_back(static_cast<size_t>(std::atol(c.c_str())));
+    } else if (arg.starts_with("--msg-size=")) {
+      config.msg_sizes.clear();
+      for (auto &s : split_csv(arg.substr(11)))
+        config.msg_sizes.push_back(static_cast<size_t>(std::atol(s.c_str())));
+    } else if (arg.starts_with("--max-ops=")) {
+      config.max_ops = static_cast<size_t>(std::atol(std::string(arg.substr(10)).c_str()));
     } else {
       fmt::println(stderr, "Unknown option: {}", arg);
       print_usage(argv[0]);
