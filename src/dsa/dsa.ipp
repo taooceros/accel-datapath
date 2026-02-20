@@ -236,6 +236,11 @@ void DsaEngine<Submitter, QueueTemplate>::submit(dsa_stdexec::OperationBase *op,
   }
 
   if (desc != nullptr) {
+    // Backpressure: wait until WQ has space before submitting
+    auto cap = submitter_.wq_capacity();
+    while (cap > 0 && submitter_.inflight() >= cap) {
+      poll();
+    }
     submitter_.submit_descriptor(desc);
   }
 
@@ -268,7 +273,8 @@ void DsaEngine<Submitter, QueueTemplate>::submit_raw(dsa_hw_desc *desc) {
 template <DescriptorSubmitter Submitter, template <typename> class QueueTemplate>
 void DsaEngine<Submitter, QueueTemplate>::poll() {
   submitter_.pre_poll();
-  task_queue_.poll();
+  auto completed = task_queue_.poll();
+  submitter_.notify_complete(completed);
 }
 
 #endif

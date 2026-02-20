@@ -69,11 +69,14 @@ static constexpr size_t kDefaultNumBatches = 16;
 // ============================================================================
 
 template <typename T>
-concept DescriptorSubmitter = requires(T &s, dsa_hw_desc *desc) {
+concept DescriptorSubmitter = requires(T &s, dsa_hw_desc *desc, size_t n) {
   { s.submit_descriptor(desc) } -> std::same_as<void>;
   { s.flush() } -> std::same_as<void>;
   { s.pre_poll() } -> std::same_as<void>;
   { s.drain() } -> std::same_as<void>;  // shutdown: flush + wait for in-flight
+  { s.wq_capacity() } -> std::same_as<size_t>;   // WQ depth (0 = no gating)
+  { s.inflight() } -> std::same_as<size_t>;       // current in-flight doorbells
+  { s.notify_complete(n) } -> std::same_as<void>; // decrement inflight by n
 };
 
 // ============================================================================
@@ -84,9 +87,17 @@ class DirectSubmitter {
 public:
   DirectSubmitter() = default;
 
-  void init(void *portal, accfg_wq_mode mode, accfg_wq *, size_t = 0) {
+  void init(void *portal, accfg_wq_mode mode, accfg_wq *wq, size_t = 0) {
     portal_ = portal;
     mode_ = mode;
+    // Query WQ depth for dedicated mode backpressure
+    if (mode == ACCFG_WQ_DEDICATED && wq != nullptr) {
+      int sz = accfg_wq_get_size(wq);
+      wq_depth_ = sz > 0 ? static_cast<size_t>(sz) : 0;
+    } else {
+      wq_depth_ = 0;  // shared WQ: _enqcmd has natural backpressure
+    }
+    inflight_ = 0;
   }
 
   void submit_descriptor(dsa_hw_desc *desc) {
@@ -98,15 +109,24 @@ public:
         _mm_pause();
       }
     }
+    ++inflight_;
   }
 
   void flush() {}
   void pre_poll() {}
   void drain() {}
 
+  size_t wq_capacity() { return wq_depth_; }
+  size_t inflight() { return inflight_; }
+  void notify_complete(size_t n) {
+    inflight_ = n <= inflight_ ? inflight_ - n : 0;  // saturating subtract
+  }
+
 private:
   void *portal_ = nullptr;
   accfg_wq_mode mode_ = ACCFG_WQ_SHARED;
+  size_t wq_depth_ = 0;    // dedicated WQ size (0 = no gating)
+  size_t inflight_ = 0;    // current in-flight doorbells
 };
 
 static_assert(DescriptorSubmitter<DirectSubmitter>);
@@ -168,6 +188,7 @@ public:
         _mm_pause();
       }
       batch_submitted_[prev] = false;
+      direct_.notify_complete(1);  // previous batch doorbell completed
     }
 
     if (staged_count_ == 1) {
@@ -198,6 +219,10 @@ public:
 
   void pre_poll() { flush(); }
   void drain() { flush(); }
+
+  size_t wq_capacity() { return direct_.wq_capacity(); }
+  size_t inflight() { return direct_.inflight(); }
+  void notify_complete(size_t) {} // no-op: batch submitters decrement in reclaim
 
 private:
   DirectSubmitter direct_;
@@ -303,6 +328,10 @@ public:
     }
   }
 
+  size_t wq_capacity() { return direct_.wq_capacity(); }
+  size_t inflight() { return direct_.inflight(); }
+  void notify_complete(size_t) {} // no-op: batch submitters decrement in reclaim
+
 private:
   DirectSubmitter direct_;
 
@@ -339,6 +368,7 @@ private:
         break;
       }
       b.state = BatchState::Free;
+      direct_.notify_complete(1);  // batch doorbell completed
       batch_head_++;
     }
   }
@@ -346,6 +376,7 @@ private:
   void submit_batch(BatchEntry &batch) {
     if (batch.count == 1) {
       direct_.submit_descriptor(&batch.descs[0]);
+      direct_.notify_complete(1);  // single-desc: doorbell consumed immediately
       batch.state = BatchState::Free;
     } else {
       // Batch descriptor must be 64-byte aligned for _enqcmd
@@ -504,6 +535,10 @@ public:
     }
   }
 
+  size_t wq_capacity() { return direct_.wq_capacity(); }
+  size_t inflight() { return direct_.inflight(); }
+  void notify_complete(size_t) {} // no-op: batch submitters decrement in reclaim
+
 private:
   DirectSubmitter direct_;
   std::function<void()> poll_fn_;
@@ -550,6 +585,7 @@ private:
       }
       desc_head_ += b.count;
       b.state = BatchState::Free;
+      direct_.notify_complete(1);  // batch doorbell completed
       batch_head_++;
     }
   }
@@ -557,6 +593,7 @@ private:
   void submit_batch(BatchEntry &batch) {
     if (batch.count == 1) {
       direct_.submit_descriptor(&desc_ring_[batch.start]);
+      direct_.notify_complete(1);  // single-desc: doorbell consumed immediately
       batch.batch_comp.status = 1;
       batch.state = BatchState::InFlight;
     } else {
@@ -696,6 +733,10 @@ public:
     }
   }
 
+  size_t wq_capacity() { return direct_.wq_capacity(); }
+  size_t inflight() { return direct_.inflight(); }
+  void notify_complete(size_t) {} // no-op: batch submitters decrement in reclaim
+
 private:
   DirectSubmitter direct_;
   std::function<void()> poll_fn_;
@@ -743,6 +784,7 @@ private:
       }
       desc_head_ += b.count;
       b.state = BatchState::Free;
+      direct_.notify_complete(1);  // batch doorbell completed
       batch_head_++;
     }
   }
@@ -754,6 +796,7 @@ private:
     // are contiguous in virtual memory, wrapping to physical slots 0..25).
     if (batch.count == 1) {
       direct_.submit_descriptor(&desc_ring_[batch.start]);
+      direct_.notify_complete(1);  // single-desc: doorbell consumed immediately
       batch.batch_comp.status = 1;
       batch.state = BatchState::InFlight;
     } else {

@@ -8,6 +8,14 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+namespace detail {
+inline size_t page_align_up(size_t n) {
+  long ps = sysconf(_SC_PAGESIZE);
+  size_t page = static_cast<size_t>(ps > 0 ? ps : 4096);
+  return (n + page - 1) & ~(page - 1);
+}
+} // namespace detail
+
 #ifndef MFD_CLOEXEC
 #include <linux/memfd.h>
 #endif
@@ -15,7 +23,8 @@
 class MirroredRing {
 public:
   MirroredRing(size_t slot_count, size_t slot_size)
-      : region_size_(slot_count * slot_size), map_size_(2 * region_size_) {
+      : region_size_(detail::page_align_up(slot_count * slot_size)),
+        map_size_(2 * region_size_) {
 
     // Create anonymous shared memory backing
     fd_ = memfd_create("dsa_ring", MFD_CLOEXEC);
