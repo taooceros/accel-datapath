@@ -138,6 +138,7 @@ struct DsaMetric {
 struct BenchmarkResult {
   size_t concurrency;
   size_t msg_size;
+  size_t batch_size = 0;
   DsaMetric single_thread;
   DsaMetric mutex;
   DsaMetric tas_spinlock;
@@ -256,36 +257,37 @@ template <size_t StorageSize = 768> struct OperationSlot {
 // Free-list arena for OperationSlots (ibverbs/UCX style).
 // O(1) acquire/release via intrusive singly-linked list.
 // Single-threaded: no atomics on the free list itself.
-template <size_t StorageSize> struct SlotArena {
-  using Slot = OperationSlot<StorageSize>;
+template <typename SlotType> struct BasicSlotArena {
+  std::vector<std::unique_ptr<SlotType>> pool;
+  SlotType *free_head = nullptr;
 
-  std::vector<std::unique_ptr<Slot>> pool;
-  Slot *free_head = nullptr;
-
-  explicit SlotArena(size_t capacity) {
+  explicit BasicSlotArena(size_t capacity) {
     pool.reserve(capacity);
     for (size_t i = 0; i < capacity; ++i) {
-      pool.push_back(std::make_unique<Slot>());
+      pool.push_back(std::make_unique<SlotType>());
       pool.back()->next_free = free_head;
       free_head = pool.back().get();
     }
   }
 
-  Slot *acquire() {
+  SlotType *acquire() {
     if (!free_head) return nullptr;
-    Slot *s = free_head;
+    SlotType *s = free_head;
     free_head = s->next_free;
     s->next_free = nullptr;
     return s;
   }
 
-  void release(Slot *s) {
+  void release(SlotType *s) {
     s->next_free = free_head;
     free_head = s;
   }
 
   bool empty() const { return free_head == nullptr; }
 };
+
+template <size_t StorageSize>
+using SlotArena = BasicSlotArena<OperationSlot<StorageSize>>;
 
 // Receiver that returns the slot to a free-list arena on completion.
 // Used with SlotArena for O(1) slot recycling.

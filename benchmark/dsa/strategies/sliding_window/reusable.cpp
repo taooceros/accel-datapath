@@ -20,8 +20,6 @@
 // ReusableSlot: pre-allocated operation storage with inline notify callback
 // ============================================================================
 
-struct ReusableSlotArena;  // forward declaration
-
 // Each slot contains a DsaOperationBase for hardware-aligned descriptor/completion
 // storage, plus metadata for the notify callback. The notify_fn pointer is set once
 // during init and reused across all operations on this slot.
@@ -41,10 +39,10 @@ struct ReusableSlot {
   std::chrono::high_resolution_clock::time_point start_time;
 
   // Arena backpointer for slot release in notify callback
-  ReusableSlotArena *arena = nullptr;
+  BasicSlotArena<ReusableSlot> *arena = nullptr;
 
   void init(DsaProxy &d, std::atomic<size_t> *rem, LatencyCollector *lat,
-            ReusableSlotArena *a) {
+            BasicSlotArena<ReusableSlot> *a) {
     dsa = &d;
     remaining = rem;
     latency = lat;
@@ -86,46 +84,7 @@ struct ReusableSlot {
   ReusableSlot &operator=(ReusableSlot &&) = delete;
 };
 
-// ============================================================================
-// ReusableSlotArena: O(1) acquire/release free-list
-// ============================================================================
-
-struct ReusableSlotArena {
-  std::vector<std::unique_ptr<ReusableSlot>> pool;
-  ReusableSlot *free_head = nullptr;
-
-  explicit ReusableSlotArena(size_t capacity) {
-    pool.reserve(capacity);
-    for (size_t i = 0; i < capacity; ++i) {
-      pool.push_back(std::make_unique<ReusableSlot>());
-      pool.back()->next_free = free_head;
-      free_head = pool.back().get();
-    }
-  }
-
-  ReusableSlot *acquire() {
-    if (!free_head) return nullptr;
-    ReusableSlot *s = free_head;
-    free_head = s->next_free;
-    s->next_free = nullptr;
-    return s;
-  }
-
-  void release(ReusableSlot *s) {
-    s->next_free = free_head;
-    free_head = s;
-  }
-
-  bool empty() const { return free_head == nullptr; }
-
-  void init_all(DsaProxy &dsa, std::atomic<size_t> *remaining, LatencyCollector *latency) {
-    for (auto &slot : pool) {
-      slot->init(dsa, remaining, latency, this);
-    }
-  }
-};
-
-// Defined after ReusableSlotArena so arena->release() is visible.
+// Defined after ReusableSlot so BasicSlotArena<ReusableSlot>::release() is visible.
 void ReusableSlot::notify_impl(dsa_stdexec::OperationBase *base) {
   // OperationBase is the first base of DsaOperationBase, which is the first
   // member of ReusableSlot. Recover the slot via offsetof (GCC supports this
@@ -230,8 +189,10 @@ static void sliding_window_reusable_impl_inline(
     LatencyCollector &latency, FillFn fill_fn) {
   size_t num_ops = total_bytes / msg_size;
   std::atomic<size_t> remaining{num_ops};
-  ReusableSlotArena arena(concurrency);
-  arena.init_all(dsa, &remaining, &latency);
+  BasicSlotArena<ReusableSlot> arena(concurrency);
+  for (auto &slot : arena.pool) {
+    slot->init(dsa, &remaining, &latency, &arena);
+  }
 
   size_t next_op = 0;
   while (next_op < num_ops) {
