@@ -80,7 +80,7 @@ src/dsa/                          Low-level DSA hardware interface
 
 **`DsaHwContext`** (`dsa.hpp`): Manages work queue portal, descriptor submission (`_movdir64b`/`_enqcmd`), and completion checking. Satisfies the `HwContext` concept used by task queues.
 
-**`DsaBase<QueueTemplate>`** (`dsa.hpp`): Generic DSA class templated on queue type. Handles device discovery via libaccel-config, work queue mapping, submit, and poll. Explicit instantiations live in `dsa_instantiate.cpp` to avoid redundant compilation.
+**`DsaEngine<Submitter, QueueTemplate>`** (`dsa.hpp`/`dsa.ipp`): Generic DSA class templated on submitter and queue type. Handles device discovery via libaccel-config, work queue mapping, submit, and poll. `submit()` includes WQ backpressure for dedicated work queues — spins on `poll()` when inflight descriptors reach WQ depth, preventing silent drops from `_movdir64b`. `poll()` feeds completion count back to the submitter via `notify_complete()`. Explicit instantiations live in `dsa_instantiate.cpp` to avoid redundant compilation.
 
 Type aliases (preferred for inline polling — no lock contention on the hot path):
 - `DsaSingleThread` — `DsaBase<SingleThreadTaskQueue>` (no locks, best for single-thread inline)
@@ -88,6 +88,10 @@ Type aliases (preferred for inline polling — no lock contention on the hot pat
 
 Other queue types (for threaded polling or comparative benchmarks):
 - `Dsa` — `DsaBase<MutexTaskQueue>`, `DsaTasSpinlock`, `DsaSpinlock` (TTAS), `DsaBackoffSpinlock`, `DsaLockFree`
+
+**`MirroredRing`** (`mirrored_ring.hpp`): RAII double-mapped ring buffer via `memfd_create` + two `MAP_FIXED` mappings of the same physical pages. Eliminates wrap-around handling in ring-based batch submitters. Region size is page-aligned.
+
+**Descriptor Submitters** (`descriptor_submitter.hpp`): Concept-based (`DescriptorSubmitter`). `DirectSubmitter` does immediate `_movdir64b`/`_enqcmd` and tracks inflight count + WQ depth for dedicated-mode backpressure. Batch submitters (`BatchAdaptiveSubmitter`, `MirroredRingBatchSubmitter`, etc.) stage descriptors and submit as hardware batch descriptors; they self-throttle via ring capacity and delegate `wq_capacity()`/`inflight()` to their inner `DirectSubmitter`.
 
 **Task Queues** (`task_queue.hpp`): Concept-based design (`TaskQueue` concept). Intrusive linked list of `OperationBase*`. Implementations: `LockedTaskQueue<Lock, HwCtx>` (parameterized by lock type), `RingBufferTaskQueue`, `LockFreeTaskQueue`.
 
@@ -124,8 +128,8 @@ benchmark/dsa/
 ├── main.cpp                  Entry point, run_benchmark, make_dsa, CSV export
 ├── config.hpp / config.cpp   Enums, BenchmarkConfig, TOML + CLI parsing
 ├── helpers.hpp               ProgressBar, LatencyCollector, BufferSet,
-│                               OperationSlot, SlotArena, SlotReceiver,
-│                               ArenaReceiver, DirectBenchReceiver
+│                               OperationSlot, BasicSlotArena, SlotArena,
+│                               SlotReceiver, ArenaReceiver, DirectBenchReceiver
 ├── strategies.hpp            StrategyParams, StrategyFn, strategy_table, dispatch_run
 ├── strategy_common.hpp       with_op_sender, spawn_op, CompletionRecord, slot-size helpers
 ├── static.cpp                Legacy monolithic benchmark (separate target)
@@ -181,7 +185,7 @@ Threaded polling variants exist for comparison but are not the optimization targ
 
 ### Benchmark Configuration
 
-Configured via `benchmark/benchmark_config.toml` with dimensions: scheduling pattern, submission strategy, queue type, concurrency levels, and message sizes. Results output to CSV; visualize with `benchmark/visualize_interactive.py`.
+Configured via `benchmark/benchmark_config.toml` with dimensions: scheduling pattern, submission strategy, queue type, concurrency levels, message sizes, and batch sizes (descriptor batching sweep). Results output to CSV with per-result batch size; visualize with `benchmark/visualize_interactive.py`. CLI: `--batch-size=N,...` (comma-separated list).
 
 ## Dependencies
 
