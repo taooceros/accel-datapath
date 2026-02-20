@@ -103,6 +103,7 @@
 
     echo "Running: $LAUNCHER $BENCHMARK $@"
     $LAUNCHER "$BENCHMARK" "$@"
+    sleep 1
     python3 "benchmark/visualize_interactive.py"
   '';
 

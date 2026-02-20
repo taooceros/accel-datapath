@@ -71,6 +71,7 @@ def create_checkbox_dashboard(df: pd.DataFrame, output_path: Path):
     submissions = sorted(df["submission"].unique().tolist())
     modes = sorted(df["polling_mode"].unique().tolist())
     concurrencies = sorted(df["concurrency"].unique().tolist())
+    batch_sizes = sorted(df["batch_size"].unique().tolist())
     queue_types = sorted(df["queue_type"].unique().tolist())
 
     # Create figure with subplots
@@ -94,136 +95,140 @@ def create_checkbox_dashboard(df: pd.DataFrame, output_path: Path):
         for ssi, sub in enumerate(submissions):
             for mi, mode in enumerate(modes):
                 for ci, conc in enumerate(concurrencies):
-                    filtered = df[
-                        (df["scheduling"] == sched)
-                        & (df["submission"] == sub)
-                        & (df["polling_mode"] == mode)
-                        & (df["concurrency"] == conc)
-                    ]
+                    for bi, bs in enumerate(batch_sizes):
+                        filtered = df[
+                            (df["scheduling"] == sched)
+                            & (df["submission"] == sub)
+                            & (df["polling_mode"] == mode)
+                            & (df["concurrency"] == conc)
+                            & (df["batch_size"] == bs)
+                        ]
 
-                    for qi, qt in enumerate(queue_types):
-                        qt_data = filtered[filtered["queue_type"] == qt].sort_values(
-                            "msg_size"
-                        )
-                        if len(qt_data) == 0:
-                            continue
+                        for qi, qt in enumerate(queue_types):
+                            qt_data = filtered[filtered["queue_type"] == qt].sort_values(
+                                "msg_size"
+                            )
+                            if len(qt_data) == 0:
+                                continue
 
-                        # Color by queue type
-                        color = COLORS[qi % len(COLORS)]
-                        # Line style by submission strategy
-                        line_style = LINE_STYLES[ssi % len(LINE_STYLES)]
-                        # Marker by concurrency
-                        marker_symbol = MARKERS[ci % len(MARKERS)]
-                        # Opacity by mode (inline=1.0, threaded=0.6)
-                        opacity = 1.0 if mi == 0 else 0.7
+                            # Color by queue type
+                            color = COLORS[qi % len(COLORS)]
+                            # Line style by submission strategy
+                            line_style = LINE_STYLES[ssi % len(LINE_STYLES)]
+                            # Marker by concurrency
+                            marker_symbol = MARKERS[ci % len(MARKERS)]
+                            # Opacity by mode (inline=1.0, threaded=0.6)
+                            opacity = 1.0 if mi == 0 else 0.7
 
-                        # Create unique label for this trace
-                        trace_label = f"{qt} ({sched}/{sub}/{mode}/c={conc})"
+                            # Create unique label for this trace
+                            trace_label = f"{qt} ({sched}/{sub}/{mode}/c={conc}/bs={bs})"
 
-                        # Start with first combination visible
-                        visible = bool(
-                            sched == scheduling_patterns[0]
-                            and sub == submissions[0]
-                            and mode == modes[0]
-                            and conc == concurrencies[0]
-                        )
+                            # Start with first combination visible
+                            visible = bool(
+                                sched == scheduling_patterns[0]
+                                and sub == submissions[0]
+                                and mode == modes[0]
+                                and conc == concurrencies[0]
+                                and bs == batch_sizes[0]
+                            )
 
-                        meta = {
-                            "scheduling": sched,
-                            "submission": sub,
-                            "mode": mode,
-                            "concurrency": int(conc),
-                            "queue_type": qt,
-                            "label": trace_label,
-                        }
+                            meta = {
+                                "scheduling": sched,
+                                "submission": sub,
+                                "mode": mode,
+                                "concurrency": int(conc),
+                                "batch_size": int(bs),
+                                "queue_type": qt,
+                                "label": trace_label,
+                            }
 
-                        # Bandwidth
-                        fig.add_trace(
-                            go.Scatter(
-                                x=qt_data["msg_size"].tolist(),
-                                y=qt_data["bandwidth_gbps"].tolist(),
-                                mode="lines+markers",
-                                name=trace_label,
-                                line=dict(color=color, dash=line_style, width=2),
-                                marker=dict(
-                                    size=7, symbol=marker_symbol, opacity=opacity
+                            # Bandwidth
+                            fig.add_trace(
+                                go.Scatter(
+                                    x=qt_data["msg_size"].tolist(),
+                                    y=qt_data["bandwidth_gbps"].tolist(),
+                                    mode="lines+markers",
+                                    name=trace_label,
+                                    line=dict(color=color, dash=line_style, width=2),
+                                    marker=dict(
+                                        size=7, symbol=marker_symbol, opacity=opacity
+                                    ),
+                                    opacity=opacity,
+                                    visible=visible,
+                                    showlegend=visible,
+                                    legendgroup=trace_label,
+                                    hovertemplate=f"{trace_label}<br>%{{x}}B: %{{y:.2f}} GB/s<extra></extra>",
                                 ),
-                                opacity=opacity,
-                                visible=visible,
-                                showlegend=visible,
-                                legendgroup=trace_label,
-                                hovertemplate=f"{trace_label}<br>%{{x}}B: %{{y:.2f}} GB/s<extra></extra>",
-                            ),
-                            row=1,
-                            col=1,
-                        )
-                        trace_metadata.append({**meta, "subplot": "bandwidth"})
+                                row=1,
+                                col=1,
+                            )
+                            trace_metadata.append({**meta, "subplot": "bandwidth"})
 
-                        # Message Rate
-                        fig.add_trace(
-                            go.Scatter(
-                                x=qt_data["msg_size"].tolist(),
-                                y=qt_data["msg_rate_mps"].tolist(),
-                                mode="lines+markers",
-                                name=trace_label,
-                                line=dict(color=color, dash=line_style, width=2),
-                                marker=dict(
-                                    size=7, symbol=marker_symbol, opacity=opacity
+                            # Message Rate
+                            fig.add_trace(
+                                go.Scatter(
+                                    x=qt_data["msg_size"].tolist(),
+                                    y=qt_data["msg_rate_mps"].tolist(),
+                                    mode="lines+markers",
+                                    name=trace_label,
+                                    line=dict(color=color, dash=line_style, width=2),
+                                    marker=dict(
+                                        size=7, symbol=marker_symbol, opacity=opacity
+                                    ),
+                                    opacity=opacity,
+                                    visible=visible,
+                                    showlegend=False,
+                                    legendgroup=trace_label,
+                                    hovertemplate=f"{trace_label}<br>%{{x}}B: %{{y:.2f}} M/s<extra></extra>",
                                 ),
-                                opacity=opacity,
-                                visible=visible,
-                                showlegend=False,
-                                legendgroup=trace_label,
-                                hovertemplate=f"{trace_label}<br>%{{x}}B: %{{y:.2f}} M/s<extra></extra>",
-                            ),
-                            row=1,
-                            col=2,
-                        )
-                        trace_metadata.append({**meta, "subplot": "msg_rate"})
+                                row=1,
+                                col=2,
+                            )
+                            trace_metadata.append({**meta, "subplot": "msg_rate"})
 
-                        # Avg Latency
-                        fig.add_trace(
-                            go.Scatter(
-                                x=qt_data["msg_size"].tolist(),
-                                y=(qt_data["latency_avg_ns"] / 1000).tolist(),
-                                mode="lines+markers",
-                                name=trace_label,
-                                line=dict(color=color, dash=line_style, width=2),
-                                marker=dict(
-                                    size=7, symbol=marker_symbol, opacity=opacity
+                            # Avg Latency
+                            fig.add_trace(
+                                go.Scatter(
+                                    x=qt_data["msg_size"].tolist(),
+                                    y=(qt_data["latency_avg_ns"] / 1000).tolist(),
+                                    mode="lines+markers",
+                                    name=trace_label,
+                                    line=dict(color=color, dash=line_style, width=2),
+                                    marker=dict(
+                                        size=7, symbol=marker_symbol, opacity=opacity
+                                    ),
+                                    opacity=opacity,
+                                    visible=visible,
+                                    showlegend=False,
+                                    legendgroup=trace_label,
+                                    hovertemplate=f"{trace_label}<br>%{{x}}B: %{{y:.2f}} us<extra></extra>",
                                 ),
-                                opacity=opacity,
-                                visible=visible,
-                                showlegend=False,
-                                legendgroup=trace_label,
-                                hovertemplate=f"{trace_label}<br>%{{x}}B: %{{y:.2f}} us<extra></extra>",
-                            ),
-                            row=2,
-                            col=1,
-                        )
-                        trace_metadata.append({**meta, "subplot": "latency_avg"})
+                                row=2,
+                                col=1,
+                            )
+                            trace_metadata.append({**meta, "subplot": "latency_avg"})
 
-                        # P99 Latency
-                        fig.add_trace(
-                            go.Scatter(
-                                x=qt_data["msg_size"].tolist(),
-                                y=(qt_data["latency_p99_ns"] / 1000).tolist(),
-                                mode="lines+markers",
-                                name=trace_label,
-                                line=dict(color=color, dash=line_style, width=2),
-                                marker=dict(
-                                    size=7, symbol=marker_symbol, opacity=opacity
+                            # P99 Latency
+                            fig.add_trace(
+                                go.Scatter(
+                                    x=qt_data["msg_size"].tolist(),
+                                    y=(qt_data["latency_p99_ns"] / 1000).tolist(),
+                                    mode="lines+markers",
+                                    name=trace_label,
+                                    line=dict(color=color, dash=line_style, width=2),
+                                    marker=dict(
+                                        size=7, symbol=marker_symbol, opacity=opacity
+                                    ),
+                                    opacity=opacity,
+                                    visible=visible,
+                                    showlegend=False,
+                                    legendgroup=trace_label,
+                                    hovertemplate=f"{trace_label}<br>%{{x}}B: %{{y:.2f}} us<extra></extra>",
                                 ),
-                                opacity=opacity,
-                                visible=visible,
-                                showlegend=False,
-                                legendgroup=trace_label,
-                                hovertemplate=f"{trace_label}<br>%{{x}}B: %{{y:.2f}} us<extra></extra>",
-                            ),
-                            row=2,
-                            col=2,
-                        )
-                        trace_metadata.append({**meta, "subplot": "latency_p99"})
+                                row=2,
+                                col=2,
+                            )
+                            trace_metadata.append({**meta, "subplot": "latency_p99"})
 
     fig.update_layout(
         title=dict(text="DSA Benchmark Results", x=0.5, xanchor="center"),
@@ -373,6 +378,15 @@ def create_checkbox_dashboard(df: pd.DataFrame, output_path: Path):
             </div>
 
             <div class="filter-group">
+                <h3>Batch Size</h3>
+                {generate_checkboxes("batch_size", [str(b) for b in batch_sizes])}
+                <div class="btn-group">
+                    <button onclick="selectAll('batch_size')">All</button>
+                    <button onclick="selectNone('batch_size')">None</button>
+                </div>
+            </div>
+
+            <div class="filter-group">
                 <h3>Queue Type</h3>
                 {generate_checkboxes("queue_type", queue_types)}
                 <div class="btn-group">
@@ -446,6 +460,7 @@ def create_checkbox_dashboard(df: pd.DataFrame, output_path: Path):
             const selectedSubmission = getCheckedValues('submission');
             const selectedModes = getCheckedValues('mode');
             const selectedConcurrencies = getCheckedValues('concurrency').map(Number);
+            const selectedBatchSizes = getCheckedValues('batch_size').map(Number);
             const selectedQueueTypes = getCheckedValues('queue_type');
 
             const visibility = traceMetadata.map(meta => {{
@@ -453,6 +468,7 @@ def create_checkbox_dashboard(df: pd.DataFrame, output_path: Path):
                        selectedSubmission.includes(meta.submission) &&
                        selectedModes.includes(meta.mode) &&
                        selectedConcurrencies.includes(meta.concurrency) &&
+                       selectedBatchSizes.includes(meta.batch_size) &&
                        selectedQueueTypes.includes(meta.queue_type);
             }});
 
@@ -510,6 +526,7 @@ def create_heatmap_dashboard(df: pd.DataFrame, output_path: Path):
     submissions = sorted(df["submission"].unique().tolist())
     modes = sorted(df["polling_mode"].unique().tolist())
     queue_types = sorted(df["queue_type"].unique().tolist())
+    batch_sizes = sorted(df["batch_size"].unique().tolist())
 
     metrics = [
         ("bandwidth_gbps", "Bandwidth (GB/s)", 1),
@@ -524,51 +541,55 @@ def create_heatmap_dashboard(df: pd.DataFrame, output_path: Path):
         for sub in submissions:
             for mode in modes:
                 for qt in queue_types:
-                    for metric, label, scale in metrics:
-                        filtered = df[
-                            (df["scheduling"] == sched)
-                            & (df["submission"] == sub)
-                            & (df["polling_mode"] == mode)
-                            & (df["queue_type"] == qt)
-                        ]
+                    for bi, bs in enumerate(batch_sizes):
+                        for metric, label, scale in metrics:
+                            filtered = df[
+                                (df["scheduling"] == sched)
+                                & (df["submission"] == sub)
+                                & (df["polling_mode"] == mode)
+                                & (df["queue_type"] == qt)
+                                & (df["batch_size"] == bs)
+                            ]
 
-                        if len(filtered) == 0:
-                            continue
+                            if len(filtered) == 0:
+                                continue
 
-                        pivot = filtered.pivot(
-                            index="concurrency", columns="msg_size", values=metric
-                        )
-                        pivot = pivot * scale
-
-                        visible = bool(
-                            sched == scheduling_patterns[0]
-                            and sub == submissions[0]
-                            and mode == modes[0]
-                            and qt == queue_types[0]
-                            and metric == "bandwidth_gbps"
-                        )
-
-                        fig.add_trace(
-                            go.Heatmap(
-                                z=pivot.values.tolist(),
-                                x=[format_size(int(c)) for c in pivot.columns],
-                                y=[f"c={int(c)}" for c in pivot.index],
-                                colorscale="Viridis",
-                                visible=visible,
-                                hovertemplate="msg=%{x}<br>%{y}<br>value=%{z:.2f}<extra></extra>",
-                                colorbar=dict(title=label),
+                            pivot = filtered.pivot(
+                                index="concurrency", columns="msg_size", values=metric
                             )
-                        )
-                        trace_metadata.append(
-                            {
-                                "scheduling": sched,
-                                "submission": sub,
-                                "mode": mode,
-                                "queue_type": qt,
-                                "metric": metric,
-                                "metric_label": label,
-                            }
-                        )
+                            pivot = pivot * scale
+
+                            visible = bool(
+                                sched == scheduling_patterns[0]
+                                and sub == submissions[0]
+                                and mode == modes[0]
+                                and qt == queue_types[0]
+                                and bs == batch_sizes[0]
+                                and metric == "bandwidth_gbps"
+                            )
+
+                            fig.add_trace(
+                                go.Heatmap(
+                                    z=pivot.values.tolist(),
+                                    x=[format_size(int(c)) for c in pivot.columns],
+                                    y=[f"c={int(c)}" for c in pivot.index],
+                                    colorscale="Viridis",
+                                    visible=visible,
+                                    hovertemplate="msg=%{x}<br>%{y}<br>value=%{z:.2f}<extra></extra>",
+                                    colorbar=dict(title=label),
+                                )
+                            )
+                            trace_metadata.append(
+                                {
+                                    "scheduling": sched,
+                                    "submission": sub,
+                                    "mode": mode,
+                                    "queue_type": qt,
+                                    "batch_size": int(bs),
+                                    "metric": metric,
+                                    "metric_label": label,
+                                }
+                            )
 
     fig.update_layout(
         title=dict(text="DSA Benchmark Heatmap", x=0.5, xanchor="center"),
@@ -664,6 +685,11 @@ def create_heatmap_dashboard(df: pd.DataFrame, output_path: Path):
             </div>
 
             <div class="filter-group">
+                <h3>Batch Size</h3>
+                {generate_radios("batch_size", [str(b) for b in batch_sizes])}
+            </div>
+
+            <div class="filter-group">
                 <h3>Metric</h3>
                 {generate_radios("metric", [m[0] for m in metrics], [m[1] for m in metrics])}
             </div>
@@ -715,6 +741,7 @@ def create_heatmap_dashboard(df: pd.DataFrame, output_path: Path):
             const selectedSubmission = getSelectedValue('submission');
             const selectedMode = getSelectedValue('mode');
             const selectedQueueType = getSelectedValue('queue_type');
+            const selectedBatchSize = getSelectedValue('batch_size');
             const selectedMetric = getSelectedValue('metric');
 
             const visibility = traceMetadata.map(meta => {{
@@ -722,13 +749,14 @@ def create_heatmap_dashboard(df: pd.DataFrame, output_path: Path):
                        meta.submission === selectedSubmission &&
                        meta.mode === selectedMode &&
                        meta.queue_type === selectedQueueType &&
+                       meta.batch_size === parseInt(selectedBatchSize) &&
                        meta.metric === selectedMetric;
             }});
 
             // Find the selected metric label for title
             const selectedMeta = traceMetadata.find((meta, i) => visibility[i]);
             const title = selectedMeta ?
-                `${{selectedScheduling}} / ${{selectedSubmission}} / ${{selectedMode}} / ${{selectedQueueType}} - ${{selectedMeta.metric_label}}` :
+                `${{selectedScheduling}} / ${{selectedSubmission}} / ${{selectedMode}} / ${{selectedQueueType}} / bs=${{selectedBatchSize}} - ${{selectedMeta.metric_label}}` :
                 'DSA Benchmark Heatmap';
 
             Plotly.restyle('heatmapDiv', {{ visible: visibility }});
