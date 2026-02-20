@@ -73,24 +73,21 @@ std::string format_metric(const DsaMetric &m) {
 }
 
 void export_to_csv(const std::string &filename,
-                   const std::vector<std::pair<std::string, std::vector<BenchmarkResult>>> &all_results,
-                   size_t batch_size) {
+                   const std::vector<std::pair<std::string, std::vector<BenchmarkResult>>> &all_results) {
   std::ofstream file(filename);
   if (!file.is_open()) {
     fmt::println(stderr, "Failed to open {} for writing", filename);
     return;
   }
 
-  size_t effective_batch_size = batch_size == 0 ? 32 : batch_size;
-
   file << "operation,pattern,polling_mode,queue_type,concurrency,msg_size,batch_size,bandwidth_gbps,msg_rate_mps,page_faults,"
        << "latency_min_ns,latency_max_ns,latency_avg_ns,latency_p50_ns,latency_p99_ns,latency_count\n";
 
-  auto write_row = [&file, effective_batch_size](const char *operation, const char *pattern, const char *polling_mode,
+  auto write_row = [&file](const char *operation, const char *pattern, const char *polling_mode,
                             const char *queue_type, size_t concurrency,
-                            size_t msg_size, const DsaMetric &m) {
+                            size_t msg_size, size_t batch_size, const DsaMetric &m) {
     file << operation << "," << pattern << "," << polling_mode << "," << queue_type << ","
-         << concurrency << "," << msg_size << "," << effective_batch_size << "," << m.bandwidth << ","
+         << concurrency << "," << msg_size << "," << batch_size << "," << m.bandwidth << ","
          << m.msg_rate << "," << m.page_faults << "," << m.latency.min_ns << "," << m.latency.max_ns
          << "," << m.latency.avg_ns << "," << m.latency.p50_ns << ","
          << m.latency.p99_ns << "," << m.latency.count << "\n";
@@ -107,15 +104,15 @@ void export_to_csv(const std::string &filename,
 
     for (const auto &r : results) {
       if (include_nolock) {
-        write_row(op_name.c_str(), pattern.c_str(), polling_mode.c_str(), "NoLock", r.concurrency, r.msg_size, r.single_thread);
+        write_row(op_name.c_str(), pattern.c_str(), polling_mode.c_str(), "NoLock", r.concurrency, r.msg_size, r.batch_size, r.single_thread);
       }
-      write_row(op_name.c_str(), pattern.c_str(), polling_mode.c_str(), "Mutex", r.concurrency, r.msg_size, r.mutex);
-      write_row(op_name.c_str(), pattern.c_str(), polling_mode.c_str(), "TAS", r.concurrency, r.msg_size, r.tas_spinlock);
-      write_row(op_name.c_str(), pattern.c_str(), polling_mode.c_str(), "TTAS", r.concurrency, r.msg_size, r.ttas_spinlock);
-      write_row(op_name.c_str(), pattern.c_str(), polling_mode.c_str(), "Backoff", r.concurrency, r.msg_size, r.backoff_spinlock);
-      write_row(op_name.c_str(), pattern.c_str(), polling_mode.c_str(), "LockFree", r.concurrency, r.msg_size, r.lockfree);
+      write_row(op_name.c_str(), pattern.c_str(), polling_mode.c_str(), "Mutex", r.concurrency, r.msg_size, r.batch_size, r.mutex);
+      write_row(op_name.c_str(), pattern.c_str(), polling_mode.c_str(), "TAS", r.concurrency, r.msg_size, r.batch_size, r.tas_spinlock);
+      write_row(op_name.c_str(), pattern.c_str(), polling_mode.c_str(), "TTAS", r.concurrency, r.msg_size, r.batch_size, r.ttas_spinlock);
+      write_row(op_name.c_str(), pattern.c_str(), polling_mode.c_str(), "Backoff", r.concurrency, r.msg_size, r.batch_size, r.backoff_spinlock);
+      write_row(op_name.c_str(), pattern.c_str(), polling_mode.c_str(), "LockFree", r.concurrency, r.msg_size, r.batch_size, r.lockfree);
       if (include_nolock) {
-        write_row(op_name.c_str(), pattern.c_str(), polling_mode.c_str(), "Indexed", r.concurrency, r.msg_size, r.indexed);
+        write_row(op_name.c_str(), pattern.c_str(), polling_mode.c_str(), "Indexed", r.concurrency, r.msg_size, r.batch_size, r.indexed);
       }
     }
   }
@@ -240,7 +237,8 @@ std::vector<BenchmarkResult> run_all_queues(
     OperationType op_type,
     const char *pattern_name,
     SubmissionStrategy ss = SubmissionStrategy::Immediate,
-    bool use_mock = false) {
+    bool use_mock = false,
+    size_t batch_size = 0) {
 
   bool use_threaded_polling = (pm == PollingMode::Threaded);
   std::vector<BenchmarkResult> results;
@@ -265,7 +263,7 @@ std::vector<BenchmarkResult> run_all_queues(
         effective_total_bytes = std::min(config.total_bytes, max_bytes);
       }
 
-      BenchmarkResult result{concurrency, msg_size, {}, {}, {}, {}, {}, {}, {}};
+      BenchmarkResult result{concurrency, msg_size, batch_size, {}, {}, {}, {}, {}, {}, {}};
       progress.set_label(fmt::format("{}/{} c={} sz={}", operation_name(op_type), pattern_name, concurrency, msg_size));
 
       for (auto qt : config.queue_types) {
@@ -275,7 +273,7 @@ std::vector<BenchmarkResult> run_all_queues(
             qt, ss, use_threaded_polling,
             concurrency, msg_size, effective_total_bytes,
             config.iterations, bufs, sp, pm, op_type, &progress,
-            config.sample_latency, config.batch_size, use_mock);
+            config.sample_latency, batch_size, use_mock);
       }
 
       results.push_back(result);
@@ -299,7 +297,7 @@ void benchmark_queues_with_dsa(const BenchmarkConfig &config) {
   fmt::println("  Iterations: {}", config.iterations);
   fmt::println("  Concurrency levels: {}", fmt::join(config.concurrency_levels, ", "));
   fmt::println("  Message sizes: {}", fmt::join(config.msg_sizes, ", "));
-  fmt::println("  Batch size: {}", config.batch_size == 0 ? 32 : config.batch_size);
+  fmt::println("  Batch sizes: {}", fmt::join(config.batch_sizes, ", "));
   fmt::println("  Latency sampling: {}", config.sample_latency ? "enabled" : "disabled");
   fmt::println("  Operations: {}", [&] {
     std::string s;
@@ -323,18 +321,24 @@ void benchmark_queues_with_dsa(const BenchmarkConfig &config) {
           const char *sp_name = scheduling_pattern_name(sp);
           const char *pm_name = polling_mode_name(pm);
           const char *ss_name = submission_strategy_name(ss);
-          std::string label_name = sp_name;
-          if (ss != SubmissionStrategy::Immediate) {
-            label_name += "_";
-            label_name += ss_name;
-          }
+          for (auto batch_size : config.batch_sizes) {
+            std::string label_name = sp_name;
+            if (ss != SubmissionStrategy::Immediate) {
+              label_name += "_";
+              label_name += ss_name;
+            }
+            if (config.batch_sizes.size() > 1) {
+              label_name += fmt::format("_bs{}", batch_size == 0 ? 32 : batch_size);
+            }
 
-          fmt::println("Running {} {} + {} polling ({})...", op_name, sp_name, pm_name, ss_name);
-          auto results = run_all_queues(config, bufs, sp, pm, op_type,
-                                         label_name.c_str(), ss, config.use_mock);
-          all_results.emplace_back(fmt::format("{}__{}_{}", op_name, label_name, pm_name),
-                                    std::move(results));
-          fmt::println("");
+            fmt::println("Running {} {} + {} polling ({}, batch_size={})...",
+                         op_name, sp_name, pm_name, ss_name, batch_size == 0 ? 32 : batch_size);
+            auto results = run_all_queues(config, bufs, sp, pm, op_type,
+                                           label_name.c_str(), ss, config.use_mock, batch_size);
+            all_results.emplace_back(fmt::format("{}__{}_{}", op_name, label_name, pm_name),
+                                      std::move(results));
+            fmt::println("");
+          }
         }
       }
     }
@@ -390,7 +394,7 @@ void benchmark_queues_with_dsa(const BenchmarkConfig &config) {
     print_results_table(title, results, include_nolock);
   }
 
-  export_to_csv(config.csv_file, all_results, config.batch_size);
+  export_to_csv(config.csv_file, all_results);
 }
 
 int main(int argc, char **argv) {

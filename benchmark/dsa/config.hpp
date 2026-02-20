@@ -59,7 +59,7 @@ struct BenchmarkConfig {
   size_t total_bytes = 32ULL * 1024 * 1024;
   size_t max_ops = 0;
   int iterations = 10;
-  size_t batch_size = 0;  // 0 = use submitter default (32)
+  std::vector<size_t> batch_sizes = {32};  // Descriptor batch sizes to sweep (0 = submitter default)
 
   // Hardware
   bool use_mock = false;  // Use MockDsaBase instead of real DSA

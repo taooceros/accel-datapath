@@ -9,24 +9,28 @@ threaded = false      # Background thread polling (dedicated polling thread)
 [scheduling]
 # Scheduling pattern - how tasks are spawned and concurrency is managed
 sliding_window = false          # Semaphore-like: spawn new op as one completes (maintains N in-flight)
-sliding_window_noalloc = true # Same as sliding-window but zero-allocation (nest + placement new)
-batch = false                  # Spawn N ops, wait all complete, then spawn next batch
-batch_noalloc = false          # Batch pattern with zero-allocation slots
-scoped_workers = false          # N worker coroutines processing items sequentially
+sliding_window_noalloc = false   # Same as sliding-window but zero-allocation (nest + placement new)
+sliding_window_arena = false    # Free-list arena recycling (ibverbs/UCX style O(1) recycle)
+sliding_window_direct = false   # Direct connect: bypass async_scope (~13 ns/op, inline only)
+sliding_window_reusable = true  # Reusable ops: bypass stdexec connect/start (~8 ns/op, inline only)
+batch = false                   # Spawn N ops, wait all complete, then spawn next batch
+batch_noalloc = false           # Batch pattern with zero-allocation slots
 batch_raw = false               # Hardware batch descriptor via dsa_batch sender (inline only)
+scoped_workers = false          # N worker coroutines processing items sequentially
 
 [submission]
 # Submission strategy - how descriptors are sent to hardware
-immediate = false     # DsaBase: 1:1 doorbell per descriptor (existing behavior)
+immediate = true     # DsaBase: 1:1 doorbell per descriptor (existing behavior)
 double_buf_batch = false   # DsaBatchBase: double-buffered staging, submit as hardware batch (opcode 0x01)
 fixed_ring_batch = false   # DsaFixedRingBatchBase: fixed-size ring batch (ablation study)
 ring_batch = false    # DsaRingBatchBase: ring-buffer based hardware batch
-mirrored_ring_batch = true  # MirroredRingSubmitter: wrap-free ring via VM mirroring
-batch_size = 32              # Descriptors per batch (0 = submitter default of 32)
+mirrored_ring_batch = false  # MirroredRingSubmitter: wrap-free ring via VM mirroring
+batch_sizes = [4]           # Descriptor batch sizes to sweep (0 = submitter default of 32)
 
 [queues]
 # Queue types to benchmark - different synchronization strategies
-nolock = true     # Single-threaded, no synchronization (baseline, inline only)
+nolock = true      # Single-threaded, no synchronization (baseline, inline only)
+indexed = false    # Per-slot indexed queue, no head contention (inline only)
 mutex = false      # std::mutex based synchronization
 tas = false        # Test-and-Set spinlock
 ttas = false       # Test-and-Test-and-Set spinlock (cache-friendly)
@@ -42,11 +46,15 @@ enabled = ["data_move"]
 # Benchmark parameters
 concurrency_levels = [1024, 2048, 4096]         # Max operations in-flight at once
 # Focus on message rate: small messages to stress per-op overhead
-msg_sizes = [8, 64]
-total_bytes = 33554432                     # Total bytes to copy per iteration (16 MB)
+msg_sizes = [8, 64, 256, 1024, 2048, 4096, 65536]
+total_bytes = 1_073_741_824                     # Total bytes to copy per iteration (16 MB)
 max_ops = 3000000                            # Max operations per iteration (0 = unlimited)
 iterations = 3                              # Number of times to repeat the full copy
 sample_latency = false                       # Record per-operation latency (disable to reduce overhead)
+
+[hardware]
+# Hardware configuration
+mock = false       # Use MockDsaBase instead of real hardware (instant completion, no CAP_SYS_RAWIO)
 
 [output]
 # Output configuration

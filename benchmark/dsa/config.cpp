@@ -253,9 +253,14 @@ static BenchmarkConfig load_config_from_toml(const std::string &filename) {
 
   if (auto t = tbl["submission"].as_table()) {
     config.submission_strategies = parse_toml_bool_table(t, parse_submission_strategy, default_submission_strategies());
-    if (auto node = t->get("batch_size")) {
-      if (auto val = node->value<int64_t>())
-        config.batch_size = static_cast<size_t>(*val);
+    if (auto node = t->get("batch_sizes")) {
+      if (auto arr = node->as_array()) {
+        config.batch_sizes.clear();
+        for (const auto &elem : *arr) {
+          if (auto val = elem.value<int64_t>())
+            config.batch_sizes.push_back(static_cast<size_t>(*val));
+        }
+      }
     }
   }
 
@@ -366,7 +371,7 @@ void print_usage(const char *prog) {
   fmt::println("                             dualcast, crc_gen, copy_crc, cache_flush");
   fmt::println("");
   fmt::println("Submission tuning:");
-  fmt::println("  --batch-size=N      Set descriptor batch size for batch submitters (default: 32)");
+  fmt::println("  --batch-size=N,...  Comma-separated list of batch sizes to sweep (default: 32)");
   fmt::println("");
   fmt::println("Hardware:");
   fmt::println("  --mock              Use mock DSA (instant completion, no hardware needed)");
@@ -528,7 +533,9 @@ BenchmarkConfig parse_args(int argc, char **argv) {
         cli_pattern->push_back(p);
       }
     } else if (arg.starts_with("--batch-size=")) {
-      config.batch_size = static_cast<size_t>(std::atol(std::string(arg.substr(13)).c_str()));
+      config.batch_sizes.clear();
+      for (auto &s : split_csv(arg.substr(13)))
+        config.batch_sizes.push_back(static_cast<size_t>(std::atol(s.c_str())));
     } else if (arg.starts_with("--concurrency=")) {
       config.concurrency_levels.clear();
       for (auto &c : split_csv(arg.substr(14)))
