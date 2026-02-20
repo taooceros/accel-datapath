@@ -6,10 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Plans**: Before implementing non-trivial changes, write a plan to `plan/YYYY-MM-DD/<topic>.md` first. This captures intent, alternatives considered, and expected outcomes before code is touched.
 - **Reports**: When discovering interesting findings during analysis (performance insights, architectural observations, surprising benchmark results, etc.), write them to `report/<descriptive_name>.md`. These build a persistent knowledge base for the project.
+- **Early Hypotheses**: When debugging performance issues or analyzing code, provide a preliminary hypothesis or summary within the first 5 minutes of investigation. Do NOT spend an entire session reading files without delivering any analysis. If you need more time, state what you've found so far and what you're still investigating.
 
 ## Project Overview
 
 C++ sender/receiver (stdexec) bindings for Intel Data Streaming Accelerator (DSA). The primary goal is **maximizing message rate** (ops/sec) for small transfers using inline polling — the calling thread drives both submission and completion in a tight loop with no cross-thread coordination.
+
+This is a DSA (Data Streaming Accelerator) benchmark project. Key architecture: C++ benchmark harness with strategies (batch, sliding_window, reusable), Python visualization (visualize_interactive.py), xmake build system. Strategies live in `benchmark/dsa/strategies/{batch,sliding_window}/` subfolders. Config is TOML-based via `benchmark/benchmark_config.toml`. Always run `xmake build` to verify changes compile.
 
 ## Hardware Reference
 
@@ -39,10 +42,6 @@ xmake f --policies=build.sanitizer.address && xmake
 
 # Run benchmarks (uses dsa_launcher for CAP_SYS_RAWIO, auto-detects build mode)
 run
-
-# Run any binary via the launcher directly
-./build/linux/x86_64/release/dsa_launcher ./build/linux/x86_64/release/dsa-stdexec
-./build/linux/x86_64/release/dsa_launcher ./build/linux/x86_64/release/example_data_move
 ```
 
 ### Running Binaries
@@ -199,3 +198,15 @@ All dependencies are managed via Nix flake (`flake.nix` / `devenv.nix`).
 - Intel CPU with DSA (4th Gen Xeon Scalable or later)
 - DSA device configured and work queue enabled (via `accel-config`)
 - `CAP_SYS_RAWIO` capability for user-space DSA access
+
+## Benchmarking
+
+When running benchmarks, always: (1) use `--output <unique_filename>.csv` to avoid overwriting previous results, (2) verify correct CLI flags before running (check `--help` first), (3) preserve all CSV outputs.
+
+## Code Changes
+
+When asked to fix or strengthen code: always match the CODE to the SPEC, not the spec to the code, unless explicitly told otherwise.
+
+## Multi-Agent Conventions
+
+When working in multi-agent team setups, minimize idle notification messages. Only send status updates when you have meaningful progress or are blocked on a dependency. Do not send repeated 'still waiting' messages.
