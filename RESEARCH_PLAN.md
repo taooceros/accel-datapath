@@ -2,9 +2,6 @@
 
 # The Batching Regime Change: When Hardware Gets Fast Enough That Software Becomes the Bottleneck
 
-*Hongtao Zhang, University of Washington*
-*Advisor: Arvind Krishnamurthy*
-
 ---
 
 ## 1. Executive Summary
