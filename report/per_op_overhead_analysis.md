@@ -1,11 +1,24 @@
 # Per-Operation Overhead Analysis and Optimization Roadmap
 
+> **Accuracy note (2026-02-22)**: The per-phase cost breakdown in this report consists
+> of **analytical estimates, not individually instrumented measurements**. The total
+> end-to-end throughput (25--27 Mpps mock, 20--22 Mpps real) is measured, but the
+> attribution of nanoseconds to individual phases (e.g., "9 ns for connect", "5 ns for
+> poll") was produced by reasoning about the code structure, not by instrumenting each
+> phase with cycle counters. Subsequent optimization experiments showed these estimates
+> significantly over-predicted savings (projected 11 ns combined, actual ~2--3 ns).
+> See `progress_post_alignment_debug.md` for the measured layer-removal results that
+> provide more reliable overhead attribution.
+
 ## Executive Summary
 
 Mock DSA benchmarks establish the pure software ceiling at **25-27 Mpps** (~37-40 ns/op).
 Real DSA peaks at **20-22 Mpps** (~45-50 ns/op). This report decomposes the per-operation
-overhead into 8 measurable phases, identifies the top 4 optimizations, and projects
+overhead into 8 phases with estimated costs, identifies the top 4 optimizations, and projects
 their combined impact at **35-40 Mpps** (mock) and **28-32 Mpps** (real DSA).
+
+> **Note**: The projected targets above were not achieved. Actual post-optimization
+> throughput was ~27 Mpps mock. See `optimization_results.md` for details.
 
 ## Methodology
 
@@ -18,6 +31,9 @@ their combined impact at **35-40 Mpps** (mock) and **28-32 Mpps** (real DSA).
 ## Per-Operation Cost Breakdown
 
 Total: ~37 ns/op (mock, best case) → 27 Mpps
+
+> **All per-phase costs below are estimates, not measurements.** They were produced by
+> reasoning about the code, not by instrumenting individual phases.
 
 ### Phase 1: stdexec connect + placement new (9 ns, 24%)
 
@@ -152,13 +168,17 @@ termination strategy (count completions instead of tracking in-flight).
 
 ## Combined Projection
 
-| Optimization | Savings | Cumulative (mock) | Mpps |
+> **These projections were not achieved.** Actual combined savings were ~2--3 ns/op
+> (27 Mpps), not the projected 11 ns/op (38 Mpps). See `optimization_results.md`.
+
+| Optimization | Projected savings | Cumulative (mock) | Projected Mpps |
 |-------------|---------|-------------------|------|
 | Baseline | — | 37 ns/op | 27 |
 | 1: Proxy → fn pointers | 4 ns | 33 ns/op | 30 |
 | 3: SlotArena free-list | 3 ns | 30 ns/op | 33 |
 | 2: Indexed array queue | 3-5 ns | 26 ns/op | 38 |
-| **Total** | **~11 ns** | **~26 ns/op** | **~38** |
+| **Total (projected)** | **~11 ns** | **~26 ns/op** | **~38** |
+| **Actual (measured)** | **~2--3 ns** | **~35 ns/op** | **~27** |
 
 For real DSA, the hardware adds ~10-15 ns/op, so the projected ceiling is:
 - Current: 45-50 ns/op → 20-22 Mpps
@@ -167,15 +187,23 @@ For real DSA, the hardware adds ~10-15 ns/op, so the projected ceiling is:
 
 ## Irreducible Floor
 
-The irreducible software overhead is:
+> **These are estimates, not measurements.** The individual phase costs were not
+> instrumented. The measured total stdexec overhead (baseline − Level 2) is ~21 ns/op.
+
+The estimated irreducible software overhead is:
 - stdexec connect/start: ~9 ns (construct sender chain)
 - stdexec set_value: ~5 ns (propagate completion)
 - Sender chain construction: ~6 ns (scope.nest + then)
 - Misc (atomic, memset desc/comp): ~2 ns
-- **Total irreducible**: ~22 ns/op → theoretical max ~45 Mpps
+- **Total estimated irreducible**: ~22 ns/op → theoretical max ~45 Mpps
 
-Getting below 22 ns/op requires bypassing stdexec entirely (batch_raw strategy does
-this but loses composability).
+The measured decomposition via layer-removal experiments gives:
+- scope.nest + then: ~14 ns (baseline − Level 1, measured)
+- connect + start: ~7 ns (Level 1 − Level 2, measured)
+- **Total measured stdexec overhead**: ~21 ns/op
+
+Getting below ~17 ns/op (Level 2 at c=2048) requires reducing cache-miss cost
+(Level 2 at c=32 reaches 11.9 ns) or bypassing the remaining per-op work entirely.
 
 ## Recommendation
 

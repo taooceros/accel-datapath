@@ -157,10 +157,12 @@ savings are ~2-3 ns/op at best, keeping us in the 25-29 Mpps range.
    c=4096 (fixing the regression) but the per-op savings are smaller than projected
    at lower concurrency.
 
-4. **Irreducible stdexec overhead dominates**: The ~20 ns irreducible floor
-   (connect + set_value + sender chain) accounts for ~75% of the per-op budget.
-   The three optimizations targeted the remaining ~17 ns, but actual savings in
-   that band were ~2-4 ns.
+4. **stdexec overhead dominates**: The measured total stdexec overhead is ~21 ns/op
+   (baseline 38 ns − Level 2 reusable 16.7 ns). The three optimizations targeted
+   the non-stdexec portion (~17 ns), but actual savings in that band were ~2-3 ns.
+   Note: the "~20 ns irreducible floor" figure from earlier reports was an estimate
+   based on summing guessed per-phase costs; the measured delta (~21 ns) is similar
+   but arrived at differently.
 
 ## Code Quality Assessment
 
@@ -197,7 +199,13 @@ savings are ~2-3 ns/op at best, keeping us in the 25-29 Mpps range.
 
 ### Current bottleneck breakdown (mock, c=2048, msg=8)
 
-| Phase | Est. Cost | % of Budget |
+> **Caveat (2026-02-22)**: The per-phase costs below are **analytical estimates, not
+> individually instrumented measurements**. The total (~34--35 ns/op) is approximately
+> measured. The measured layer-removal deltas (see `progress_post_alignment_debug.md`)
+> provide more reliable overhead attribution: scope.nest + then = ~14 ns (measured),
+> connect + start = ~7 ns (measured), remaining per-op work = ~16.7 ns (measured).
+
+| Phase | Estimated cost | % of Budget |
 |---|---|---|
 | stdexec connect + placement new | ~9 ns | 26% |
 | Sender chain overhead (scope.nest + then) | ~6 ns | 17% |

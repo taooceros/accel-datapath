@@ -21,6 +21,12 @@ meaning **80% of per-operation cost is pure software machinery.**
 
 ### Per-operation cost breakdown (mock, 37 ns/op = 27 Mpps)
 
+> **Caveat (2026-02-22)**: The per-phase costs below are **analytical estimates, not
+> measurements**. They were produced by reasoning about the code structure. Subsequent
+> optimization experiments showed these estimates over-predicted savings (projected
+> 11 ns combined, actual ~2--3 ns). The proxy has since been replaced with function
+> pointers. See `progress_post_alignment_debug.md` for measured layer-removal results.
+
 | Phase | Estimated ns | % | Source |
 |-------|-------------|---|--------|
 | `stdexec::connect()` + placement new | 8-10 | 24% | `operation_base_mixin.hpp:235-242`, `helpers.hpp:221-224` |
@@ -308,22 +314,27 @@ jitter entirely**, making it the correct tool for measuring software overhead.
 
 ### Immediate optimizations (target: 30+ Mpps mock ceiling)
 
+> **Update (2026-02-22)**: All three optimizations below were implemented. Combined
+> actual savings were ~2--3 ns/op (~27 Mpps), far below the projected gains. See
+> `optimization_results.md` for measured results and analysis of why the projections
+> were wrong.
+
 1. **Eliminate per-start proxy allocation**: `pro::make_proxy<OperationFacade>(
    Wrapper{&self})` on every `start()` allocates and constructs a new proxy
    object. Since the wrapper only captures `&self`, this could be a static
    dispatch table or a pre-constructed proxy stored in the operation.
-   **Expected gain: ~4 ns/op (+3 Mpps)**
+   **Expected gain: ~4 ns/op (+3 Mpps)** — Actual: ~1 ns/op
 
 2. **Replace O(N) poll with indexed completion**: Use a bitmap or ring-indexed
    queue where poll only visits operations known to be complete (via completion
    record status byte). With mock this is minor, but with real DSA it eliminates
    the feedback loop that causes bistable fluctuation.
-   **Expected gain: ~3 ns/op (+2 Mpps for mock, stabilizes real DSA)**
+   **Expected gain: ~3 ns/op (+2 Mpps for mock, stabilizes real DSA)** — Actual: ~0 ns on mock
 
 3. **Reduce slot scan overhead at high concurrency**: Use a free-list (arena
    pattern) instead of scanning all slots. `SlotArena` already exists but isn't
    used in `sliding_window_noalloc`.
-   **Expected gain: eliminates c=4096 regression**
+   **Expected gain: eliminates c=4096 regression** — Actual: fixed c=4096 regression, ~1 ns at other levels
 
 ### Architectural insights
 

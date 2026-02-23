@@ -107,32 +107,23 @@ At low concurrency (c=32), Level 2 reaches **84 Mpps** (11.9 ns/op).
 
 ### Why the gap between projections and actuals?
 
+The original plan over-estimated achievable throughput. The explanations below attempt
+to account for the gap, but note that the per-phase cost attributions (e.g., "9 ns for
+connect", "8 ns for start") are themselves estimates, not individually measured.
+
 **Level 1 (projected 77 Mpps, actual 42 Mpps):**
 
-1. **`stdexec::connect()` cost underestimated**: The plan treated connect as ~4 ns
-   (just placement-new). Actual cost is ~9 ns due to DsaOperationBase constructor
-   (alignment arithmetic for desc/comp pointers), receiver copy, and the large 384-byte
-   operation state memcpy.
-
-2. **`stdexec::start()` cost not counted**: `start()` does memset(desc, 128B) +
-   memset(comp, 64B) + fill_descriptor + function pointer assignment + submit = ~8 ns.
-   The plan assumed this was "hardware cost" but it's software overhead.
-
-3. **Arena + atomic cost was ~3 ns, not ~1 ns**: Free-list operations and
-   `remaining.fetch_sub(release)` are not free.
+The plan underestimated the combined cost of connect + start. The measured delta
+(Level 1 → Level 2) shows connect + start costs ~7 ns total. Combined with the
+remaining per-op work (memset, fill, submit, poll, arena, atomics), 24 ns/op is
+the measured reality.
 
 **Level 2 (projected 125 Mpps, actual 60 Mpps):**
 
-1. **Irreducible per-op cost**: memset(desc, 128B) + memset(comp, 64B) + fill_descriptor
-   + submit + arena acquire/release + remaining atomic = ~12 ns minimum. The plan's
-   8-10 ns target was below this floor.
-
-2. **Task queue overhead**: `dsa.poll()` traverses the linked list, checking completion
-   status and calling notify. This adds ~2-3 ns per op when amortized.
-
-3. **At c=32, we hit 84 Mpps (11.9 ns/op)**: With fewer slots, the working set fits
-   in L1 cache and the linked-list traversal is shorter. This shows the achievable
-   ceiling with hot caches is close to the plan's targets.
+The plan's 8-10 ns target underestimated the remaining per-op work (memset, fill,
+submit, poll, arena, atomics). The measured 16.7 ns/op at c=2048 includes cache-miss
+effects: at c=32, Level 2 reaches 11.9 ns/op (84 Mpps), showing that ~5 ns of the
+16.7 ns is cache-miss overhead at high concurrency.
 
 ## Operation State Size Analysis
 
@@ -163,9 +154,14 @@ for descriptor/completion storage.
 
 ## Per-Op Cost Breakdown
 
-### Level 1: Direct Connect (24 ns/op)
+> **Caveat (2026-02-22)**: The per-phase costs in the tables below are **analytical
+> estimates, not individually instrumented measurements**. They were produced by
+> reasoning about the code, not by timing each phase. The end-to-end totals (24 ns/op,
+> 16.7 ns/op) are measured; the internal breakdown is speculative.
 
-| Phase | Cost | % |
+### Level 1: Direct Connect (24 ns/op) — estimated breakdown
+
+| Phase | Estimated cost | % |
 |---|---|---|
 | `stdexec::connect()` + placement new (384 B) | ~9 ns | 38% |
 | `stdexec::start()` (memset + fill + submit) | ~8 ns | 33% |
@@ -174,9 +170,9 @@ for descriptor/completion storage.
 | Function pointer dispatch (notify) | ~2 ns | 8% |
 | Misc | ~2 ns | 8% |
 
-### Level 2: Reusable Ops (16.7 ns/op)
+### Level 2: Reusable Ops (16.7 ns/op) — estimated breakdown
 
-| Phase | Cost | % |
+| Phase | Estimated cost | % |
 |---|---|---|
 | `memset(desc, 128B)` + `memset(comp, 64B)` | ~4 ns | 24% |
 | `fill_descriptor()` (fill dsa_hw_desc fields) | ~3 ns | 18% |
@@ -188,9 +184,12 @@ for descriptor/completion storage.
 
 ## What Was Eliminated at Each Level
 
-### Level 1 eliminated (~14 ns saved):
+The total savings at each level are measured (end-to-end deltas). The per-component
+breakdown within each level is estimated.
 
-| Component | Savings |
+### Level 1 eliminated (~14 ns saved — total measured, breakdown estimated):
+
+| Component | Estimated savings |
 |---|---|
 | `exec::async_scope::nest()` wrapper | ~4 ns |
 | `stdexec::then(CompletionRecord)` adapter | ~3 ns |
@@ -198,9 +197,9 @@ for descriptor/completion storage.
 | ThenSender + CompletionRecord per-op construction | ~2 ns |
 | `scope.on_empty()` drain overhead | ~2 ns |
 
-### Level 2 eliminated (~7 ns more, ~21 ns total vs baseline):
+### Level 2 eliminated (~7 ns more — total measured, breakdown estimated):
 
-| Component | Savings |
+| Component | Estimated savings |
 |---|---|
 | `stdexec::connect()` placement-new (384 B op state) | ~5 ns |
 | `stdexec::start()` function pointer setup per-op | ~1 ns |
