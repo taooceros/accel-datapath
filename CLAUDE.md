@@ -6,6 +6,7 @@ Guidance for Claude Code working in this repository.
 
 - **Plans**: Write to `plan/YYYY-MM-DD/<topic>.md` before non-trivial changes.
 - **Reports**: Write findings to `report/<descriptive_name>.md`.
+- **Remarks**: Write concise, standalone insights to `remark/NNN_<topic>.md`. Each remark captures one interesting finding with data, explanation, and implication. Number sequentially. Reference source report.
 - **Early Hypotheses**: Deliver a preliminary analysis within the first 30 seconds. State what you've found so far if you need more time.
 - **Read before modify**: Read the module's co-located README before changing any module. They document patterns, conventions, and extension steps.
 - **Check prior work**: Scan `report/*.md` before starting analysis — previous sessions may have covered the topic.

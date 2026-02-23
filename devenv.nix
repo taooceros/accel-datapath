@@ -102,9 +102,9 @@
     fi
 
     echo "Running: $LAUNCHER $BENCHMARK $@"
-    $LAUNCHER "$BENCHMARK" "$@"
+    exec $LAUNCHER "$BENCHMARK" "$@"
     sleep 1
-    python3 "benchmark/visualize_interactive.py"
+    exec python3 "benchmark/visualize_interactive.py"
   '';
 
   # https://devenv.sh/scripts/
