@@ -102,15 +102,80 @@
         "type": "github"
       }
     },
+    "perfetto": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1763055008,
+        "owner": "google",
+        "repo": "perfetto",
+        "rev": "c1bbc165292877349b219a12498c1e768015a9e8",
+        "type": "github"
+      },
+      "original": {
+        "owner": "google",
+        "ref": "v53.0",
+        "repo": "perfetto",
+        "type": "github"
+      }
+    },
+    "proxy": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1769678507,
+        "owner": "microsoft",
+        "repo": "proxy",
+        "rev": "dc3d95c763ec04b0b2821addd643b024b07cd1c9",
+        "type": "github"
+      },
+      "original": {
+        "owner": "microsoft",
+        "repo": "proxy",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "devenv": "devenv",
         "git-hooks": "git-hooks",
         "idxd-config": "idxd-config",
         "nixpkgs": "nixpkgs",
+        "perfetto": "perfetto",
         "pre-commit-hooks": [
           "git-hooks"
-        ]
+        ],
+        "proxy": "proxy",
+        "stdexec": "stdexec",
+        "tomlplusplus": "tomlplusplus"
+      }
+    },
+    "stdexec": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1772671552,
+        "owner": "nvidia",
+        "repo": "stdexec",
+        "rev": "43a90a6306b88048750062f5330787962ca89045",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nvidia",
+        "repo": "stdexec",
+        "type": "github"
+      }
+    },
+    "tomlplusplus": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1766578845,
+        "owner": "marzer",
+        "repo": "tomlplusplus",
+        "rev": "7807a314ad1c0c9c227d9dbd68f23f187163372e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "marzer",
+        "repo": "tomlplusplus",
+        "type": "github"
       }
     }
   },
