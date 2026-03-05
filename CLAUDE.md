@@ -22,116 +22,17 @@ Research project for Intel hardware accelerator (DSA + IAX) integration into dat
 2. **accel-rpc/** — Accelerator-driven gRPC using Tonic (Rust). Offload gRPC data path (memcpy, CRC, compression) to DSA/IAX via the Rust async framework.
 3. **hw-eval/** — Raw hardware performance evaluation (Rust). Zero-framework-overhead DSA/IAX benchmarks. Calls hardware directly via inline asm (MOVDIR64B/ENQCMD). Establishes true hardware floor.
 
-## Repository Structure
+## Subprojects
 
-```
-dsa-stdexec/                        C++ stdexec framework
-  src/dsa/                          Low-level DSA hardware interface
-  include/dsa_stdexec/              stdexec sender/receiver integration
-  benchmark/dsa/                    Multi-dimensional benchmark suite
-  examples/                         Per-operation examples
-  test/                             Unit + integration tests
-  xmake.lua                         Build configuration
+Each has its own README with build instructions, structure, and dependencies:
 
-accel-rpc/                          Accelerator-driven gRPC (Rust)
-  tonic/                            Submodule: taooceros/tonic fork
-  accel-codec/                      Custom Tonic Codec with pooled buffers
-  accel-middleware/                  Tower CRC/compression middleware
-  dsa-ffi/                          FFI bridge to C++ DSA
-  iax-ffi/                          FFI bridge to IAX
-  async-bench/                      Async framework overhead characterization
-  tonic-profile/                    Tonic profiling harness
-  Cargo.toml                        Workspace root
+| Subfolder | Description |
+|-----------|-------------|
+| [`dsa-stdexec/`](dsa-stdexec/README.md) | C++ stdexec sender/receiver framework for DSA (xmake) |
+| [`accel-rpc/`](accel-rpc/README.md) | Accelerator-driven gRPC using Tonic (Rust/Cargo) |
+| [`hw-eval/`](hw-eval/README.md) | Raw hardware performance evaluation (Rust/Cargo) |
 
-hw-eval/                            Raw hardware evaluation (Rust)
-  src/dsa.rs                        DSA descriptors, WQ portal, inline asm
-  src/main.rs                       Latency/throughput benchmarks + SW baselines
-  benches/dsa_raw.rs                Criterion benchmarks
-  Cargo.toml
-
-Shared (repo root):
-  tools/                            dsa_launcher capability wrapper
-  dsa_architecture_spec.md          Hardware spec
-  dsa-config/                       accel-config device configurations
-  plan/                             Plans
-  report/                           Reports
-  remark/                           Insight remarks
-  docs/                             Design documents
-  devenv.nix                        Nix dev environment (C++ + Rust)
-```
-
-## Build
-
-### C++ (dsa-stdexec/)
-
-```bash
-devenv shell                                    # Nix development shell
-cd dsa-stdexec
-xmake                                           # Build all targets
-xmake build dsa_benchmark                       # Build specific target
-xmake f -m release && xmake                     # Build modes: debug/release/profile
-run                                             # Run benchmarks (auto dsa_launcher + build mode)
-launch <cmd> [args...]                          # Run any command with CAP_SYS_RAWIO
-```
-
-C++23, GCC 15, mold linker. Flags `-menqcmd` and `-mmovdir64b` required for DSA intrinsics.
-
-### Rust (accel-rpc/)
-
-```bash
-cd accel-rpc
-cargo build                                     # Build all crates
-cargo check                                     # Type-check workspace
-```
-
-### Raw Hardware Eval (hw-eval/)
-
-```bash
-cd hw-eval
-cargo build --release
-# Run via launch script for CAP_SYS_RAWIO:
-launch ./target/release/hw-eval
-# Software baselines only (no hardware needed):
-cargo run --release -- --sw-only
-# Criterion benchmarks:
-launch cargo bench
-```
-
-### C++ Build Targets
-
-| Target | Description |
-|--------|-------------|
-| `dsa-stdexec` | Main executable (all `dsa-stdexec/src/**/*.cpp`) |
-| `dsa_benchmark` | Multi-dimensional benchmark suite |
-| `task_queue_benchmark` | Task queue synchronization benchmarks |
-| `example_<op>` | One per op: `data_move`, `mem_fill`, `compare`, `compare_value`, `dualcast`, `crc_gen`, `copy_crc`, `cache_flush` |
-
-## C++ Architecture
-
-Per-module READMEs:
-
-| README | Covers |
-|--------|--------|
-| `dsa-stdexec/src/dsa/README.md` | DsaEngine, task queues, descriptor submitters, alignment |
-| `dsa-stdexec/include/dsa_stdexec/README.md` | stdexec integration, PollingRunLoop, senders |
-| `dsa-stdexec/include/dsa_stdexec/operations/README.md` | Per-operation sender pattern, how to add ops |
-| `dsa-stdexec/benchmark/dsa/README.md` | Benchmark framework, config, dispatch |
-| `dsa-stdexec/benchmark/dsa/strategies/README.md` | Strategy taxonomy, decision guide, perf reference |
-| `dsa-stdexec/examples/README.md` | Quick-start examples |
-| `dsa-stdexec/test/README.md` | Test suite coverage |
-| `dsa-config/README.md` | accel-config device configurations |
-| `tools/README.md` | dsa_launcher capability model |
-
-Design decisions: `report/design_decisions.md`. Hardware spec: `dsa_architecture_spec.md`.
-
-## Benchmark Rules
-
-Always: (1) `--output <unique_filename>.csv` to avoid overwriting, (2) check `--help` before running, (3) preserve all CSV outputs. Visualize with `dsa-stdexec/benchmark/visualize_interactive.py`.
-
-## Dependencies
-
-**C++ Deps** (managed via Nix flake): stdexec, libaccel-config, fmt, proxy, tomlplusplus.
-**Rust Deps** (managed via Cargo): tonic, tokio, prost, bytes, tower, libc, clap, criterion.
+Shared root resources: `tools/` (dsa_launcher), `dsa_architecture_spec.md` (hardware spec), `dsa-config/` (accel-config), `report/`, `plan/`, `remark/`, `docs/`, `devenv.nix`.
 
 ## Code Rules
 
