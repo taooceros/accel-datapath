@@ -31,7 +31,6 @@ dsa-stdexec/                        C++ stdexec framework
   benchmark/dsa/                    Multi-dimensional benchmark suite
   examples/                         Per-operation examples
   test/                             Unit + integration tests
-  tools/                            dsa_launcher capability wrapper
   xmake.lua                         Build configuration
 
 accel-rpc/                          Accelerator-driven gRPC (Rust)
@@ -51,6 +50,7 @@ hw-eval/                            Raw hardware evaluation (Rust)
   Cargo.toml
 
 Shared (repo root):
+  tools/                            dsa_launcher capability wrapper
   dsa_architecture_spec.md          Hardware spec
   dsa-config/                       accel-config device configurations
   plan/                             Plans
@@ -71,6 +71,7 @@ xmake                                           # Build all targets
 xmake build dsa_benchmark                       # Build specific target
 xmake f -m release && xmake                     # Build modes: debug/release/profile
 run                                             # Run benchmarks (auto dsa_launcher + build mode)
+launch <cmd> [args...]                          # Run any command with CAP_SYS_RAWIO
 ```
 
 C++23, GCC 15, mold linker. Flags `-menqcmd` and `-mmovdir64b` required for DSA intrinsics.
@@ -88,12 +89,12 @@ cargo check                                     # Type-check workspace
 ```bash
 cd hw-eval
 cargo build --release
-# Run via dsa_launcher for CAP_SYS_RAWIO:
-dsa_launcher ./target/release/hw-eval
+# Run via launch script for CAP_SYS_RAWIO:
+launch ./target/release/hw-eval
 # Software baselines only (no hardware needed):
 cargo run --release -- --sw-only
 # Criterion benchmarks:
-dsa_launcher cargo bench
+launch cargo bench
 ```
 
 ### C++ Build Targets
@@ -103,7 +104,6 @@ dsa_launcher cargo bench
 | `dsa-stdexec` | Main executable (all `dsa-stdexec/src/**/*.cpp`) |
 | `dsa_benchmark` | Multi-dimensional benchmark suite |
 | `task_queue_benchmark` | Task queue synchronization benchmarks |
-| `dsa_launcher` | C11 capability launcher (see `dsa-stdexec/tools/README.md`) |
 | `example_<op>` | One per op: `data_move`, `mem_fill`, `compare`, `compare_value`, `dualcast`, `crc_gen`, `copy_crc`, `cache_flush` |
 
 ## C++ Architecture
@@ -119,8 +119,8 @@ Per-module READMEs:
 | `dsa-stdexec/benchmark/dsa/strategies/README.md` | Strategy taxonomy, decision guide, perf reference |
 | `dsa-stdexec/examples/README.md` | Quick-start examples |
 | `dsa-stdexec/test/README.md` | Test suite coverage |
-| `dsa-stdexec/tools/README.md` | dsa_launcher capability model |
 | `dsa-config/README.md` | accel-config device configurations |
+| `tools/README.md` | dsa_launcher capability model |
 
 Design decisions: `report/design_decisions.md`. Hardware spec: `dsa_architecture_spec.md`.
 

@@ -85,50 +85,58 @@
   # services.postgres.enable = true;
 
   # https://devenv.sh/scripts/
-  scripts.run.exec = ''
-    cd dsa-stdexec
-    MODE=$(xmake show 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep 'mode:' | awk '{print $2}')
-    BUILD_DIR="./build/linux/x86_64/$MODE"
+  scripts.launch.exec = ''
+    REPO_ROOT="$(git rev-parse --show-toplevel)"
+    TOOLS_DIR="$REPO_ROOT/tools"
+    BUILD_DIR="$TOOLS_DIR/build"
     LAUNCHER="$BUILD_DIR/dsa_launcher"
-    BENCHMARK="$BUILD_DIR/dsa_benchmark"
 
     if [ ! -f "$LAUNCHER" ]; then
-      echo "Launcher not found. Building dsa_launcher..."
-      xmake build dsa_launcher
+      echo "Building dsa_launcher..."
+      mkdir -p "$BUILD_DIR"
+      gcc -o "$LAUNCHER" "$TOOLS_DIR/dsa_launcher.c" -lcap
+      sudo setcap cap_sys_rawio+eip "$LAUNCHER"
     fi
+
+    if [ $# -eq 0 ]; then
+      echo "Usage: launch <command> [args...]"
+      echo "Runs <command> with CAP_SYS_RAWIO via dsa_launcher"
+      exit 1
+    fi
+
+    echo "Running: $LAUNCHER $@"
+    exec "$LAUNCHER" "$@"
+  '';
+
+  scripts.run.exec = ''
+    REPO_ROOT="$(git rev-parse --show-toplevel)"
+    DSA_DIR="$REPO_ROOT/dsa-stdexec"
+    MODE=$(cd "$DSA_DIR" && xmake show 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep 'mode:' | awk '{print $2}')
+    BENCHMARK="$DSA_DIR/build/linux/x86_64/$MODE/dsa_benchmark"
 
     if [ ! -f "$BENCHMARK" ]; then
       echo "Benchmark not found. Building dsa_benchmark..."
-      xmake build dsa_benchmark
+      (cd "$DSA_DIR" && xmake build dsa_benchmark)
     fi
 
-    echo "Running: $LAUNCHER $BENCHMARK $@"
-    exec $LAUNCHER "$BENCHMARK" "$@"
-    sleep 1
-    exec python3 "benchmark/visualize_interactive.py"
+    echo "Running: launch $BENCHMARK $@"
+    exec launch "$BENCHMARK" "$@"
   '';
 
   # https://devenv.sh/scripts/
   scripts.profile.exec = ''
-    cd dsa-stdexec
-    MODE=$(xmake show 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep 'mode:' | awk '{print $2}')
-    BUILD_DIR="./build/linux/x86_64/$MODE"
-    LAUNCHER="$BUILD_DIR/dsa_launcher"
-    BENCHMARK="$BUILD_DIR/dsa_benchmark"
-
-    if [ ! -f "$LAUNCHER" ]; then
-      echo "Launcher not found. Building dsa_launcher..."
-      xmake build dsa_launcher
-    fi
+    REPO_ROOT="$(git rev-parse --show-toplevel)"
+    DSA_DIR="$REPO_ROOT/dsa-stdexec"
+    MODE=$(cd "$DSA_DIR" && xmake show 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep 'mode:' | awk '{print $2}')
+    BENCHMARK="$DSA_DIR/build/linux/x86_64/$MODE/dsa_benchmark"
 
     if [ ! -f "$BENCHMARK" ]; then
       echo "Benchmark not found. Building dsa_benchmark..."
-      xmake build dsa_benchmark
+      (cd "$DSA_DIR" && xmake build dsa_benchmark)
     fi
 
-    echo "Running: $LAUNCHER samply record $BENCHMARK $@"
-    exec "$LAUNCHER" samply record "$BENCHMARK" "$@"
-    exec "python3" "benchmark/visualize_interactive.py"
+    echo "Running: launch samply record $BENCHMARK $@"
+    exec launch samply record "$BENCHMARK" "$@"
   '';
 
   # https://devenv.sh/basics/
