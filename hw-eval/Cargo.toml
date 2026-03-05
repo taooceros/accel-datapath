@@ -1,0 +1,16 @@
+[package]
+name = "hw-eval"
+version = "0.1.0"
+edition = "2021"
+description = "Raw hardware performance evaluation for Intel DSA and IAX — no framework overhead"
+
+[dependencies]
+libc = "0.2"
+clap = { version = "4", features = ["derive"] }
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "dsa_raw"
+harness = false

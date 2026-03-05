@@ -86,7 +86,7 @@
 
   # https://devenv.sh/scripts/
   scripts.run.exec = ''
-    cd cpp
+    cd dsa-stdexec
     MODE=$(xmake show 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep 'mode:' | awk '{print $2}')
     BUILD_DIR="./build/linux/x86_64/$MODE"
     LAUNCHER="$BUILD_DIR/dsa_launcher"
@@ -110,7 +110,7 @@
 
   # https://devenv.sh/scripts/
   scripts.profile.exec = ''
-    cd cpp
+    cd dsa-stdexec
     MODE=$(xmake show 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep 'mode:' | awk '{print $2}')
     BUILD_DIR="./build/linux/x86_64/$MODE"
     LAUNCHER="$BUILD_DIR/dsa_launcher"
