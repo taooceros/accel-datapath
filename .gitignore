@@ -55,3 +55,6 @@ __pycache__/
 *.pyo
 
 *.png
+
+# Rust
+target/

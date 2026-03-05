@@ -1,0 +1,9 @@
+[package]
+name = "accel-middleware"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tonic = { workspace = true }
+tower = { workspace = true }
+bytes = { workspace = true }

@@ -1,0 +1,9 @@
+[package]
+name = "accel-codec"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tonic = { workspace = true }
+prost = { workspace = true }
+bytes = { workspace = true }

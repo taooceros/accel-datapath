@@ -1,6 +1,6 @@
 [submodule "stdexec"]
-	path = stdexec
+	path = cpp/stdexec
 	url = https://github.com/NVIDIA/stdexec.git
 [submodule "tonic"]
-	path = tonic
+	path = rust/tonic
 	url = https://github.com/taooceros/tonic.git

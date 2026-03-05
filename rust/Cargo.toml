@@ -1,0 +1,22 @@
+[workspace]
+members = [
+    "accel-codec",
+    "accel-middleware",
+    "dsa-ffi",
+    "iax-ffi",
+    "async-bench",
+    "tonic-profile",
+]
+exclude = ["tonic"]
+resolver = "2"
+
+[workspace.package]
+rust-version = "1.88"
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+tonic = { path = "tonic/tonic" }
+tonic-build = { path = "tonic/tonic-build" }
+prost = "0.13"
+bytes = "1"
+tower = "0.5"
