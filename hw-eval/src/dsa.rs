@@ -198,16 +198,18 @@ impl WqPortal {
             return Err(std::io::Error::last_os_error());
         }
 
-        // Detect if dedicated WQ by trying to check the device name
-        // Dedicated WQs use movdir64b, shared WQs use enqcmd
-        // Default to dedicated WQ (movdir64b). Set dedicated=false for shared WQs.
-        let dedicated = true;
+        let dedicated = detect_wq_mode(path);
 
         Ok(Self {
             portal: portal as *mut u8,
             _fd: file,
             dedicated,
         })
+    }
+
+    /// Returns true if this is a dedicated WQ (MOVDIR64B), false for shared (ENQCMD).
+    pub fn is_dedicated(&self) -> bool {
+        self.dedicated
     }
 
     /// Submit a descriptor to the work queue via MOVDIR64B (dedicated WQ).
@@ -322,4 +324,169 @@ pub fn sw_crc32c(data: &[u8], seed: u32) -> u32 {
         }
     }
     crc
+}
+
+// ============================================================================
+// Cycle-accurate timing via RDTSCP
+// ============================================================================
+
+/// Read TSC with serialization. Returns (cycles, processor_id).
+#[inline(always)]
+pub fn rdtscp() -> (u64, u32) {
+    let lo: u32;
+    let hi: u32;
+    let aux: u32;
+    unsafe {
+        core::arch::asm!(
+            "rdtscp",
+            out("eax") lo,
+            out("edx") hi,
+            out("ecx") aux,
+            options(nostack, nomem, preserves_flags),
+        );
+    }
+    (((hi as u64) << 32) | lo as u64, aux)
+}
+
+/// Serializing fence before timing region.
+#[inline(always)]
+pub fn lfence() {
+    unsafe {
+        core::arch::asm!("lfence", options(nostack, nomem, preserves_flags));
+    }
+}
+
+/// Detect TSC frequency in Hz. Parses /proc/cpuinfo for base frequency,
+/// falls back to calibration against Instant.
+pub fn tsc_frequency_hz() -> u64 {
+    // Strategy 1: parse "model name" line for "@ X.XXGHz"
+    if let Ok(cpuinfo) = std::fs::read_to_string("/proc/cpuinfo") {
+        for line in cpuinfo.lines() {
+            if line.starts_with("model name") {
+                if let Some(at_pos) = line.find("@ ") {
+                    let ghz_str = &line[at_pos + 2..];
+                    if let Some(ghz_end) = ghz_str.find("GHz") {
+                        if let Ok(ghz) = ghz_str[..ghz_end].trim().parse::<f64>() {
+                            return (ghz * 1e9) as u64;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Strategy 2: calibrate against Instant over 10ms
+    let start_tsc = rdtscp().0;
+    let start_wall = std::time::Instant::now();
+    std::thread::sleep(std::time::Duration::from_millis(10));
+    let end_tsc = rdtscp().0;
+    let elapsed_ns = start_wall.elapsed().as_nanos() as u64;
+    (end_tsc - start_tsc) * 1_000_000_000 / elapsed_ns
+}
+
+/// Convert cycles to nanoseconds given a known TSC frequency.
+#[inline(always)]
+pub fn cycles_to_ns(cycles: u64, tsc_freq_hz: u64) -> u64 {
+    ((cycles as u128 * 1_000_000_000) / tsc_freq_hz as u128) as u64
+}
+
+// ============================================================================
+// WQ mode detection
+// ============================================================================
+
+/// Detect WQ mode from sysfs. Returns true for dedicated, false for shared.
+fn detect_wq_mode(dev_path: &Path) -> bool {
+    let filename = match dev_path.file_name().and_then(|f| f.to_str()) {
+        Some(f) => f,
+        None => {
+            eprintln!("WARNING: cannot parse device name from {:?}, assuming dedicated WQ", dev_path);
+            return true;
+        }
+    };
+    let sysfs = format!("/sys/bus/dsa/devices/{}/mode", filename);
+    match std::fs::read_to_string(&sysfs) {
+        Ok(mode) => {
+            let mode = mode.trim();
+            if mode == "dedicated" {
+                true
+            } else if mode == "shared" {
+                false
+            } else {
+                eprintln!("WARNING: unknown WQ mode '{}', assuming dedicated", mode);
+                true
+            }
+        }
+        Err(_) => {
+            eprintln!("WARNING: cannot read {}, assuming dedicated WQ", sysfs);
+            true
+        }
+    }
+}
+
+// ============================================================================
+// Thread pinning and NUMA topology
+// ============================================================================
+
+/// Pin the calling thread to the specified CPU core.
+pub fn pin_to_core(core: usize) -> std::io::Result<usize> {
+    unsafe {
+        let mut cpuset: libc::cpu_set_t = std::mem::zeroed();
+        libc::CPU_ZERO(&mut cpuset);
+        libc::CPU_SET(core, &mut cpuset);
+        let ret = libc::sched_setaffinity(0, std::mem::size_of::<libc::cpu_set_t>(), &cpuset);
+        if ret != 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+    }
+    Ok(core)
+}
+
+/// Get the current CPU core.
+pub fn current_core() -> usize {
+    unsafe { libc::sched_getcpu() as usize }
+}
+
+/// Get the NUMA node for a CPU core.
+pub fn cpu_numa_node(core: usize) -> Option<usize> {
+    let cpu_dir = format!("/sys/devices/system/cpu/cpu{}", core);
+    for entry in std::fs::read_dir(&cpu_dir).ok()? {
+        let entry = entry.ok()?;
+        let name = entry.file_name();
+        let name = name.to_str()?;
+        if name.starts_with("node") {
+            return name[4..].parse().ok();
+        }
+    }
+    None
+}
+
+/// Get the NUMA node for a DSA device (e.g., /dev/dsa/wq0.0 -> dsa0).
+pub fn device_numa_node(dev_path: &Path) -> Option<i32> {
+    let filename = dev_path.file_name()?.to_str()?;
+    let dsa_id = filename.strip_prefix("wq")?;
+    let dot = dsa_id.find('.')?;
+    let dsa_device = format!("dsa{}", &dsa_id[..dot]);
+    let sysfs = format!("/sys/bus/dsa/devices/{}/numa_node", dsa_device);
+    std::fs::read_to_string(&sysfs).ok()?.trim().parse().ok()
+}
+
+// ============================================================================
+// Cache control
+// ============================================================================
+
+/// Flush all cache lines covering [ptr, ptr+len).
+pub fn flush_range(ptr: *const u8, len: usize) {
+    let mut offset = 0;
+    while offset < len {
+        unsafe {
+            core::arch::asm!(
+                "clflush [{}]",
+                in(reg) ptr.add(offset),
+                options(nostack, preserves_flags),
+            );
+        }
+        offset += 64;
+    }
+    unsafe {
+        core::arch::asm!("mfence", options(nostack, preserves_flags));
+    }
 }

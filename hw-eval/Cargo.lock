@@ -267,6 +267,8 @@ dependencies = [
  "clap",
  "criterion",
  "libc",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
