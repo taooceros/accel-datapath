@@ -1,0 +1,8 @@
+[package]
+name = "dsa-bindings"
+version = "0.1.0"
+edition = "2021"
+description = "Low-level Intel DSA hardware bindings — descriptors, WQ portal, submit/poll, page fault handling"
+
+[dependencies]
+libc = "0.2"

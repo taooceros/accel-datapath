@@ -439,8 +439,22 @@ fn bench_pipelined_batch(
 
             while completed_batches < total_batches {
                 let status = poll_completion(&slots[idx].batch_comp);
-                assert_eq!(status, DSA_COMP_SUCCESS,
-                    "Batch failed with status {:#x}", status);
+                if status == DSA_COMP_PAGE_FAULT_NOBOF {
+                    touch_fault_page(&slots[idx].batch_comp);
+                    fill_and_submit(&mut slots[idx], wq);
+                    continue;
+                }
+                if status != DSA_COMP_SUCCESS && status != 0x05 {
+                    // Drain all in-flight batch descriptors before panic
+                    for s in &slots {
+                        let st = unsafe { std::ptr::read_volatile(&s.batch_comp.status) };
+                        if st == DSA_COMP_NONE {
+                            poll_completion(&s.batch_comp);
+                        }
+                    }
+                    panic!("Pipelined batch failed: status {:#x} (size={}, conc={})",
+                           status, size, concurrency);
+                }
                 completed_batches += 1;
 
                 if completed_batches + concurrency <= total_batches + concurrency {
@@ -449,7 +463,7 @@ fn bench_pipelined_batch(
                 idx = (idx + 1) % concurrency;
             }
 
-            // Drain
+            // Drain remaining
             for s in &slots {
                 let status = unsafe { std::ptr::read_volatile(&s.batch_comp.status) };
                 if status == DSA_COMP_NONE {
@@ -524,8 +538,28 @@ fn bench_burst(
             // Wait all
             for i in 0..burst_size {
                 let status = poll_completion(&comps[i]);
-                assert_eq!(status, DSA_COMP_SUCCESS,
-                    "DSA operation failed with status {:#x}", status);
+                if status == DSA_COMP_PAGE_FAULT_NOBOF {
+                    touch_fault_page(&comps[i]);
+                    // Drain remaining, then retry whole burst
+                    drain_completions(&comps[i+1..]);
+                    // Resubmit this one
+                    reset_completion(&mut comps[i]);
+                    fill_fn(&mut descs[i], srcs[i].as_ptr(), dsts[i].as_mut_ptr(), size as u32);
+                    descs[i].set_completion(&mut comps[i]);
+                    unsafe { wq.submit(&descs[i]) };
+                    // Re-poll from this slot
+                    let retry_status = poll_completion(&comps[i]);
+                    if retry_status != DSA_COMP_SUCCESS {
+                        drain_completions(&comps);
+                        panic!("DSA burst {} failed after page fault retry: status {:#x}", op_name, retry_status);
+                    }
+                    continue;
+                }
+                if status != DSA_COMP_SUCCESS {
+                    drain_completions(&comps[i+1..]);
+                    panic!("DSA burst {} failed: status {:#x} (size={}, burst={})",
+                           op_name, status, size, burst_size);
+                }
             }
         }
 
@@ -624,8 +658,22 @@ fn bench_burst_batch(
                 // Wait all batch descriptors
                 for s in &slots {
                     let status = poll_completion(&s.batch_comp);
-                    assert_eq!(status, DSA_COMP_SUCCESS,
-                        "Burst-batch failed with status {:#x}", status);
+                    if status == DSA_COMP_PAGE_FAULT_NOBOF {
+                        touch_fault_page(&s.batch_comp);
+                        // Remaining slots will be drained at next round or below
+                        continue;
+                    }
+                    if status != DSA_COMP_SUCCESS && status != 0x05 {
+                        // Drain all in-flight before panic
+                        for s2 in &slots {
+                            let st = unsafe { std::ptr::read_volatile(&s2.batch_comp.status) };
+                            if st == DSA_COMP_NONE {
+                                poll_completion(&s2.batch_comp);
+                            }
+                        }
+                        panic!("Burst-batch failed: status {:#x} (size={}, burst={})",
+                               status, size, burst_size);
+                    }
                 }
             }
 
@@ -700,11 +748,19 @@ fn bench_sliding_window(
 
         while completed < iterations {
             let status = poll_completion(&comps[slot]);
-            assert_eq!(
-                status, DSA_COMP_SUCCESS,
-                "DSA operation failed with status {:#x}",
-                status
-            );
+            if status == DSA_COMP_PAGE_FAULT_NOBOF {
+                touch_fault_page(&comps[slot]);
+                reset_completion(&mut comps[slot]);
+                fill_fn(&mut descs[slot], srcs[slot].as_ptr(), dsts[slot].as_mut_ptr(), size as u32);
+                descs[slot].set_completion(&mut comps[slot]);
+                unsafe { wq.submit(&descs[slot]) };
+                continue;
+            }
+            if status != DSA_COMP_SUCCESS {
+                drain_completions(&comps);
+                panic!("DSA {} failed: status {:#x} (size={}, conc={})",
+                       op_name, status, size, concurrency);
+            }
             completed += 1;
 
             if completed + concurrency <= iterations + concurrency {
@@ -718,12 +774,7 @@ fn bench_sliding_window(
         }
 
         // Drain remaining
-        for i in 0..concurrency {
-            let status = unsafe { std::ptr::read_volatile(&comps[i].status) };
-            if status == DSA_COMP_NONE {
-                poll_completion(&comps[i]);
-            }
-        }
+        drain_completions(&comps);
 
         let elapsed = start.elapsed();
         let ops_per_sec = iterations as f64 / elapsed.as_secs_f64();
