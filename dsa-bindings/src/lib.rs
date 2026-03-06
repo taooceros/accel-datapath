@@ -220,10 +220,10 @@ impl WqPortal {
     #[inline(always)]
     pub unsafe fn submit_movdir64b(&self, desc: &DsaHwDesc) {
         core::arch::asm!(
-            ".byte 0x66, 0x0f, 0x38, 0xf8, 0x02", // movdir64b (%rdx), %rax
-            in("rax") self.portal,
-            in("rdx") desc as *const DsaHwDesc,
-            options(nostack, preserves_flags),
+            "movdir64b ({src}), {dst}",
+            dst = in(reg) self.portal,
+            src = in(reg) desc as *const DsaHwDesc,
+            options(nostack, preserves_flags, att_syntax),
         );
     }
 
@@ -235,12 +235,12 @@ impl WqPortal {
     pub unsafe fn submit_enqcmd(&self, desc: &DsaHwDesc) -> bool {
         let result: u8;
         core::arch::asm!(
-            ".byte 0xf2, 0x0f, 0x38, 0xf8, 0x02", // enqcmd (%rdx), %rax
+            "enqcmd ({src}), {dst}",
             "setz {result}",
-            in("rax") self.portal,
-            in("rdx") desc as *const DsaHwDesc,
+            dst = in(reg) self.portal,
+            src = in(reg) desc as *const DsaHwDesc,
             result = out(reg_byte) result,
-            options(nostack, preserves_flags),
+            options(nostack, preserves_flags, att_syntax),
         );
         result != 0
     }
