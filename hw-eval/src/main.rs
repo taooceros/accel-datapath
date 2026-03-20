@@ -15,14 +15,21 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 #[derive(Parser)]
-#[command(name = "hw-eval", about = "Raw DSA/IAX hardware performance evaluation")]
+#[command(
+    name = "hw-eval",
+    about = "Raw DSA/IAX hardware performance evaluation"
+)]
 struct Args {
     /// WQ device path (e.g., /dev/dsa/wq0.0)
     #[arg(short, long, default_value = "/dev/dsa/wq0.0")]
     device: PathBuf,
 
     /// Message sizes to test (bytes, comma-separated)
-    #[arg(short, long, default_value = "64,256,1024,4096,16384,65536,262144,1048576")]
+    #[arg(
+        short,
+        long,
+        default_value = "64,256,1024,4096,16384,65536,262144,1048576"
+    )]
     sizes: String,
 
     /// Number of iterations per measurement
@@ -80,12 +87,28 @@ fn compute_stats(sorted: &[u64]) -> LatencyStats {
     let p999 = sorted[((n as f64 * 0.999) as usize).min(n - 1)];
 
     let mean_f = sum as f64 / n as f64;
-    let variance: f64 = sorted.iter()
-        .map(|&v| { let d = v as f64 - mean_f; d * d })
-        .sum::<f64>() / n as f64;
-    let cv = if mean_f > 0.0 { variance.sqrt() / mean_f } else { 0.0 };
+    let variance: f64 = sorted
+        .iter()
+        .map(|&v| {
+            let d = v as f64 - mean_f;
+            d * d
+        })
+        .sum::<f64>()
+        / n as f64;
+    let cv = if mean_f > 0.0 {
+        variance.sqrt() / mean_f
+    } else {
+        0.0
+    };
 
-    LatencyStats { min, median, mean, p99, p999, cv }
+    LatencyStats {
+        min,
+        median,
+        mean,
+        p99,
+        p999,
+        cv,
+    }
 }
 
 // ============================================================================
@@ -170,16 +193,23 @@ fn bench_noop_latency(
 
     latencies.sort_unstable();
     let cyc = compute_stats(&latencies);
-    let ns_vec: Vec<u64> = latencies.iter().map(|&c| cycles_to_ns(c, tsc_freq)).collect();
+    let ns_vec: Vec<u64> = latencies
+        .iter()
+        .map(|&c| cycles_to_ns(c, tsc_freq))
+        .collect();
     // ns_vec is monotonic since latencies is sorted and cycles_to_ns is monotonic
     let ns = compute_stats(&ns_vec);
 
     if !json {
         println!("\n=== Single-op latency: noop ===");
-        println!("{:>10} {:>10} {:>10} {:>10} {:>10} {:>10} {:>8}",
-                 "min_cyc", "med_cyc", "mean_cyc", "min_ns", "p99_ns", "p999_ns", "cv");
-        println!("{:>10} {:>10} {:>10} {:>10} {:>10} {:>10} {:>8.3}",
-                 cyc.min, cyc.median, cyc.mean, ns.min, ns.p99, ns.p999, cyc.cv);
+        println!(
+            "{:>10} {:>10} {:>10} {:>10} {:>10} {:>10} {:>8}",
+            "min_cyc", "med_cyc", "mean_cyc", "min_ns", "p99_ns", "p999_ns", "cv"
+        );
+        println!(
+            "{:>10} {:>10} {:>10} {:>10} {:>10} {:>10} {:>8.3}",
+            cyc.min, cyc.median, cyc.mean, ns.min, ns.p99, ns.p999, cyc.cv
+        );
     }
 
     results.push(LatencyResult {
@@ -208,8 +238,10 @@ fn bench_single_op_latency(
 ) {
     if !json {
         println!("\n=== Single-op latency: {} ===", op_name);
-        println!("{:>10} {:>10} {:>10} {:>10} {:>10} {:>10} {:>10} {:>8}",
-                 "size", "min_cyc", "med_cyc", "min_ns", "med_ns", "mean_ns", "p99_ns", "cv");
+        println!(
+            "{:>10} {:>10} {:>10} {:>10} {:>10} {:>10} {:>10} {:>8}",
+            "size", "min_cyc", "med_cyc", "min_ns", "med_ns", "mean_ns", "p99_ns", "cv"
+        );
     }
 
     for &size in sizes {
@@ -252,12 +284,17 @@ fn bench_single_op_latency(
 
         latencies.sort_unstable();
         let cyc = compute_stats(&latencies);
-        let ns_vec: Vec<u64> = latencies.iter().map(|&c| cycles_to_ns(c, tsc_freq)).collect();
+        let ns_vec: Vec<u64> = latencies
+            .iter()
+            .map(|&c| cycles_to_ns(c, tsc_freq))
+            .collect();
         let ns = compute_stats(&ns_vec);
 
         if !json {
-            println!("{:>10} {:>10} {:>10} {:>10} {:>10} {:>10} {:>10} {:>8.3}",
-                     size, cyc.min, cyc.median, ns.min, ns.median, ns.mean, ns.p99, cyc.cv);
+            println!(
+                "{:>10} {:>10} {:>10} {:>10} {:>10} {:>10} {:>10} {:>8.3}",
+                size, cyc.min, cyc.median, ns.min, ns.median, ns.mean, ns.p99, cyc.cv
+            );
         }
 
         results.push(LatencyResult {
@@ -284,15 +321,21 @@ fn bench_batch_latency(
 ) {
     if !json {
         println!("\n=== Batch latency: memmove (size={}) ===", size);
-        println!("{:>8} {:>10} {:>10} {:>10} {:>12}",
-                 "batch_n", "med_cyc", "med_ns", "mean_ns", "per_op_ns");
+        println!(
+            "{:>8} {:>10} {:>10} {:>10} {:>12}",
+            "batch_n", "med_cyc", "med_ns", "mean_ns", "per_op_ns"
+        );
     }
 
     for &batch_n in &[1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024] {
         let mut sub_descs: Vec<DsaHwDesc> = (0..batch_n).map(|_| DsaHwDesc::default()).collect();
-        let mut sub_comps: Vec<DsaCompletionRecord> =
-            (0..batch_n).map(|_| DsaCompletionRecord::default()).collect();
-        debug_assert!(sub_descs.as_ptr() as usize % 64 == 0, "descriptor list not 64-byte aligned");
+        let mut sub_comps: Vec<DsaCompletionRecord> = (0..batch_n)
+            .map(|_| DsaCompletionRecord::default())
+            .collect();
+        debug_assert!(
+            sub_descs.as_ptr() as usize % 64 == 0,
+            "descriptor list not 64-byte aligned"
+        );
 
         let src = vec![0xABu8; size];
         let mut dst = vec![0u8; size];
@@ -338,13 +381,18 @@ fn bench_batch_latency(
 
         latencies.sort_unstable();
         let cyc = compute_stats(&latencies);
-        let ns_vec: Vec<u64> = latencies.iter().map(|&c| cycles_to_ns(c, tsc_freq)).collect();
+        let ns_vec: Vec<u64> = latencies
+            .iter()
+            .map(|&c| cycles_to_ns(c, tsc_freq))
+            .collect();
         let ns = compute_stats(&ns_vec);
         let per_op_ns = ns.median / batch_n as u64;
 
         if !json {
-            println!("{:>8} {:>10} {:>10} {:>10} {:>12}",
-                     batch_n, cyc.median, ns.median, ns.mean, per_op_ns);
+            println!(
+                "{:>8} {:>10} {:>10} {:>10} {:>12}",
+                batch_n, cyc.median, ns.median, ns.mean, per_op_ns
+            );
         }
 
         results.push(LatencyResult {
@@ -370,14 +418,23 @@ fn bench_pipelined_batch(
     results: &mut Vec<ThroughputResult>,
 ) {
     if !json {
-        println!("\n=== Pipelined batch throughput: memmove (size={}) ===", size);
-        println!("{:>6} {:>8} {:>10} {:>14} {:>14}",
-                 "conc", "batch_n", "total_fly", "ops/sec", "bandwidth_MB/s");
+        println!(
+            "\n=== Pipelined batch throughput: memmove (size={}) ===",
+            size
+        );
+        println!(
+            "{:>6} {:>8} {:>10} {:>14} {:>14}",
+            "conc", "batch_n", "total_fly", "ops/sec", "bandwidth_MB/s"
+        );
     }
 
     // Sweep batch sizes × concurrency levels
     for &batch_n in &[4, 8, 16, 32, 64, 128, 256] {
-        for concurrency in [1, 2, 4, 8, 16, 32].iter().copied().filter(|&c| c <= max_concurrency) {
+        for concurrency in [1, 2, 4, 8, 16, 32]
+            .iter()
+            .copied()
+            .filter(|&c| c <= max_concurrency)
+        {
             let total_inflight = concurrency * batch_n;
 
             // Per-slot: each slot owns a batch descriptor + sub-descriptors + sub-completions + buffers
@@ -390,31 +447,40 @@ fn bench_pipelined_batch(
                 dst: Vec<u8>,
             }
 
-            let mut slots: Vec<BatchSlot> = (0..concurrency).map(|_| {
-                let mut dst = vec![0u8; size];
-                // Touch pages
-                for offset in (0..size).step_by(4096) {
-                    dst[offset] = 0xFF;
-                }
-                BatchSlot {
-                    batch_desc: DsaHwDesc::default(),
-                    batch_comp: DsaCompletionRecord::default(),
-                    sub_descs: (0..batch_n).map(|_| DsaHwDesc::default()).collect(),
-                    sub_comps: (0..batch_n).map(|_| DsaCompletionRecord::default()).collect(),
-                    src: vec![0xABu8; size],
-                    dst,
-                }
-            }).collect();
+            let mut slots: Vec<BatchSlot> = (0..concurrency)
+                .map(|_| {
+                    let mut dst = vec![0u8; size];
+                    // Touch pages
+                    for offset in (0..size).step_by(4096) {
+                        dst[offset] = 0xFF;
+                    }
+                    BatchSlot {
+                        batch_desc: DsaHwDesc::default(),
+                        batch_comp: DsaCompletionRecord::default(),
+                        sub_descs: (0..batch_n).map(|_| DsaHwDesc::default()).collect(),
+                        sub_comps: (0..batch_n)
+                            .map(|_| DsaCompletionRecord::default())
+                            .collect(),
+                        src: vec![0xABu8; size],
+                        dst,
+                    }
+                })
+                .collect();
 
             // Helper to fill and submit a batch slot
             let fill_and_submit = |slot: &mut BatchSlot, wq: &WqPortal| {
                 for i in 0..batch_n {
                     reset_completion(&mut slot.sub_comps[i]);
-                    slot.sub_descs[i].fill_memmove(slot.src.as_ptr(), slot.dst.as_mut_ptr(), size as u32);
+                    slot.sub_descs[i].fill_memmove(
+                        slot.src.as_ptr(),
+                        slot.dst.as_mut_ptr(),
+                        size as u32,
+                    );
                     slot.sub_descs[i].set_completion(&mut slot.sub_comps[i]);
                 }
                 reset_completion(&mut slot.batch_comp);
-                slot.batch_desc.fill_batch(slot.sub_descs.as_ptr(), batch_n as u32);
+                slot.batch_desc
+                    .fill_batch(slot.sub_descs.as_ptr(), batch_n as u32);
                 slot.batch_desc.set_completion(&mut slot.batch_comp);
                 unsafe { wq.submit(&slot.batch_desc) };
             };
@@ -452,12 +518,14 @@ fn bench_pipelined_batch(
                             poll_completion(&s.batch_comp);
                         }
                     }
-                    panic!("Pipelined batch failed: status {:#x} (size={}, conc={})",
-                           status, size, concurrency);
+                    panic!(
+                        "Pipelined batch failed: status {:#x} (size={}, conc={})",
+                        status, size, concurrency
+                    );
                 }
                 completed_batches += 1;
 
-                if completed_batches + concurrency <= total_batches + concurrency {
+                if completed_batches + concurrency <= total_batches {
                     fill_and_submit(&mut slots[idx], wq);
                 }
                 idx = (idx + 1) % concurrency;
@@ -477,8 +545,10 @@ fn bench_pipelined_batch(
             let bw_mb = (total_ops * size) as f64 / elapsed.as_secs_f64() / 1e6;
 
             if !json {
-                println!("{:>6} {:>8} {:>10} {:>14.0} {:>14.1}",
-                         concurrency, batch_n, total_inflight, ops_per_sec, bw_mb);
+                println!(
+                    "{:>6} {:>8} {:>10} {:>14.0} {:>14.1}",
+                    concurrency, batch_n, total_inflight, ops_per_sec, bw_mb
+                );
             }
 
             results.push(ThroughputResult {
@@ -511,18 +581,27 @@ fn bench_burst(
         println!("{:>6} {:>14} {:>14}", "burst", "ops/sec", "bandwidth_MB/s");
     }
 
-    for burst_size in [1, 2, 4, 8, 16, 32, 64, 128].iter().copied().filter(|&b| b <= max_burst) {
+    for burst_size in [1, 2, 4, 8, 16, 32, 64, 128]
+        .iter()
+        .copied()
+        .filter(|&b| b <= max_burst)
+    {
         let mut descs: Vec<DsaHwDesc> = (0..burst_size).map(|_| DsaHwDesc::default()).collect();
-        let mut comps: Vec<DsaCompletionRecord> =
-            (0..burst_size).map(|_| DsaCompletionRecord::default()).collect();
+        let mut comps: Vec<DsaCompletionRecord> = (0..burst_size)
+            .map(|_| DsaCompletionRecord::default())
+            .collect();
 
         // Per-op buffers
         let srcs: Vec<Vec<u8>> = (0..burst_size).map(|_| vec![0xABu8; size]).collect();
-        let mut dsts: Vec<Vec<u8>> = (0..burst_size).map(|_| {
-            let mut v = vec![0u8; size];
-            for offset in (0..size).step_by(4096) { v[offset] = 0xFF; }
-            v
-        }).collect();
+        let mut dsts: Vec<Vec<u8>> = (0..burst_size)
+            .map(|_| {
+                let mut v = vec![0u8; size];
+                for offset in (0..size).step_by(4096) {
+                    v[offset] = 0xFF;
+                }
+                v
+            })
+            .collect();
 
         let num_bursts = iterations;
         let start = Instant::now();
@@ -531,7 +610,12 @@ fn bench_burst(
             // Submit all
             for i in 0..burst_size {
                 reset_completion(&mut comps[i]);
-                fill_fn(&mut descs[i], srcs[i].as_ptr(), dsts[i].as_mut_ptr(), size as u32);
+                fill_fn(
+                    &mut descs[i],
+                    srcs[i].as_ptr(),
+                    dsts[i].as_mut_ptr(),
+                    size as u32,
+                );
                 descs[i].set_completion(&mut comps[i]);
                 unsafe { wq.submit(&descs[i]) };
             }
@@ -541,24 +625,34 @@ fn bench_burst(
                 if status == DSA_COMP_PAGE_FAULT_NOBOF {
                     touch_fault_page(&comps[i]);
                     // Drain remaining, then retry whole burst
-                    drain_completions(&comps[i+1..]);
+                    drain_completions(&comps[i + 1..]);
                     // Resubmit this one
                     reset_completion(&mut comps[i]);
-                    fill_fn(&mut descs[i], srcs[i].as_ptr(), dsts[i].as_mut_ptr(), size as u32);
+                    fill_fn(
+                        &mut descs[i],
+                        srcs[i].as_ptr(),
+                        dsts[i].as_mut_ptr(),
+                        size as u32,
+                    );
                     descs[i].set_completion(&mut comps[i]);
                     unsafe { wq.submit(&descs[i]) };
                     // Re-poll from this slot
                     let retry_status = poll_completion(&comps[i]);
                     if retry_status != DSA_COMP_SUCCESS {
                         drain_completions(&comps);
-                        panic!("DSA burst {} failed after page fault retry: status {:#x}", op_name, retry_status);
+                        panic!(
+                            "DSA burst {} failed after page fault retry: status {:#x}",
+                            op_name, retry_status
+                        );
                     }
                     continue;
                 }
                 if status != DSA_COMP_SUCCESS {
-                    drain_completions(&comps[i+1..]);
-                    panic!("DSA burst {} failed: status {:#x} (size={}, burst={})",
-                           op_name, status, size, burst_size);
+                    drain_completions(&comps[i + 1..]);
+                    panic!(
+                        "DSA burst {} failed: status {:#x} (size={}, burst={})",
+                        op_name, status, size, burst_size
+                    );
                 }
             }
         }
@@ -596,13 +690,19 @@ fn bench_burst_batch(
 ) {
     if !json {
         println!("\n=== Burst-batch throughput: memmove (size={}) ===", size);
-        println!("{:>6} {:>8} {:>10} {:>14} {:>14}",
-                 "burst", "batch_n", "total_ops", "ops/sec", "bandwidth_MB/s");
+        println!(
+            "{:>6} {:>8} {:>10} {:>14} {:>14}",
+            "burst", "batch_n", "total_ops", "ops/sec", "bandwidth_MB/s"
+        );
     }
 
     // Sweep batch_n × burst_size
     for &batch_n in &[4, 8, 16, 32, 64, 128, 256] {
-        for burst_size in [1, 2, 4, 8, 16, 32].iter().copied().filter(|&b| b <= max_burst) {
+        for burst_size in [1, 2, 4, 8, 16, 32]
+            .iter()
+            .copied()
+            .filter(|&b| b <= max_burst)
+        {
             struct BatchSlot {
                 batch_desc: DsaHwDesc,
                 batch_comp: DsaCompletionRecord,
@@ -612,29 +712,38 @@ fn bench_burst_batch(
                 dst: Vec<u8>,
             }
 
-            let mut slots: Vec<BatchSlot> = (0..burst_size).map(|_| {
-                let mut dst = vec![0u8; size];
-                for offset in (0..size).step_by(4096) {
-                    dst[offset] = 0xFF;
-                }
-                BatchSlot {
-                    batch_desc: DsaHwDesc::default(),
-                    batch_comp: DsaCompletionRecord::default(),
-                    sub_descs: (0..batch_n).map(|_| DsaHwDesc::default()).collect(),
-                    sub_comps: (0..batch_n).map(|_| DsaCompletionRecord::default()).collect(),
-                    src: vec![0xABu8; size],
-                    dst,
-                }
-            }).collect();
+            let mut slots: Vec<BatchSlot> = (0..burst_size)
+                .map(|_| {
+                    let mut dst = vec![0u8; size];
+                    for offset in (0..size).step_by(4096) {
+                        dst[offset] = 0xFF;
+                    }
+                    BatchSlot {
+                        batch_desc: DsaHwDesc::default(),
+                        batch_comp: DsaCompletionRecord::default(),
+                        sub_descs: (0..batch_n).map(|_| DsaHwDesc::default()).collect(),
+                        sub_comps: (0..batch_n)
+                            .map(|_| DsaCompletionRecord::default())
+                            .collect(),
+                        src: vec![0xABu8; size],
+                        dst,
+                    }
+                })
+                .collect();
 
             let fill_and_submit = |slot: &mut BatchSlot, wq: &WqPortal| {
                 for i in 0..batch_n {
                     reset_completion(&mut slot.sub_comps[i]);
-                    slot.sub_descs[i].fill_memmove(slot.src.as_ptr(), slot.dst.as_mut_ptr(), size as u32);
+                    slot.sub_descs[i].fill_memmove(
+                        slot.src.as_ptr(),
+                        slot.dst.as_mut_ptr(),
+                        size as u32,
+                    );
                     slot.sub_descs[i].set_completion(&mut slot.sub_comps[i]);
                 }
                 reset_completion(&mut slot.batch_comp);
-                slot.batch_desc.fill_batch(slot.sub_descs.as_ptr(), batch_n as u32);
+                slot.batch_desc
+                    .fill_batch(slot.sub_descs.as_ptr(), batch_n as u32);
                 slot.batch_desc.set_completion(&mut slot.batch_comp);
                 unsafe { wq.submit(&slot.batch_desc) };
             };
@@ -671,8 +780,10 @@ fn bench_burst_batch(
                                 poll_completion(&s2.batch_comp);
                             }
                         }
-                        panic!("Burst-batch failed: status {:#x} (size={}, burst={})",
-                               status, size, burst_size);
+                        panic!(
+                            "Burst-batch failed: status {:#x} (size={}, burst={})",
+                            status, size, burst_size
+                        );
                     }
                 }
             }
@@ -683,8 +794,14 @@ fn bench_burst_batch(
             let bw_mb = (total_ops * size) as f64 / elapsed.as_secs_f64() / 1e6;
 
             if !json {
-                println!("{:>6} {:>8} {:>10} {:>14.0} {:>14.1}",
-                         burst_size, batch_n, burst_size * batch_n, ops_per_sec, bw_mb);
+                println!(
+                    "{:>6} {:>8} {:>10} {:>14.0} {:>14.1}",
+                    burst_size,
+                    batch_n,
+                    burst_size * batch_n,
+                    ops_per_sec,
+                    bw_mb
+                );
             }
 
             results.push(ThroughputResult {
@@ -713,31 +830,46 @@ fn bench_sliding_window(
     fill_fn: impl Fn(&mut DsaHwDesc, *const u8, *mut u8, u32),
 ) {
     if !json {
-        println!("\n=== Sliding window throughput: {} (size={}) ===", op_name, size);
+        println!(
+            "\n=== Sliding window throughput: {} (size={}) ===",
+            op_name, size
+        );
         println!("{:>6} {:>14} {:>14}", "conc", "ops/sec", "bandwidth_MB/s");
     }
 
-    for concurrency in [1, 2, 4, 8, 16, 32, 64, 128].iter().copied().filter(|&c| c <= max_concurrency) {
+    for concurrency in [1, 2, 4, 8, 16, 32, 64, 128]
+        .iter()
+        .copied()
+        .filter(|&c| c <= max_concurrency)
+    {
         let mut descs: Vec<DsaHwDesc> = (0..concurrency).map(|_| DsaHwDesc::default()).collect();
-        let mut comps: Vec<DsaCompletionRecord> =
-            (0..concurrency).map(|_| DsaCompletionRecord::default()).collect();
+        let mut comps: Vec<DsaCompletionRecord> = (0..concurrency)
+            .map(|_| DsaCompletionRecord::default())
+            .collect();
 
         // Per-op buffers — each slot has its own src/dst.
         // Touch every page to avoid DSA page faults (DSA_COMP_PAGE_FAULT_NOBOF).
         let srcs: Vec<Vec<u8>> = (0..concurrency).map(|_| vec![0xABu8; size]).collect();
-        let mut dsts: Vec<Vec<u8>> = (0..concurrency).map(|_| {
-            let mut v = vec![0u8; size];
-            // Force page mapping by writing every page
-            for offset in (0..size).step_by(4096) {
-                v[offset] = 0xFF;
-            }
-            v
-        }).collect();
+        let mut dsts: Vec<Vec<u8>> = (0..concurrency)
+            .map(|_| {
+                let mut v = vec![0u8; size];
+                // Force page mapping by writing every page
+                for offset in (0..size).step_by(4096) {
+                    v[offset] = 0xFF;
+                }
+                v
+            })
+            .collect();
 
         // Pre-fill and submit initial window
         for i in 0..concurrency {
             reset_completion(&mut comps[i]);
-            fill_fn(&mut descs[i], srcs[i].as_ptr(), dsts[i].as_mut_ptr(), size as u32);
+            fill_fn(
+                &mut descs[i],
+                srcs[i].as_ptr(),
+                dsts[i].as_mut_ptr(),
+                size as u32,
+            );
             descs[i].set_completion(&mut comps[i]);
             unsafe { wq.submit(&descs[i]) };
         }
@@ -751,21 +883,33 @@ fn bench_sliding_window(
             if status == DSA_COMP_PAGE_FAULT_NOBOF {
                 touch_fault_page(&comps[slot]);
                 reset_completion(&mut comps[slot]);
-                fill_fn(&mut descs[slot], srcs[slot].as_ptr(), dsts[slot].as_mut_ptr(), size as u32);
+                fill_fn(
+                    &mut descs[slot],
+                    srcs[slot].as_ptr(),
+                    dsts[slot].as_mut_ptr(),
+                    size as u32,
+                );
                 descs[slot].set_completion(&mut comps[slot]);
                 unsafe { wq.submit(&descs[slot]) };
                 continue;
             }
             if status != DSA_COMP_SUCCESS {
                 drain_completions(&comps);
-                panic!("DSA {} failed: status {:#x} (size={}, conc={})",
-                       op_name, status, size, concurrency);
+                panic!(
+                    "DSA {} failed: status {:#x} (size={}, conc={})",
+                    op_name, status, size, concurrency
+                );
             }
             completed += 1;
 
             if completed + concurrency <= iterations + concurrency {
                 reset_completion(&mut comps[slot]);
-                fill_fn(&mut descs[slot], srcs[slot].as_ptr(), dsts[slot].as_mut_ptr(), size as u32);
+                fill_fn(
+                    &mut descs[slot],
+                    srcs[slot].as_ptr(),
+                    dsts[slot].as_mut_ptr(),
+                    size as u32,
+                );
                 descs[slot].set_completion(&mut comps[slot]);
                 unsafe { wq.submit(&descs[slot]) };
             }
@@ -798,7 +942,12 @@ fn bench_sliding_window(
 // Software baselines
 // ============================================================================
 
-fn bench_software_baselines(sizes: &[usize], iterations: usize, json: bool, results: &mut Vec<LatencyResult>) {
+fn bench_software_baselines(
+    sizes: &[usize],
+    iterations: usize,
+    json: bool,
+    results: &mut Vec<LatencyResult>,
+) {
     if !json {
         println!("\n=== Software baselines ===");
     }
@@ -806,7 +955,10 @@ fn bench_software_baselines(sizes: &[usize], iterations: usize, json: bool, resu
     // memcpy
     if !json {
         println!("\n--- memcpy (software) ---");
-        println!("{:>10} {:>10} {:>10} {:>14}", "size", "med_ns", "p99_ns", "bandwidth_MB/s");
+        println!(
+            "{:>10} {:>10} {:>10} {:>14}",
+            "size", "med_ns", "p99_ns", "bandwidth_MB/s"
+        );
     }
     for &size in sizes {
         let src = vec![0xABu8; size];
@@ -825,14 +977,17 @@ fn bench_software_baselines(sizes: &[usize], iterations: usize, json: bool, resu
         let bw = size as f64 / (stats.median as f64) * 1000.0;
 
         if !json {
-            println!("{:>10} {:>10} {:>10} {:>14.1}", size, stats.median, stats.p99, bw);
+            println!(
+                "{:>10} {:>10} {:>10} {:>14.1}",
+                size, stats.median, stats.p99, bw
+            );
         }
 
         results.push(LatencyResult {
             benchmark: "sw_memcpy".into(),
             size: Some(size),
             batch_size: None,
-            cycles: stats.clone(),  // SW uses ns directly, cycles field holds ns
+            cycles: stats.clone(), // SW uses ns directly, cycles field holds ns
             ns: stats,
         });
     }
@@ -840,7 +995,10 @@ fn bench_software_baselines(sizes: &[usize], iterations: usize, json: bool, resu
     // CRC-32C (SSE4.2)
     if !json {
         println!("\n--- CRC-32C (SSE4.2) ---");
-        println!("{:>10} {:>10} {:>10} {:>14}", "size", "med_ns", "p99_ns", "bandwidth_MB/s");
+        println!(
+            "{:>10} {:>10} {:>10} {:>14}",
+            "size", "med_ns", "p99_ns", "bandwidth_MB/s"
+        );
     }
     for &size in sizes {
         let data = vec![0xABu8; size];
@@ -858,7 +1016,10 @@ fn bench_software_baselines(sizes: &[usize], iterations: usize, json: bool, resu
         let bw = size as f64 / (stats.median as f64) * 1000.0;
 
         if !json {
-            println!("{:>10} {:>10} {:>10} {:>14.1}", size, stats.median, stats.p99, bw);
+            println!(
+                "{:>10} {:>10} {:>10} {:>14.1}",
+                size, stats.median, stats.p99, bw
+            );
         }
 
         results.push(LatencyResult {
@@ -882,7 +1043,11 @@ fn main() {
     // Thread pinning
     let core = args.pin_core.unwrap_or_else(|| current_core());
     match pin_to_core(core) {
-        Ok(c) => if !args.json { println!("Pinned to core {}", c) },
+        Ok(c) => {
+            if !args.json {
+                println!("Pinned to core {}", c)
+            }
+        }
         Err(e) => eprintln!("WARNING: failed to pin to core {}: {}", core, e),
     }
 
@@ -895,7 +1060,9 @@ fn main() {
         println!("TSC frequency: {:.3} GHz", tsc_freq as f64 / 1e9);
         println!("Sizes: {:?}", sizes);
         println!("Iterations: {}", args.iterations);
-        if args.cold { println!("Mode: cold-cache (clflush between iterations)"); }
+        if args.cold {
+            println!("Mode: cold-cache (clflush between iterations)");
+        }
         if let Some(node) = cpu_numa_node(core) {
             println!("CPU NUMA node: {}", node);
         }
@@ -932,8 +1099,15 @@ fn main() {
     let wq = match WqPortal::open(&args.device) {
         Ok(wq) => {
             if !args.json {
-                println!("\nOpened WQ: {} ({})", args.device.display(),
-                         if wq.is_dedicated() { "dedicated" } else { "shared" });
+                println!(
+                    "\nOpened WQ: {} ({})",
+                    args.device.display(),
+                    if wq.is_dedicated() {
+                        "dedicated"
+                    } else {
+                        "shared"
+                    }
+                );
                 if let Some(node) = device_numa_node(&args.device) {
                     println!("DSA NUMA node: {}", node);
                 }
@@ -951,51 +1125,133 @@ fn main() {
     };
 
     // NOOP — pure submission overhead
-    bench_noop_latency(&wq, args.iterations, tsc_freq, args.json, &mut latency_results);
+    bench_noop_latency(
+        &wq,
+        args.iterations,
+        tsc_freq,
+        args.json,
+        &mut latency_results,
+    );
 
     // Single-op latency: memmove
-    bench_single_op_latency(&wq, "memmove", &sizes, args.iterations, tsc_freq, args.cold, args.json, &mut latency_results,
-        |desc, src, dst, size| { desc.fill_memmove(src, dst, size); });
+    bench_single_op_latency(
+        &wq,
+        "memmove",
+        &sizes,
+        args.iterations,
+        tsc_freq,
+        args.cold,
+        args.json,
+        &mut latency_results,
+        |desc, src, dst, size| {
+            desc.fill_memmove(src, dst, size);
+        },
+    );
 
     // Single-op latency: crc_gen
-    bench_single_op_latency(&wq, "crc_gen", &sizes, args.iterations, tsc_freq, args.cold, args.json, &mut latency_results,
-        |desc, src, _dst, size| { desc.fill_crc_gen(src, size, 0); });
+    bench_single_op_latency(
+        &wq,
+        "crc_gen",
+        &sizes,
+        args.iterations,
+        tsc_freq,
+        args.cold,
+        args.json,
+        &mut latency_results,
+        |desc, src, _dst, size| {
+            desc.fill_crc_gen(src, size, 0);
+        },
+    );
 
     // Single-op latency: copy_crc
-    bench_single_op_latency(&wq, "copy_crc", &sizes, args.iterations, tsc_freq, args.cold, args.json, &mut latency_results,
-        |desc, src, dst, size| { desc.fill_copy_crc(src, dst, size, 0); });
+    bench_single_op_latency(
+        &wq,
+        "copy_crc",
+        &sizes,
+        args.iterations,
+        tsc_freq,
+        args.cold,
+        args.json,
+        &mut latency_results,
+        |desc, src, dst, size| {
+            desc.fill_copy_crc(src, dst, size, 0);
+        },
+    );
 
     // Batch latency
-    bench_batch_latency(&wq, 4096, args.iterations, tsc_freq, args.json, &mut latency_results);
+    bench_batch_latency(
+        &wq,
+        4096,
+        args.iterations,
+        tsc_freq,
+        args.json,
+        &mut latency_results,
+    );
 
     // Pipelined batch: memmove (representative sizes)
-    for &size in &[64, 256, 4096] {
-        if sizes.contains(&size) {
-            bench_pipelined_batch(&wq, size, args.iterations, args.max_concurrency, args.json, &mut throughput_results);
-        }
+    for &size in sizes.iter() {
+        bench_pipelined_batch(
+            &wq,
+            size,
+            args.iterations,
+            args.max_concurrency,
+            args.json,
+            &mut throughput_results,
+        );
     }
 
     // Burst: memmove (all requested sizes)
     for &size in &sizes {
-        bench_burst(&wq, "memmove", size, args.iterations, args.max_concurrency, args.json, &mut throughput_results,
-            |desc, src, dst, sz| desc.fill_memmove(src, dst, sz));
+        bench_burst(
+            &wq,
+            "memmove",
+            size,
+            args.iterations,
+            args.max_concurrency,
+            args.json,
+            &mut throughput_results,
+            |desc, src, dst, sz| desc.fill_memmove(src, dst, sz),
+        );
     }
 
     // Burst-batch: memmove (all requested sizes)
     for &size in &sizes {
-        bench_burst_batch(&wq, size, args.iterations, args.max_concurrency, args.json, &mut throughput_results);
+        bench_burst_batch(
+            &wq,
+            size,
+            args.iterations,
+            args.max_concurrency,
+            args.json,
+            &mut throughput_results,
+        );
     }
 
     // Sliding window: memmove (all requested sizes)
     for &size in &sizes {
-        bench_sliding_window(&wq, "memmove", size, args.iterations, args.max_concurrency, args.json, &mut throughput_results,
-            |desc, src, dst, sz| desc.fill_memmove(src, dst, sz));
+        bench_sliding_window(
+            &wq,
+            "memmove",
+            size,
+            args.iterations,
+            args.max_concurrency,
+            args.json,
+            &mut throughput_results,
+            |desc, src, dst, sz| desc.fill_memmove(src, dst, sz),
+        );
     }
 
     // Sliding window: copy_crc (all requested sizes)
     for &size in &sizes {
-        bench_sliding_window(&wq, "copy_crc", size, args.iterations, args.max_concurrency, args.json, &mut throughput_results,
-            |desc, src, dst, sz| desc.fill_copy_crc(src, dst, sz, 0));
+        bench_sliding_window(
+            &wq,
+            "copy_crc",
+            size,
+            args.iterations,
+            args.max_concurrency,
+            args.json,
+            &mut throughput_results,
+            |desc, src, dst, sz| desc.fill_copy_crc(src, dst, sz, 0),
+        );
     }
 
     if args.json {

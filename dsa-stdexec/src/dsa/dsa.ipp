@@ -57,6 +57,13 @@ DsaEngine<Submitter, QueueTemplate>::DsaEngine(bool start_poller, size_t batch_s
           continue;
         }
 
+        // DSA_WQ_MODE env: "shared" or "dedicated" to filter WQ selection
+        const char *want_mode = std::getenv("DSA_WQ_MODE");
+        if (want_mode) {
+          if (std::string(want_mode) == "shared" && mode != ACCFG_WQ_SHARED) continue;
+          if (std::string(want_mode) == "dedicated" && mode != ACCFG_WQ_DEDICATED) continue;
+        }
+
         void *portal = map_wq(wq);
         if (portal == MAP_FAILED) {
           continue;
@@ -65,6 +72,8 @@ DsaEngine<Submitter, QueueTemplate>::DsaEngine(bool start_poller, size_t batch_s
         wq_ = wq;
         wq_portal_ = portal;
         mode_ = mode;
+        fmt::println(stderr, "Selected WQ: {} (mode={})",
+                     accfg_wq_get_devname(wq), mode == ACCFG_WQ_DEDICATED ? "dedicated" : "shared");
         break;
       }
 

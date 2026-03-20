@@ -168,7 +168,6 @@ impl DsaHwDesc {
 
 pub struct WqPortal {
     portal: *mut u8,
-    _fd: std::fs::File,
     dedicated: bool,
 }
 
@@ -202,7 +201,6 @@ impl WqPortal {
 
         Ok(Self {
             portal: portal as *mut u8,
-            _fd: file,
             dedicated,
         })
     }
@@ -233,16 +231,17 @@ impl WqPortal {
     /// Same requirements as submit_movdir64b.
     #[inline(always)]
     pub unsafe fn submit_enqcmd(&self, desc: &DsaHwDesc) -> bool {
-        let result: u8;
+        let mut retry: u8;
         core::arch::asm!(
-            "enqcmd ({src}), {dst}",
-            "setz {result}",
+            "enqcmd {dst}, [{src}]", // Intel syntax: dst, [src]
+            "setnz {result}",        // ZF=0 (success) -> result=1
             dst = in(reg) self.portal,
-            src = in(reg) desc as *const DsaHwDesc,
-            result = out(reg_byte) result,
-            options(nostack, preserves_flags, att_syntax),
+            src = in(reg) desc,
+            result = out(reg_byte) retry,
+            // Removed preserves_flags because we modify ZF
+            options(nostack),
         );
-        result != 0
+        retry != 0
     }
 
     /// Submit a descriptor using the appropriate method for this WQ type.
@@ -254,7 +253,7 @@ impl WqPortal {
         if self.dedicated {
             self.submit_movdir64b(desc);
         } else {
-            // Retry until accepted
+            // Retry until accepted (shared WQ may reject under contention)
             while !self.submit_enqcmd(desc) {
                 core::hint::spin_loop();
             }
@@ -400,7 +399,10 @@ fn detect_wq_mode(dev_path: &Path) -> bool {
     let filename = match dev_path.file_name().and_then(|f| f.to_str()) {
         Some(f) => f,
         None => {
-            eprintln!("WARNING: cannot parse device name from {:?}, assuming dedicated WQ", dev_path);
+            eprintln!(
+                "WARNING: cannot parse device name from {:?}, assuming dedicated WQ",
+                dev_path
+            );
             return true;
         }
     };
