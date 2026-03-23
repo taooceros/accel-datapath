@@ -1,8 +1,11 @@
 [package]
-name = "dsa-bindings"
+name = "idxd-bindings"
 version = "0.1.0"
 edition = "2021"
-description = "Low-level Intel DSA hardware bindings — descriptors, WQ portal, submit/poll, page fault handling"
+description = "Low-level Intel IDXD hardware bindings — handwritten DSA path plus bindgen-backed idxd UAPI"
 
 [dependencies]
 libc = "0.2"
+
+[build-dependencies]
+bindgen = "0.69"

@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use hw_eval::dsa::*;
+use hw_eval::sw::*;
 
 fn bench_sw_memcpy(c: &mut Criterion) {
     let mut group = c.benchmark_group("sw_memcpy");

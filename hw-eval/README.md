@@ -18,7 +18,9 @@ cargo bench
 ## CLI Options
 
 ```
---device, -d <PATH>      WQ device path (default: /dev/dsa/wq0.0)
+--accel <dsa|iax>       Accelerator backend (default: dsa)
+--device, -d <PATH>      WQ device path (default: /dev/dsa/wq0.0 for dsa,
+                         /dev/iax/wq1.0 for iax)
 --sizes, -s <LIST>       Message sizes in bytes, comma-separated
 --iterations, -i <N>     Iterations per measurement (default: 10000)
 --max-concurrency, -m <N> Max sliding window concurrency (default: 128)
@@ -42,6 +44,14 @@ cargo bench
 | **burst** | Submit N ops, wait all, repeat (no pipelining overlap) |
 | **sw_memcpy** | Software memcpy baseline |
 | **sw_crc32c** | Software CRC-32C (SSE4.2) baseline |
+
+Backend notes:
+- `dsa`: runs the full suite above.
+- `iax`: runs `noop` plus `crc64` latency, burst throughput, and sliding-window
+  throughput. The IAX path does not use the old `memmove` benchmark anymore.
+- `iax` descriptor/completion layouts are sourced through the sibling
+  `idxd-bindings` crate, which runs bindgen against the local kernel
+  `linux/idxd.h` at build time.
 
 ## Timing
 
@@ -74,7 +84,10 @@ Requires: `pip install matplotlib numpy`
 ## Structure
 
 ```
-src/dsa.rs                        DSA descriptors, WQ portal, inline asm, timing, NUMA
+src/submit.rs                     Shared WQ submission and low-level polling/timing/topology helpers
+src/dsa.rs                        DSA-specific descriptors/completions/opcodes/helpers
+src/iax.rs                        IAX-specific descriptors/completions/opcodes/helpers
+src/sw.rs                         Software memcpy/CRC baselines
 src/main.rs                       All benchmarks, CLI, JSON output
 benches/dsa_raw.rs                Criterion benchmarks (SW baselines only)
 plot_results.py                   Matplotlib graphing script
@@ -83,5 +96,9 @@ Cargo.toml
 
 ## Dependencies
 
-Managed via Cargo: libc, clap, serde, serde_json, criterion (dev).
+Managed via Cargo: libc, clap, serde, serde_json, criterion (dev), and the
+sibling `idxd-bindings` crate for IAX UAPI access.
+Build-time for IAX bindings: `idxd-bindings` uses `bindgen` plus a working
+`libclang`, reading `/usr/include/linux/idxd.h` by default (override with
+`IDXD_HEADER`).
 Graphing: matplotlib, numpy (Python 3).

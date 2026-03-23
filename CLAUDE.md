@@ -1,11 +1,11 @@
 # CLAUDE.md
 
-Guidance for Claude Code working in this repository.
+Guidance for working in this repository.
 
 ## Workflow Rules
 
-- **Plans**: Write to `plan/YYYY-MM-DD/<topic>.md` before non-trivial changes.
-- **Reports**: Write findings to `report/<descriptive_name>.md`.
+- **Plans**: Write to `plan/YYYY-MM-DD/NN.<topic>.<state>.md` before non-trivial changes.
+- **Reports**: Write findings to `report/NNN.<descriptive_name>.md`.
 - **Remarks**: Write concise, standalone insights to `remark/NNN_<topic>.md`. Each remark captures one interesting finding with data, explanation, and implication. Number sequentially. Reference source report.
 - **Early Hypotheses**: Deliver a preliminary analysis within the first 30 seconds. State what you've found so far if you need more time.
 - **Read before modify**: Read the module's co-located README before changing any module. They document patterns, conventions, and extension steps.
@@ -32,9 +32,14 @@ Each has its own README with build instructions, structure, and dependencies:
 | [`accel-rpc/`](accel-rpc/README.md) | Accelerator-driven gRPC using Tonic (Rust/Cargo) |
 | [`hw-eval/`](hw-eval/README.md) | Raw hardware performance evaluation (Rust/Cargo) |
 
-Shared root resources: `tools/` (dsa_launcher), `dsa_architecture_spec.md` (hardware spec), `dsa-config/` (accel-config), `report/`, `plan/`, `remark/`, `docs/`, `devenv.nix`.
+Shared root resources: `tools/` (dsa_launcher), `dsa_architecture_spec.md` (dsa hardware spec), `iax(iaa)_architecture_spec.md` (iax/iaa hardware spec), `dsa-config/` (accel-config), `report/`, `plan/`, `remark/`, `docs/`, `devenv.nix`.
 
 ## Code Rules
 
 - Match CODE to SPEC, not spec to code, unless told otherwise.
 - In multi-agent setups, minimize idle messages. Only send updates on meaningful progress or when blocked.
+
+## Execution
+
+Run everything in a devenv shell;
+Run hardware related code with launcher;

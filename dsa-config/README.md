@@ -6,6 +6,7 @@ Pre-made `accel-config` JSON configuration files for Intel DSA devices.
 
 | File | Description |
 |------|-------------|
+| `iax-hw-eval.conf` | IAX queue setup for hw-eval (`iax1/wq1.0` and `iax3/wq3.0`) |
 | `1-engine.conf` | 1 engine per work queue |
 | `2-engine.conf` | 2 engines per work queue |
 | `3-engine.conf` | 3 engines per work queue |
@@ -15,6 +16,13 @@ The naming convention is `N-engine.conf`, where N is the number of engines
 assigned to the work queue. More engines allow higher hardware parallelism.
 
 ## How to Apply
+
+```bash
+accel-config load-config iax-hw-eval.conf
+```
+
+This loads IAX queues for `iax1` and `iax3` in dedicated mode with one engine
+per work queue for hw-eval testing.
 
 ```bash
 accel-config load-config 2-engine.conf

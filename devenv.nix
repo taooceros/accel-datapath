@@ -5,6 +5,10 @@
   inputs,
   ...
 }:
+
+let
+  pkgs-stable = import inputs.nixpkgs-stable { system = pkgs.stdenv.system; };
+in
 {
 
   languages = {
@@ -55,16 +59,18 @@
     samply
     mold-wrapped
     linuxPackages.perf
-    pkgs.glibc.out
-    pkgs.glibc.debug
+    glibc.out
+    glibc.debug
     numactl
     libcap
     doctest
+    clang
+    libclang
     # Python packages for benchmark visualization
     python3Packages.pandas
     python3Packages.matplotlib
     python3Packages.numpy
-    python3Packages.plotly
+    pkgs-stable.python3Packages.plotly
   ];
 
   # 1. Force C/C++ Compiler Flags
@@ -72,7 +78,7 @@
   # -fno-omit-frame-pointer: Crucial for 'perf' to unwind stacks correctly
   env.CFLAGS = "-g -fno-omit-frame-pointer";
   env.CXXFLAGS = "-g -fno-omit-frame-pointer";
-
+  env.LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
   env.NIX_ENFORCE_NO_NATIVE = "0";
 
   # https://devenv.sh/languages/
@@ -94,7 +100,7 @@
     if [ ! -f "$LAUNCHER" ]; then
       echo "Building dsa_launcher..."
       mkdir -p "$BUILD_DIR"
-      gcc -o "$LAUNCHER" "$TOOLS_DIR/dsa_launcher.c" -lcap
+      gcc -o "$LAUNCHER" "$TOOLS_DIR/dsa_launcher.c"
       sudo setcap cap_sys_rawio+eip "$LAUNCHER"
     fi
 
