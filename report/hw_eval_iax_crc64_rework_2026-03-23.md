@@ -28,9 +28,10 @@ The local IAA architecture specification lists these relevant IAX operations:
 It does not list `memmove` as an IAX operation, so the previous hardware path
 was not a defensible target for `hw-eval`.
 
-## Notes
+## Validation
 
 - The new IAX data-path benchmark uses `CRC64` with a fixed T10-DIF
   polynomial.
-- This change has not been followed by a build or hardware run in this
-  session.
+- Targeted unit tests passed in `devenv`.
+- `cargo build --release` completed successfully.
+- A hardware-backed smoke test completed successfully on `/dev/iax/wq1.0`.

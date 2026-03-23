@@ -13,6 +13,23 @@ Added pure unit tests for the IAX CRC64 helper path in `hw-eval`.
 - Verified the `fill_crc64()` descriptor builder populates the expected opcode,
   transfer size, source address, and CRC polynomial field.
 
+## Command run
+
+```bash
+devenv shell -- bash -lc 'cd hw-eval && cargo test crc64 -- --nocapture'
+```
+
+## Result
+
+```text
+running 3 tests
+test iax::tests::fill_crc64_populates_expected_descriptor_fields ... ok
+test iax::tests::completion_crc64_reads_64_bit_field_at_offset_32 ... ok
+test iax::tests::crc64_t10dif_field_packs_crc_in_msb_bits ... ok
+
+test result: ok. 3 passed; 0 failed
+```
+
 ## Why
 
 The hardware smoke test validates acceptance and completion of the IAX

@@ -28,3 +28,14 @@ IAA architecture spec, while keeping `iax` as the code and CLI name.
 2. Replace the IAX `memmove` benchmark path with a `CRC64` benchmark path.
 3. Keep `noop` as the pure submission/completion benchmark for IAX.
 4. Update the README and record the implementation change in a report.
+
+## Outcome
+
+- The IAX backend now benchmarks spec-aligned `CRC64` instead of non-spec `memmove`.
+- The new path keeps `noop` for pure submission/completion measurement.
+- Targeted CRC64 unit tests passed in `devenv`.
+- The hardware-backed smoke test passed on `/dev/iax/wq1.0`.
+
+## Conclusion
+
+The CRC64 rework is implemented and validated for the scope of this plan.

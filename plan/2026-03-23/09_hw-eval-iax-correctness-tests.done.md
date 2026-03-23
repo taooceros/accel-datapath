@@ -26,3 +26,9 @@ has a hardware-independent correctness check in addition to the smoke test.
    - the completion-record CRC field extraction helper;
    - the IAX CRC64 descriptor builder.
 3. Run targeted unit tests inside `devenv`.
+
+## Outcome
+
+- Ran `devenv shell -- bash -lc 'cd hw-eval && cargo test crc64 -- --nocapture'`.
+- Passed 3 targeted unit tests covering the CRC field packing, completion-record extraction, and descriptor builder.
+- Recorded the validation result in `report/hw_eval_iax_crc64_unit_tests_2026-03-23.md`.
