@@ -43,3 +43,7 @@ Shared root resources: `tools/` (dsa_launcher), `dsa_architecture_spec.md` (dsa 
 
 Run everything in a devenv shell;
 Run hardware related code with launcher;
+
+## Remark
+
+Don't check for user for every steps; Only check for user if you have thought too long or you are blocked or completed.
