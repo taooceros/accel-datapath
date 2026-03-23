@@ -19,7 +19,8 @@ cargo bench
 
 ```
 --accel <dsa|iax>       Accelerator backend (default: dsa)
---device, -d <PATH>      WQ device path (default: /dev/dsa/wq0.0)
+--device, -d <PATH>      WQ device path (default: /dev/dsa/wq0.0 for dsa,
+                         /dev/iax/wq1.0 for iax)
 --sizes, -s <LIST>       Message sizes in bytes, comma-separated
 --iterations, -i <N>     Iterations per measurement (default: 10000)
 --max-concurrency, -m <N> Max sliding window concurrency (default: 128)

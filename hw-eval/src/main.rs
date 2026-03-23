@@ -27,9 +27,9 @@ struct Args {
     #[arg(long, value_enum, default_value = "dsa")]
     accel: AccelKind,
 
-    /// WQ device path (e.g., /dev/dsa/wq0.0)
-    #[arg(short, long, default_value = "/dev/dsa/wq0.0")]
-    device: PathBuf,
+    /// WQ device path (default: /dev/dsa/wq0.0 for dsa, /dev/iax/wq1.0 for iax)
+    #[arg(short, long)]
+    device: Option<PathBuf>,
 
     /// Message sizes to test (bytes, comma-separated)
     #[arg(
@@ -76,6 +76,13 @@ impl AccelKind {
             Self::Dsa => "dsa",
             Self::Iax => "iax",
         }
+    }
+}
+
+fn default_device(accel: AccelKind) -> PathBuf {
+    match accel {
+        AccelKind::Dsa => PathBuf::from("/dev/dsa/wq0.0"),
+        AccelKind::Iax => PathBuf::from("/dev/iax/wq1.0"),
     }
 }
 
@@ -865,6 +872,7 @@ fn bench_sliding_window(
         .copied()
         .filter(|&c| c <= max_concurrency)
     {
+        let window = concurrency.min(iterations);
         let mut descs: Vec<DsaHwDesc> = (0..concurrency).map(|_| DsaHwDesc::default()).collect();
         let mut comps: Vec<DsaCompletionRecord> = (0..concurrency)
             .map(|_| DsaCompletionRecord::default())
@@ -885,7 +893,7 @@ fn bench_sliding_window(
             .collect();
 
         // Pre-fill and submit initial window
-        for i in 0..concurrency {
+        for i in 0..window {
             reset_completion(&mut comps[i]);
             fill_fn(
                 &mut descs[i],
@@ -898,6 +906,7 @@ fn bench_sliding_window(
         }
 
         let start = Instant::now();
+        let mut issued = window;
         let mut completed = 0usize;
         let mut slot = 0usize;
 
@@ -925,7 +934,7 @@ fn bench_sliding_window(
             }
             completed += 1;
 
-            if completed + concurrency <= iterations + concurrency {
+            if issued < iterations {
                 reset_completion(&mut comps[slot]);
                 fill_fn(
                     &mut descs[slot],
@@ -935,9 +944,10 @@ fn bench_sliding_window(
                 );
                 descs[slot].set_completion(&mut comps[slot]);
                 unsafe { wq.submit(&descs[slot]) };
+                issued += 1;
             }
 
-            slot = (slot + 1) % concurrency;
+            slot = (slot + 1) % window;
         }
 
         // Drain remaining
@@ -1241,6 +1251,7 @@ fn bench_sliding_window_iax_crc64(
         .copied()
         .filter(|&c| c <= max_concurrency)
     {
+        let window = concurrency.min(iterations);
         let mut descs: Vec<iax::IaxHwDesc> = (0..concurrency)
             .map(|_| iax::IaxHwDesc::default())
             .collect();
@@ -1249,7 +1260,7 @@ fn bench_sliding_window_iax_crc64(
             .collect();
         let srcs: Vec<Vec<u8>> = (0..concurrency).map(|_| vec![0xABu8; size]).collect();
 
-        for i in 0..concurrency {
+        for i in 0..window {
             iax::reset_completion(&mut comps[i]);
             descs[i].fill_crc64(srcs[i].as_ptr(), size as u32);
             descs[i].set_completion(&mut comps[i]);
@@ -1257,6 +1268,7 @@ fn bench_sliding_window_iax_crc64(
         }
 
         let start = Instant::now();
+        let mut issued = window;
         let mut completed = 0usize;
         let mut slot = 0usize;
 
@@ -1283,14 +1295,15 @@ fn bench_sliding_window_iax_crc64(
             }
             completed += 1;
 
-            if completed + concurrency <= iterations + concurrency {
+            if issued < iterations {
                 iax::reset_completion(&mut comps[slot]);
                 descs[slot].fill_crc64(srcs[slot].as_ptr(), size as u32);
                 descs[slot].set_completion(&mut comps[slot]);
                 unsafe { wq.submit_iax(&descs[slot]) };
+                issued += 1;
             }
 
-            slot = (slot + 1) % concurrency;
+            slot = (slot + 1) % window;
         }
 
         iax::drain_completions(&comps);
@@ -1414,6 +1427,10 @@ fn bench_software_baselines(
 fn main() {
     let args = Args::parse();
     let sizes = parse_sizes(&args.sizes);
+    let device = args
+        .device
+        .clone()
+        .unwrap_or_else(|| default_device(args.accel));
 
     // Thread pinning
     let core = args.pin_core.unwrap_or_else(|| current_core());
@@ -1462,7 +1479,7 @@ fn main() {
                     pinned_core: core,
                     cpu_numa_node: cpu_numa_node(core),
                     device_numa_node: None,
-                    device: args.device.display().to_string(),
+                    device: device.display().to_string(),
                     wq_dedicated: None,
                     iterations: args.iterations,
                     cold_cache: args.cold,
@@ -1476,19 +1493,19 @@ fn main() {
     }
 
     // Open WQ
-    let wq = match WqPortal::open(&args.device) {
+    let wq = match WqPortal::open(&device) {
         Ok(wq) => {
             if !args.json {
                 println!(
                     "\nOpened WQ: {} ({})",
-                    args.device.display(),
+                    device.display(),
                     if wq.is_dedicated() {
                         "dedicated"
                     } else {
                         "shared"
                     }
                 );
-                if let Some(node) = device_numa_node(&args.device) {
+                if let Some(node) = device_numa_node(&device) {
                     println!("{} NUMA node: {}", args.accel.as_str().to_uppercase(), node);
                 }
             }
@@ -1497,7 +1514,7 @@ fn main() {
         Err(e) => {
             eprintln!(
                 "\nFailed to open {}: {} (need CAP_SYS_RAWIO or run via dsa_launcher)",
-                args.device.display(),
+                device.display(),
                 e
             );
             return;
@@ -1676,8 +1693,8 @@ fn main() {
                 tsc_freq_hz: tsc_freq,
                 pinned_core: core,
                 cpu_numa_node: cpu_numa_node(core),
-                device_numa_node: device_numa_node(&args.device),
-                device: args.device.display().to_string(),
+                device_numa_node: device_numa_node(&device),
+                device: device.display().to_string(),
                 wq_dedicated: Some(wq.is_dedicated()),
                 iterations: args.iterations,
                 cold_cache: args.cold,
