@@ -5,6 +5,10 @@
   inputs,
   ...
 }:
+
+let
+  pkgs-stable = import inputs.nixpkgs-stable { system = pkgs.stdenv.system; };
+in
 {
 
   languages = {
@@ -55,16 +59,17 @@
     samply
     mold-wrapped
     linuxPackages.perf
-    pkgs.glibc.out
-    pkgs.glibc.debug
+    glibc.out
+    glibc.debug
     numactl
     libcap
     doctest
+    libclang
     # Python packages for benchmark visualization
     python3Packages.pandas
     python3Packages.matplotlib
     python3Packages.numpy
-    python3Packages.plotly
+    pkgs-stable.python3Packages.plotly
   ];
 
   # 1. Force C/C++ Compiler Flags

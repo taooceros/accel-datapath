@@ -32,13 +32,14 @@ Each has its own README with build instructions, structure, and dependencies:
 | [`accel-rpc/`](accel-rpc/README.md) | Accelerator-driven gRPC using Tonic (Rust/Cargo) |
 | [`hw-eval/`](hw-eval/README.md) | Raw hardware performance evaluation (Rust/Cargo) |
 
-Shared root resources: `tools/` (dsa_launcher), `dsa_architecture_spec.md` (hardware spec), `dsa-config/` (accel-config), `report/`, `plan/`, `remark/`, `docs/`, `devenv.nix`.
+Shared root resources: `tools/` (dsa_launcher), `dsa_architecture_spec.md` (dsa hardware spec), `iax(iaa)_architecture_spec.md` (iax/iaa hardware spec), `dsa-config/` (accel-config), `report/`, `plan/`, `remark/`, `docs/`, `devenv.nix`.
 
 ## Code Rules
 
 - Match CODE to SPEC, not spec to code, unless told otherwise.
 - In multi-agent setups, minimize idle messages. Only send updates on meaningful progress or when blocked.
 
-## Remark
+## Execution
 
+Run everything in a devenv shell;
 Run hardware related code with launcher;
