@@ -1,75 +1,67 @@
 /*
- * DSA Launcher - launches binaries with cap_sys_rawio capability
+ * DSA Launcher - launches binaries with CAP_SYS_RAWIO capability.
  *
- * Build: gcc -o dsa_launcher dsa_launcher.c -lcap
- * Setup: sudo setcap cap_sys_rawio+eip dsa_launcher
- * Usage: ./dsa_launcher ./build/linux/x86_64/releasedbg/dsa_benchmark [args...]
+ * Build: gcc -O2 -o dsa_launcher dsa_launcher.c
+ * Setup: setcap cap_sys_rawio+eip dsa_launcher
  */
 
 #define _GNU_SOURCE
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/capability.h>
-#include <sys/prctl.h>
 #include <errno.h>
+#include <linux/capability.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/prctl.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+
+static int enable_inheritable_rawio(void) {
+    struct __user_cap_header_struct header = {
+        .version = _LINUX_CAPABILITY_VERSION_3,
+        .pid = 0,
+    };
+    struct __user_cap_data_struct data[_LINUX_CAPABILITY_U32S_3] = {{0}};
+    int idx = CAP_TO_INDEX(CAP_SYS_RAWIO);
+    __u32 mask = CAP_TO_MASK(CAP_SYS_RAWIO);
+
+    if (syscall(SYS_capget, &header, data) != 0) {
+        perror("capget");
+        return -1;
+    }
+
+    if ((data[idx].permitted & mask) == 0) {
+        fprintf(stderr, "CAP_SYS_RAWIO is not in the permitted set\n");
+        return -1;
+    }
+
+    data[idx].inheritable |= mask;
+
+    if (syscall(SYS_capset, &header, data) != 0) {
+        perror("capset");
+        return -1;
+    }
+    return 0;
+}
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <program> [args...]\n", argv[0]);
-        fprintf(stderr, "Launches a program with cap_sys_rawio capability for DSA access.\n");
         return 1;
     }
 
-    // Get current capabilities
-    cap_t caps = cap_get_proc();
-    if (caps == NULL) {
-        perror("cap_get_proc");
+    if (enable_inheritable_rawio() != 0) {
+        fprintf(stderr,
+                "Hint: launcher must have file capability cap_sys_rawio+eip\n");
         return 1;
     }
 
-    // Check if we have cap_sys_rawio
-    cap_flag_value_t has_rawio;
-    if (cap_get_flag(caps, CAP_SYS_RAWIO, CAP_EFFECTIVE, &has_rawio) != 0) {
-        perror("cap_get_flag");
-        cap_free(caps);
-        return 1;
-    }
-
-    if (has_rawio != CAP_SET) {
-        fprintf(stderr, "Error: Launcher does not have CAP_SYS_RAWIO.\n");
-        fprintf(stderr, "Please run: sudo setcap cap_sys_rawio+eip %s\n", argv[0]);
-        cap_free(caps);
-        return 1;
-    }
-
-    // Set the capability as inheritable
-    cap_value_t cap_list[] = { CAP_SYS_RAWIO };
-    if (cap_set_flag(caps, CAP_INHERITABLE, 1, cap_list, CAP_SET) != 0) {
-        perror("cap_set_flag inheritable");
-        cap_free(caps);
-        return 1;
-    }
-
-    if (cap_set_proc(caps) != 0) {
-        perror("cap_set_proc");
-        cap_free(caps);
-        return 1;
-    }
-
-    cap_free(caps);
-
-    // Allow capabilities to be inherited across execve
     if (prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, CAP_SYS_RAWIO, 0, 0) != 0) {
         perror("prctl PR_CAP_AMBIENT_RAISE");
+        fprintf(stderr,
+                "Hint: launcher must have file capability cap_sys_rawio+eip\n");
         return 1;
     }
 
-    // Execute the target program
     execvp(argv[1], &argv[1]);
-
-    // If we get here, exec failed
     fprintf(stderr, "Failed to execute %s: %s\n", argv[1], strerror(errno));
     return 1;
 }
