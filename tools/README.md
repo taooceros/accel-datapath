@@ -16,7 +16,7 @@ without needing its own `setcap`.
 ### Build
 
 ```bash
-gcc -o dsa_launcher dsa_launcher.c -lcap
+gcc -o dsa_launcher dsa_launcher.c
 sudo setcap cap_sys_rawio+eip dsa_launcher
 ```
 

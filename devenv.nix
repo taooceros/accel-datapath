@@ -94,7 +94,7 @@
     if [ ! -f "$LAUNCHER" ]; then
       echo "Building dsa_launcher..."
       mkdir -p "$BUILD_DIR"
-      gcc -o "$LAUNCHER" "$TOOLS_DIR/dsa_launcher.c" -lcap
+      gcc -o "$LAUNCHER" "$TOOLS_DIR/dsa_launcher.c"
       sudo setcap cap_sys_rawio+eip "$LAUNCHER"
     fi
 

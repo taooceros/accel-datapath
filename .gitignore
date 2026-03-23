@@ -23,8 +23,8 @@ Makefile
 
 
 #direnv
-.envrc
 .direnv/
+.envrc.local
 # Devenv
 .devenv*
 devenv.local.nix
