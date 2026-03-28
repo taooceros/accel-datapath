@@ -25,6 +25,7 @@ include/dsa_stdexec/         stdexec sender/receiver integration
 benchmark/dsa/               Multi-dimensional benchmark suite
 examples/                    Per-operation examples (data_move, crc_gen, etc.)
 tools/                       dsa_launcher capability helper
+docs/specs/                  Local DSA / IAX hardware specification copies
 test/                        Unit and integration tests
 dsa-config/                  accel-config device configurations
 ```

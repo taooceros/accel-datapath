@@ -19,7 +19,7 @@ IAA architecture spec, while keeping `iax` as the code and CLI name.
 - `hw-eval/src/iax.rs`
 - `hw-eval/src/main.rs`
 - `hw-eval/README.md`
-- `report/...`
+- `docs/report/...`
 
 ## Planned steps
 

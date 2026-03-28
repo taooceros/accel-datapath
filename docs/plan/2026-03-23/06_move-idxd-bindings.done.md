@@ -15,7 +15,7 @@ crate instead of generating `idxd` bindings locally.
 - `hw-eval/src/iax.rs`
 - `hw-eval/README.md`
 - `hw-eval/build.rs` (remove)
-- `report/...` for the implementation note
+- `docs/report/...` for the implementation note
 
 ## Planned steps
 
@@ -34,7 +34,7 @@ Implemented on 2026-03-23:
 - `linux/idxd.h` bindgen generation lives in `dsa-bindings/build.rs`.
 - `hw-eval` consumes `idxd_bindings::idxd` for IAX types/constants and no
   longer owns a local `build.rs`.
-- Recorded in `report/hw_eval_idxd_bindings_crate_2026-03-23.md`.
+- Recorded in `docs/report/hw_eval_idxd_bindings_crate_2026-03-23.md`.
 
 The filesystem directory remains `dsa-bindings/`, and this change has not been
 validated by a build or hardware run in this session.

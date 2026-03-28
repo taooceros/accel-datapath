@@ -16,3 +16,5 @@ inputs:
 imports:
     - ./idxd-config
     - ./dsa-stdexec
+    - ./codemogger
+    - ./tursodb

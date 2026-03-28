@@ -352,4 +352,4 @@ gRPC EventEngine integration as practical impact path.
 
 ---
 
-*This document synthesizes findings from the DSA-stdexec research prototype. Raw data and detailed analysis available in `report/`, `remark/`, and the benchmark suite.*
+*This document synthesizes findings from the DSA-stdexec research prototype. Raw data and detailed analysis available in `docs/report/`, `remark/`, and the benchmark suite.*

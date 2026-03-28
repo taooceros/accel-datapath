@@ -371,4 +371,4 @@ dsa_launcher ./build/.../binary        # Run with CAP_SYS_RAWIO
 
 ---
 
-*This document synthesizes findings from `report/design_decisions.md`, `report/progress_post_alignment_debug.md`, `report/stdexec_overhead_results.md`, `report/mock_benchmark_results.md`, and the module READMEs. See those files for raw data and detailed analysis.*
+*This document synthesizes findings from `docs/report/design_decisions.md`, `docs/report/progress_post_alignment_debug.md`, `docs/report/stdexec_overhead_results.md`, `docs/report/mock_benchmark_results.md`, and the module READMEs. See those files for raw data and detailed analysis.*

@@ -17,4 +17,4 @@ enabled IAX work queue on this machine.
 - Rebuilt `hw-eval` successfully with `cargo build --release` inside `devenv`.
 - Ran the minimal hardware-backed IAX smoke test on `/dev/iax/wq1.0`.
 - The run completed successfully and produced valid `noop` and `crc64` latency/throughput JSON.
-- Recorded the successful result in `report/hw_eval_iax_crc64_hardware_smoke_test_2026-03-23.md`.
+- Recorded the successful result in `docs/report/hw_eval_iax_crc64_hardware_smoke_test_2026-03-23.md`.
