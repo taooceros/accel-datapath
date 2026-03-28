@@ -15,7 +15,7 @@ kb_tracked_files() {
 
 kb_is_tracked_rel() {
   case "$1" in
-    docs/plan/*.md|docs/report/*.md|docs/specs/*.md) return 0 ;;
+    docs/plan/*.md|docs/plan/*/*.md|docs/report/*.md|docs/specs/*.md) return 0 ;;
     *) return 1 ;;
   esac
 }
