@@ -75,4 +75,4 @@ interactive HTML plots (heatmaps, dashboards) from the CSV data.
 ## Further Reading
 
 - [strategies/README.md](strategies/README.md) -- detailed strategy taxonomy, decision guide, and performance reference
-- [CLAUDE.md](../../CLAUDE.md) -- project-wide conventions, build commands, and architecture overview
+- [../../AGENTS.md](../../AGENTS.md) -- project-wide conventions, build commands, and architecture overview

@@ -55,4 +55,4 @@ Every operation follows the same three-part structure:
 
 - [examples/](../../../examples/) -- one example per operation demonstrating basic usage
 - [Parent README](../README.md) -- stdexec integration layer overview
-- [CLAUDE.md](../../../CLAUDE.md) -- project-wide conventions and architecture overview
+- [../../../AGENTS.md](../../../AGENTS.md) -- project-wide conventions and architecture overview

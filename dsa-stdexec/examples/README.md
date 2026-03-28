@@ -58,5 +58,5 @@ Every example follows the same structure:
 
 ## Further Reading
 
-- [CLAUDE.md](../CLAUDE.md) -- project architecture overview and build reference.
+- [../AGENTS.md](../AGENTS.md) -- project architecture overview and build reference.
 - [include/dsa_stdexec/operations/](../include/dsa_stdexec/operations/) -- sender implementations backing each `dsa_<op>()` call.

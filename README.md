@@ -2,7 +2,7 @@
 
 C++ sender/receiver (stdexec) bindings for Intel Data Streaming Accelerator (DSA), focused on maximizing message rate for small transfers using inline polling.
 
-See [CLAUDE.md](CLAUDE.md) for full architecture details, build options, and benchmark documentation.
+See [AGENTS.md](AGENTS.md) for the repo-wide map, workflow, and subdirectory guidance.
 
 ## Quick Start
 
