@@ -45,9 +45,9 @@ The `.turso/` directory is created automatically when the shell starts.
 `rebuild-kb` recreates `.turso/knowledge.db` from the tracked markdown sources.
 `sync-kb` incrementally upserts tracked markdown files into `.turso/knowledge.db`, and removes tracked rows for deleted paths that you pass in or for missing tracked files during a no-arg sync.
 `sync-kb` is intentionally markdown-only; it does not parse PDFs.
-`search-kb` runs a true hybrid search: it sums per-term `fts_score(...)` contributions for the lexical side, computes vector distance for the semantic side, derives lexical/vector ranks, and fuses them into one hybrid score.
-`search-kb-fts` returns only FTS-ranked results.
-`search-kb-vector` returns only vector-ranked results.
+`search-kb` runs a true hybrid search: it sums per-term `fts_score(...)` contributions for the lexical side, computes vector distance for the semantic side, derives lexical/vector ranks, fuses them into one hybrid score, and returns a short body-context snippet anchored to a matching phrase or term when available.
+`search-kb-fts` returns FTS-ranked results plus a snippet.
+`search-kb-vector` returns vector-ranked results plus a snippet.
 
 ## Updating the preview version
 

@@ -30,5 +30,5 @@ This is intentionally simple:
 - no approximate vector index is assumed.
 - multi-word `search-kb` queries sum per-term `fts_score(...)` contributions into the lexical signal.
 - results are fused with a simple reciprocal-rank hybrid score over lexical and vector ranks, with a small bonus for lexical matches.
-- explicit retrieval-mode utilities make it clear whether a result set came from FTS, vector search, or hybrid fusion.
+- explicit retrieval-mode utilities make it clear whether a result set came from FTS, vector search, or hybrid fusion, and each search row includes a short context snippet from the matched document body.
 - `sync-kb` with no arguments reconciles all tracked KB sources; `sync-kb path/to/file.md` upserts just that path, and deleting a tracked path plus syncing it removes it from the DB.
