@@ -41,7 +41,7 @@ Research monorepo for Intel DSA/IAX data-path work. Main code lives in `dsa-stde
 ## CONVENTIONS
 - Write a plan in `docs/plan/YYYY-MM-DD/NN.<topic>.<state>.md` before non-trivial changes.
 - Write findings to `docs/report/NNN.<descriptive_name>.md`; write single-point insights to `remark/NNN_<topic>.md`.
-- For plans, reports, and specs, query the local KB first with `search-kb*`; for code search, prefer `devenv shell -- codemogger search "query"`.
+- For plans, reports, and specs, start with the repo-local `tursodb-kb` skill; its underlying commands are `devenv shell -- search-kb`, `search-kb-fts`, and `search-kb-vector`. For code search, prefer `devenv shell -- codemogger search "query"`.
 - Read the co-located README before modifying a module. `dsa-stdexec/` has the richest nested README map.
 - Match code to specs, not specs to code, unless explicitly told otherwise.
 

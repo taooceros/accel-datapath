@@ -12,7 +12,7 @@ Structured pipeline for acquiring and processing academic papers. This is the pa
 - This repository's existing literature hub is `docs/related work/`, not `docs/literature-review/`.
 - The repo currently contains `docs/research_plan.md`; it does not currently contain `docs/research_log.md`.
 - The repo currently does not include `rules/knowledge_grounding.md`, `papers/`, or `local-corpus/bin/corpus`. If those are added later, treat them as the canonical paper-processing path. Until then, use this workflow with the repo's current docs and KB helpers.
-- Before broad manual scans, follow `AGENTS.md`: prefer `devenv shell -- search-kb`, `search-kb-fts`, `search-kb-vector`, and `devenv shell -- codemogger search "query"`.
+- Before broad manual scans, follow `AGENTS.md`: start with the repo-local `tursodb-kb` skill for KB retrieval, then use `devenv shell -- codemogger search "query"` for code search.
 
 ## Input Modes
 
@@ -21,7 +21,7 @@ Structured pipeline for acquiring and processing academic papers. This is the pa
 
 ## Phase 0: Discover Resources
 
-1. **Check existing knowledge** — Read `docs/related work/` and query the local KB (`devenv shell -- search-kb`, `search-kb-fts`, `search-kb-vector`). If sufficient, skip to Phase 3.
+1. **Check existing knowledge** — Read `docs/related work/` and use the repo-local `tursodb-kb` skill to query the local KB. If sufficient, skip to Phase 3.
 2. **Search** — Use the search tools below. Try multiple query formulations. Prioritize strong venues and authoritative sources. Apply search saturation criteria: stop only after multiple query reformulations converge on the same core set of papers or when marginal results stop changing the reading list.
 3. **Curate a reading list** — Select the most relevant resources. Breadth first, then depth.
 4. **Acquire** — Download PDFs locally when possible. If the repo later adds `papers/todo/`, use it as the staging area. For non-downloadable resources, note the URL and clearly flag that the paper was not acquired.
@@ -56,7 +56,7 @@ For each paper:
 
 | Need | Tool | Why |
 |------|------|-----|
-| Internal prior work, plans, reports, specs | `devenv shell -- search-kb` | Repo-local retrieval should be first. |
+| Internal prior work, plans, reports, specs | `tursodb-kb` skill | Repo-local retrieval should be first. |
 | Exact keyword/spec lookup in indexed docs | `devenv shell -- search-kb-fts` | Best when wording is known. |
 | Semantic recall from indexed docs | `devenv shell -- search-kb-vector` | Best when wording may differ. |
 | Repo code and implementation search | `devenv shell -- codemogger search "query"` | Required repo-first code search path. |
