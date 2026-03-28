@@ -4,7 +4,7 @@
 
 **Author**: Hongtao Zhang
 **Advisor**: Arvind Krishnamurthy
-**Last updated**: 2026-03-03
+**Last updated**: 2026-03-28
 
 ---
 
@@ -14,7 +14,7 @@ A regime change is underway in datacenter I/O. Hardware submission mechanisms �
 
 We have demonstrated this concretely for Intel DSA (Data Streaming Accelerator). With batched submission, DSA hardware adds only ~5 ns/op of amortized overhead. Yet the full async framework path (C++ P2300/stdexec) costs 38 ns/op, of which 21 ns is pure framework overhead. **Software is 70-80% of total per-operation cost.** By progressively stripping framework layers, we achieved 84 Mpps on mock hardware and 34 Mpps on real DSA — a 1.87x improvement — by reducing software, not improving hardware.
 
-This is not DSA-specific. The same dynamic applies wherever batching amortizes submission overhead: RDMA NICs, io_uring, NVMe, GPU command submission. We propose a 5-year research program to characterize this regime change across hardware domains, decompose end-to-end RPC cost, design frameworks for the nanosecond regime, and build accelerator-native transports.
+This is not DSA-specific. The same dynamic should appear wherever batching amortizes submission overhead: RDMA NICs, io_uring, NVMe, and GPU command submission are the clearest analogs. However, the strongest evidence we currently possess is still local: cache footprint and completion-path behavior are now the most concrete bottlenecks, and stdexec is the measurement vehicle rather than the deployment target. That suggests a revised program order: first stabilize and shrink the DSA software path, then extract general framework-design principles for the nanosecond regime, then apply the methodology to end-to-end RPC decomposition, and only then push toward broader cross-domain validation and accelerator-native transports.
 
 ---
 
@@ -28,15 +28,15 @@ For large operations (multi-kilobyte DMA transfers), doorbell overhead is neglig
 
 ### 2.2 The Regime Change
 
-**Batching** amortizes one doorbell across many operations. Our MirroredRing submitter batches 32 DSA descriptors behind a single doorbell, reducing amortized hardware cost from ~160 ns/op to ~5 ns/op. The same principle operates across domains:
+**Batching** amortizes one doorbell across many operations. Our MirroredRing submitter batches 32 DSA descriptors behind a single doorbell, reducing amortized hardware cost from ~160 ns/op to ~5 ns/op. The same principle appears in adjacent systems across domains, although only the DSA row below is directly measured in this repository today:
 
-| System | Batching Mechanism | Amortized Overhead |
+| System | Batching Mechanism | Repo evidence status |
 |---|---|---|
-| DSA (this work) | MirroredRing: 32 descriptors/doorbell | ~5 ns/op |
-| RDMA NIC (Mellanox) | Doorbell batching, BlueFlame | ~5-10 ns/op |
-| io_uring | Multi-SQE submission per `io_uring_enter` | ~10-20 ns/op |
-| NVMe | Command batching, 1 doorbell per batch | ~5-15 ns/op |
-| GPU (CUDA) | Graph launch, stream batching | ~50-100 ns/op |
+| DSA (this work) | MirroredRing: 32 descriptors/doorbell | Directly measured in this repo |
+| RDMA NIC | Doorbell batching / BlueFlame-style submission | Adjacent analog; not yet repo-measured |
+| io_uring | Multi-SQE submission per `io_uring_enter` | Adjacent analog; not yet repo-measured |
+| NVMe | Command batching, one doorbell per batch | Adjacent analog; not yet repo-measured |
+| GPU | Graph launch or stream batching | Adjacent analog; not yet repo-measured |
 
 Once batching drives hardware cost into single-digit nanoseconds, a previously hidden cost becomes dominant: **the software framework** that prepares, submits, and completes operations. Modern async frameworks were designed when per-operation hardware latency was microseconds:
 
@@ -48,7 +48,7 @@ Once batching drives hardware cost into single-digit nanoseconds, a previously h
 
 ### 2.3 The Core Insight
 
-Composability is not inherently expensive. Frameworks like stdexec, gRPC's EventEngine, io_uring's liburing, and DPDK's rte_ethdev were designed when per-operation hardware latency was microseconds. At that scale, tens of nanoseconds of framework overhead is noise. Batching changes the equation: when hardware cost drops to 5 ns/op, framework overhead at 20+ ns/op is the majority of cost. These frameworks were never optimized for a regime that didn't exist before batched submission became the norm.
+Composability is not inherently expensive. The repository has directly established this point for stdexec, and the same structural issue is likely to appear in production runtimes such as EventEngine, liburing, and DPDK once batched hardware drives per-operation cost down far enough. At microsecond scales, tens of nanoseconds of framework overhead is noise; after batching, that overhead can become the majority cost. The key claim here is measured for stdexec and posed as a translation hypothesis for other frameworks.
 
 ---
 
@@ -131,6 +131,14 @@ Gains are *larger* on real hardware because reducing software overhead also impr
 
 4. **Batching exposes a new class of overhead**: The observation is not that batching is good (well-known) — it is that batching *shifts the bottleneck* from hardware to software, exposing framework overhead that was previously invisible.
 
+### 3.6 Immediate implications
+
+These findings sharpen the near-term agenda. The next step is not simply to expand to more systems; it is to first remove the clearest local bottlenecks that the existing measurements already expose:
+
+1. **Reduce hot-path working-set size** through hot/cold splitting, smaller operation state, and prefetch-friendly access patterns.
+2. **Replace O(N) completion scans** with indexed or bitmap-driven completion paths that break the bistable feedback loop.
+3. **Preserve the methodology distinction** between proof vehicle and target system: stdexec validated the measurement method, but the transferable deliverable is a set of nanosecond-regime design principles for production async runtimes.
+
 ---
 
 ## 4. Positioning: Completing the Intra-Host Picture
@@ -142,7 +150,7 @@ Recent work from the group has characterized the NIC-to-host data path:
 - **SIGCOMM 2024** ("Understanding the Host Network"): Data copies consume >50% of CPU cycles at 100G+; 49% cache miss rates on the receive side
 - **SIGCOMM 2023** (hostCC): Host congestion control for the intra-host interconnect
 - **OSDI 2024** (ZeroNIC): Data/control path separation via FPGA NIC co-design
-- **MICRO 2025** (CXL-NIC): MMIO writes are the bottleneck for NIC submission; CXL coherence yields 49% latency reduction
+- **CXL-based host-path work**: adjacent hardware efforts attack MMIO/interconnect costs from the hardware side, complementing our software batching story
 - **HotNets 2025**: "Your Network Doesn't End at the NIC"
 
 This body of work characterizes the **receive path**: NIC → PCIe → host interconnect → memory → CPU.
@@ -153,10 +161,10 @@ This body of work characterizes the **receive path**: NIC → PCIe → host inte
 
 | Approach | Direction | Problem | Solution |
 |---|---|---|---|
-| CXL-NIC [MICRO 2025] | CPU → NIC | MMIO doorbells expensive | Replace MMIO with CXL coherence (hardware) |
+| CXL-based host-path work | CPU → NIC | MMIO/interconnect submission costs | Reduce host-path submission overhead in hardware |
 | This work | CPU → DSA | MMIO doorbells expensive | Batch descriptors behind one doorbell (software) |
 
-Combined: CXL eliminates MMIO overhead + software batching reduces framework overhead → minimal submission cost. Hardware improvements don't eliminate the need for software optimization — they shift the bottleneck and make software optimization matter *more*.
+Combined: CXL eliminates MMIO overhead + software batching reduces framework overhead → minimal submission cost. Hardware improvements don't eliminate the need for software optimization — they shift the bottleneck and make software optimization matter *more*. This is primarily a positioning result for the program: it explains how our software work complements adjacent host-path work, rather than defining the first execution milestone.
 
 ### 4.3 Multi-Threading Is Orthogonal
 
@@ -166,41 +174,59 @@ Using more CPU cores scales total throughput linearly, but doesn't change per-co
 
 ## 5. Research Questions
 
-1. **Regime characterization**: Across DSA, RDMA NICs, io_uring, and NVMe, at what batch size does software framework overhead become the dominant cost? What are the common structural causes?
+1. **Immediate bottleneck removal**: How much additional throughput and stability can we recover on DSA by shrinking per-operation metadata and replacing O(N) completion scanning with indexed or O(1) mechanisms?
 
 2. **Framework redesign**: Can composable async frameworks achieve sub-10 ns per-operation overhead — matching batched hardware cost — without sacrificing safety or expressiveness?
 
-3. **End-to-end RPC decomposition**: For a gRPC call, what fraction of latency is memcpy, serialization, TLS, kernel, NIC? At what message sizes does each on-die accelerator offload actually reduce end-to-end latency?
+3. **End-to-end RPC decomposition**: For a gRPC call, what fraction of latency is memcpy, serialization, TLS, kernel, and NIC? At what message sizes does each accelerator offload actually reduce end-to-end latency, and when should the system fall back to software?
 
-4. **Multi-accelerator composition**: Can DSA→IAA→QAT be chained transparently? Does pipeline depth hide individual stage latencies?
+4. **Generalization**: Does the layer-removal + mock-hardware methodology generalize to RDMA NICs, io_uring, NVMe, and GPU submission? Are the same structural bottlenecks present once batching is introduced?
 
-5. **Generalization**: Does the layer-removal + mock-hardware methodology generalize to other domains? Does the scheduling/submission separation principle hold for NIC rings, io_uring, GPU command buffers?
+5. **Multi-accelerator composition**: Once the crossover points are known, can DSA→IAA→QAT be chained transparently without recreating the same completion and metadata bottlenecks at the framework layer?
 
 ---
 
 ## 6. Proposed Research
 
-### Thrust 1: Cross-Domain Characterization (Years 1-2)
+### Thrust 1: DSA Path Stabilization and Software-Floor Maximization (Years 1-2)
 
-*Core question: Is the software-becomes-bottleneck phenomenon general?*
+*Core question: How much of the remaining gap is explained by cache footprint and completion policy?*
 
-Apply layer-removal and mock-hardware methodologies to four hardware domains beyond DSA:
+The strongest current evidence is local, so the first thrust should finish the story that the existing prototype already exposed.
 
-**RDMA NIC (Mellanox ConnectX-6/7)**: Build progressively-stripped RDMA send benchmarks: full ibverbs → minimal ibv_post_send → raw WQE construction → pre-allocated WQEs. Measure: at what batch size does ibverbs overhead exceed wire time?
+**Working-set reduction**: shrink operation state with hot/cold field splitting, reduce over-allocation around descriptor alignment, and test prefetch-oriented slot traversal.
 
-**io_uring**: Strip liburing wrappers progressively: full liburing API → raw io_uring_enter → pre-filled SQEs. Connection: io_uring's submission model is structurally identical to DSA's (ring buffer + doorbell).
+**Completion-path redesign**: replace O(N) scans with indexed queues, completion bitmaps, or other O(1)-style mechanisms that break the real-hardware bistable loop.
 
-**NVMe**: Use SPDK or raw NVMe passthrough. Measure: at high IOPS, what fraction is command construction vs. doorbell vs. completion?
+**Poll-loop stabilization**: measure stable vs. unstable hardware regimes explicitly, tighten batch fill behavior, and improve reporting so real-hardware runs cleanly separate throughput floor from feedback-path artifacts.
 
-**GPU (CUDA)**: Compare CUDA graph launch (batched) vs. individual kernel launch. Does CUDA runtime overhead dominate with graph batching?
+**Deliverables**: a stable high-throughput DSA path, a quantified software floor at realistic concurrency, and a validated explanation of how cache footprint and completion policy limit throughput.
 
-**Deliverables**: Cross-domain characterization paper targeting **OSDI/SOSP**. Open-source multi-domain benchmark suite. Layer-removal methodology formalized with guidelines.
+### Thrust 2: Framework Design for the Nanosecond Regime (Years 1-3)
 
-### Thrust 2: End-to-End RPC Decomposition (Years 1-3)
+*Core question: Can composable frameworks achieve sub-10 ns overhead once batched hardware reaches the same scale?*
 
-*Core question: For a gRPC call end-to-end, where does time go?*
+Our layer-removal identifies exactly where stdexec's 21 ns comes from. Neither source is fundamental to composability:
 
-Apply layer-removal to gRPC, building progressively-stripped variants:
+- **Scope tracking (14 ns)**: `scope.nest()` does runtime bookkeeping per operation. Alternative: compile-time scope inference for static graphs.
+- **Per-operation connection (7 ns)**: `connect()` constructs 448B state via placement new. Alternative: pre-allocated pools with reset-and-reuse (our `reusable` strategy proves this works at 84 Mpps).
+
+Design directions:
+1. **Operation pool concept** for stdexec-like systems: pre-allocate and recycle operation states.
+2. **Lightweight sender adapters**: specialized, stack/arena-allocated combinators.
+3. **O(1) completion mechanisms**: completion bitmaps instead of O(N) poll traversal.
+4. **Cache-conscious metadata**: <256 bytes/op target (vs. 448B current).
+5. **Production-facing validation**: translate the same overhead categories into EventEngine- or runtime-level measurements rather than assuming stdexec itself is the deployment target.
+
+**Deliverables**: nanosecond-regime framework design principles, reusable implementation patterns, and an evidence-backed translation from stdexec measurements to production async runtimes.
+
+### Thrust 3: End-to-End RPC Decomposition and Adaptive Offload (Years 2-4)
+
+*Core question: For a gRPC call end to end, where does time go, and when does accelerator offload win?*
+
+The literature suggests RPC is the most interesting next application layer, but the direct tonic/gRPC accelerator corpus is still sparse. Therefore this thrust should begin with decomposition and crossover analysis before full transport construction.
+
+Apply layer-removal to gRPC, building progressively stripped variants:
 
 | Level | Configuration | What's Measured |
 |---|---|---|
@@ -212,48 +238,30 @@ Apply layer-removal to gRPC, building progressively-stripped variants:
 | 5 | Replace kernel TCP with io_uring zero-copy | Kernel overhead |
 | 6 | Shared-memory transport (no NIC) | NIC + wire cost |
 
-Sweep across message sizes (64 B to 1 MB), concurrency (1 to 10,000 RPCs), payload types, and RPC patterns. Produce **crossover maps**: at what size does DSA beat CPU memcpy? QAT beat software AES-GCM?
+Sweep across message sizes (64 B to 1 MB), concurrency (1 to 10,000 RPCs), payload types, and RPC patterns. Produce **crossover maps**: at what size does DSA beat CPU memcpy? When does IAA beat software compression? When should the runtime fall back to CPU paths?
 
-**Deliverables**: Complete gRPC latency decomposition. Crossover maps. Open-source instrumented gRPC. Targeting **NSDI**.
+Use tonic/Tokio or EventEngine-like integration points as measurement targets, but keep the claim modest: the initial result is a decomposition and adaptive-offload policy, not yet a claim of a production transport replacement.
 
-### Thrust 3: Framework Design for the Nanosecond Regime (Years 2-4)
+**Deliverables**: complete RPC latency decomposition, crossover maps, adaptive-offload policy, and an instrumented RPC evaluation harness suitable for NSDI-style systems evaluation.
 
-*Core question: Can composable frameworks achieve sub-10 ns overhead?*
+### Thrust 4: Cross-Domain Validation and Deployment Paths (Years 3-5)
 
-Our layer-removal identifies exactly where stdexec's 21 ns comes from. Neither source is fundamental to composability:
+*Core question: Which parts of the batching-regime story are general, and which are specific to the current DSA path?*
 
-- **Scope tracking (14 ns)**: `scope.nest()` does runtime bookkeeping per-operation. Alternative: compile-time scope inference for static graphs.
-- **Per-operation connection (7 ns)**: `connect()` constructs 448B state via placement new. Alternative: pre-allocated pools with reset-and-reuse (our `reusable` strategy proves this works at 84 Mpps).
+After the local bottlenecks and RPC decomposition are better understood, extend the validated methodology to four hardware domains beyond DSA:
 
-Design directions:
-1. **Operation pool concept** for stdexec: pre-allocate and recycle operation states
-2. **Lightweight sender adapters**: specialized, stack/arena-allocated combinators
-3. **O(1) completion mechanisms**: completion bitmaps instead of O(N) poll traversal
-4. **Cache-conscious metadata**: <256 bytes/op target (vs. 448B current)
-5. **Multi-accelerator composition**: DSA→IAA→QAT through the same framework
 
-gRPC EventEngine integration as practical impact path.
+**RDMA NIC (Mellanox ConnectX-6/7)**: build progressively stripped send benchmarks: full ibverbs → minimal `ibv_post_send` → raw WQE construction → pre-allocated WQEs.
 
-**Deliverables**: ns-regime stdexec extensions. Multi-accelerator pipeline. Adaptive offload policy. gRPC EventEngine prototype. Targeting **ASPLOS**.
+**io_uring**: strip liburing wrappers progressively: full liburing API → raw `io_uring_enter` → pre-filled SQEs.
 
-### Thrust 4: Accelerator-Native Transports (Years 3-5)
+**NVMe**: use SPDK or raw passthrough. Measure what fraction of high-IOPS cost is command construction vs. doorbell vs. completion.
 
-*Core question: Can accelerator-native transports compete with kernel-bypass and SmartNIC approaches using commodity hardware?*
+**GPU (CUDA)**: compare CUDA graph launch (batched) vs. individual kernel launch to test whether runtime overhead dominates with graph batching.
 
-**gRPC accelerator transport**: Custom transport with DSA (buffer management), IAA (compression), QAT (TLS), io_uring (kernel-bypass I/O), and adaptive per-message CPU/accelerator selection.
+Only after those measurements and RPC crossover maps are in hand should the program fully commit to deployment-facing artifacts such as accelerator-native gRPC transports or UCX plugins.
 
-**UCX transport plugin**: `uct_md` + `uct_iface` for DSA. Enables every MPI and OpenSHMEM implementation on UCX to benefit from DSA offload.
-
-**Comparison with state of the art:**
-
-| System | Approach | Our Advantage |
-|---|---|---|
-| RPCAcc [arXiv 2024] | SmartNIC (FPGA) + DSA | No PCIe round-trip; commodity hardware |
-| RpcNIC [HPCA 2025] | SmartNIC RPC accelerator | No special NIC; works with any NIC |
-| ZeroNIC [OSDI 2024] | Custom FPGA NIC | Commodity Xeon; same data/control separation |
-| eRPC [NSDI 2019] | Kernel bypass (DPDK) | Offloads CPU entirely for data movement |
-
-**Deliverables**: Accelerator-native gRPC transport. UCX DSA plugin. End-to-end comparison. CXL + DSA characterization. Targeting **NSDI/SIGCOMM**.
+**Deliverables**: a cross-domain characterization paper, a multi-domain benchmark suite, and—if justified by the decomposition results—deployment-facing prototypes such as an accelerator-aware RPC transport or UCX DSA plugin.
 
 ---
 
@@ -261,15 +269,15 @@ gRPC EventEngine integration as practical impact path.
 
 | Period | Thrust | Milestone | Publication Target |
 |---|---|---|---|
-| Y1 Q1-Q2 | T1, T2 | RDMA + io_uring layer-removal; gRPC baseline decomposition | HotNets/HotOS workshop |
-| Y1 Q3-Q4 | T1, T2 | NVMe + GPU characterization; DSA memcpy in gRPC; crossover maps | — |
-| Y2 Q1-Q2 | T1, T2 | Cross-domain regime change paper; QAT TLS + IAA in gRPC | OSDI/SOSP submission |
-| Y2 Q3-Q4 | T2, T3 | Adaptive offload policy; ns-regime stdexec extensions | — |
-| Y3 Q1-Q2 | T2, T3 | gRPC accelerator transport beta; multi-accelerator pipeline | NSDI submission |
-| Y3 Q3-Q4 | T3, T4 | UCX transport plugin; EventEngine ns-regime prototype | — |
-| Y4 Q1-Q2 | T3, T4 | End-to-end benchmarks (DeathStarBench); on-die vs SmartNIC comparison | ASPLOS submission |
-| Y4 Q3-Q4 | T4 | CXL + DSA characterization; open benchmark release | NSDI/SIGCOMM submission |
-| Y5 | All | Production release; upstream contributions; standards proposals | — |
+| Y1 Q1-Q2 | T1 | Indexed/O(1) completion prototype; cache-footprint reduction study; stable/unstable regime characterization | Workshop / tech report |
+| Y1 Q3-Q4 | T1, T2 | Revised DSA software floor; nanosecond-regime framework design principles; EventEngine-style overhead mapping | ASPLOS / HotOS submission |
+| Y2 Q1-Q2 | T2, T3 | gRPC baseline decomposition; DSA memcpy and CRC crossover maps; adaptive fallback policy | NSDI submission |
+| Y2 Q3-Q4 | T3 | IAA/QAT decomposition passes; multi-accelerator pipeline feasibility study | — |
+| Y3 Q1-Q2 | T3, T4 | tonic/EventEngine-facing prototype; RDMA + io_uring cross-domain layer-removal | OSDI / SOSP submission |
+| Y3 Q3-Q4 | T4 | NVMe + GPU characterization; multi-domain benchmark release | — |
+| Y4 Q1-Q2 | T4 | End-to-end deployment-facing prototype if justified (accelerator-aware gRPC transport or UCX plugin) | NSDI / SIGCOMM submission |
+| Y4 Q3-Q4 | T4 | On-die vs SmartNIC comparison; CXL-complement framing backed by stronger measurements | — |
+| Y5 | All | Production release, upstream contributions, standards proposals | — |
 
 ### Risk Mitigations
 
@@ -284,10 +292,11 @@ gRPC EventEngine integration as practical impact path.
 
 ### 8.1 Technical Outcomes
 
-- **Cross-domain characterization**: First systematic measurement showing software frameworks become the bottleneck once hardware submission is batched, across DSA, RDMA, io_uring, and NVMe
-- **gRPC latency decomposition**: First rigorous decomposition with per-accelerator crossover maps
-- **Framework design principles**: Concrete guidelines (operation pooling, cache-conscious metadata, O(1) completion) applicable to stdexec, gRPC EventEngine, and other async frameworks
-- **Accelerator-native transports**: Open-source gRPC and UCX implementations on commodity Xeon
+- **Stable nanosecond-regime DSA datapath**: a clearer software floor, with quantified effects from cache footprint and completion policy
+- **Framework design principles**: concrete guidelines (operation pooling, cache-conscious metadata, O(1) completion) applicable to stdexec, gRPC EventEngine, and other async frameworks
+- **gRPC latency decomposition**: rigorous decomposition with per-accelerator crossover maps and adaptive software-fallback policy
+- **Cross-domain characterization**: systematic validation of which batching-regime lessons transfer beyond DSA
+- **Deployment-facing artifacts when justified**: open-source RPC or UCX integrations on commodity Xeon, contingent on the decomposition and cross-domain evidence
 
 ### 8.2 Community Impact
 
@@ -295,12 +304,12 @@ gRPC EventEngine integration as practical impact path.
 
 **Completing the intra-host picture**: The receive path (NIC-to-host) is characterized by prior work. We characterize the offload path (host-to-accelerator). Together, the full intra-host data movement pipeline is measured. Directly relevant to the "Your Network Doesn't End at the NIC" vision.
 
-**Bridging hardware and software solutions**: CXL-NIC (hardware) and our batching (software) are complementary solutions to the same MMIO bottleneck. Our characterization informs hardware architects about what software can and cannot solve.
+**Bridging hardware and software solutions**: CXL-style hardware improvements and our batching/software-path work are complementary approaches to the broader submission bottleneck. This is a positioning advantage for the project, but the core contribution remains the software-regime characterization and redesign guidance.
 
 ### 8.3 Standards and Ecosystem
 
-- **C++ P2300 (stdexec)**: First empirical characterization of P2300 cost on real hardware. Framework redesign findings inform WG21 proposals for operation pools and lightweight combinators
-- **Open-source**: All framework code, benchmarks, and transport implementations released
+- **C++ P2300 (stdexec)**: empirical characterization of P2300 cost on real hardware, used as a case study for broader framework redesign guidance
+- **Open-source**: framework code, benchmarks, decomposition harnesses, and later transport implementations released as evidence justifies them
 
 ---
 
@@ -310,7 +319,7 @@ gRPC EventEngine integration as practical impact path.
 - "Understanding the Host Network" [SIGCOMM 2024] — receive path characterization
 - hostCC [SIGCOMM 2023] — host congestion control
 - ZeroNIC [OSDI 2024] — FPGA NIC data/control separation
-- CXL-NIC [MICRO 2025] — MMIO replacement with CXL coherence
+- CXL-based host-path work — adjacent hardware framing for host submission costs
 - "Your Network Doesn't End at the NIC" [HotNets 2025]
 
 ### RPC Acceleration
@@ -336,7 +345,7 @@ gRPC EventEngine integration as practical impact path.
 [1] Vuppalapati, Agarwal, Schuh, Kasikci, Krishnamurthy, Agarwal. "Understanding the Host Network." SIGCOMM 2024.
 [2] Agarwal et al. "hostCC." SIGCOMM 2023.
 [3] Agarwal et al. "ZeroNIC." OSDI 2024.
-[4] Agarwal et al. "CXL-NIC." MICRO 2025.
+[4] "My CXL Pool Obviates Your PCIe Switch." HotOS 2025.
 [5] Agarwal et al. "Your Network Doesn't End at the NIC." HotNets 2025.
 [6] RPCAcc. arXiv:2411.07632, 2024.
 [7] RpcNIC. HPCA 2025.
