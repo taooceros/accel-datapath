@@ -532,7 +532,7 @@ NUMA 1: tokio workers N-M  →  dsa2/wq2.x + iax3/wq3.x + local buffer pool
 - Cache behavior: LLC miss rate (accelerators bypass cache)
 - Crossover points: message size where hardware offload beats software
 
-**Deliverable**: `report/accelerator_rpc_results.md` with data, flamegraphs, and analysis.
+**Deliverable**: `docs/report/accelerator_rpc_results.md` with data, flamegraphs, and analysis.
 
 ---
 
@@ -674,4 +674,4 @@ src/dsa/                            # Existing C++ DSA code
 | 16-20 | **Phase 3**: CRC middleware | Tower CRC layer, software vs DSA comparison |
 | 21-28 | **Phase 4**: IAX compression | IAX deflate in gRPC path, vs software gzip |
 | 29-35 | **Phase 5**: Full pipeline | End-to-end accelerator-driven server |
-| 36-42 | **Phase 6**: Benchmarks & report | Comprehensive comparison, `report/accelerator_rpc_results.md` |
+| 36-42 | **Phase 6**: Benchmarks & report | Comprehensive comparison, `docs/report/accelerator_rpc_results.md` |

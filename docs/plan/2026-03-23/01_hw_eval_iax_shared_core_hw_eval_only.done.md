@@ -20,7 +20,7 @@ Implement Intel IAX support in `hw-eval` without modifying `dsa-bindings`, and s
    - burst throughput (memmove)
    - sliding-window throughput (memmove)
 5. Update `hw-eval/README.md` for accelerator selector and IAX coverage.
-6. Write implementation report in `report/`.
+6. Write implementation report in `docs/report/`.
 
 ## Explicit non-goals
 
