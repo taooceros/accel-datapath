@@ -54,6 +54,7 @@ term_joins=""
 term_match_expr="0"
 fts_score_sum="0.0"
 term_index=0
+snippet_term_expr=""
 
 if [ -s "$tmp_terms" ]; then
   while IFS= read -r term; do
@@ -75,6 +76,12 @@ $term_name AS (
       term_match_expr="$term_match_expr AND $term_name.doc_id IS NOT NULL"
     fi
     fts_score_sum="$fts_score_sum + COALESCE($term_name.score, 0.0)"
+    term_snippet_expr="CASE WHEN instr(base.body_lc, '$term_sql') > 0 THEN '$term_sql' END"
+    if [ -z "$snippet_term_expr" ]; then
+      snippet_term_expr="$term_snippet_expr"
+    else
+      snippet_term_expr="COALESCE($snippet_term_expr, $term_snippet_expr)"
+    fi
   done < "$tmp_terms"
 fi
 
@@ -82,6 +89,15 @@ phrase_bonus="0.0"
 if [ -n "$phrase_query" ]; then
   phrase_sql="$(printf '%s' "$phrase_query" | sed "s/'/''/g")"
   phrase_bonus="CASE WHEN instr(base.title_lc, '$phrase_sql') > 0 THEN 1.5 ELSE 0.0 END + CASE WHEN instr(base.body_lc, '$phrase_sql') > 0 THEN 0.75 ELSE 0.0 END"
+  if [ -z "$snippet_term_expr" ]; then
+    snippet_term_expr="CASE WHEN instr(base.body_lc, '$phrase_sql') > 0 THEN '$phrase_sql' END"
+  else
+    snippet_term_expr="COALESCE(CASE WHEN instr(base.body_lc, '$phrase_sql') > 0 THEN '$phrase_sql' END, $snippet_term_expr)"
+  fi
+fi
+
+if [ -z "$snippet_term_expr" ]; then
+  snippet_term_expr="NULL"
 fi
 
 vector_sql="$(
@@ -143,6 +159,7 @@ WITH base AS (
     source_kind,
     source_path,
     title,
+    body,
     lower(title) AS title_lc,
     lower(body) AS body_lc,
     vector_distance_cos(binary_embedding, $vector_sql) AS vector_distance
@@ -153,9 +170,12 @@ scored AS (
     base.source_kind,
     base.source_path,
     base.title,
+    base.body,
+    base.body_lc,
     CASE WHEN $term_match_expr THEN 1 ELSE 0 END AS is_fts_match,
     ($fts_score_sum) + ($phrase_bonus) AS lexical_score,
-    base.vector_distance
+    base.vector_distance,
+    $snippet_term_expr AS snippet_match_term
   FROM base$term_joins
 ),
 ranked AS (
@@ -163,9 +183,12 @@ ranked AS (
     s1.source_kind,
     s1.source_path,
     s1.title,
+    s1.body,
+    s1.body_lc,
     s1.is_fts_match,
     s1.lexical_score,
     s1.vector_distance,
+    s1.snippet_match_term,
     (
       SELECT COUNT(*)
       FROM scored s2
@@ -197,6 +220,11 @@ SELECT
   source_kind,
   source_path,
   title,
+  CASE
+    WHEN snippet_match_term IS NULL THEN replace(replace(substr(body, 1, 240), char(10), ' '), char(13), ' ')
+    WHEN instr(body_lc, snippet_match_term) > 120 THEN replace(replace(substr(body, instr(body_lc, snippet_match_term) - 120, 240), char(10), ' '), char(13), ' ')
+    ELSE replace(replace(substr(body, 1, 240), char(10), ' '), char(13), ' ')
+  END AS snippet,
   is_fts_match,
   lexical_score,
   vector_distance,

@@ -10,8 +10,9 @@ if ! [[ "$limit" =~ ^[0-9]+$ ]]; then
   exit 1
 fi
 tmp_query="$(mktemp)"
+tmp_terms="$(mktemp)"
 tmp_sql="$(mktemp)"
-trap 'rm -f "$tmp_query" "$tmp_sql"' EXIT
+trap 'rm -f "$tmp_query" "$tmp_terms" "$tmp_sql"' EXIT
 
 if [ -z "$query_text" ]; then
   printf 'usage: search-kb-vector "query text" [limit]\n' >&2
@@ -19,6 +20,57 @@ if [ -z "$query_text" ]; then
 fi
 
 printf '%s\n' "$query_text" > "$tmp_query"
+
+tr '[:upper:]' '[:lower:]' < "$tmp_query" \
+  | awk '
+      {
+        for (i = 1; i <= NF; ++i) {
+          if ($i != "" && !seen[$i]++) {
+            print $i;
+          }
+        }
+      }
+    ' > "$tmp_terms"
+
+phrase_query="$(
+  tr '[:upper:]' '[:lower:]' < "$tmp_query" \
+    | awk '
+      {
+        line = "";
+        for (i = 1; i <= NF; ++i) {
+          if (line == "") {
+            line = $i;
+          } else {
+            line = line " " $i;
+          }
+        }
+        print line;
+      }
+    '
+)"
+
+snippet_term_expr=""
+if [ -n "$phrase_query" ]; then
+  phrase_sql="$(printf '%s' "$phrase_query" | sed "s/'/''/g")"
+  snippet_term_expr="CASE WHEN instr(base.body_lc, '$phrase_sql') > 0 THEN '$phrase_sql' END"
+fi
+
+if [ -s "$tmp_terms" ]; then
+  while IFS= read -r term; do
+    [ -n "$term" ] || continue
+    term_sql="$(printf '%s' "$term" | sed "s/'/''/g")"
+    term_snippet_expr="CASE WHEN instr(base.body_lc, '$term_sql') > 0 THEN '$term_sql' END"
+    if [ -z "$snippet_term_expr" ]; then
+      snippet_term_expr="$term_snippet_expr"
+    else
+      snippet_term_expr="COALESCE($snippet_term_expr, $term_snippet_expr)"
+    fi
+  done < "$tmp_terms"
+fi
+
+if [ -z "$snippet_term_expr" ]; then
+  snippet_term_expr="NULL"
+fi
 
 vector_sql="$(
   awk -v dims=256 -v fanout=8 '
@@ -73,13 +125,28 @@ vector_sql="$(
 
 cat > "$tmp_sql" <<EOF
 .open $db_path
+WITH base AS (
+  SELECT
+    source_kind,
+    source_path,
+    title,
+    body,
+    lower(body) AS body_lc,
+    vector_distance_cos(binary_embedding, $vector_sql) AS vector_distance
+  FROM source_documents
+)
 SELECT
   'vector' AS retrieval_mode,
   source_kind,
   source_path,
   title,
-  vector_distance_cos(binary_embedding, $vector_sql) AS vector_distance
-FROM source_documents
+  CASE
+    WHEN $snippet_term_expr IS NULL THEN replace(replace(substr(body, 1, 240), char(10), ' '), char(13), ' ')
+    WHEN instr(body_lc, $snippet_term_expr) > 120 THEN replace(replace(substr(body, instr(body_lc, $snippet_term_expr) - 120, 240), char(10), ' '), char(13), ' ')
+    ELSE replace(replace(substr(body, 1, 240), char(10), ' '), char(13), ' ')
+  END AS snippet,
+  vector_distance
+FROM base
 ORDER BY vector_distance ASC, source_path ASC
 LIMIT $limit;
 .quit
