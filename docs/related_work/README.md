@@ -22,6 +22,15 @@ This directory organizes related work around the repository's actual research th
 - `docs/research_plan.md`
 - `RESEARCH_PLAN.md`
 - `docs/report/003.repo_grounded_literature_review_2026-03-28.md`
+- `docs/report/004.top_tier_paper_ingestion_index_2026-03-28.md`
+- `docs/report/005.paper_ingestion_async_runtime_2026-03-28.md`
+- `docs/report/006.paper_ingestion_rpc_transport_2026-03-28.md`
+- `docs/report/007.paper_ingestion_accelerator_hostpath_2026-03-28.md`
+- `docs/report/008.paper_question_correlation_matrix_2026-03-28.md`
 - `remark/006_research_positioning_notes.md`
 - `remark/007_batching_regime_change_is_general.md`
 - `remark/011_mmio_bottleneck_software_vs_hardware_solutions.md`
+
+## Paper-level summary layer
+
+Use `docs/related_work/` when the question is organized by thesis topic. Use `docs/report/005` through `docs/report/007` when the question is organized by individual paper. Use `docs/report/008.paper_question_correlation_matrix_2026-03-28.md` when the question is which papers actually support, qualify, or only loosely touch a given repo research question.
