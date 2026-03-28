@@ -5,6 +5,10 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 db_path="${TURSODB_DB_PATH:-$repo_root/.turso/knowledge.db}"
 query_text="${1:-}"
 limit="${2:-10}"
+if ! [[ "$limit" =~ ^[0-9]+$ ]]; then
+  printf 'error: limit must be a non-negative integer\n' >&2
+  exit 1
+fi
 tmp_query="$(mktemp)"
 tmp_sql="$(mktemp)"
 tmp_terms="$(mktemp)"
@@ -18,11 +22,10 @@ fi
 printf '%s\n' "$query_text" > "$tmp_query"
 
 tr '[:upper:]' '[:lower:]' < "$tmp_query" \
-  | sed 's/[^a-z0-9][^a-z0-9]*/ /g' \
   | awk '
       {
         for (i = 1; i <= NF; ++i) {
-          if (!seen[$i]++) {
+          if ($i != "" && !seen[$i]++) {
             print $i;
           }
         }
@@ -31,7 +34,19 @@ tr '[:upper:]' '[:lower:]' < "$tmp_query" \
 
 phrase_query="$(
   tr '[:upper:]' '[:lower:]' < "$tmp_query" \
-    | sed 's/[^a-z0-9][^a-z0-9]*/ /g; s/^ //; s/ $//; s/  */ /g'
+    | awk '
+      {
+        line = "";
+        for (i = 1; i <= NF; ++i) {
+          if (line == "") {
+            line = $i;
+          } else {
+            line = line " " $i;
+          }
+        }
+        print line;
+      }
+    '
 )"
 
 term_ctes=""

@@ -69,7 +69,6 @@ kb_make_binary_vector_expr() {
       raw = $0;
       weight = (raw ~ /^#/) ? 4 : 1;
       line = tolower(raw);
-      gsub(/[^a-z0-9]+/, " ", line);
       n = split(line, tokens, /[[:space:]]+/);
       for (i = 1; i <= n; ++i) {
         tok = tokens[i];

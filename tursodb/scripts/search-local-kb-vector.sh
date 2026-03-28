@@ -5,6 +5,10 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 db_path="${TURSODB_DB_PATH:-$repo_root/.turso/knowledge.db}"
 query_text="${1:-}"
 limit="${2:-10}"
+if ! [[ "$limit" =~ ^[0-9]+$ ]]; then
+  printf 'error: limit must be a non-negative integer\n' >&2
+  exit 1
+fi
 tmp_query="$(mktemp)"
 tmp_sql="$(mktemp)"
 trap 'rm -f "$tmp_query" "$tmp_sql"' EXIT
@@ -40,7 +44,6 @@ vector_sql="$(
       raw = $0;
       weight = (raw ~ /^#/) ? 4 : 1;
       line = tolower(raw);
-      gsub(/[^a-z0-9]+/, " ", line);
       n = split(line, tokens, /[[:space:]]+/);
       for (i = 1; i <= n; ++i) {
         tok = tokens[i];
