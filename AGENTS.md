@@ -12,6 +12,7 @@ Guidance for working in this repository.
 - **Code search first via codemogger**: When searching source code definitions, implementations, symbols, or behavior across the repo, use `devenv shell -- codemogger search "query"` before broad manual scans.
 - **Local KB first**: Use the repo-local Turso knowledge base before broad manual scans when looking for prior plans, reports, and hardware specs.
 - **Keep KB fresh**: After adding, moving, deleting, or editing tracked KB sources, run `devenv shell -- sync-kb` or `devenv shell -- sync-kb <path>` before relying on retrieval results.
+- **Paper corpus convention**: Keep raw papers/PDFs as artifacts, but put searchable paper content into tracked markdown (typically `docs/report/*.md`); do not expect `sync-kb` to ingest PDFs directly.
 - **Use the right retrieval mode**: Use `devenv shell -- search-kb "query"` for hybrid retrieval, `devenv shell -- search-kb-fts "query"` for exact keyword/spec lookup, and `devenv shell -- search-kb-vector "query"` for semantic recall when wording may differ.
 - **Read before modify**: Read the module's co-located README before changing any module. They document patterns, conventions, and extension steps.
 - **Check prior work**: Scan `docs/report/*.md` before starting analysis — previous sessions may have covered the topic.
