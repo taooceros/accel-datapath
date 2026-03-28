@@ -53,4 +53,4 @@ Use the local KB helpers through `devenv shell -- sync-kb`, `search-kb`, `search
 
 ## Remark
 
-1. Don't check for user for every steps;
+1. Don't prompt the user at every step; only ask when blocked or finished.
