@@ -31,7 +31,7 @@ DSA tests require `CAP_SYS_RAWIO` to access the hardware. Use the `dsa_launcher`
 dsa_launcher ./build/<mode>/<platform>/test_binary
 ```
 
-The `dsa_launcher` binary has `setcap cap_sys_rawio+eip` applied and passes the capability to child processes via ambient capabilities. See the main [CLAUDE.md](../CLAUDE.md) for more details on the launcher and build modes.
+The `dsa_launcher` binary has `setcap cap_sys_rawio+eip` applied and passes the capability to child processes via ambient capabilities. See the main [../AGENTS.md](../AGENTS.md) for more details on the launcher and build modes.
 
 ## What Is Tested
 
@@ -48,4 +48,4 @@ The `dsa_launcher` binary has `setcap cap_sys_rawio+eip` applied and passes the 
 
 ## Further Reading
 
-See [CLAUDE.md](../CLAUDE.md) for project architecture, build commands, and hardware requirements.
+See [../AGENTS.md](../AGENTS.md) for project architecture, build commands, and hardware requirements.

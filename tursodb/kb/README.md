@@ -1,10 +1,17 @@
 # Local KB sources
 
-The local Turso database is rebuilt from git-tracked markdown sources:
+The local Turso database is rebuilt from git-tracked **markdown** sources:
 
 - `docs/plan/**/*.md`
 - `docs/report/*.md`
 - `docs/specs/*.md`
+
+## Paper ingestion policy
+
+- Raw PDFs are kept as source artifacts, for example under `papers/top_tier_pdfs/`.
+- The KB does **not** ingest PDFs directly.
+- To make papers searchable in the KB, store extracted or curated paper content as markdown under a tracked path such as `docs/report/*.md`.
+- `sync-kb` should be treated as a markdown-ingestion tool, not a PDF parser.
 
 Use `rebuild-kb` from a `devenv shell` to recreate `.turso/knowledge.db` from those files.
 Use:

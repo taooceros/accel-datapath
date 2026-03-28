@@ -76,5 +76,5 @@ explicit instantiation files.
 
 ## See Also
 
-See [CLAUDE.md](../../CLAUDE.md) for the full project architecture, build
+See [../../AGENTS.md](../../AGENTS.md) for the full project architecture, build
 instructions, and benchmark strategy taxonomy.

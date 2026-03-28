@@ -44,4 +44,4 @@ is allocated inside a coroutine frame, where `alignas` is not guaranteed to be h
 ## See Also
 
 - [operations/README.md](operations/README.md) -- per-operation sender details
-- [CLAUDE.md](../../CLAUDE.md) -- project-wide conventions and architecture overview
+- [../../AGENTS.md](../../AGENTS.md) -- project-wide conventions and architecture overview
