@@ -15,6 +15,7 @@ Documentation and knowledge-base inputs. This subtree is about document placemen
 
 ## CONVENTIONS
 - Keep KB-searchable project knowledge in tracked markdown under `docs/plan/`, `docs/report/`, or `docs/specs/`.
+- For `docs/report/`, use topic directories and name files as `report/<topic>/NNN.<descriptor>.<ext>`; see `docs/report/AGENTS.md` for topic meanings.
 - Use `docs/related_work/` for curated topic notes tied to the repo thesis, not as the primary dump for searchable paper extraction.
 - When a paper or PDF should become KB-searchable, extract or curate it into markdown under a tracked path, usually `docs/report/`.
 - Keep single-point observations in `../remark/`; this file only narrows rules inside `docs/`.

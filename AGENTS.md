@@ -40,13 +40,13 @@ Research monorepo for Intel DSA/IAX data-path work. Main code lives in `dsa-stde
 
 ## CONVENTIONS
 - Write a plan in `docs/plan/YYYY-MM-DD/NN.<topic>.<state>.md` before non-trivial changes.
-- Write findings to `docs/report/NNN.<descriptive_name>.md`; write single-point insights to `remark/NNN_<topic>.md`.
+- Write findings to `docs/report/<topic>/NNN.<descriptor>.<ext>` using a topic-local sequence number; write single-point insights to `remark/NNN_<topic>.md`.
 - For plans, reports, and specs, start with the repo-local `tursodb-kb` skill; its underlying commands are `devenv shell -- search-kb`, `search-kb-fts`, and `search-kb-vector`. For code search, prefer `devenv shell -- codemogger search "query"`.
 - Read the co-located README before modifying a module. `dsa-stdexec/` has the richest nested README map.
 - Match code to specs, not specs to code, unless explicitly told otherwise.
 
 ## ANTI-PATTERNS (THIS PROJECT)
-- Do not guess DSA/IAX behavior when `docs/specs/*.md` or `docs/report/design_decisions.md` already cover it.
+- Do not guess DSA/IAX behavior when `docs/specs/*.md` or `docs/report/architecture/001.design_decisions.md` already cover it.
 - Do not treat raw PDFs as KB-ingested content; searchable paper content belongs in tracked markdown.
 - Do not run hardware-facing binaries directly when the documented flow requires `launch` / `dsa_launcher`.
 - Do not duplicate parent guidance in child `AGENTS.md` files; child files should contain only local deltas.
