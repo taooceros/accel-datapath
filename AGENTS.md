@@ -1,82 +1,60 @@
 # PROJECT KNOWLEDGE BASE
 
-**Generated:** 2026-03-28 UTC  
-**Commit:** `8a18b76`  
-**Branch:** `literature-review`
+Research monorepo for Intel DSA/IAX data-path work.
 
-## OVERVIEW
-Research monorepo for Intel DSA/IAX data-path work. Main code lives in `dsa-stdexec/` (C++/xmake), `accel-rpc/` (Rust/Cargo workspace), and `hw-eval/` (Rust/Cargo hardware floor benchmarks).
+## DEFAULT MODE: SPEED FIRST
+- Prefer response time over exhaustive verification unless the user asks for high confidence.
+- Answer from local context first; escalate only when the risk or uncertainty is meaningful.
+- If external lookup may help but is not blocking, answer first and enrich later.
 
-## STRUCTURE
-```text
-./
-├── dsa-stdexec/        C++ stdexec sender/receiver framework for DSA
-├── accel-rpc/          Rust workspace for accelerator-aware RPC components
-├── hw-eval/            Raw DSA/IAX benchmark harnesses
-├── dsa-bindings/       Rust `idxd-bindings` crate used by `hw-eval`
-├── docs/               Plans, reports, specs, related-work notes
-├── remark/             Standalone research insights linked from reports
-├── tools/              `dsa_launcher` capability wrapper
-├── dsa-config/         accel-config JSONs for work queues
-├── tursodb/            local KB tooling and ingestion rules
-└── codemogger/         repo-local code-search wrapper
-```
+## SOURCE ORDER
+1. Current conversation
+2. This file, nearest child `AGENTS.md`, nearby `README.md`
+3. Repo docs in `docs/` and `remark/`
+4. Local indexes/tools: `codemogger`, Turso KB, `read`, `grep`, `glob`, `lsp_*`
+5. External docs and web search
 
-## WHERE TO LOOK
-| Task | Location | Notes |
-|------|----------|-------|
-| Repo workflow | `AGENTS.md` | This file is the root policy layer. |
-| C++ DSA framework work | `dsa-stdexec/AGENTS.md` | Read nearest child under `dsa-stdexec/` for local invariants. |
-| Rust RPC workspace work | `accel-rpc/AGENTS.md` | Workspace-level guidance only; crates are still small. |
-| Raw hardware benchmarking | `hw-eval/AGENTS.md` | Hardware vs `--sw-only` split lives there. |
-| Rust IDXD bindings crate | `dsa-bindings/Cargo.toml` | Path is `dsa-bindings/`, package name is `idxd-bindings`. |
-| Plans / reports / specs / related work | `docs/AGENTS.md` | Placement rules differ inside `docs/`. |
-| Standalone insights | `remark/` | One insight per file, linked back to source work. |
-| Low-level DSA engine internals | `dsa-stdexec/src/dsa/AGENTS.md` | Queue, submitter, alignment, backpressure rules. |
-| DSA benchmark framework | `dsa-stdexec/benchmark/dsa/AGENTS.md` | Config/dispatch/CSV discipline. |
-| Adding a DSA operation sender | `dsa-stdexec/include/dsa_stdexec/operations/AGENTS.md` | Local checklist spans headers, examples, and build registration. |
-| Tool launcher behavior | `tools/README.md` | `dsa_launcher` is the source of truth. |
-| Work-queue config assets | `dsa-config/README.md` | Config meanings and apply flow. |
+## TOOL ROUTING
+- Known path: `read`
+- Narrow local lookup: `grep` / `glob`
+- Code discovery: `codemogger search`
+- Semantic navigation/refactor safety: `lsp_*`
+- Plans/reports/spec history: `tursodb-kb` when the path is not already known
+- External docs (`@librarian`, web) only when local sources are insufficient, version-specific behavior matters, or the user asks for verification
+- Reuse prior external findings instead of refetching; store reusable notes under `docs/cache/external/<topic>.md` and reindex after adding them
+
+## PARALLELISM
+- Prefer concurrent tool calls for independent reads/searches.
+- Run sequentially only when later steps depend on earlier results.
+- For broad codebase discovery, prefer parallel search or `@explorer`.
+- When delegating to `@explorer`, batch independent searches in one request and ask it to run them concurrently.
+- Do not use `@explorer` for a single known-path read or a narrow symbol/file lookup; use direct local tools first.
 
 ## CONVENTIONS
 - Write a plan in `docs/plan/YYYY-MM-DD/NN.<topic>.<state>.md` before non-trivial changes.
-- Write findings to `docs/report/<topic>/NNN.<descriptor>.<ext>` using a topic-local sequence number; write single-point insights to `remark/NNN_<topic>.md`.
-- For plans, reports, and specs, start with the repo-local `tursodb-kb` skill; its underlying commands are `devenv shell -- search-kb`, `search-kb-fts`, and `search-kb-vector`. For code search, prefer `devenv shell -- codemogger search "query"`.
-- Read the co-located README before modifying a module. `dsa-stdexec/` has the richest nested README map.
+- Write findings to `docs/report/<topic>/NNN.<descriptor>.<ext>`; write single-point insights to `remark/NNN_<topic>.md`.
+- Read the nearest README before modifying a module.
 - Match code to specs, not specs to code, unless explicitly told otherwise.
+- Keep child `AGENTS.md` files lean and local; do not repeat parent guidance.
 
-## ANTI-PATTERNS (THIS PROJECT)
-- Do not guess DSA/IAX behavior when `docs/specs/*.md` or `docs/report/architecture/001.design_decisions.md` already cover it.
-- Do not treat raw PDFs as KB-ingested content; searchable paper content belongs in tracked markdown.
-- Do not run hardware-facing binaries directly when the documented flow requires `launch` / `dsa_launcher`.
-- Do not duplicate parent guidance in child `AGENTS.md` files; child files should contain only local deltas.
+## DO NOT
+- Guess DSA/IAX behavior if `docs/specs/*.md` or `docs/report/architecture/001.design_decisions.md` already cover it.
+- Treat raw PDFs as KB-ingested content; searchable paper content belongs in tracked markdown.
+- Run hardware-facing binaries directly when the documented flow requires `launch` / `dsa_launcher`.
 
-## UNIQUE STYLES
-- The repo favors short, repo-grounded workflow notes over generic advice.
-- `dsa-stdexec/` treats inline polling as the primary optimization path; threaded polling is comparative, not default.
-- `docs/related_work/` is organized by the repo thesis, not by paper title or venue.
-
-## COMMANDS
-```bash
-devenv shell
-devenv shell -- search-kb "query text"
-devenv shell -- codemogger search "query text"
-launch <command> [args...]
-
-# dsa-stdexec
-cd dsa-stdexec && xmake
-cd dsa-stdexec && run -- --help
-
-# accel-rpc
-cd accel-rpc && cargo build
-cd accel-rpc && cargo check
-
-# hw-eval
-cd hw-eval && cargo build --release
-cd hw-eval && cargo run --release -- --sw-only
+## REPO MAP
+```text
+dsa-stdexec/  C++ stdexec sender/receiver framework
+accel-rpc/    Rust accelerator-aware RPC workspace
+hw-eval/      Benchmark harnesses
+docs/         Plans, reports, specs, related work
+tools/        Launcher behavior
 ```
 
-## NOTES
-- `README.md` at repo root is still `dsa-stdexec`-centric; use this file for the true repo map.
-- `CLAUDE.md` should remain a thin pointer to this hierarchy rather than a second full copy.
-- Not every directory gets its own `AGENTS.md`; only real workflow or invariant boundaries do.
+## KEY PATHS
+- Root policy: `AGENTS.md`
+- C++ framework: `dsa-stdexec/AGENTS.md`
+- Rust workspace: `accel-rpc/AGENTS.md`
+- Hardware benchmarking: `hw-eval/AGENTS.md`
+- Docs placement rules: `docs/AGENTS.md`
+- Launcher behavior: `tools/README.md`
