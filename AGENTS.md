@@ -18,9 +18,12 @@ Research monorepo for Intel DSA/IAX data-path work.
 - Use `@explorer` for bounded candidate discovery by default, not final synthesis.
 - Do not combine repo-wide discovery, broad reading, and final recommendation in one explorer task.
 - Every explorer task must specify: objective, scope boundary, allowed sources, max candidates, and stop condition.
+- For resumed explorer work, the orchestrator must pass a session-scoped explorer memory summary with task id, objective, scope, rounds used, candidates found, rejected leads, unknowns, files already read, stop conditions seen, and compaction count.
+- Explorer memory is execution state, not repo knowledge; keep it ephemeral and session-scoped.
 - Default limits: max 2 search rounds, max 2 domains, max 8 candidates, max 1-2 reads per candidate.
-- Stop early and hand back when: 3 plausible candidates are found; the candidate set is not converging; the task splits into multiple subquestions; or deeper cross-domain synthesis is required.
-- Explorer returns shortlists, rejected leads, unknowns, and next step; the orchestrator owns pruning, merging, and final synthesis.
+- Stop early and hand back when: 3 plausible candidates are found; the candidate set is not converging; the task splits into multiple subquestions; deeper cross-domain synthesis is required; or prior compaction / resumed-with-missing-context is detected.
+- If explorer resumes after prior compaction, or if required prior state is missing relative to explorer memory, it must stop immediately, return current findings, and suggest parallel sub-searches instead of broadening discovery to rebuild context.
+- Explorer returns shortlists, rejected leads, unknowns, status, and next step; the orchestrator owns pruning, splitting, merging, and final synthesis.
 
 ## AGENT TEMPLATES
 - Agent-specific task templates live under `.agents/templates/`.
