@@ -11,8 +11,7 @@
 
 ### Active items
 
-- revise the profiling matrix to avoid confounded comparisons across size, concurrency, payload kind, and runtime
-- decide what metrics must be collected for every run versus representative profiling points only
+- use the bounded-matrix results to tighten the next tonic profiling matrix and matched-comparison claims
 
 ### Relevant artifacts
 
@@ -20,10 +19,13 @@
 - `docs/plan/2026-04-01/08.tonic_dsa_iax_experiment_plan.in_progress.md`
 - `docs/report/benchmarking/007.tonic_profile_split_localhost_results.md`
 - `docs/report/benchmarking/008.tonic_profile_split_core_localhost_results.md`
+- `docs/report/benchmarking/009.tonic_profile_bounded_matrix_results.md`
+- `results/tonic/2026-04-01-loop2/`
 
 ### Completed items
 
 - split-core localhost profiling rerun completed; results at `docs/report/benchmarking/008.tonic_profile_split_core_localhost_results.md`
+- bounded first-pass tonic matrix executed with representative perf/flamegraph captures; results at `docs/report/benchmarking/009.tonic_profile_bounded_matrix_results.md`
 
 ## Resume note
 
