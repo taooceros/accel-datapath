@@ -10,9 +10,21 @@ Research monorepo for Intel DSA/IAX data-path work.
 
 ## SOURCE ORDER
 1. Current conversation
+2. Root status file: `current.md`
 3. Repo docs in `docs/` and `remark/`
 4. Local indexes/tools: `codemogger`, Turso KB, `read`, `grep`, `glob`, `lsp_*`
 5. External docs and web search
+
+## CURRENT STATUS WORKFLOW
+- Treat `current.md` as the active run ledger, not just a passive resume note.
+- Structure `current.md` as a short TOC-led status page with named sections so resumed work can jump directly to the relevant thread.
+- Format TOC entries as Markdown task-list bullets that contain only section status, section name, and starting offset, such as `- [x] Active — topic (offset: 10)` and `- [ ] Paused — topic (offset: 28)`.
+- Keep an explicit **overall goal** in the currently active section of `current.md` for the current run or resumed work thread.
+- Mark exactly one thread/section as **active** at a time; that active section may contain multiple in-progress items.
+- Track individual work items in `current.md` within each thread section under active, paused, and completed status so progress is visible across handoffs.
+- The moment an individual item is completed, mark it complete in `current.md`; do not batch completion updates until the end.
+- When a task produces a concrete artifact, note the path in `current.md` alongside the completed item.
+- If the run changes direction, move the old thread to paused, mark the new thread active, and update the TOC before continuing.
 
 ## EXPLORER WORKFLOW
 - Use `@explorer` for bounded candidate discovery by default, not final synthesis.
@@ -34,6 +46,8 @@ Research monorepo for Intel DSA/IAX data-path work.
 - Restate critical task budgets and stop conditions inline even when a template is provided.
 
 ## CONVENTIONS
+- On resume, read `current.md` first, then the latest relevant plan/report before acting.
+- Before non-trivial work, make sure `current.md` reflects the current active section, overall goal, and active items for the run.
 - Write a plan in `docs/plan/YYYY-MM-DD/NN.<topic>.<state>.md` before non-trivial changes.
 - Write findings to `docs/report/<topic>/NNN.<descriptor>.<ext>`; write single-point insights to `remark/NNN_<topic>.md`.
 - Read the nearest README before modifying a module.
