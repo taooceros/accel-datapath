@@ -30,6 +30,7 @@ Makefile
 devenv.local.nix
 devenv.local.yaml
 .codemogger/
+.ralph/
 .turso/
 
 # direnv
