@@ -4,6 +4,7 @@ Research monorepo for Intel DSA/IAX data-path work.
 
 ## DEFAULT MODE: SPEED FIRST
 - Prefer response time over exhaustive verification unless the user asks for high confidence.
+- Thinking is allowed and encouraged, but periodically report back with current best guess and confidence level.
 - Answer from local context first; escalate only when the risk or uncertainty is meaningful.
 - If external lookup may help but is not blocking, answer first and enrich later.
 
