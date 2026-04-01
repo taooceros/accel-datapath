@@ -18,6 +18,12 @@ Session state:
 - Stop conditions already seen: {stop_conditions_seen}
 - Compaction count: {compaction_count}
 
+Checkpointing:
+- Write findings into session memory aggressively instead of waiting until the end.
+- Update memory whenever you add/promote a candidate, reject a lead, read a file, add an unknown, or finish a search round.
+- Checkpoint before broadening scope, opening a new domain, or reading several more files.
+- Keep memory compact: prefer path/symbol notes and short reasons, not large snippets.
+
 Budget:
 - Max {N} search rounds
 - Max {M} candidates

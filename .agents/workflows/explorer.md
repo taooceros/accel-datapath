@@ -28,6 +28,12 @@ Do not use explorer for end-to-end understanding by default.
 - Use the session state to avoid re-reading and to detect prior compaction or resumed-with-missing-context runs.
 - Missing prior context means the resumed task lacks task id, rounds used, shortlist/rejections/unknowns, or files already read.
 
+## Checkpointing
+- Write findings into session memory aggressively rather than waiting for the final handback.
+- Update session memory when any of these change: candidate shortlist, rejected leads, unknowns, files already read, rounds used, stop conditions seen.
+- Checkpoint at least after each search round and before any action likely to expand context further.
+- Prefer compact path/symbol notes over raw snippets when writing session memory.
+
 ## Stop Conditions
 Stop and return when:
 - 3 strong candidates exist
