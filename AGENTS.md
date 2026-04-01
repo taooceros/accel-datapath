@@ -9,26 +9,24 @@ Research monorepo for Intel DSA/IAX data-path work.
 
 ## SOURCE ORDER
 1. Current conversation
-2. This file, nearest child `AGENTS.md`, nearby `README.md`
 3. Repo docs in `docs/` and `remark/`
 4. Local indexes/tools: `codemogger`, Turso KB, `read`, `grep`, `glob`, `lsp_*`
 5. External docs and web search
 
-## TOOL ROUTING
-- Known path: `read`
-- Narrow local lookup: `grep` / `glob`
-- Code discovery: `codemogger search`
-- Semantic navigation/refactor safety: `lsp_*`
-- Plans/reports/spec history: `tursodb-kb` when the path is not already known
-- External docs (`@librarian`, web) only when local sources are insufficient, version-specific behavior matters, or the user asks for verification
-- Reuse prior external findings instead of refetching; store reusable notes under `docs/cache/external/<topic>.md` and reindex after adding them
+## EXPLORER WORKFLOW
+- Use `@explorer` for bounded candidate discovery by default, not final synthesis.
+- Do not combine repo-wide discovery, broad reading, and final recommendation in one explorer task.
+- Every explorer task must specify: objective, scope boundary, allowed sources, max candidates, and stop condition.
+- Default limits: max 2 search rounds, max 2 domains, max 8 candidates, max 1-2 reads per candidate.
+- Stop early and hand back when: 3 plausible candidates are found; the candidate set is not converging; the task splits into multiple subquestions; or deeper cross-domain synthesis is required.
+- Explorer returns shortlists, rejected leads, unknowns, and next step; the orchestrator owns pruning, merging, and final synthesis.
 
-## PARALLELISM
-- Prefer concurrent tool calls for independent reads/searches.
-- Run sequentially only when later steps depend on earlier results.
-- For broad codebase discovery, prefer parallel search or `@explorer`.
-- When delegating to `@explorer`, batch independent searches in one request and ask it to run them concurrently.
-- Do not use `@explorer` for a single known-path read or a narrow symbol/file lookup; use direct local tools first.
+## AGENT TEMPLATES
+- Agent-specific task templates live under `.agents/templates/`.
+- Naming convention: `.agents/templates/<agent_name>_*.md`.
+- When delegating to a specialist, cite the exact matching template file when one exists.
+- Do not reference `.agents/templates/` generically; reference a specific template path.
+- Restate critical task budgets and stop conditions inline even when a template is provided.
 
 ## CONVENTIONS
 - Write a plan in `docs/plan/YYYY-MM-DD/NN.<topic>.<state>.md` before non-trivial changes.
@@ -41,6 +39,7 @@ Research monorepo for Intel DSA/IAX data-path work.
 - Guess DSA/IAX behavior if `docs/specs/*.md` or `docs/report/architecture/001.design_decisions.md` already cover it.
 - Treat raw PDFs as KB-ingested content; searchable paper content belongs in tracked markdown.
 - Run hardware-facing binaries directly when the documented flow requires `launch` / `dsa_launcher`.
+- Do not combine repo-wide discovery, broad file reading, and final synthesis in one explorer task unless the scope is already tightly bounded.
 
 ## REPO MAP
 ```text
@@ -53,6 +52,8 @@ tools/        Launcher behavior
 
 ## KEY PATHS
 - Root policy: `AGENTS.md`
+- Agent workflows: `.agents/workflows/`
+- Agent prompt templates: `.agents/templates/`
 - C++ framework: `dsa-stdexec/AGENTS.md`
 - Rust workspace: `accel-rpc/AGENTS.md`
 - Hardware benchmarking: `hw-eval/AGENTS.md`

@@ -10,6 +10,7 @@ Inherits `../AGENTS.md`.
 - `benchmarking/` — performance analysis, optimization results, profiling output, and benchmark-derived findings.
 - `hw_eval/` — hardware enablement, validation, smoke tests, bindings status, launcher issues, and device-specific investigations.
 - `literature/` — KB-searchable literature reviews, paper-ingestion summaries, and cross-paper synthesis.
+- `workflow/` — agent workflow design, orchestration policy, retrieval strategy, task-shaping guidance, and process-level improvements.
 - `artifacts/` — rendered `.pdf` / `.typ` report companions that support a markdown report but are not the primary KB input.
 - `incidents/` — one-off environment or workflow failure reports that do not belong to a technical subsystem thread.
 
