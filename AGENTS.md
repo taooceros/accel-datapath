@@ -25,6 +25,7 @@ Research monorepo for Intel DSA/IAX data-path work.
 - The moment an individual item is completed, mark it complete in `current.md`; do not batch completion updates until the end.
 - When a task produces a concrete artifact, note the path in `current.md` alongside the completed item.
 - If the run changes direction, move the old thread to paused, mark the new thread active, and update the TOC before continuing.
+- When a thread is fully completed, remove it from `current.md` after its outcome is captured in a durable artifact such as a workflow report, plan completion note, or report file.
 
 ## EXPLORER WORKFLOW
 - Use `@explorer` for bounded candidate discovery by default, not final synthesis.
@@ -48,6 +49,7 @@ Research monorepo for Intel DSA/IAX data-path work.
 ## CONVENTIONS
 - On resume, read `current.md` first, then the latest relevant plan/report before acting.
 - Before non-trivial work, make sure `current.md` reflects the current active section, overall goal, and active items for the run.
+- Keep `current.md` focused on active and paused threads; use reports and completed plan notes as the durable record for finished threads.
 - Write a plan in `docs/plan/YYYY-MM-DD/NN.<topic>.<state>.md` before non-trivial changes.
 - Write findings to `docs/report/<topic>/NNN.<descriptor>.<ext>`; write single-point insights to `remark/NNN_<topic>.md`.
 - Read the nearest README before modifying a module.
