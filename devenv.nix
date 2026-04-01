@@ -152,7 +152,9 @@ in
     # 3. Export to CPLUS_INCLUDE_PATH so clangd sees it
     export CPLUS_INCLUDE_PATH=$(gcc -E -Wp,-v -xc++ /dev/null 2>&1 | grep '^ ' | awk '{print $1}' | tr '\n' ':')
 
-    echo "Updated CPLUS_INCLUDE_PATH for gcc15"
+    if [ -t 1 ] && [ -t 2 ]; then
+      echo "Updated CPLUS_INCLUDE_PATH for gcc15" >&2
+    fi
   '';
 
   # https://devenv.sh/tasks/
