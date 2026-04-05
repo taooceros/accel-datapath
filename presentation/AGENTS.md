@@ -20,7 +20,72 @@ Typst slide decks and presentation-only artifacts live here. This subtree is for
 - When editing a deck, preserve readability on a 16:9 presentation page and favor concise speaker-facing structure over dense prose.
 - Compile the deck after non-trivial changes to catch Typst errors.
 
+## SLIDE-PLAN REQUIREMENTS
+- Before creating or substantially revising a deck, write or update a plan under `../docs/plan/YYYY-MM-DD/`.
+- The slide plan should be detailed enough that someone could implement the deck structure from the plan alone without rereading the whole conversation.
+- The plan is not just a topic list; it should capture the intended audience-facing story and the concrete slide components.
+
+### What a slide plan must include
+1. **Goal and audience**
+   - what the talk is for (interview, project meeting, advisor update, defense dry run, etc.)
+   - target duration
+   - desired tone (conversational, persuasive, technical, status-update, etc.)
+2. **Source grounding**
+   - exact reports / plans / specs / older decks being summarized
+   - any claims or numbers that must remain traceable to repo artifacts
+3. **Story spine**
+   - the high-level narrative arc in order
+   - what question the talk opens with, what insight changes the story, and what closing message the audience should remember
+4. **Slide-by-slide design**
+   - every planned slide should have:
+     - working title
+     - purpose of the slide
+     - key message / takeaway sentence
+     - concrete content components to show
+     - visual guidance when relevant
+5. **Component-level detail**
+   - specify which concrete components belong on a slide, such as:
+     - title / subtitle / metadata
+     - callouts / notes / cards / tables
+     - diagrams or pipeline stages
+     - explicit system components, APIs, or modules to mention
+     - exact benchmark variants or measured results that appear
+6. **Delivery guidance**
+   - expected time per section or per slide when useful
+   - transitions or phrasing cues if the deck should sound conversational
+
+### Expected level of detail for slide plans
+- Do not stop at “slide 3: background” or “slide 5: results”.
+- Include which *components* appear on the slide and which *system pieces* they refer to.
+- For systems talks, explicitly name the important software and hardware components when they matter to the story, for example:
+  - APIs or abstractions (`async/await`, callbacks, sender/receiver, futures)
+  - framework layers (`scope.nest`, `then`, `connect`, `start`)
+  - hardware examples (RDMA MMIO, Intel DSA, Intel IAX)
+  - datapath stages (codec, copy/CRC, compression, framing, runtime)
+- If one slide contains the central quantitative evidence, say exactly which numbers, variants, or comparisons it should show.
+
+### Preferred slide-plan structure
+- `## Goal`
+- `## Sources`
+- `## Intended output`
+- `## Design goals`
+- `## Story spine`
+- `## Planned slide sequence`
+- `## Slide-by-slide content components`
+- `## Visual guidance`
+- `## Delivery guidance`
+- `## Steps`
+
+### Presentation-specific planning guidance
+- Prefer one main idea per slide.
+- Reserve dense tables or detailed quantitative artifacts for the one or two slides where they matter most.
+- Use the plan to decide which material stays in the deck and which material remains only in reports.
+- If a deck is conversational, say so explicitly in the plan and specify where simple visuals should replace dense text.
+- If reusing an older deck, the plan should say what is reused, what is reframed, and what is newly added.
+
 ## ANTI-PATTERNS
 - Do not store the only copy of important analysis in slides.
 - Do not create undated or ambiguously named presentation directories.
 - Do not turn presentation files into a general knowledge dump; keep reusable knowledge in tracked docs.
+- Do not write slide plans that are only a vague list of topics without slide purposes and components.
+- Do not omit the key system components or measurements that the slide is supposed to mention.
