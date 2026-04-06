@@ -1,6 +1,6 @@
 // Progress presentation 2026-03-31
 
-#import "../template.typ": callout, card, deck, fit-badge, palette, panel, slide-title, zebra-fill
+#import "../template.typ": callout, card, deck, fit-badge, palette, panel
 
 #show: deck.with(
   margin: (x: 52pt, y: 42pt),
@@ -8,21 +8,17 @@
   spacing: 0.95em,
 )
 
-#let c-title = palette.title
 #let c-accent = palette.accent
 #let c-blue = palette.blue
 #let c-green = palette.green
 #let c-orange = palette.orange
 #let c-red = palette.red
-#let tbl-fill = zebra-fill
+#let c-indigo = rgb("#eef2ff")
+#let tbl-fill = (_, y) => if calc.odd(y) { palette.row } else { white }
 
-// ========================================================================
-// TITLE
-// ========================================================================
+= Project Update: Last 2 Months
 
 #align(center + horizon)[
-  #text(size: 29pt, weight: "bold", fill: c-title)[Project Update: Last 2 Months]
-  #v(0.8em)
   #text(size: 18pt)[From DSA microbenchmarks to accelerator-aware RPC decomposition]
   #v(0.8em)
   #text(size: 16pt)[Hongtao Zhang]
@@ -30,7 +26,7 @@
   #text(size: 14pt, fill: luma(120))[Mar 31, 2026 · project meeting]
 ]
 
-#v(1.5em)
+#v(0.8em)
 
 #callout(fill: c-blue, stroke: c-accent)[
   *High-level story*: batching makes the hardware cheap enough that the
@@ -38,13 +34,7 @@
   both the DSA work and the next RPC/offload direction.
 ]
 
-// ========================================================================
-// OVERVIEW
-// ========================================================================
-
-#pagebreak()
-
-#slide-title[What I got done]
+== What I got done
 
 #grid(
   columns: (1fr, 1fr),
@@ -67,7 +57,6 @@
     ],
     fill: c-green,
   )],
-
   [#card(
     [3. Stabilized the hardware side],
     [
@@ -84,30 +73,20 @@
       - decomposed the Tonic gRPC stack by component \
       - mapped the concrete interception points for copy / CRC / compression offload
     ],
-    fill: rgb("#eef2ff"),
+    fill: c-indigo,
   )],
 )
-
-#v(0.9em)
 
 #callout(fill: c-orange, stroke: rgb("#f97316"))[
   The work now has both a *measured low-level result* and a *clear next application target*.
 ]
 
-// ========================================================================
-// MAIN RESULT
-// ========================================================================
-
-#pagebreak()
-
-#slide-title[Main technical result]
+== Main technical result
 
 #callout(fill: c-blue, stroke: c-accent)[
   *Main finding*: after batching, hardware is no longer the dominant cost for
   small DSA operations; the async software framework is.
 ]
-
-
 
 #table(
   columns: (1.7fr, 1fr, 1fr, 1fr),
@@ -117,8 +96,6 @@
   [Direct path (remove scope/then)], [42 Mpps], [24 ns], [28 Mpps],
   [Reusable ops (remove connect/start)], [60--84 Mpps], [16.7--11.9 ns], [34 Mpps],
 )
-
-#v(0.8em)
 
 #grid(
   columns: (1fr, 1fr, 1fr),
@@ -140,13 +117,7 @@
   )],
 )
 
-// ========================================================================
-// WHY IT MATTERS
-// ========================================================================
-
-#pagebreak()
-
-#slide-title[Why this matters]
+== Why this matters
 
 #panel[
   #set text(size: 18pt)
@@ -154,8 +125,6 @@
   + Once that happens, *software overhead becomes visible* and can dominate the end-to-end cost.
   + So the research question is no longer just “is offload fast?” but “when does the software path erase the benefit?”
 ]
-
-#v(1.0em)
 
 #grid(
   columns: (1fr, 1fr),
@@ -180,13 +149,7 @@
   )],
 )
 
-// ========================================================================
-// RPC DIRECTION
-// ========================================================================
-
-#pagebreak()
-
-#slide-title[Where the RPC work stands]
+== Where the RPC work stands
 
 #callout(fill: c-blue, stroke: c-accent)[
   We could turn the low-level result into a concrete
@@ -226,21 +189,14 @@
   )],
 )
 
-
 #callout(fill: c-orange, stroke: rgb("#f97316"))[
   The near-term RPC goal is *decomposition and crossover analysis*.
 ]
 
-// ========================================================================
-// KB / AI WORKFLOW
-// ========================================================================
-
-#pagebreak()
-
-#slide-title[Knowledge base design and new AI workflow]
+== Knowledge base design and new AI workflow
 
 #callout(fill: c-blue, stroke: c-accent)[
-  Shengkai is really interesting in making a AI Research Assistant (do literature review, propose hypothesis, conduct experiment etc.).
+  Shengkai is interested in building an AI research assistant that can help with literature review, hypothesis generation, and experiment planning.
 ]
 
 #grid(
@@ -267,16 +223,7 @@
   )],
 )
 
-#v(0.9em)
-
-
-// ========================================================================
-// TAKEAWAYS / NEXT
-// ========================================================================
-
-#pagebreak()
-
-#slide-title[Takeaways and next steps]
+== Takeaways and next steps
 
 #grid(
   columns: (1fr, 1fr),
@@ -301,8 +248,6 @@
     fill: c-green,
   )],
 )
-
-#v(1.0em)
 
 #callout(fill: c-orange, stroke: rgb("#f97316"))[
   *Bottom line*: over the last two months, the project moved from “optimize a DSA path”

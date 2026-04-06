@@ -9,22 +9,26 @@
 
 ## Active — Google interview research slide draft
 
-**Overall goal:** draft a conversational ~15 minute slide that introduces the basic research idea, the current research plan, and the concrete progress already achieved, grounded in the existing presentation and plan/report artifacts.
+**Overall goal:** keep the presentation set Touying-native while simplifying the shared template so future slide edits spend less effort on formatting and more on content.
 
 ### Active items
 
-- review the newly drafted deck and tighten wording or visuals if requested
-- adapt the deck to the final interview emphasis if the story needs rebalancing
-- optionally add speaker notes or a shorter backup version
+- optionally do a quick visual pass on the migrated older decks if any slide now feels crowded under Touying
+- keep any color aliases or one-off layout helpers local unless a true shared-template blocker appears
+- only add shared helpers later if the same pattern repeats across future decks
 
 ### Relevant artifacts
 
 - `current.md`
 - `docs/plan/2026-04-05/01.google_interview_research_slide_plan.in_progress.md`
+- `docs/plan/2026-04-06/01.touying_migrate_older_presentations.in_progress.md`
+- `presentation/template.typ`
 - `presentation/2026-04-05/google_interview_research.typ`
 - `presentation/2026-04-05/google_interview_research.pdf`
 - `presentation/2026-03-31/progress_2026-03-31.typ`
+- `presentation/2026-03-31/progress_2026-03-31.pdf`
 - `presentation/2026-03-30/tonic_offloadability.typ`
+- `presentation/2026-02-23/progress_2026-02-23.typ`
 - `docs/plan/2026-03-31/01.two_month_project_meeting_slides.done.md`
 - `docs/plan/2026-03-30/02.tonic_offloadability_presentation.done.md`
 - `docs/report/benchmarking/009.tonic_profile_bounded_matrix_results.md`
@@ -39,6 +43,25 @@
 - reframed the project premise around async API suitability for modern fast accelerators, batching, MMIO amortization, and control-path overhead
 - drafted a concrete ~10-slide Typst deck at `presentation/2026-04-05/google_interview_research.typ`
 - compiled the deck successfully to `presentation/2026-04-05/google_interview_research.pdf`
+- started revising the deck/template to use Touying instead of the hand-crafted presentation scaffolding
+- migrated `presentation/template.typ` to a Touying-based slide wrapper while preserving the existing palette and helper components
+- ported `presentation/2026-04-05/google_interview_research.typ` from manual page breaks to Touying `title-slide` / `slide` wrappers
+- recompiled the interview deck successfully after the Touying migration and minor spacing trims
+- started a second pass to make the deck more Touying-native and move shared styling into the Touying theme itself
+- updated `presentation/template.typ` so the shared Touying wrapper carries more of the deck chrome (simple theme setup, palette-driven primary color, shared header/footer controls)
+- rewrote `presentation/2026-04-05/google_interview_research.typ` into a more Touying-native heading-driven source using `=` / `==` slide structure
+- recompiled the heading-driven Touying deck successfully and trimmed repeated-slide titles to read as continuations
+- started a simplification pass to reduce custom formatting logic so future slide edits can stay content-first
+- simplified `presentation/template.typ` into a thinner Touying wrapper plus only the reusable content helpers (`callout`, `card`, `panel`, `stage-card`, `fit-badge`)
+- kept the heading-driven deck source unchanged under the simplified template and recompiled successfully
+- migrated `presentation/2026-03-31/progress_2026-03-31.typ` from manual title/`#pagebreak()` structure to shared Touying heading-driven slides with local table striping and palette aliases
+- recompiled `presentation/2026-03-31/progress_2026-03-31.typ` successfully to `presentation/2026-03-31/progress_2026-03-31.pdf`
+- migrated `presentation/2026-02-23/progress_2026-02-23.typ` from manual page breaks to the shared Touying `#show: deck.with(...)` style while keeping its story and measurements intact
+- recompiled `presentation/2026-02-23/progress_2026-02-23.typ` successfully with `typst compile --root ...`
+- migrated `presentation/2026-03-30/tonic_offloadability.typ` from manual `#pagebreak()` / `#slide-title` structure to shared Touying `#show: deck.with(...)` plus heading-driven slides
+- kept the deck-local palette aliases local and recompiled `presentation/2026-03-30/tonic_offloadability.pdf` successfully with `typst compile --root ...`
+- verified the three migrated older decks compile cleanly together; Typst LSP still reports import-root access limits on `../template.typ`, so compile remains the reliable validation path
+- cleaned one rough wording spot in the 2026-03-31 deck and removed unused aliases from the 2026-02-23 deck after review
 
 ## Paused — Mosaic integration for report visualization
 

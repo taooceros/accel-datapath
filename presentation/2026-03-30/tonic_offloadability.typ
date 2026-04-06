@@ -1,27 +1,22 @@
 // Tonic offloadability presentation
 
-#import "../template.typ": deck, palette, slide-title, zebra-fill, callout, card, stage-card, fit-badge
+#import "../template.typ": callout, card, deck, fit-badge, palette, stage-card
 
-#show: deck
+#show: deck.with(
+  leading: 0.9em,
+  spacing: 0.95em,
+)
 
 #let c-title = palette.title
 #let c-accent = palette.accent
-#let c-head = palette.head
-#let c-row = palette.row
 #let c-blue = palette.blue
 #let c-orange = palette.orange
 #let c-green = palette.green
 #let c-red = palette.red
 
-#let tbl-fill = zebra-fill
-
-// ========================================================================
-// TITLE
-// ========================================================================
+= Offloadability of Tonic
 
 #align(center + horizon)[
-  #text(size: 30pt, weight: "bold", fill: c-title)[Offloadability of Tonic]
-  #v(0.9em)
   #text(size: 19pt)[Which parts of the Rust gRPC datapath can move to DSA / IAX?]
   #v(0.8em)
   #text(size: 16pt)[Hongtao Zhang]
@@ -29,20 +24,14 @@
   #text(size: 14pt, fill: luma(120))[Mar 30, 2026]
 ]
 
-#v(1.6em)
+#v(0.9em)
 
 #callout(fill: c-blue, stroke: c-accent)[
   *Working assumption in this repo*: keep the gRPC API and most control logic unchanged;
   offload only the regular, byte-oriented kernels below the API boundary.
 ]
 
-// ========================================================================
-// QUESTION
-// ========================================================================
-
-#pagebreak()
-
-#slide-title[What does “offloadability” mean here?]
+== What does “offloadability” mean here?
 
 - *Not* “move Tonic wholesale onto hardware”
 - *Not* “replace tokio, tower, or HTTP/2 with a device runtime”
@@ -59,13 +48,7 @@
   cost less than the CPU work it removes.
 ]
 
-// ========================================================================
-// DATAPATH
-// ========================================================================
-
-#pagebreak()
-
-#slide-title[Tonic datapath, decomposed]
+== Tonic datapath, decomposed
 
 #grid(
   columns: (1fr, auto, 1fr, auto, 1fr, auto, 1fr, auto, 1fr),
@@ -110,13 +93,7 @@
   baseline comparison point.
 ]
 
-// ========================================================================
-// PER-MESSAGE PIPELINE
-// ========================================================================
-
-#pagebreak()
-
-#slide-title[What happens to one message?]
+== What happens to one message?
 
 #grid(
   columns: (1fr, auto, 1fr, auto, 1fr, auto, 1fr, auto, 1fr),
@@ -180,13 +157,7 @@
   ], fill: c-blue)],
 )
 
-// ========================================================================
-// CRITERIA
-// ========================================================================
-
-#pagebreak()
-
-#slide-title[Practical criteria for exploring offloadability]
+== Practical criteria for exploring offloadability
 
 #grid(
   columns: (1fr, 1fr),
@@ -197,7 +168,6 @@
     [Compression and CRC are better fits than branchy protocol logic.],
     fill: c-blue,
   )],
-
   [#card(
     [3. Batchability],
     [Many messages or larger payloads can amortize enqueue, DMA, and completion cost.],
@@ -214,13 +184,7 @@
   with CPU fallback.
 ]
 
-// ========================================================================
-// MATRIX
-// ========================================================================
-
-#pagebreak()
-
-#slide-title[Current assessment of offload potential by stage]
+== Current assessment of offload potential by stage
 
 #grid(
   columns: (1fr, 1fr, 1fr),
@@ -261,13 +225,7 @@
   ],
 )
 
-// ========================================================================
-// ARCHITECTURE
-// ========================================================================
-
-#pagebreak()
-
-#slide-title[Tonic request path: concrete layers and the best middle point]
+== Tonic request path: concrete layers and the best middle point
 
 #card([Client path], [
   generated client (`new`, `with_interceptor`) → optional interceptor \
@@ -334,13 +292,7 @@
   ]],
 )
 
-// ========================================================================
-// ARCHITECTURE
-// ========================================================================
-
-#pagebreak()
-
-#slide-title[Tonic request path: deeper payload hooks]
+== Tonic request path: deeper payload hooks
 
 #grid(
   columns: (1fr, auto, 1fr, auto, 1fr),
@@ -387,13 +339,7 @@
   ]],
 )
 
-// ========================================================================
-// ARCHITECTURE
-// ========================================================================
-
-#pagebreak()
-
-#slide-title[One possible split to evaluate]
+== One possible split to evaluate
 
 #card([CPU / control plane], [
   request dispatch  ·  futures / tower  ·  protocol state  ·  service logic
@@ -428,13 +374,7 @@
   to drop deeper into codec/body internals; `tonic-profile` is the end-to-end check.
 ]
 
-// ========================================================================
-// VALIDATION
-// ========================================================================
-
-#pagebreak()
-
-#slide-title[What still needs validation?]
+== What still needs validation?
 
 #grid(
   columns: (1fr, 1fr),
@@ -449,7 +389,6 @@
     [Which costs dominate in practice: serialization, copies, compression, framing, or runtime scheduling?],
     fill: c-blue,
   )],
-
   [#card([Buffering effects], [Does pooled buffering change the comparison more than hardware offload does?], fill: c-blue)],
   [#card([RPC style], [Do unary, medium-payload, and streaming RPCs require different conclusions?], fill: c-blue)],
 )
@@ -461,13 +400,7 @@
   the set of plausible interception points and payload regimes worth measuring.
 ]
 
-// ========================================================================
-// PLAN
-// ========================================================================
-
-#pagebreak()
-
-#slide-title[Suggested evaluation sequence]
+== Suggested evaluation sequence
 
 #grid(
   columns: 5,
@@ -483,7 +416,6 @@
   [#card([5. Compare by payload regime], [tiny unary vs medium payload vs streaming], fill: white)],
 )
 
-
 #v(0.7em)
 
 #grid(
@@ -494,13 +426,7 @@
   [#callout(fill: white, stroke: luma(140))[*Probably lower priority*: transport/runtime changes]],
 )
 
-// ========================================================================
-// TAKEAWAY
-// ========================================================================
-
-#pagebreak()
-
-#slide-title[Takeaway]
+== Takeaway
 
 #callout(fill: c-blue, stroke: c-accent)[
   *Current read*: Tonic appears more amenable to selective offload than wholesale offload.
