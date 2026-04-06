@@ -29,8 +29,6 @@
   #text(size: 14pt, fill: luma(120))[Apr 5, 2026 · interview talk]
 ]
 
-#v(1.3em)
-
 #callout(fill: c-blue, stroke: c-accent)[
   *Thesis*: accelerator programming wants an async abstraction, but once submission cost is amortized,
   the async control path itself can become more expensive than the hardware work.
@@ -51,13 +49,19 @@
   + The real question is: *are today’s async APIs still efficient enough for modern fast accelerators?*
 ]
 
-#v(1em)
-
 #grid(
   columns: (1fr, 1fr),
   gutter: 14pt,
-  [#card([Why this matters], [If the abstraction is too expensive, then a clean async interface may hide the very performance that makes offload attractive.], fill: c-blue)],
-  [#card([Research lens], [This project studies both *programmability* and *cost*: can we make accelerator usage easier without losing the performance regime that batching unlocks?], fill: c-green)],
+  [#card(
+    [Why this matters],
+    [If the abstraction is too expensive, then a clean async interface may hide the very performance that makes offload attractive.],
+    fill: c-blue,
+  )],
+  [#card(
+    [Research lens],
+    [This project studies both *programmability* and *cost*: can we make accelerator usage easier without losing the performance regime that batching unlocks?],
+    fill: c-green,
+  )],
 )
 
 // ========================================================================
@@ -101,149 +105,89 @@
   )],
 )
 
-#v(1em)
-
 #callout(fill: c-orange, stroke: rgb("#f97316"))[
   *Better API*: accelerator work should look like normal structured async work — in C++ sender/receiver or Rust async style — rather than manual callback-and-poll control flow.
 ]
 
 // ========================================================================
-// HARDWARE CHANGED
+// REGIME CHANGE
 // ========================================================================
 
 #pagebreak()
 
-#slide-title[3. But the hardware changed underneath us]
+#slide-title[3. Why this question matters now]
 
 #grid(
-  columns: (1fr, 1fr),
-  gutter: 16pt,
+  columns: (1fr, 1fr, 1fr),
+  gutter: 14pt,
   [#card(
-    [When many async APIs were shaped],
-    [I/O and network operations were relatively expensive, so software overhead was easier to hide behind long-latency operations.],
+    [Old async assumption],
+    [
+      I/O and network operations were expensive enough that software overhead was easier to hide behind long-latency work.
+    ],
     fill: c-blue,
   )],
   [#card(
-    [Today’s tension],
-    [Modern on-chip accelerators such as Intel DSA/IAX can complete byte-oriented work fast enough that software assumptions from that older regime may no longer hold.],
-    fill: c-orange,
-  )],
-)
-
-#v(1em)
-
-#note[
-  *Conversational takeaway*: async was designed to help manage slow operations. The interesting question is what happens when the operation is no longer that slow.
-]
-
-// ========================================================================
-// RDMA CLUE
-// ========================================================================
-
-#pagebreak()
-
-#slide-title[4. A clue from earlier RDMA work]
-
-#callout(fill: c-blue, stroke: c-accent)[
-  Earlier RDMA work suggested that the submission path, not the device itself, could become the main bottleneck at very high message rates.
-]
-
-#v(0.8em)
-
-#grid(
-  columns: (1.2fr, 0.9fr),
-  gutter: 16pt,
-  [#card(
-    [Observed issue],
+    [Batching clue from RDMA],
     [
-      - one MMIO doorbell costs roughly *100--200 ns* \
-      - that submission cost dominates at high message rates \
-      - batching amortizes one expensive doorbell across many operations
+      #fit-badge([~100--200 ns MMIO], fill: rgb("#f59e0b"))
+      One doorbell can dominate at high message rates, but batching amortizes that cost across many operations.
     ],
     fill: c-orange,
   )],
-  [#panel[
-    #align(center)[
-      #text(size: 16pt, weight: "bold", fill: c-title)[One expensive submission]
-      #v(0.4em)
-      #text(size: 28pt)[1 MMIO]
-      #v(0.4em)
-      #text(size: 16pt)[driving many ops]
-      #v(0.6em)
-      #fit-badge([batching], fill: rgb("#16a34a"))
-    ]
-  ]],
+  [#card(
+    [Why this matters now],
+    [
+      If DSA/IAX shows the same structure, then submission becomes cheap enough that the software control path may become the visible bottleneck.
+    ],
+    fill: c-green,
+  )],
 )
-
-#v(0.8em)
 
 #callout(fill: c-green, stroke: rgb("#16a34a"))[
-  *Lesson*: batching can move the bottleneck from hardware submission cost to software overhead.
+  *Lesson*: batching can make hardware submission cheap enough that software overhead becomes the next bottleneck.
 ]
 
 // ========================================================================
-// HYPOTHESIS
+// SETUP
 // ========================================================================
 
 #pagebreak()
 
-#slide-title[5. The project hypothesis]
+#slide-title[4. How I tested it]
 
-#panel[
-  #set text(size: 18pt)
-  + If batching changes the regime for RDMA, then Intel on-chip accelerators may show the same structure.
-  + If that is true, then even *smaller operations* may become worth offloading once submission is amortized.
-  + That would broaden accelerator coverage beyond only very large transfers or heavy kernels.
+#callout(fill: c-blue, stroke: c-accent)[
+  *Hypothesis*: if batching hides submission cost in RDMA, Intel DSA should show the same shift: hardware gets cheap, software overhead shows up.
 ]
-
-#v(1em)
-
-#grid(
-  columns: (1fr, auto, 1fr, auto, 1fr),
-  gutter: 10pt,
-  [#stage-card([Question], [Do DSA/IAX show the same batching effect?], [research trigger], fill: c-blue, accent: c-accent)],
-  [#align(center + horizon)[#text(size: 18pt, weight: "bold", fill: luma(110))[→]]],
-  [#stage-card([Method], [compare hardware, mock-hardware, and stripped software paths], [measurement], fill: c-green, accent: rgb("#16a34a"))],
-  [#align(center + horizon)[#text(size: 18pt, weight: "bold", fill: luma(110))[→]]],
-  [#stage-card([Goal], [see whether software or hardware becomes the limiting cost], [main decision], fill: c-orange, accent: rgb("#f59e0b"))],
-)
-
-// ========================================================================
-// WHAT I BUILT
-// ========================================================================
-
-#pagebreak()
-
-#slide-title[6. What I built to test it]
 
 #grid(
   columns: (1fr, 1fr),
   gutter: 14pt,
   [#card(
-    [Measurement platform],
+    [Measurement design],
     [
-      - sender/receiver support for all 8 DSA operations \
-      - benchmark sweeps across message size, concurrency, and submission strategy \
-      - mock-hardware runs to isolate software cost from device cost
+      - *8 DSA ops* \
+      - sweep: message size, concurrency, batching \
+      - compare *mock vs real hardware*
     ],
     fill: c-blue,
   )],
   [#card(
     [Controlled software variants],
     [
-      - full stdexec baseline \
-      - direct path removing `scope.nest()` + `then()` \
-      - reusable-op path removing per-op `connect()` + `start()`
+      *baseline* \
+      `scope.nest(dsa.copy(...) | then(record))` \
+      *direct* \
+      `dsa.copy(...)` \
+      remove `scope.nest()` + `then()` \
+      *reusable* \
+      prebuild op-state, skip per-op `connect()` + `start()`
     ],
     fill: c-green,
   )],
 )
 
-#v(0.8em)
-
-#callout(fill: c-orange, stroke: rgb("#f97316"))[
-  The point was not just to optimize one implementation, but to *measure the cost of the abstraction layers themselves*.
-]
+#note[*Method*: control one layer at a time — baseline full stdexec, then remove `scope.nest()` + `then()`, then remove per-op `connect()` + `start()` — and measure the delta at each step.]
 
 // ========================================================================
 // MAIN RESULT
@@ -251,30 +195,46 @@
 
 #pagebreak()
 
-#slide-title[7. Main result: batching exposes the bottleneck shift]
+#slide-title[5. Main result: software control-path cost can dominate]
 
 #callout(fill: c-blue, stroke: c-accent)[
   *Main finding*: yes — once submission is amortized, Intel DSA shows the same pattern: hardware becomes cheap enough that the software path becomes a first-order cost.
 ]
 
-#v(0.7em)
-
 #table(
   columns: (1.7fr, 1fr, 1fr, 1fr),
   table.header([*Path*], [*Mock throughput*], [*Per-op*], [*Real DSA*]),
-  [Full stdexec baseline], [26 Mpps], [38 ns], [18 Mpps],
-  [Direct path], [42 Mpps], [24 ns], [28 Mpps],
-  [Reusable ops], [60--84 Mpps], [16.7--11.9 ns], [34 Mpps],
+  [Full stdexec baseline], [26.3 Mpps], [38.0 ns], [18 Mpps],
+  [Direct path], [41.6 Mpps], [24.0 ns], [28 Mpps],
+  [Reusable ops], [59.9 Mpps], [16.7 ns], [34 Mpps],
 )
 
-#v(0.8em)
+#callout(fill: c-orange, stroke: rgb("#f97316"))[
+  *Matched point shown above*: `c=2048`, `msg=8` on mock DSA. Separate hot-cache ceiling: reusable reaches *84 Mpps / 11.9 ns* at `c=32`.
+]
+
+#pagebreak()
+
+#slide-title[5. Main result: software control-path cost can dominate]
 
 #grid(
   columns: (1fr, 1fr, 1fr),
   gutter: 12pt,
-  [#card([Measured delta], [Removing framework layers cuts per-op cost from 38 ns to as low as 11.9 ns.], fill: c-green)],
-  [#card([Interpretation], [The dominant savings come from software abstraction layers rather than from changing the hardware.], fill: c-blue)],
-  [#card([Why it matters], [This means smaller offloaded operations become plausible once submission is amortized.], fill: c-orange)],
+  [#card(
+    [Measured delta],
+    [At the matched comparison point, removing framework layers cuts per-op cost from 38.0 ns to 16.7 ns — a 56% reduction.],
+    fill: c-green,
+  )],
+  [#card(
+    [Interpretation],
+    [The dominant savings come from software abstraction layers rather than from changing the hardware path.],
+    fill: c-blue,
+  )],
+  [#card(
+    [Why it matters],
+    [Once submission is amortized, the software control path is no longer secondary overhead.],
+    fill: c-orange,
+  )],
 )
 
 // ========================================================================
@@ -283,27 +243,25 @@
 
 #pagebreak()
 
-#slide-title[8. The surprising part]
+#slide-title[6. What this result does — and does not — say]
 
 #grid(
   columns: (1fr, 1fr),
   gutter: 16pt,
   [#card(
-    [What we expected],
-    [The common assumption is that hardware offload is the expensive part, and software mostly exists to organize requests.],
+    [What the result supports],
+    [In this measured DSA path, generic async control-path overhead can become a first-order cost once hardware submission is amortized.],
     fill: c-blue,
   )],
   [#card(
-    [What we found],
-    [After batching, the control path can be slower than the hardware work itself. The async framework is no longer invisible overhead.],
+    [What it does *not* prove],
+    [It does not prove that all async APIs are inefficient. It shows that this software stack and this performance regime expose control-path cost very clearly.],
     fill: c-red,
   )],
 )
 
-#v(1em)
-
 #note[
-  *Interview version*: this is the moment where the project changes from “how do I use an accelerator nicely?” to “is the software model fundamentally in the wrong performance regime?”
+  *Interview version*: the research turn is from “how do I use an accelerator nicely?” to “when does the software model itself become too expensive for fast devices?”
 ]
 
 // ========================================================================
@@ -312,7 +270,7 @@
 
 #pagebreak()
 
-#slide-title[9. How this changed the research direction]
+#slide-title[7. How this changed the research direction]
 
 #panel[
   #set text(size: 18pt)
@@ -321,13 +279,19 @@
   + In other words: can the software control flow keep up with modern accelerators?
 ]
 
-#v(0.9em)
-
 #grid(
   columns: (1fr, 1fr),
   gutter: 14pt,
-  [#card([Broader claim], [This is likely not just a DSA result; batching may expose the same software-design problem in RDMA, io_uring, NVMe, RPC, and similar fast async paths.], fill: c-blue)],
-  [#card([Practical shift], [stdexec became the measurement vehicle, not the end target. The deeper target is the software structure required for fast offload.], fill: c-green)],
+  [#card(
+    [Broader hypothesis],
+    [This may extend to other fast async paths — RDMA, io_uring, NVMe, RPC — wherever batching makes device submission cheap enough that software structure becomes visible.],
+    fill: c-blue,
+  )],
+  [#card(
+    [Practical shift],
+    [stdexec became the measurement vehicle, not the end target. The deeper target is the software structure required for fast offload.],
+    fill: c-green,
+  )],
 )
 
 // ========================================================================
@@ -336,44 +300,56 @@
 
 #pagebreak()
 
-#slide-title[10. Current status: moving into Tonic/RPC]
+#slide-title[8. Current status: moving into Tonic/RPC]
 
 #callout(fill: c-blue, stroke: c-accent)[
   The next step is to ask the same question in a richer software stack: when low-level submission is amortized, where does the cost live in end-to-end RPC?
 ]
 
-#v(0.8em)
-
 #grid(
   columns: (1fr, auto, 1fr, auto, 1fr, auto, 1fr),
   gutter: 8pt,
-  [#stage-card([Codec], [encode/decode buffers], [promising], fill: c-green, accent: rgb("#16a34a"))],
+  [#stage-card([Codec], [encode/decode buffers], [architecture-guided], fill: c-green, accent: rgb("#16a34a"))],
   [#align(center + horizon)[#text(size: 18pt, weight: "bold", fill: luma(110))[→]]],
-  [#stage-card([Payload transforms], [copy, CRC, compression], [strongest fit], fill: c-green, accent: rgb("#16a34a"))],
+  [#stage-card(
+    [Payload transforms],
+    [copy, CRC, compression],
+    [best current target],
+    fill: c-green,
+    accent: rgb("#16a34a"),
+  )],
   [#align(center + horizon)[#text(size: 18pt, weight: "bold", fill: luma(110))[→]]],
-  [#stage-card([Framing], [some byte-path work], [mixed], fill: c-orange, accent: rgb("#f59e0b"))],
+  [#stage-card([Framing], [some byte-path work], [mixed / case-dependent], fill: c-orange, accent: rgb("#f59e0b"))],
   [#align(center + horizon)[#text(size: 18pt, weight: "bold", fill: luma(110))[→]]],
-  [#stage-card([Runtime], [tokio / control flow], [likely CPU], fill: c-red, accent: rgb("#dc2626"))],
+  [#stage-card([Runtime], [tokio / control flow], [measured as important], fill: c-red, accent: rgb("#dc2626"))],
 )
 
-#v(0.8em)
+#pagebreak()
+
+#slide-title[8. Current status: moving into Tonic/RPC]
 
 #grid(
   columns: (1fr, 1fr),
   gutter: 14pt,
-  [#card([Already done], [
-    - Tonic component decomposition \
-    - concrete interception-point mapping \
-    - bounded profiling matrix showing copy/allocation/buffer growth dominate medium and large runs
-  ], fill: c-blue)],
-  [#card([Next questions], [
-    - which payload-path stages are worth offloading? \
-    - when does offload help vs hurt? \
-    - how much of the remaining cost is fundamental control flow versus avoidable software structure?
-  ], fill: c-orange)],
+  [#card(
+    [Measured now],
+    [
+      - bounded profiling matrix across payload size, compression, concurrency, and runtime \
+      - medium/large uncompressed runs are dominated by copy, allocation, and buffer growth \
+      - runtime crossover depends on workload rather than one global best setting
+    ],
+    fill: c-blue,
+  )],
+  [#card(
+    [Architecture-guided next steps],
+    [
+      - codec/body boundaries are the cleanest insertion points \
+      - strongest current candidates are copy + CRC and compression / decompression \
+      - next question: when does offload help vs hurt once the RPC software path is included?
+    ],
+    fill: c-orange,
+  )],
 )
-
-#v(0.9em)
 
 #note[
   *Bottom line*: the broader contribution I want is a method for deciding when modern async abstractions help accelerator programming — and when they get in the way.
