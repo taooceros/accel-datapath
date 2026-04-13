@@ -38,7 +38,7 @@ Research monorepo for Intel DSA/IAX data-path work.
 - Restate critical task budgets and stop conditions inline even when a template is provided.
 
 ## CONVENTIONS
-- Read `current.md` toc (limits=15) first, then the latest relevant plan/report before acting.
+- Read `current.md` toc (limits=10) first, then the latest relevant plan/report before acting.
 - Before non-trivial work, make sure `current.md` reflects the current active section, overall goal, and active items for the run.
 - Keep `current.md` focused on active and paused threads; use reports and completed plan notes as the durable record for finished threads.
 - Write a plan in `docs/plan/YYYY-MM-DD/NN.<topic>.<state>.md` before non-trivial changes.

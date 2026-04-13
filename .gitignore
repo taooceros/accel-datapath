@@ -64,3 +64,13 @@ target/
 
 # dsa_launcher build output
 tools/build/
+
+results/
+
+
+node_modules/
+dist/
+docs/report/artifacts/
+tools/mosaic-tonic-report/src/.observablehq
+
+.omx/

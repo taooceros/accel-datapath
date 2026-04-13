@@ -17,6 +17,6 @@ rust-version = "1.88"
 tokio = { version = "1", features = ["full"] }
 tonic = { path = "tonic/tonic" }
 tonic-build = { path = "tonic/tonic-build" }
-prost = "0.13"
+prost = "0.14"
 bytes = "1"
 tower = "0.5"
