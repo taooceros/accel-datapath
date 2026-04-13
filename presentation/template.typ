@@ -1,3 +1,6 @@
+#import "@preview/touying:0.7.0": *
+#import themes.simple: *
+
 #let palette = (
   title: rgb("#1e3a5f"),
   accent: rgb("#2563eb"),
@@ -18,28 +21,20 @@
   size: 17pt,
   leading: 0.9em,
   spacing: 1em,
+  footer: [],
   table-stroke: 0.4pt + luma(205),
   table-inset: 8pt,
 ) = {
-  set page(
-    paper: "presentation-16-9",
-    margin: margin,
+  show: simple-theme.with(
+    aspect-ratio: "16-9",
+    primary: palette.title,
+    footer: footer,
   )
+  set page(margin: margin)
   set text(font: font, size: size)
   set par(leading: leading, spacing: spacing)
   set table(stroke: table-stroke, inset: table-inset)
   body
-}
-
-#let slide-title(body, accent: palette.accent, fill: palette.title) = {
-  block(width: 100%, below: 14pt, stroke: (bottom: 2.5pt + accent))[
-    #text(size: 24pt, weight: "bold", fill: fill)[#body]
-    #v(4pt)
-  ]
-}
-
-#let zebra-fill(x, y, head: palette.head, row: palette.row) = {
-  if y == 0 { head } else if calc.odd(y) { white } else { row }
 }
 
 #let callout(body, fill: palette.blue, stroke: palette.accent, inset: (x: 16pt, y: 11pt)) = block(
@@ -80,8 +75,8 @@
   fill: white,
   accent: palette.accent,
   stroke: 0.6pt + palette.border,
-  body-size: 12.5pt,
-  fit-size: 11pt,
+  body-size: 11.5pt,
+  fit-size: 10.5pt,
 ) = block(
   width: 100%,
   radius: 7pt,
