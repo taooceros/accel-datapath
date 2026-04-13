@@ -1,0 +1,18 @@
+{
+  "name": "mosaic-tonic-report",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "bun@1.3.11",
+  "scripts": {
+    "dev": "observable preview --host 127.0.0.1 --port 4173",
+    "build": "rm -rf dist && observable build",
+    "build:artifact": "bun run build && rm -rf ../../docs/report/artifacts/003.tonic_bounded_matrix_mosaic && mkdir -p ../../docs/report/artifacts/003.tonic_bounded_matrix_mosaic && cp -r dist/. ../../docs/report/artifacts/003.tonic_bounded_matrix_mosaic/",
+    "preview": "observable preview --host 127.0.0.1 --port 4173"
+  },
+  "dependencies": {
+    "@observablehq/framework": "latest",
+    "@uwdata/vgplot": "latest"
+  },
+  "devDependencies": {}
+}
