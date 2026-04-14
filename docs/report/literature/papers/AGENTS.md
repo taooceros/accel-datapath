@@ -51,7 +51,7 @@ Use this pipeline when adding or refreshing paper text.
 
 7. **Paper-folder updates**
    - Link `paper.md` from the paper folder `README.md` under local artifacts.
-   - Record meaningful extraction-method changes in `current.md` when they affect the active literature workflow.
+   - Record meaningful extraction-method changes in the active literature canonical thread file under `.agents/state/threads/`, then refresh the matching `current.md` dashboard/index entry.
 
 ## RECOMMENDED SHAPE FOR `paper.md`
 ```md

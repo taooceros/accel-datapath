@@ -74,3 +74,4 @@ docs/report/artifacts/
 tools/mosaic-tonic-report/src/.observablehq
 
 .omx/
+.sisyphus/
