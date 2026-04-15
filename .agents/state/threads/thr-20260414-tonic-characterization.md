@@ -33,12 +33,7 @@ next_actions:
 blocked_by:
   - Current timer instrumentation is diagnostic-only outside the tiny single-thread point, so stronger claims need lower-overhead endpoint-local timers.
 related_artifacts:
-  - docs/plan/2026-04-12/02.tonic_characterization_plan.in_progress.md
-  - docs/plan/2026-04-13/01.fleetbench_inspired_two_level_tonic_characterization.in_progress.md
   - docs/plan/2026-04-13/05.pre_advisor_tonic_characterization_priorities.in_progress.md
-  - docs/plan/2026-04-01/09.tonic_only_profiling_experiment_plan.in_progress.md
-  - docs/plan/2026-04-01/08.tonic_dsa_iax_experiment_plan.in_progress.md
-  - docs/report/benchmarking/009.tonic_profile_bounded_matrix_results.md
   - docs/report/benchmarking/012.tonic_characterization_refinement_results.md
   - docs/report/benchmarking/013.fleetbench_rpc_characterization_intake.md
   - results/tonic/2026-04-12-characterization/
@@ -51,11 +46,12 @@ related_artifacts:
 
 ## Detailed state
 
-- The execution checklist remains centered on `docs/plan/2026-04-12/02.tonic_characterization_plan.in_progress.md`.
+- The execution checklist now stays centered on the surviving pre-advisor characterization priorities plan, with current readouts in reports `012` and `013`.
 - The first Phase A characterization subset is complete in `results/tonic/2026-04-12-characterization/`, with the current readout in `docs/report/benchmarking/012.tonic_characterization_refinement_results.md`.
 - Current measurements already separate fixed tiny-RPC codec work, 4 KiB buffer-policy sensitivity, large-message body and encode or decode movement, and compression transform cost.
 - FleetBench RPC intake is complete in `docs/report/benchmarking/013.fleetbench_rpc_characterization_intake.md`.
 - The thread now uses a two-level characterization model: FleetBench-style CPU and code-path characterization for realistic gRPC and protobuf behavior, plus Tonic stage decomposition for higher-level attribution across encode and decode, copy and buffer lifecycle, compression, framing, runtime, and tails.
+- Earlier characterization planning passes are preserved as historical cancelled plans and are no longer part of this live thread surface.
 
 ## Key findings carried over from the old ledger
 

@@ -31,7 +31,7 @@ next_actions:
   - Keep the static artifact path aligned with `docs/report/artifacts/003.tonic_bounded_matrix_mosaic/`.
 blocked_by: []
 related_artifacts:
-  - docs/plan/2026-04-03/01.observable_framework_mosaic_rewrite_plan.in_progress.md
+  - docs/plan/2026-04-03/01.observable_framework_mosaic_rewrite_plan.done.md
   - docs/report/benchmarking/009.tonic_profile_bounded_matrix_results.md
   - docs/report/artifacts/003.tonic_bounded_matrix_mosaic/index.html
   - tools/mosaic-tonic-report/src/index.md
@@ -42,4 +42,4 @@ related_artifacts:
 
 - The Observable Framework plus Mosaic baseline is already in place under `tools/mosaic-tonic-report/`.
 - The thread is intentionally paused. The next useful work is either dashboard polish or selective interaction reintroduction, not another structural rewrite.
-- The rewrite plan at `docs/plan/2026-04-03/01.observable_framework_mosaic_rewrite_plan.in_progress.md` remains the main source for scope and verification expectations if this thread resumes.
+- The rewrite plan at `docs/plan/2026-04-03/01.observable_framework_mosaic_rewrite_plan.done.md` remains the historical source for scope and verification expectations if this thread resumes.

@@ -3,6 +3,10 @@
 **Date**: 2026-02-23
 **Source**: Conversation analysis + Saksham Agarwal positioning (remark #006)
 
+Historical note:
+Corrected by: docs/report/literature/005.accelerator_hostpath_2026-03-28.md
+Why: This note keeps the software-versus-hardware MMIO framing, but report `005` corrects the earlier certainty that a paper literally titled `CXL-NIC` was confirmed.
+
 ## Finding
 
 MMIO doorbell writes are the fundamental bottleneck for hardware submission
@@ -11,7 +15,7 @@ opposite sides:
 
 | Approach | Who | Direction | Solution | Result |
 |---|---|---|---|---|
-| CXL-NIC [MICRO 2025] | Agarwal et al. | Hardware | Replace MMIO with CXL coherence messages | 49% latency reduction |
+| Earlier `CXL-NIC` thread / best-match candidate (`My CXL Pool Obviates Your PCIe Switch`, HotOS 2025) | Agarwal et al. | Hardware/interconnect | CXL-backed host-path redesign | best-match candidate for the hardware-side comparison |
 | This work | Us | Software | Batch descriptors behind one MMIO doorbell | ~5 ns/op amortized (vs ~160 ns unbatched) |
 
 ## Why they're complementary, not competing
@@ -34,20 +38,20 @@ design.
 
 This is an instance of a common systems pattern: hardware improvements don't
 eliminate the need for software optimization; they shift the bottleneck and
-make software optimization matter *more*. CXL-NIC doesn't make batching
+make software optimization matter *more*. The earlier `CXL-NIC` thread doesn't make batching
 unnecessary — it makes the framework overhead (which batching exposes) even
 more dominant.
 
 ## Connection to research positioning
 
-Saksham's group measures and fixes the hardware submission path (MMIO → CXL).
+Saksham's group's later literature-backed best-match candidate covers the hardware/interconnect side of the submission path (MMIO → CXL).
 We measure and fix the software path above the submission mechanism (framework
 → descriptor → doorbell). Together, both paths are characterized and optimized.
 Neither group's work subsumes the other.
 
 ## What triggered this insight
 
-Analyzing CXL-NIC [MICRO 2025] while positioning against Saksham Agarwal's
+Analyzing the earlier `CXL-NIC` thread and its current best-match candidate while positioning against Saksham Agarwal's
 research arc. The user asked how our work differs from Arvind's group's host
 network characterization, leading to systematic comparison that revealed the
 complementary relationship.

@@ -29,8 +29,8 @@ Read this dashboard first, match on the per-entry dashboard metadata, then open 
   - last_updated: 2026-04-14T12:00:00Z
   - canonical_thread_file: `.agents/state/threads/thr-20260414-tonic-literature-deck.md`
   - next_action: Acquire missing cited papers, clean low-confidence paper extractions, or revise the literature deck only when the request is explicitly about literature or presentation work.
-  - match_hints: tonic literature review, paper folders, gRPC cost breakdown, paper ingestion, characterization deck, typst presentation, missing citations
-  - related_artifacts: `docs/report/literature/007.grpc_cost_breakdown_2026-04-12.md`, `docs/report/literature/010.expanded_paper_folder_index_2026-04-13.md`, `presentation/2026-04-12/tonic_literature_characterization.typ`, `presentation/2026-04-12/tonic_literature_characterization.pdf`
+  - match_hints: tonic literature review, paper folders, gRPC cost breakdown, paper ingestion, characterization deck, typst presentation, missing citations, Hermes paper
+  - related_artifacts: `docs/report/literature/007.grpc_cost_breakdown_2026-04-12.md`, `docs/report/literature/010.expanded_paper_folder_index_2026-04-13.md`, `docs/report/literature/papers/hermes-enhancing-layer-7-cloud-load-balancers-with-userspace-directed-i-o-event-notification/README.md`, `presentation/2026-04-12/tonic_literature_characterization.typ`, `presentation/2026-04-12/tonic_literature_characterization.pdf`, `presentation/2026-04-14/tonic_progress_since_2026-04-09.typ`, `presentation/2026-04-14/tonic_progress_since_2026-04-09.pdf`
 
 - `thr-20260414-mosaic-visualization`
   - index_label: Mosaic integration for report visualization
@@ -43,7 +43,7 @@ Read this dashboard first, match on the per-entry dashboard metadata, then open 
   - canonical_thread_file: `.agents/state/threads/thr-20260414-mosaic-visualization.md`
   - next_action: Resume with dashboard polish or selective interaction reintroduction in the Observable Framework plus Mosaic report app.
   - match_hints: Mosaic dashboard, Observable Framework, report visualization, bounded matrix app, tools/mosaic-tonic-report, dashboard polish, interaction reintroduction
-  - related_artifacts: `docs/plan/2026-04-03/01.observable_framework_mosaic_rewrite_plan.in_progress.md`, `docs/report/artifacts/003.tonic_bounded_matrix_mosaic/index.html`, `tools/mosaic-tonic-report/src/index.md`
+  - related_artifacts: `docs/plan/2026-04-03/01.observable_framework_mosaic_rewrite_plan.done.md`, `docs/report/artifacts/003.tonic_bounded_matrix_mosaic/index.html`, `tools/mosaic-tonic-report/src/index.md`
 
 ## Resume note
 
