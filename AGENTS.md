@@ -60,6 +60,7 @@ Research monorepo for Intel DSA/IAX data-path work.
 - Read `current.md` first for dashboard routing metadata, then the latest relevant plan/report before acting.
 - On resume, read `current.md` for dashboard routing, then the matched canonical thread file under `.agents/state/threads/`, then the linked plan/report artifacts named by that thread.
 - Keep `current.md` focused on active and paused dashboard entries. Keep thread detail in canonical thread files, and use reports and completed plan notes as the durable record for finished work.
+- Keep commit headlines short and consistent with current style, but include richer detail about what changed and why in the commit body/description.
 - Write a plan in `docs/plan/YYYY-MM-DD/NN.<topic>.<state>.md` before non-trivial changes.
 - Write findings to `docs/report/<topic>/NNN.<descriptor>.<ext>`; write single-point insights to `remark/NNN_<topic>.md`.
 - Read the nearest README before modifying a module.
