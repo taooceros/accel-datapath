@@ -57,6 +57,14 @@ fn validate_report(report: &Value) -> Result<(), String> {
         "timestamp_unix_s",
         "mode",
         "rpc",
+        "ordinary_path",
+        "seam",
+        "workload_label",
+        "selection_policy",
+        "request_shape",
+        "response_shape",
+        "request_serialized_size",
+        "response_serialized_size",
         "bind",
         "target",
         "payload_size",
@@ -172,7 +180,9 @@ fn selftest_report_exposes_required_contract_fields() {
 
     let report = load_and_validate_report(&json_out).expect("valid selftest report");
     assert_eq!(report["metadata"]["mode"], "selftest");
-    assert_eq!(report["metadata"]["rpc"], "unary");
+    assert_eq!(report["metadata"]["rpc"], "unary-bytes");
+    assert_eq!(report["metadata"]["ordinary_path"], "software");
+    assert_eq!(report["metadata"]["seam"], "codec_body");
     assert_eq!(report["metadata"]["instrumentation"], "on");
     assert_eq!(report["stages"]["enabled"], true);
 }
