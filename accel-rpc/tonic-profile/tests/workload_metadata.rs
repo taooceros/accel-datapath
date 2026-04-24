@@ -73,12 +73,10 @@ fn asymmetric_response_metadata_reports_shape_and_size_separately() {
     assert_eq!(report["metadata"]["selection_policy"], "explicit_response");
     assert_eq!(report["metadata"]["request_shape"], "fleet-small");
     assert_eq!(report["metadata"]["response_shape"], "fleet-response-heavy");
-    assert!(
-        report["metadata"]["workload_label"]
-            .as_str()
-            .unwrap()
-            .contains("fleet-small-to-fleet-response-heavy")
-    );
+    assert!(report["metadata"]["workload_label"]
+        .as_str()
+        .unwrap()
+        .contains("fleet-small-to-fleet-response-heavy"));
 
     let request_size = report["metadata"]["request_serialized_size"]
         .as_u64()
@@ -140,7 +138,10 @@ fn response_shape_same_boundary_remains_valid_for_string_heavy_shape() {
     let response_size = report["metadata"]["response_serialized_size"]
         .as_u64()
         .expect("response_serialized_size as u64");
-    assert!(request_size >= response_size, "request should include the explicit response selector field");
+    assert!(
+        request_size >= response_size,
+        "request should include the explicit response selector field"
+    );
     assert!(
         request_size - response_size <= 8,
         "same-shape boundary should only differ by the small selector field overhead ({request_size} vs {response_size})"

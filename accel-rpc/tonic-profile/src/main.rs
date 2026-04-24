@@ -16,6 +16,8 @@ use tonic::codec::CompressionEncoding;
 use tonic::transport::{Channel, Endpoint, Server};
 use tonic::{Request, Response, Status};
 
+mod custom_codec;
+
 pub mod profile {
     tonic::include_proto!("tonicprofile");
 }
@@ -71,9 +73,11 @@ mod runtime_instrumentation {
 }
 
 fn set_default_buffer_settings_for_process(
-    _buffer_size: Option<usize>,
-    _yield_threshold: Option<usize>,
-) {
+    buffer_size: Option<usize>,
+    yield_threshold: Option<usize>,
+) -> Result<custom_codec::EffectiveBufferSettings, BoxError> {
+    custom_codec::set_process_default_buffer_settings(buffer_size, yield_threshold)
+        .map_err(Into::into)
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
@@ -399,7 +403,7 @@ impl ProtoPools {
 fn main() -> Result<(), BoxError> {
     let args = Args::parse();
     validate_args(&args)?;
-    configure_process_controls(&args);
+    configure_process_controls(&args)?;
     let runtime = build_runtime(args.runtime)?;
     runtime.block_on(async_main(args))
 }
@@ -428,29 +432,34 @@ fn validate_args(args: &Args) -> Result<(), BoxError> {
     Ok(())
 }
 
-fn configure_process_controls(args: &Args) {
+fn configure_process_controls(args: &Args) -> Result<(), BoxError> {
     runtime_instrumentation::set_enabled(args.instrumentation == InstrumentationMode::On);
     let (buffer_size, yield_threshold) = effective_buffer_settings(args);
-    set_default_buffer_settings_for_process(buffer_size, yield_threshold);
+    set_default_buffer_settings_for_process(buffer_size, yield_threshold)?;
+    Ok(())
 }
 
 fn effective_buffer_settings(args: &Args) -> (Option<usize>, Option<usize>) {
-    const DEFAULT_BUFFER_SIZE: usize = 8 * 1024;
-    const DEFAULT_YIELD_THRESHOLD: usize = 32 * 1024;
-    const HEADER_SIZE: usize = 5;
+    const HEADER_SIZE: usize = tonic::codec::HEADER_SIZE;
     let workload_size = workload_probe(args).request_serialized_size;
     match args.buffer_policy {
         BufferPolicy::Default => (None, None),
         BufferPolicy::Pooled => {
             let frame = workload_size
                 .saturating_add(HEADER_SIZE)
-                .max(DEFAULT_BUFFER_SIZE);
-            let buffer = next_multiple(frame, DEFAULT_BUFFER_SIZE);
-            (Some(buffer), Some(buffer.max(DEFAULT_YIELD_THRESHOLD)))
+                .max(custom_codec::DEFAULT_CODEC_BUFFER_SIZE);
+            let buffer = next_multiple(frame, custom_codec::DEFAULT_CODEC_BUFFER_SIZE);
+            (
+                Some(buffer),
+                Some(buffer.max(custom_codec::DEFAULT_CODEC_YIELD_THRESHOLD)),
+            )
         }
         BufferPolicy::CopyMinimized => {
             let buffer = workload_size.saturating_add(HEADER_SIZE).max(1);
-            (Some(buffer), Some(buffer.max(DEFAULT_YIELD_THRESHOLD)))
+            (
+                Some(buffer),
+                Some(buffer.max(custom_codec::DEFAULT_CODEC_YIELD_THRESHOLD)),
+            )
         }
     }
 }
@@ -498,7 +507,9 @@ async fn run_selftest(args: Args) -> Result<(), BoxError> {
     let server_args = args.clone();
     let server_shared = shared.clone();
     let server_handle =
-        tokio::spawn(async move { run_server_with_shutdown(server_args, bind, server_shared).await });
+        tokio::spawn(
+            async move { run_server_with_shutdown(server_args, bind, server_shared).await },
+        );
 
     tokio::time::sleep(Duration::from_millis(300)).await;
 
@@ -553,14 +564,15 @@ async fn run_client(args: &Args) -> Result<Report, BoxError> {
     let channel = endpoint.connect().await?;
     let warmup_deadline = Instant::now() + Duration::from_millis(args.warmup_ms);
 
+    custom_codec::reset_observations();
     run_phase(channel.clone(), args, true, warmup_deadline, None).await?;
 
     let measure_deadline = Instant::now() + Duration::from_millis(args.measure_ms);
     runtime_instrumentation::reset();
     let metrics = run_phase(channel, args, false, measure_deadline, args.requests).await?;
     let stages = StageSnapshot::from(runtime_instrumentation::snapshot());
-    let (effective_codec_buffer_size, effective_codec_yield_threshold) =
-        effective_buffer_settings(args);
+    let observed_codec_settings = custom_codec::observed_settings()
+        .ok_or("custom codec observations were missing for this run")?;
 
     Ok(Report {
         metadata: Metadata {
@@ -587,8 +599,8 @@ async fn run_client(args: &Args) -> Result<Report, BoxError> {
             runtime: args.runtime,
             instrumentation: args.instrumentation,
             buffer_policy: args.buffer_policy,
-            effective_codec_buffer_size,
-            effective_codec_yield_threshold,
+            effective_codec_buffer_size: Some(observed_codec_settings.buffer_size),
+            effective_codec_yield_threshold: Some(observed_codec_settings.yield_threshold),
             server_core: args.server_core,
             client_core: args.client_core,
         },
@@ -673,9 +685,10 @@ async fn run_phase(
                     .await
                     .map_err(|err| format!("worker {worker_id} unary request failed: {err}"))?;
                 let elapsed = start.elapsed().as_micros() as u64;
-                let response_size = validate_response(prepared, response.get_ref()).map_err(|err| {
-                    format!("worker {worker_id} response validation failed: {err}")
-                })? as u64;
+                let response_size =
+                    validate_response(prepared, response.get_ref()).map_err(|err| {
+                        format!("worker {worker_id} response validation failed: {err}")
+                    })? as u64;
                 if !warmup {
                     bytes_sent_counter
                         .fetch_add(prepared.request_serialized_size as u64, Ordering::Relaxed);
@@ -825,8 +838,10 @@ fn build_request_pool(args: &Args, worker_seed: u64) -> Vec<PreparedRequest> {
                 .map(|offset| {
                     let request_message =
                         build_proto_message(request_shape, worker_seed * 100 + offset as u64);
-                    let response_message =
-                        build_proto_message(response_shape, 10_000 + worker_seed * 100 + offset as u64);
+                    let response_message = build_proto_message(
+                        response_shape,
+                        10_000 + worker_seed * 100 + offset as u64,
+                    );
                     let request = EchoRequest {
                         body: Some(EchoRequestBody::ProtoPayload(request_message.clone())),
                         requested_response_shape: response_shape.to_wire(),
@@ -872,12 +887,13 @@ fn validate_response(prepared: &PreparedRequest, response: &EchoReply) -> Result
         (PreparedRequestBody::Bytes(_), Some(EchoReplyBody::ProtoPayload(_))) => Err(
             "bytes workload received a proto response instead of an echoed bytes payload".into(),
         ),
-        (PreparedRequestBody::Proto(_), Some(EchoReplyBody::Payload(_))) => Err(
-            "proto-shape workload received a bytes response instead of a proto shape".into(),
-        ),
+        (PreparedRequestBody::Proto(_), Some(EchoReplyBody::Payload(_))) => {
+            Err("proto-shape workload received a bytes response instead of a proto shape".into())
+        }
         (PreparedRequestBody::Proto(_), Some(EchoReplyBody::ProtoPayload(message))) => {
-            let actual = proto_shape_from_message(message)
-                .ok_or_else(|| "proto-shape response body was missing a concrete shape".to_string())?;
+            let actual = proto_shape_from_message(message).ok_or_else(|| {
+                "proto-shape response body was missing a concrete shape".to_string()
+            })?;
             let expected = prepared
                 .expected_response_shape
                 .ok_or_else(|| "proto workload missing expected response shape".to_string())?;
@@ -933,13 +949,15 @@ fn make_payload(size: usize, kind: PayloadKind, seed: u64) -> Vec<u8> {
 fn build_proto_message(shape: ProtoShape, seed: u64) -> CompactProfileShape {
     match shape {
         ProtoShape::FleetSmall => CompactProfileShape {
-            shape: Some(profile::compact_profile_shape::Shape::FleetSmall(FleetSmallShape {
-                id: (seed % 32) + 1,
-                service: format!("svc-{:04}", seed % 10_000),
-                method: format!("unary-{:04}", seed % 10_000),
-                flags: vec![1, 0, 1, (seed % 3) as u32],
-                token: seeded_bytes(seed, 16),
-            })),
+            shape: Some(profile::compact_profile_shape::Shape::FleetSmall(
+                FleetSmallShape {
+                    id: (seed % 32) + 1,
+                    service: format!("svc-{:04}", seed % 10_000),
+                    method: format!("unary-{:04}", seed % 10_000),
+                    flags: vec![1, 0, 1, (seed % 3) as u32],
+                    token: seeded_bytes(seed, 16),
+                },
+            )),
         },
         ProtoShape::FleetStringHeavy => CompactProfileShape {
             shape: Some(profile::compact_profile_shape::Shape::FleetStringHeavy(
@@ -951,9 +969,7 @@ fn build_proto_message(shape: ProtoShape, seed: u64) -> CompactProfileShape {
                     paths: (0..4)
                         .map(|idx| fixed_string(&format!("/fleet/{idx}/{}", seed % 31), 36))
                         .collect(),
-                    counters: (0..10)
-                        .map(|idx| ((seed + idx as u64) % 64) + 1)
-                        .collect(),
+                    counters: (0..10).map(|idx| ((seed + idx as u64) % 64) + 1).collect(),
                     leaves: (0..4)
                         .map(|idx| FleetStringLeaf {
                             name: fixed_string(&format!("leaf-{idx}"), 18),
@@ -996,9 +1012,7 @@ fn build_proto_message(shape: ProtoShape, seed: u64) -> CompactProfileShape {
                     digests: (0..10)
                         .map(|idx| seeded_bytes(seed + idx as u64 + 50, 20))
                         .collect(),
-                    histogram: (0..32)
-                        .map(|idx| ((seed + idx as u64) % 96) + 1)
-                        .collect(),
+                    histogram: (0..32).map(|idx| ((seed + idx as u64) % 96) + 1).collect(),
                     summary: fixed_string(&format!("response-heavy-summary-{}", seed % 101), 96),
                 },
             )),

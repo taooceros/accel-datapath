@@ -87,6 +87,31 @@ fn validate_report(report: &Value) -> Result<(), String> {
         }
     }
 
+    let effective_codec_buffer_size = metadata
+        .get("effective_codec_buffer_size")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| {
+            "metadata.effective_codec_buffer_size must be a positive integer".to_string()
+        })?;
+    let effective_codec_yield_threshold = metadata
+        .get("effective_codec_yield_threshold")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| {
+            "metadata.effective_codec_yield_threshold must be a positive integer".to_string()
+        })?;
+    if effective_codec_buffer_size == 0 {
+        return Err("metadata.effective_codec_buffer_size must be > 0".to_string());
+    }
+    if effective_codec_yield_threshold == 0 {
+        return Err("metadata.effective_codec_yield_threshold must be > 0".to_string());
+    }
+    if effective_codec_yield_threshold < effective_codec_buffer_size {
+        return Err(format!(
+            "metadata.effective_codec_yield_threshold must be >= metadata.effective_codec_buffer_size ({} < {})",
+            effective_codec_yield_threshold, effective_codec_buffer_size
+        ));
+    }
+
     let metrics = report
         .get("metrics")
         .and_then(Value::as_object)
@@ -184,6 +209,9 @@ fn selftest_report_exposes_required_contract_fields() {
     assert_eq!(report["metadata"]["ordinary_path"], "software");
     assert_eq!(report["metadata"]["seam"], "codec_body");
     assert_eq!(report["metadata"]["instrumentation"], "on");
+    assert_eq!(report["metadata"]["buffer_policy"], "default");
+    assert_eq!(report["metadata"]["effective_codec_buffer_size"], 8192);
+    assert_eq!(report["metadata"]["effective_codec_yield_threshold"], 32768);
     assert_eq!(report["stages"]["enabled"], true);
 }
 

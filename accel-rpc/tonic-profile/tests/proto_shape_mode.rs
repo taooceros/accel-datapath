@@ -122,8 +122,18 @@ fn unary_proto_shape_mode_supports_same_shape_round_trip() {
     assert_eq!(report["metadata"]["selection_policy"], "same_as_request");
     assert_eq!(report["metadata"]["request_shape"], "fleet-small");
     assert_eq!(report["metadata"]["response_shape"], "fleet-small");
-    assert!(report["metadata"]["request_serialized_size"].as_u64().unwrap() > 0);
-    assert!(report["metadata"]["response_serialized_size"].as_u64().unwrap() > 0);
+    assert!(
+        report["metadata"]["request_serialized_size"]
+            .as_u64()
+            .unwrap()
+            > 0
+    );
+    assert!(
+        report["metadata"]["response_serialized_size"]
+            .as_u64()
+            .unwrap()
+            > 0
+    );
     assert!(report["metadata"]["payload_size"].is_null());
     assert!(report["metadata"]["payload_kind"].is_null());
 }

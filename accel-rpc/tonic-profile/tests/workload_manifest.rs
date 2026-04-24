@@ -32,10 +32,7 @@ fn unique_dir(name: &str) -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .expect("system time before unix epoch")
         .as_nanos();
-    let path = env::temp_dir().join(format!(
-        "tonic-profile-{name}-{}-{ts}",
-        std::process::id()
-    ));
+    let path = env::temp_dir().join(format!("tonic-profile-{name}-{}-{ts}", std::process::id()));
     fs::create_dir_all(&path).expect("create temp dir");
     path
 }
@@ -44,7 +41,11 @@ fn write_json(path: &Path, value: &Value) {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).expect("create parent dir");
     }
-    fs::write(path, serde_json::to_vec_pretty(value).expect("serialize json")).expect("write json");
+    fs::write(
+        path,
+        serde_json::to_vec_pretty(value).expect("serialize json"),
+    )
+    .expect("write json");
 }
 
 fn valid_report(label: &str, instrumentation: &str) -> Value {

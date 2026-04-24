@@ -6,6 +6,7 @@ fn main() {
     tonic_prost_build::configure()
         .build_server(true)
         .build_client(true)
+        .codec_path("crate::custom_codec::ProfileCodec")
         .compile_protos(&["proto/profile.proto"], &["proto"])
         .expect("failed to compile profile proto");
 }
