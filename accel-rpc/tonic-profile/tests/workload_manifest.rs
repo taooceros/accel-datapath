@@ -860,6 +860,27 @@ fn s04_runner_script() -> PathBuf {
         .join("run_s04_claim_package.py")
 }
 
+fn summarizer_script() -> PathBuf {
+    repo_root()
+        .join("tonic-profile")
+        .join("scripts")
+        .join("summarize_s04_claim_package.py")
+}
+
+fn proof_runner_common_script() -> PathBuf {
+    repo_root()
+        .join("tonic-profile")
+        .join("scripts")
+        .join("proof_runner_common.py")
+}
+
+fn claim_package_contract_script() -> PathBuf {
+    repo_root()
+        .join("tonic-profile")
+        .join("scripts")
+        .join("claim_package_contract.py")
+}
+
 fn s04_tracked_manifest() -> PathBuf {
     repo_root()
         .join("tonic-profile")
@@ -982,6 +1003,26 @@ fn tracked_s04_manifest_covers_required_families_outputs_and_report_references()
             "accel-rpc/target/s04-claim-package/latest/summary/ordinary_vs_idxd.csv",
             "accel-rpc/target/s04-claim-package/latest/summary/claim_table.md"
         ])
+    );
+}
+
+#[test]
+fn extracted_helper_modules_exist_and_summarizer_imports_only_contract_helpers() {
+    let proof_runner_common = proof_runner_common_script();
+    let claim_package_contract = claim_package_contract_script();
+    let summarizer = summarizer_script();
+
+    assert!(proof_runner_common.exists(), "missing shared proof runner helper: {:?}", proof_runner_common);
+    assert!(claim_package_contract.exists(), "missing claim package contract helper: {:?}", claim_package_contract);
+
+    let summarizer_text = fs::read_to_string(&summarizer).expect("read s04 summarizer");
+    assert!(
+        summarizer_text.contains("import claim_package_contract as claim_contract"),
+        "summarizer should import the extracted claim package contract helper"
+    );
+    assert!(
+        !summarizer_text.contains("import run_s04_claim_package"),
+        "summarizer should not import the s04 orchestration runner directly"
     );
 }
 

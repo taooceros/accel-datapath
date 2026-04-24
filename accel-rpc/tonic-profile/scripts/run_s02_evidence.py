@@ -10,19 +10,16 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
+from proof_runner_common import (
+    EXPECTED_ENDPOINT_ROLES,
+    REQUIRED_STAGE_COUNTER_FIELDS,
+    REQUIRED_STAGE_NAMES,
+    build_rpc_args,
+    run_server_client_pair,
+)
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_MANIFEST = SCRIPT_DIR.parent / "workloads" / "s02_trustworthy_matrix.json"
-REQUIRED_STAGE_NAMES = [
-    "encode",
-    "decode",
-    "compress",
-    "decompress",
-    "buffer_reserve",
-    "body_accum",
-    "frame_header",
-]
-REQUIRED_STAGE_COUNTER_FIELDS = ["count", "nanos", "millis", "bytes", "avg_nanos"]
-EXPECTED_ENDPOINT_ROLES = ("client", "server")
 EXPECTED_BENCHMARKS = [
     "tokio_spawn_join",
     "tokio_oneshot_completion",
@@ -270,43 +267,7 @@ def wait_for_port(
 
 
 def build_common_args(entry: Dict[str, Any], addr: str) -> List[str]:
-    args = [
-        "--rpc",
-        entry["rpc"],
-        "--bind",
-        addr,
-        "--target",
-        addr,
-        "--warmup-ms",
-        str(entry["warmup_ms"]),
-        "--measure-ms",
-        str(entry["measure_ms"]),
-        "--requests",
-        str(entry["requests"]),
-        "--concurrency",
-        str(entry["concurrency"]),
-        "--runtime",
-        entry["runtime"],
-        "--compression",
-        entry["compression"],
-        "--buffer-policy",
-        entry["buffer_policy"],
-    ]
-    if entry["rpc"] == "unary-bytes":
-        args.extend([
-            "--payload-size",
-            str(entry["payload_size"]),
-            "--payload-kind",
-            entry["payload_kind"],
-        ])
-    else:
-        args.extend([
-            "--proto-shape",
-            entry["proto_shape"],
-            "--response-shape",
-            entry["response_shape"],
-        ])
-    return args
+    return build_rpc_args(entry, addr)
 
 
 
@@ -327,110 +288,48 @@ def run_manifest(
             common_args = build_common_args(entry, addr)
             client_artifact = output_dir / entry["endpoint_artifacts"][instrumentation]["client"]
             server_artifact = output_dir / entry["endpoint_artifacts"][instrumentation]["server"]
-            server_artifact.parent.mkdir(parents=True, exist_ok=True)
-            client_artifact.parent.mkdir(parents=True, exist_ok=True)
-            server: subprocess.Popen[bytes] | None = None
-            try:
-                server_cmd = [
-                    str(binary),
-                    "--mode",
-                    "server",
-                    "--instrumentation",
-                    instrumentation,
-                    *common_args,
-                    "--run-id",
-                    run_id,
-                    "--shutdown-after-requests",
-                    str(entry["requests"]),
-                    "--server-json-out",
-                    str(server_artifact),
-                ]
-                print(
-                    f"label={label} phase=server-startup instrumentation={instrumentation} endpoint_role=server artifact={server_artifact} bind={addr}",
-                    flush=True,
-                )
-                server = subprocess.Popen(
-                    server_cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                )
-                wait_for_port(
-                    server,
-                    addr,
-                    server_start_timeout,
-                    label=label,
-                    instrumentation=instrumentation,
-                    artifact_path=server_artifact,
-                )
-
-                client_cmd = [
-                    str(binary),
-                    "--mode",
-                    "client",
-                    "--instrumentation",
-                    instrumentation,
-                    *common_args,
-                    "--run-id",
-                    run_id,
-                    "--json-out",
-                    str(client_artifact),
-                ]
-                print(
-                    f"label={label} phase=client-execution instrumentation={instrumentation} endpoint_role=client artifact={client_artifact} target={addr}",
-                    flush=True,
-                )
-                result = subprocess.run(
-                    client_cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    timeout=client_timeout,
-                    check=False,
-                )
-                if result.returncode != 0:
-                    raise RunError(
-                        "\n".join(
-                            [
-                                f"label={label} phase=client-execution instrumentation={instrumentation} endpoint_role=client artifact={client_artifact} exit={result.returncode}",
-                                f"stdout:\n{result.stdout.decode('utf-8', errors='replace')}",
-                                f"stderr:\n{result.stderr.decode('utf-8', errors='replace')}",
-                            ]
-                        )
-                    )
-
-                try:
-                    server.wait(timeout=server_flush_timeout)
-                except subprocess.TimeoutExpired as err:
-                    raise RunError(
-                        f"label={label} phase=server-flush instrumentation={instrumentation} endpoint_role=server artifact={server_artifact} timeout after {server_flush_timeout:.1f}s"
-                    ) from err
-
-                if server.returncode != 0:
-                    stdout, stderr = drain_process_output(server)
-                    raise RunError(
-                        "\n".join(
-                            [
-                                f"label={label} phase=server-flush instrumentation={instrumentation} endpoint_role=server artifact={server_artifact} exit={server.returncode}",
-                                f"stdout:\n{stdout}",
-                                f"stderr:\n{stderr}",
-                            ]
-                        )
-                    )
-                print(
-                    f"label={label} phase=server-flush instrumentation={instrumentation} endpoint_role=server artifact={server_artifact} verdict=pass",
-                    flush=True,
-                )
-            except subprocess.TimeoutExpired as err:
-                raise RunError(
-                    f"label={label} phase=client-execution instrumentation={instrumentation} endpoint_role=client artifact={client_artifact} timeout after {client_timeout:.1f}s"
-                ) from err
-            finally:
-                if server is not None:
-                    terminate_process(
-                        server,
-                        label=label,
-                        phase=f"cleanup instrumentation={instrumentation}",
-                        artifact_path=server_artifact,
-                    )
+            server_cmd = [
+                str(binary),
+                "--mode",
+                "server",
+                "--instrumentation",
+                instrumentation,
+                *common_args,
+                "--run-id",
+                run_id,
+                "--shutdown-after-requests",
+                str(entry["requests"]),
+                "--server-json-out",
+                str(server_artifact),
+            ]
+            client_cmd = [
+                str(binary),
+                "--mode",
+                "client",
+                "--instrumentation",
+                instrumentation,
+                *common_args,
+                "--run-id",
+                run_id,
+                "--json-out",
+                str(client_artifact),
+            ]
+            run_server_client_pair(
+                label=label,
+                server_cmd=server_cmd,
+                client_cmd=client_cmd,
+                server_artifact=server_artifact,
+                client_artifact=client_artifact,
+                bind_addr=addr,
+                target_addr=addr,
+                server_start_timeout=server_start_timeout,
+                client_timeout=client_timeout,
+                server_flush_timeout=server_flush_timeout,
+                error_cls=RunError,
+                fail_fn=fail,
+                context={"instrumentation": instrumentation},
+                cleanup_phase=f"cleanup instrumentation={instrumentation}",
+            )
 
 
 

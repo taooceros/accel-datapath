@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
-import run_s04_claim_package as claim_manifest
+import claim_package_contract as claim_contract
 
 REQUIRED_STAGE_NAMES = [
     "encode",
@@ -118,7 +118,7 @@ def load_json_object(path: Path, *, phase: str, scope: str) -> Dict[str, Any]:
 
 def resolve_run_root(manifest: Dict[str, Any], run_root_override: str | None) -> Path:
     raw = run_root_override or manifest["run_root"]
-    return claim_manifest.resolve_repo_path(raw).resolve()
+    return claim_contract.resolve_repo_path(raw).resolve()
 
 
 def output_paths(manifest: Dict[str, Any], run_root: Path) -> Dict[str, Path]:
@@ -230,7 +230,7 @@ def load_report(
 
 
 def load_control_floor(manifest: Dict[str, Any]) -> Dict[str, Any]:
-    control_floor_path = claim_manifest.resolve_repo_path(manifest["inputs"]["control_floor_summary"])
+    control_floor_path = claim_contract.resolve_repo_path(manifest["inputs"]["control_floor_summary"])
     summary = load_json_object(
         control_floor_path,
         phase="control-floor-validation",
@@ -238,7 +238,7 @@ def load_control_floor(manifest: Dict[str, Any]) -> Dict[str, Any]:
     )
     benchmarks = require_dict(summary.get("benchmarks"), scope="control_floor_summary.benchmarks")
 
-    software_manifest_path = claim_manifest.resolve_repo_path(manifest["inputs"]["software_manifest"])
+    software_manifest_path = claim_contract.resolve_repo_path(manifest["inputs"]["software_manifest"])
     software_manifest = load_json_object(
         software_manifest_path,
         phase="control-floor-validation",
@@ -338,7 +338,7 @@ def build_rows(
 ) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     for label in manifest["scope"]["workload_labels"]:
-        for endpoint_role in claim_manifest.EXPECTED_ENDPOINT_ROLES:
+        for endpoint_role in claim_contract.EXPECTED_ENDPOINT_ROLES:
             baseline = family_reports["software_baseline"][(label, endpoint_role)]
             sw_on = family_reports["software_attribution"][(label, endpoint_role)]
             idxd = family_reports["idxd_attribution"][(label, endpoint_role)]
@@ -543,7 +543,7 @@ def build_summary_document(
 
 
 def summarize(manifest_path: Path, run_root_override: str | None, verify_only: bool) -> Dict[str, Path]:
-    manifest = claim_manifest.load_manifest(manifest_path)
+    manifest = claim_contract.load_manifest(manifest_path)
     run_root = resolve_run_root(manifest, run_root_override)
     outputs = output_paths(manifest, run_root)
     print(
@@ -591,7 +591,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Summarize the frozen S04 ordinary-versus-IDXD run tree into stable JSON/CSV/Markdown outputs."
     )
-    parser.add_argument("--manifest", default=str(claim_manifest.DEFAULT_MANIFEST))
+    parser.add_argument("--manifest", default=str(claim_contract.DEFAULT_MANIFEST))
     parser.add_argument("--run-root", help="Override the manifest run_root for fixture-driven verification")
     parser.add_argument(
         "--verify-only",
@@ -604,7 +604,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         manifest_path = Path(args.manifest).resolve()
         summarize(manifest_path, args.run_root, args.verify_only)
         return 0
-    except (claim_manifest.ManifestError, SummaryError) as err:
+    except (claim_contract.ManifestError, SummaryError) as err:
         fail(str(err))
         return 1
 

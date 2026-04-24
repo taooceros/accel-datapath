@@ -11,23 +11,20 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
+from proof_runner_common import (
+    EXPECTED_ENDPOINT_ROLES,
+    REQUIRED_STAGE_COUNTER_FIELDS,
+    REQUIRED_STAGE_NAMES,
+    build_rpc_args,
+    run_server_client_pair,
+)
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 TONIC_PROFILE_DIR = SCRIPT_DIR.parent
 ACCEL_RPC_DIR = TONIC_PROFILE_DIR.parent
 REPO_ROOT = ACCEL_RPC_DIR.parent
 DEFAULT_MANIFEST = TONIC_PROFILE_DIR / "workloads" / "s03_idxd_matrix.json"
 DEFAULT_BINARY = ACCEL_RPC_DIR / "target" / "release" / "tonic-profile"
-REQUIRED_STAGE_NAMES = [
-    "encode",
-    "decode",
-    "compress",
-    "decompress",
-    "buffer_reserve",
-    "body_accum",
-    "frame_header",
-]
-REQUIRED_STAGE_COUNTER_FIELDS = ["count", "nanos", "millis", "bytes", "avg_nanos"]
-EXPECTED_ENDPOINT_ROLES = ("client", "server")
 REQUIRED_LABELS = {
     "ordinary/unary-bytes/repeated-64",
     "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
@@ -291,48 +288,15 @@ def wait_for_port(
 
 
 def build_common_args(entry: Dict[str, Any], addr: str, device_path: str) -> List[str]:
-    args = [
-        "--rpc",
-        entry["rpc"],
-        "--bind",
-        addr,
-        "--target",
-        addr,
-        "--warmup-ms",
-        str(entry["warmup_ms"]),
-        "--measure-ms",
-        str(entry["measure_ms"]),
-        "--requests",
-        str(entry["requests"]),
-        "--concurrency",
-        str(entry["concurrency"]),
-        "--runtime",
-        entry["runtime"],
-        "--compression",
-        entry["compression"],
-        "--buffer-policy",
-        entry["buffer_policy"],
+    args = build_rpc_args(entry, addr)
+    args.extend([
         "--instrumentation",
         entry["instrumentation"],
         "--accelerated-path",
         entry["accelerated_path"],
         "--accelerator-device",
         device_path,
-    ]
-    if entry["rpc"] == "unary-bytes":
-        args.extend([
-            "--payload-size",
-            str(entry["payload_size"]),
-            "--payload-kind",
-            entry["payload_kind"],
-        ])
-    else:
-        args.extend([
-            "--proto-shape",
-            entry["proto_shape"],
-            "--response-shape",
-            entry["response_shape"],
-        ])
+    ])
     return args
 
 
@@ -360,111 +324,48 @@ def run_manifest(
         common_args = build_common_args(entry, addr, accelerator_device)
         client_artifact = output_dir / entry["endpoint_artifacts"]["client"]
         server_artifact = output_dir / entry["endpoint_artifacts"]["server"]
-        server_artifact.parent.mkdir(parents=True, exist_ok=True)
-        client_artifact.parent.mkdir(parents=True, exist_ok=True)
-        server: subprocess.Popen[bytes] | None = None
-        try:
-            server_cmd = [
-                *launch,
-                str(binary),
-                "--mode",
-                "server",
-                *common_args,
-                "--run-id",
-                run_id,
-                "--shutdown-after-requests",
-                str(entry["requests"]),
-                "--server-json-out",
-                str(server_artifact),
-            ]
-            print(
-                f"label={label} phase=server-startup endpoint_role=server artifact={server_artifact} bind={addr} device_path={accelerator_device} launcher=launch",
-                flush=True,
-            )
-            server = subprocess.Popen(
-                server_cmd,
-                cwd=REPO_ROOT,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-            wait_for_port(
-                server,
-                addr,
-                server_start_timeout,
-                label=label,
-                artifact_path=server_artifact,
-                device_path=accelerator_device,
-            )
-
-            client_cmd = [
-                *launch,
-                str(binary),
-                "--mode",
-                "client",
-                *common_args,
-                "--run-id",
-                run_id,
-                "--json-out",
-                str(client_artifact),
-            ]
-            print(
-                f"label={label} phase=client-execution endpoint_role=client artifact={client_artifact} target={addr} device_path={accelerator_device} launcher=launch",
-                flush=True,
-            )
-            result = subprocess.run(
-                client_cmd,
-                cwd=REPO_ROOT,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                timeout=client_timeout,
-                check=False,
-            )
-            if result.returncode != 0:
-                raise RunError(
-                    "\n".join(
-                        [
-                            f"label={label} phase=client-execution endpoint_role=client artifact={client_artifact} device_path={accelerator_device} exit={result.returncode}",
-                            f"stdout:\n{result.stdout.decode('utf-8', errors='replace')}",
-                            f"stderr:\n{result.stderr.decode('utf-8', errors='replace')}",
-                        ]
-                    )
-                )
-
-            try:
-                server.wait(timeout=server_flush_timeout)
-            except subprocess.TimeoutExpired as err:
-                raise RunError(
-                    f"label={label} phase=server-flush endpoint_role=server artifact={server_artifact} device_path={accelerator_device} timeout after {server_flush_timeout:.1f}s"
-                ) from err
-
-            if server.returncode != 0:
-                stdout, stderr = drain_process_output(server)
-                raise RunError(
-                    "\n".join(
-                        [
-                            f"label={label} phase=server-flush endpoint_role=server artifact={server_artifact} device_path={accelerator_device} exit={server.returncode}",
-                            f"stdout:\n{stdout}",
-                            f"stderr:\n{stderr}",
-                        ]
-                    )
-                )
-            print(
-                f"label={label} phase=server-flush endpoint_role=server artifact={server_artifact} device_path={accelerator_device} verdict=pass",
-                flush=True,
-            )
-        except subprocess.TimeoutExpired as err:
-            raise RunError(
-                f"label={label} phase=client-execution endpoint_role=client artifact={client_artifact} device_path={accelerator_device} timeout after {client_timeout:.1f}s"
-            ) from err
-        finally:
-            if server is not None:
-                terminate_process(
-                    server,
-                    label=label,
-                    phase="cleanup",
-                    artifact_path=server_artifact,
-                    device_path=accelerator_device,
-                )
+        server_cmd = [
+            *launch,
+            str(binary),
+            "--mode",
+            "server",
+            *common_args,
+            "--run-id",
+            run_id,
+            "--shutdown-after-requests",
+            str(entry["requests"]),
+            "--server-json-out",
+            str(server_artifact),
+        ]
+        client_cmd = [
+            *launch,
+            str(binary),
+            "--mode",
+            "client",
+            *common_args,
+            "--run-id",
+            run_id,
+            "--json-out",
+            str(client_artifact),
+        ]
+        run_server_client_pair(
+            label=label,
+            server_cmd=server_cmd,
+            client_cmd=client_cmd,
+            server_artifact=server_artifact,
+            client_artifact=client_artifact,
+            bind_addr=addr,
+            target_addr=addr,
+            server_start_timeout=server_start_timeout,
+            client_timeout=client_timeout,
+            server_flush_timeout=server_flush_timeout,
+            error_cls=RunError,
+            fail_fn=fail,
+            server_popen_kwargs={"cwd": REPO_ROOT},
+            client_run_kwargs={"cwd": REPO_ROOT},
+            context={"device_path": accelerator_device, "launcher": "launch"},
+            cleanup_phase="cleanup",
+        )
 
 
 def parse_json(path: Path) -> Dict[str, Any]:

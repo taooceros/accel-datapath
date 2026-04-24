@@ -10,11 +10,13 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
+import claim_package_contract as claim_contract
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 TONIC_PROFILE_DIR = SCRIPT_DIR.parent
 ACCEL_RPC_DIR = TONIC_PROFILE_DIR.parent
 REPO_ROOT = ACCEL_RPC_DIR.parent
-DEFAULT_MANIFEST = TONIC_PROFILE_DIR / "workloads" / "s04_claim_package.json"
+DEFAULT_MANIFEST = claim_contract.DEFAULT_MANIFEST
 DEFAULT_S02_VERIFY = TONIC_PROFILE_DIR / "scripts" / "verify_s02_trustworthy_evidence.sh"
 DEFAULT_S03_VERIFY = TONIC_PROFILE_DIR / "scripts" / "verify_s03_idxd_path.sh"
 DEFAULT_S03_RUNNER = TONIC_PROFILE_DIR / "scripts" / "run_s03_idxd_evidence.py"
@@ -22,42 +24,10 @@ DEFAULT_SUMMARIZER = TONIC_PROFILE_DIR / "scripts" / "summarize_s04_claim_packag
 DEFAULT_SOFTWARE_TIMEOUT_S = int(os.environ.get("S04_SOFTWARE_TIMEOUT_S", "900"))
 DEFAULT_IDXD_TIMEOUT_S = int(os.environ.get("S04_IDXD_TIMEOUT_S", "900"))
 DEFAULT_SUMMARY_TIMEOUT_S = int(os.environ.get("S04_SUMMARY_TIMEOUT_S", "120"))
-REQUIRED_LABELS = {
-    "ordinary/unary-bytes/repeated-64",
-    "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
-}
-REQUIRED_PAIRING_KEYS = ["workload_label", "endpoint_role", "run_family"]
-EXPECTED_ENDPOINT_ROLES = ("client", "server")
-EXPECTED_FAMILIES = {
-    "software_baseline": {
-        "source_key": "software_manifest",
-        "instrumentation": "off",
-        "selected_path": "software",
-        "prefix": "software/",
-    },
-    "software_attribution": {
-        "source_key": "software_manifest",
-        "instrumentation": "on",
-        "selected_path": "software",
-        "prefix": "software/",
-    },
-    "idxd_attribution": {
-        "source_key": "idxd_manifest",
-        "instrumentation": "on",
-        "selected_path": "idxd",
-        "prefix": "idxd/",
-    },
-}
-EXPECTED_DERIVED_OUTPUTS = {
-    "comparison_summary_json": "summary/comparison_summary.json",
-    "ordinary_vs_idxd_csv": "summary/ordinary_vs_idxd.csv",
-    "claim_table_md": "summary/claim_table.md",
-}
-EXPECTED_REPORT_PATH = "docs/report/benchmarking/014.idxd_tonic_same_repo_claim_package.md"
+EXPECTED_ENDPOINT_ROLES = claim_contract.EXPECTED_ENDPOINT_ROLES
 
 
-class ManifestError(RuntimeError):
-    pass
+ManifestError = claim_contract.ManifestError
 
 
 class RunError(RuntimeError):
@@ -858,6 +828,26 @@ def execute_run(
         ),
         flush=True,
     )
+
+
+resolve_repo_path = claim_contract.resolve_repo_path
+required_str = claim_contract.required_str
+required_list = claim_contract.required_list
+load_json = claim_contract.load_json
+load_upstream_manifest = claim_contract.load_upstream_manifest
+index_s02_workloads = claim_contract.index_s02_workloads
+index_s03_workloads = claim_contract.index_s03_workloads
+validate_scope = claim_contract.validate_scope
+validate_inputs = claim_contract.validate_inputs
+expected_report_references = claim_contract.expected_report_references
+validate_report = claim_contract.validate_report
+validate_derived_outputs = claim_contract.validate_derived_outputs
+validate_family_entries = claim_contract.validate_family_entries
+validate_artifact_families = claim_contract.validate_artifact_families
+load_manifest = claim_contract.load_manifest
+resolve_run_root = claim_contract.resolve_run_root
+manifest_copy_path = claim_contract.manifest_copy_path
+summary_output_paths = claim_contract.summary_output_paths
 
 
 def main(argv: Iterable[str] | None = None) -> int:
