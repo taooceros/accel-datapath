@@ -852,3 +852,161 @@ fn s03_verify_only_rejects_software_looking_accelerated_artifacts() {
         "stderr should identify the software-looking accelerated artifact\nstderr:\n{stderr}"
     );
 }
+
+fn s04_runner_script() -> PathBuf {
+    repo_root()
+        .join("tonic-profile")
+        .join("scripts")
+        .join("run_s04_claim_package.py")
+}
+
+fn s04_tracked_manifest() -> PathBuf {
+    repo_root()
+        .join("tonic-profile")
+        .join("workloads")
+        .join("s04_claim_package.json")
+}
+
+#[test]
+fn tracked_s04_manifest_covers_required_families_outputs_and_report_references() {
+    let raw = fs::read_to_string(s04_tracked_manifest()).expect("read tracked s04 manifest");
+    let manifest: Value = serde_json::from_str(&raw).expect("parse tracked s04 manifest");
+
+    assert_eq!(manifest["run_root"], "accel-rpc/target/s04-claim-package/latest");
+    assert_eq!(
+        manifest["scope"]["pairing_keys"],
+        json!(["workload_label", "endpoint_role", "run_family"])
+    );
+    assert_eq!(
+        manifest["scope"]["workload_labels"],
+        json!([
+            "ordinary/unary-bytes/repeated-64",
+            "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy"
+        ])
+    );
+    assert_eq!(
+        manifest["inputs"]["software_manifest"],
+        "accel-rpc/tonic-profile/workloads/s02_trustworthy_matrix.json"
+    );
+    assert_eq!(
+        manifest["inputs"]["idxd_manifest"],
+        "accel-rpc/tonic-profile/workloads/s03_idxd_matrix.json"
+    );
+    assert_eq!(
+        manifest["inputs"]["control_floor_summary"],
+        "accel-rpc/target/control-floor/async_control_floor_summary.json"
+    );
+    assert_eq!(
+        manifest["inputs"]["report_contract"],
+        "accel-rpc/tonic-profile/tests/report_contract.rs"
+    );
+
+    let families = manifest["artifact_families"]
+        .as_array()
+        .expect("tracked s04 artifact_families array");
+    assert_eq!(families.len(), 3, "s04 should freeze three comparison families");
+
+    for (run_family, instrumentation, selected_path, source_manifest, expected_prefix) in [
+        (
+            "software_baseline",
+            "off",
+            "software",
+            "accel-rpc/tonic-profile/workloads/s02_trustworthy_matrix.json",
+            "software/",
+        ),
+        (
+            "software_attribution",
+            "on",
+            "software",
+            "accel-rpc/tonic-profile/workloads/s02_trustworthy_matrix.json",
+            "software/",
+        ),
+        (
+            "idxd_attribution",
+            "on",
+            "idxd",
+            "accel-rpc/tonic-profile/workloads/s03_idxd_matrix.json",
+            "idxd/",
+        ),
+    ] {
+        let family = families
+            .iter()
+            .find(|entry| entry["run_family"] == run_family)
+            .unwrap_or_else(|| panic!("missing run_family {run_family}"));
+        assert_eq!(family["instrumentation"], instrumentation);
+        assert_eq!(family["selected_path"], selected_path);
+        assert_eq!(family["source_manifest"], source_manifest);
+
+        let reports = family["endpoint_reports"]
+            .as_array()
+            .expect("endpoint_reports array");
+        assert_eq!(reports.len(), 4, "{run_family} should enumerate client/server artifacts for both workloads");
+        for label in [
+            "ordinary/unary-bytes/repeated-64",
+            "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
+        ] {
+            for endpoint_role in ["client", "server"] {
+                let report = reports
+                    .iter()
+                    .find(|entry| {
+                        entry["workload_label"] == label && entry["endpoint_role"] == endpoint_role
+                    })
+                    .unwrap_or_else(|| {
+                        panic!("missing {run_family} artifact for {label} {endpoint_role}")
+                    });
+                let artifact = report["artifact"].as_str().expect("artifact string");
+                assert!(
+                    artifact.starts_with(expected_prefix),
+                    "{run_family} artifact should live under {expected_prefix}: {artifact}"
+                );
+            }
+        }
+    }
+
+    assert_eq!(
+        manifest["derived_outputs"],
+        json!({
+            "comparison_summary_json": "summary/comparison_summary.json",
+            "ordinary_vs_idxd_csv": "summary/ordinary_vs_idxd.csv",
+            "claim_table_md": "summary/claim_table.md"
+        })
+    );
+    assert_eq!(
+        manifest["report"]["path"],
+        "docs/report/benchmarking/014.idxd_tonic_same_repo_claim_package.md"
+    );
+    assert_eq!(
+        manifest["report"]["required_references"],
+        json!([
+            "accel-rpc/target/s04-claim-package/latest/summary/comparison_summary.json",
+            "accel-rpc/target/s04-claim-package/latest/summary/ordinary_vs_idxd.csv",
+            "accel-rpc/target/s04-claim-package/latest/summary/claim_table.md"
+        ])
+    );
+}
+
+#[test]
+fn s04_validate_only_accepts_the_tracked_manifest() {
+    let output = Command::new("python3")
+        .arg(s04_runner_script())
+        .arg("--manifest")
+        .arg(s04_tracked_manifest())
+        .arg("--validate-only")
+        .output()
+        .expect("run s04 claim-package validate-only");
+
+    assert!(
+        output.status.success(),
+        "validate-only failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("phase=manifest-parse")
+            && stdout.contains("run_root=accel-rpc/target/s04-claim-package/latest")
+            && stdout.contains("summary_path=accel-rpc/target/s04-claim-package/latest/summary/comparison_summary.json"),
+        "validate-only should print the tracked run-root and summary contract\nstdout:\n{stdout}"
+    );
+}

@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "run_root": "accel-rpc/target/s04-claim-package/latest",
+  "scope": {
+    "workload_labels": [
+      "ordinary/unary-bytes/repeated-64",
+      "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy"
+    ],
+    "pairing_keys": [
+      "workload_label",
+      "endpoint_role",
+      "run_family"
+    ]
+  },
+  "inputs": {
+    "software_manifest": "accel-rpc/tonic-profile/workloads/s02_trustworthy_matrix.json",
+    "idxd_manifest": "accel-rpc/tonic-profile/workloads/s03_idxd_matrix.json",
+    "control_floor_summary": "accel-rpc/target/control-floor/async_control_floor_summary.json",
+    "report_contract": "accel-rpc/tonic-profile/tests/report_contract.rs"
+  },
+  "artifact_families": [
+    {
+      "run_family": "software_baseline",
+      "source_manifest": "accel-rpc/tonic-profile/workloads/s02_trustworthy_matrix.json",
+      "instrumentation": "off",
+      "selected_path": "software",
+      "endpoint_reports": [
+        {
+          "workload_label": "ordinary/unary-bytes/repeated-64",
+          "endpoint_role": "client",
+          "artifact": "software/ordinary__unary-bytes__repeated-64.client.off.json"
+        },
+        {
+          "workload_label": "ordinary/unary-bytes/repeated-64",
+          "endpoint_role": "server",
+          "artifact": "software/ordinary__unary-bytes__repeated-64.server.off.json"
+        },
+        {
+          "workload_label": "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
+          "endpoint_role": "client",
+          "artifact": "software/ordinary__unary-proto-shape__fleet-small-to-fleet-response-heavy.client.off.json"
+        },
+        {
+          "workload_label": "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
+          "endpoint_role": "server",
+          "artifact": "software/ordinary__unary-proto-shape__fleet-small-to-fleet-response-heavy.server.off.json"
+        }
+      ]
+    },
+    {
+      "run_family": "software_attribution",
+      "source_manifest": "accel-rpc/tonic-profile/workloads/s02_trustworthy_matrix.json",
+      "instrumentation": "on",
+      "selected_path": "software",
+      "endpoint_reports": [
+        {
+          "workload_label": "ordinary/unary-bytes/repeated-64",
+          "endpoint_role": "client",
+          "artifact": "software/ordinary__unary-bytes__repeated-64.client.on.json"
+        },
+        {
+          "workload_label": "ordinary/unary-bytes/repeated-64",
+          "endpoint_role": "server",
+          "artifact": "software/ordinary__unary-bytes__repeated-64.server.on.json"
+        },
+        {
+          "workload_label": "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
+          "endpoint_role": "client",
+          "artifact": "software/ordinary__unary-proto-shape__fleet-small-to-fleet-response-heavy.client.on.json"
+        },
+        {
+          "workload_label": "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
+          "endpoint_role": "server",
+          "artifact": "software/ordinary__unary-proto-shape__fleet-small-to-fleet-response-heavy.server.on.json"
+        }
+      ]
+    },
+    {
+      "run_family": "idxd_attribution",
+      "source_manifest": "accel-rpc/tonic-profile/workloads/s03_idxd_matrix.json",
+      "instrumentation": "on",
+      "selected_path": "idxd",
+      "endpoint_reports": [
+        {
+          "workload_label": "ordinary/unary-bytes/repeated-64",
+          "endpoint_role": "client",
+          "artifact": "idxd/idxd__unary-bytes__repeated-64.client.json"
+        },
+        {
+          "workload_label": "ordinary/unary-bytes/repeated-64",
+          "endpoint_role": "server",
+          "artifact": "idxd/idxd__unary-bytes__repeated-64.server.json"
+        },
+        {
+          "workload_label": "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
+          "endpoint_role": "client",
+          "artifact": "idxd/idxd__unary-proto-shape__fleet-small-to-fleet-response-heavy.client.json"
+        },
+        {
+          "workload_label": "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
+          "endpoint_role": "server",
+          "artifact": "idxd/idxd__unary-proto-shape__fleet-small-to-fleet-response-heavy.server.json"
+        }
+      ]
+    }
+  ],
+  "derived_outputs": {
+    "comparison_summary_json": "summary/comparison_summary.json",
+    "ordinary_vs_idxd_csv": "summary/ordinary_vs_idxd.csv",
+    "claim_table_md": "summary/claim_table.md"
+  },
+  "report": {
+    "path": "docs/report/benchmarking/014.idxd_tonic_same_repo_claim_package.md",
+    "required_references": [
+      "accel-rpc/target/s04-claim-package/latest/summary/comparison_summary.json",
+      "accel-rpc/target/s04-claim-package/latest/summary/ordinary_vs_idxd.csv",
+      "accel-rpc/target/s04-claim-package/latest/summary/claim_table.md"
+    ]
+  }
+}

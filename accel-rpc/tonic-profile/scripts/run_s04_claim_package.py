@@ -1,0 +1,457 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from typing import Any, Dict, Iterable, List
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+TONIC_PROFILE_DIR = SCRIPT_DIR.parent
+ACCEL_RPC_DIR = TONIC_PROFILE_DIR.parent
+REPO_ROOT = ACCEL_RPC_DIR.parent
+DEFAULT_MANIFEST = TONIC_PROFILE_DIR / "workloads" / "s04_claim_package.json"
+REQUIRED_LABELS = {
+    "ordinary/unary-bytes/repeated-64",
+    "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
+}
+REQUIRED_PAIRING_KEYS = ["workload_label", "endpoint_role", "run_family"]
+EXPECTED_ENDPOINT_ROLES = ("client", "server")
+EXPECTED_FAMILIES = {
+    "software_baseline": {
+        "source_key": "software_manifest",
+        "instrumentation": "off",
+        "selected_path": "software",
+        "prefix": "software/",
+    },
+    "software_attribution": {
+        "source_key": "software_manifest",
+        "instrumentation": "on",
+        "selected_path": "software",
+        "prefix": "software/",
+    },
+    "idxd_attribution": {
+        "source_key": "idxd_manifest",
+        "instrumentation": "on",
+        "selected_path": "idxd",
+        "prefix": "idxd/",
+    },
+}
+EXPECTED_DERIVED_OUTPUTS = {
+    "comparison_summary_json": "summary/comparison_summary.json",
+    "ordinary_vs_idxd_csv": "summary/ordinary_vs_idxd.csv",
+    "claim_table_md": "summary/claim_table.md",
+}
+EXPECTED_REPORT_PATH = "docs/report/benchmarking/014.idxd_tonic_same_repo_claim_package.md"
+
+
+class ManifestError(RuntimeError):
+    pass
+
+
+class RunError(RuntimeError):
+    pass
+
+
+def fail(message: str) -> None:
+    print(message, file=sys.stderr)
+
+
+def resolve_repo_path(raw: str) -> Path:
+    path = Path(raw)
+    return path if path.is_absolute() else (REPO_ROOT / path)
+
+
+def required_str(obj: Dict[str, Any], key: str, *, scope: str) -> str:
+    value = obj.get(key)
+    if not isinstance(value, str) or not value:
+        raise ManifestError(f"{scope} missing {key}")
+    return value
+
+
+def required_list(obj: Dict[str, Any], key: str, *, scope: str) -> List[Any]:
+    value = obj.get(key)
+    if not isinstance(value, list) or not value:
+        raise ManifestError(f"{scope}.{key} must be a non-empty array")
+    return value
+
+
+def load_json(path: Path, *, scope: str) -> Dict[str, Any]:
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as err:
+        raise ManifestError(f"{scope} read failed ({path}): {err}") from err
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as err:
+        raise ManifestError(f"{scope} parse failed ({path}): {err}") from err
+    if not isinstance(value, dict):
+        raise ManifestError(f"{scope} root must be an object")
+    return value
+
+
+def load_upstream_manifest(path_raw: str, *, scope: str) -> Dict[str, Any]:
+    path = resolve_repo_path(path_raw)
+    manifest = load_json(path, scope=scope)
+    workloads = manifest.get("workloads")
+    if not isinstance(workloads, list) or not workloads:
+        raise ManifestError(f"{scope} workloads must be a non-empty array")
+    return manifest
+
+
+def index_s02_workloads(manifest: Dict[str, Any]) -> Dict[str, Dict[str, Dict[str, str]]]:
+    indexed: Dict[str, Dict[str, Dict[str, str]]] = {}
+    for index, entry in enumerate(manifest["workloads"]):
+        if not isinstance(entry, dict):
+            raise ManifestError(f"inputs.software_manifest workloads[{index}] must be an object")
+        label = required_str(entry, "label", scope=f"inputs.software_manifest.workloads[{index}]")
+        endpoint_artifacts = entry.get("endpoint_artifacts")
+        if not isinstance(endpoint_artifacts, dict):
+            raise ManifestError(
+                f"inputs.software_manifest workloads[{index}] label={label!r} missing endpoint_artifacts"
+            )
+        indexed[label] = {}
+        for instrumentation in ("off", "on"):
+            pair = endpoint_artifacts.get(instrumentation)
+            if not isinstance(pair, dict):
+                raise ManifestError(
+                    f"inputs.software_manifest workloads[{index}] label={label!r} endpoint_artifacts missing {instrumentation}"
+                )
+            indexed[label][instrumentation] = {}
+            for endpoint_role in EXPECTED_ENDPOINT_ROLES:
+                indexed[label][instrumentation][endpoint_role] = required_str(
+                    pair,
+                    endpoint_role,
+                    scope=f"inputs.software_manifest.workloads[{index}].endpoint_artifacts.{instrumentation}",
+                )
+    return indexed
+
+
+def index_s03_workloads(manifest: Dict[str, Any]) -> Dict[str, Dict[str, str]]:
+    indexed: Dict[str, Dict[str, str]] = {}
+    for index, entry in enumerate(manifest["workloads"]):
+        if not isinstance(entry, dict):
+            raise ManifestError(f"inputs.idxd_manifest workloads[{index}] must be an object")
+        label = required_str(entry, "label", scope=f"inputs.idxd_manifest.workloads[{index}]")
+        endpoint_artifacts = entry.get("endpoint_artifacts")
+        if not isinstance(endpoint_artifacts, dict):
+            raise ManifestError(
+                f"inputs.idxd_manifest workloads[{index}] label={label!r} missing endpoint_artifacts"
+            )
+        indexed[label] = {}
+        for endpoint_role in EXPECTED_ENDPOINT_ROLES:
+            indexed[label][endpoint_role] = required_str(
+                endpoint_artifacts,
+                endpoint_role,
+                scope=f"inputs.idxd_manifest.workloads[{index}].endpoint_artifacts",
+            )
+    return indexed
+
+
+def validate_scope(scope_obj: Any) -> Dict[str, Any]:
+    if not isinstance(scope_obj, dict):
+        raise ManifestError("manifest.scope must be an object")
+    labels = required_list(scope_obj, "workload_labels", scope="manifest.scope")
+    validated_labels: List[str] = []
+    for index, label in enumerate(labels):
+        if not isinstance(label, str) or not label:
+            raise ManifestError(
+                f"manifest.scope.workload_labels[{index}] must be a non-empty string"
+            )
+        validated_labels.append(label)
+    if set(validated_labels) != REQUIRED_LABELS:
+        raise ManifestError(
+            "manifest.scope.workload_labels must match the curated S04 workloads: "
+            + ", ".join(sorted(REQUIRED_LABELS))
+        )
+
+    pairing_keys = required_list(scope_obj, "pairing_keys", scope="manifest.scope")
+    validated_pairing_keys: List[str] = []
+    for index, key in enumerate(pairing_keys):
+        if not isinstance(key, str) or not key:
+            raise ManifestError(
+                f"manifest.scope.pairing_keys[{index}] must be a non-empty string"
+            )
+        validated_pairing_keys.append(key)
+    if validated_pairing_keys != REQUIRED_PAIRING_KEYS:
+        raise ManifestError(
+            "manifest.scope.pairing_keys must be exactly: "
+            + ", ".join(REQUIRED_PAIRING_KEYS)
+        )
+
+    return {
+        "workload_labels": validated_labels,
+        "pairing_keys": validated_pairing_keys,
+    }
+
+
+def validate_inputs(inputs_obj: Any) -> Dict[str, str]:
+    if not isinstance(inputs_obj, dict):
+        raise ManifestError("manifest.inputs must be an object")
+    validated: Dict[str, str] = {}
+    for key in ["software_manifest", "idxd_manifest", "control_floor_summary", "report_contract"]:
+        raw = required_str(inputs_obj, key, scope="manifest.inputs")
+        resolved = resolve_repo_path(raw)
+        if not resolved.exists():
+            raise ManifestError(f"manifest.inputs.{key} path does not exist: {raw}")
+        validated[key] = raw
+    return validated
+
+
+def expected_report_references(run_root: str) -> List[str]:
+    return [f"{run_root}/{value}" for value in EXPECTED_DERIVED_OUTPUTS.values()]
+
+
+def validate_report(report_obj: Any, run_root: str) -> Dict[str, Any]:
+    if not isinstance(report_obj, dict):
+        raise ManifestError("manifest.report must be an object")
+    path = required_str(report_obj, "path", scope="manifest.report")
+    if path != EXPECTED_REPORT_PATH:
+        raise ManifestError(
+            f"manifest.report.path={path!r} expected {EXPECTED_REPORT_PATH!r}"
+        )
+    references = required_list(report_obj, "required_references", scope="manifest.report")
+    validated_references: List[str] = []
+    for index, reference in enumerate(references):
+        if not isinstance(reference, str) or not reference:
+            raise ManifestError(
+                f"manifest.report.required_references[{index}] must be a non-empty string"
+            )
+        validated_references.append(reference)
+    expected = expected_report_references(run_root)
+    if validated_references != expected:
+        raise ManifestError(
+            "manifest.report.required_references must point at the stable generated outputs: "
+            + ", ".join(expected)
+        )
+    return {"path": path, "required_references": validated_references}
+
+
+def validate_derived_outputs(derived_outputs_obj: Any) -> Dict[str, str]:
+    if not isinstance(derived_outputs_obj, dict):
+        raise ManifestError("manifest.derived_outputs must be an object")
+    validated: Dict[str, str] = {}
+    seen_paths: set[str] = set()
+    for key, expected in EXPECTED_DERIVED_OUTPUTS.items():
+        actual = required_str(derived_outputs_obj, key, scope="manifest.derived_outputs")
+        if actual != expected:
+            raise ManifestError(
+                f"manifest.derived_outputs.{key}={actual!r} expected {expected!r}"
+            )
+        if actual in seen_paths:
+            raise ManifestError(
+                f"manifest.derived_outputs.{key} duplicates output path {actual!r}"
+            )
+        seen_paths.add(actual)
+        validated[key] = actual
+    return validated
+
+
+def validate_family_entries(
+    family_name: str,
+    entries: Any,
+    expected_labels: List[str],
+    expected_prefix: str,
+    upstream_artifacts: Dict[str, Dict[str, str]],
+    global_artifacts: set[str],
+) -> List[Dict[str, str]]:
+    if not isinstance(entries, list) or not entries:
+        raise ManifestError(f"artifact_families.{family_name}.endpoint_reports must be a non-empty array")
+
+    validated: List[Dict[str, str]] = []
+    seen_pairs: set[tuple[str, str]] = set()
+    for index, entry in enumerate(entries):
+        scope = f"artifact_families.{family_name}.endpoint_reports[{index}]"
+        if not isinstance(entry, dict):
+            raise ManifestError(f"{scope} must be an object")
+        workload_label = required_str(entry, "workload_label", scope=scope)
+        endpoint_role = required_str(entry, "endpoint_role", scope=scope)
+        artifact = required_str(entry, "artifact", scope=scope)
+        if workload_label not in expected_labels:
+            raise ManifestError(f"{scope}.workload_label={workload_label!r} is outside the curated S04 scope")
+        if endpoint_role not in EXPECTED_ENDPOINT_ROLES:
+            raise ManifestError(
+                f"{scope}.endpoint_role={endpoint_role!r} expected one of {', '.join(EXPECTED_ENDPOINT_ROLES)}"
+            )
+        pair = (workload_label, endpoint_role)
+        if pair in seen_pairs:
+            raise ManifestError(
+                f"{scope} duplicates workload_label={workload_label!r} endpoint_role={endpoint_role!r}"
+            )
+        seen_pairs.add(pair)
+        if artifact in global_artifacts:
+            raise ManifestError(f"{scope}.artifact duplicates artifact path {artifact!r}")
+        global_artifacts.add(artifact)
+        if not artifact.startswith(expected_prefix):
+            raise ManifestError(
+                f"{scope}.artifact={artifact!r} expected to live under {expected_prefix!r}"
+            )
+
+        expected_upstream = upstream_artifacts[workload_label][endpoint_role]
+        if Path(artifact).name != expected_upstream:
+            raise ManifestError(
+                f"{scope}.artifact={artifact!r} expected basename {expected_upstream!r} from upstream manifest"
+            )
+        validated.append(
+            {
+                "workload_label": workload_label,
+                "endpoint_role": endpoint_role,
+                "artifact": artifact,
+            }
+        )
+
+    expected_pairs = {(label, role) for label in expected_labels for role in EXPECTED_ENDPOINT_ROLES}
+    missing_pairs = sorted(expected_pairs - seen_pairs)
+    if missing_pairs:
+        rendered = ", ".join(f"{label}:{role}" for label, role in missing_pairs)
+        raise ManifestError(
+            f"artifact_families.{family_name}.endpoint_reports missing curated entries: {rendered}"
+        )
+
+    return validated
+
+
+def validate_artifact_families(
+    artifact_families_obj: Any,
+    inputs: Dict[str, str],
+    scope: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    if not isinstance(artifact_families_obj, list) or not artifact_families_obj:
+        raise ManifestError("manifest.artifact_families must be a non-empty array")
+
+    software_manifest = load_upstream_manifest(
+        inputs["software_manifest"], scope="inputs.software_manifest"
+    )
+    idxd_manifest = load_upstream_manifest(inputs["idxd_manifest"], scope="inputs.idxd_manifest")
+    s02_artifacts = index_s02_workloads(software_manifest)
+    s03_artifacts = index_s03_workloads(idxd_manifest)
+
+    validated: List[Dict[str, Any]] = []
+    seen_families: set[str] = set()
+    global_artifacts: set[str] = set()
+    for index, family in enumerate(artifact_families_obj):
+        scope_name = f"manifest.artifact_families[{index}]"
+        if not isinstance(family, dict):
+            raise ManifestError(f"{scope_name} must be an object")
+        run_family = required_str(family, "run_family", scope=scope_name)
+        if run_family in seen_families:
+            raise ManifestError(f"{scope_name}.run_family={run_family!r} is duplicated")
+        seen_families.add(run_family)
+        if run_family not in EXPECTED_FAMILIES:
+            raise ManifestError(f"{scope_name}.run_family={run_family!r} is not a tracked S04 family")
+        expected = EXPECTED_FAMILIES[run_family]
+        source_manifest = required_str(family, "source_manifest", scope=scope_name)
+        if source_manifest != inputs[expected["source_key"]]:
+            raise ManifestError(
+                f"{scope_name}.source_manifest={source_manifest!r} expected {inputs[expected['source_key']]!r}"
+            )
+        instrumentation = required_str(family, "instrumentation", scope=scope_name)
+        if instrumentation != expected["instrumentation"]:
+            raise ManifestError(
+                f"{scope_name}.instrumentation={instrumentation!r} expected {expected['instrumentation']!r}"
+            )
+        selected_path = required_str(family, "selected_path", scope=scope_name)
+        if selected_path != expected["selected_path"]:
+            raise ManifestError(
+                f"{scope_name}.selected_path={selected_path!r} expected {expected['selected_path']!r}"
+            )
+
+        upstream = (
+            {label: values[instrumentation] for label, values in s02_artifacts.items()}
+            if run_family in {"software_baseline", "software_attribution"}
+            else s03_artifacts
+        )
+        endpoint_reports = validate_family_entries(
+            run_family,
+            family.get("endpoint_reports"),
+            scope["workload_labels"],
+            expected["prefix"],
+            upstream,
+            global_artifacts,
+        )
+        validated.append(
+            {
+                "run_family": run_family,
+                "source_manifest": source_manifest,
+                "instrumentation": instrumentation,
+                "selected_path": selected_path,
+                "endpoint_reports": endpoint_reports,
+            }
+        )
+
+    missing_families = sorted(set(EXPECTED_FAMILIES) - seen_families)
+    if missing_families:
+        raise ManifestError(
+            "manifest.artifact_families missing required S04 families: " + ", ".join(missing_families)
+        )
+
+    return validated
+
+
+def load_manifest(path: Path) -> Dict[str, Any]:
+    manifest = load_json(path, scope="phase=manifest-parse manifest")
+    version = manifest.get("version")
+    if version != 1:
+        raise ManifestError(f"manifest.version={version!r} expected 1")
+    run_root = required_str(manifest, "run_root", scope="manifest")
+    if run_root != "accel-rpc/target/s04-claim-package/latest":
+        raise ManifestError(
+            f"manifest.run_root={run_root!r} expected 'accel-rpc/target/s04-claim-package/latest'"
+        )
+    scope = validate_scope(manifest.get("scope"))
+    inputs = validate_inputs(manifest.get("inputs"))
+    derived_outputs = validate_derived_outputs(manifest.get("derived_outputs"))
+    artifact_families = validate_artifact_families(manifest.get("artifact_families"), inputs, scope)
+    report = validate_report(manifest.get("report"), run_root)
+    return {
+        "version": version,
+        "run_root": run_root,
+        "scope": scope,
+        "inputs": inputs,
+        "artifact_families": artifact_families,
+        "derived_outputs": derived_outputs,
+        "report": report,
+    }
+
+
+def summary_path(manifest: Dict[str, Any]) -> str:
+    return f"{manifest['run_root']}/{manifest['derived_outputs']['comparison_summary_json']}"
+
+
+def main(argv: Iterable[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Validate or run the tracked S04 ordinary-vs-IDXD claim package contract."
+    )
+    parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST))
+    parser.add_argument("--validate-only", action="store_true")
+    args = parser.parse_args(list(argv) if argv is not None else None)
+
+    try:
+        manifest_path = Path(args.manifest).resolve()
+        manifest = load_manifest(manifest_path)
+        print(
+            " ".join(
+                [
+                    f"phase=manifest-parse",
+                    f"manifest={manifest_path}",
+                    f"run_root={manifest['run_root']}",
+                    f"summary_path={summary_path(manifest)}",
+                    f"report_path={manifest['report']['path']}",
+                    f"families={len(manifest['artifact_families'])}",
+                ]
+            ),
+            flush=True,
+        )
+        if args.validate_only:
+            return 0
+        raise RunError(
+            "phase=execution message=run_s04_claim_package.py execution path lands in T03; use --validate-only for the T01 contract gate"
+        )
+    except (ManifestError, RunError) as err:
+        fail(str(err))
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
