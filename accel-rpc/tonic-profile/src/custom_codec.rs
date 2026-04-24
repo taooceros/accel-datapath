@@ -359,18 +359,21 @@ impl<U: Message + Default> Decoder for ProfileDecoder<U> {
 
 fn idxd_status(device_path: &Path, err: &MemmoveError) -> Status {
     let phase = match err {
-        MemmoveError::QueueOpen { .. } | MemmoveError::InvalidDevicePath { .. } => "queue_open",
-        MemmoveError::CompletionTimeout { phase, .. }
-        | MemmoveError::MalformedCompletion { phase, .. } => phase_label(*phase),
-        MemmoveError::PageFaultRetryExhausted { .. }
-        | MemmoveError::CompletionStatus { .. } => "completion_poll",
+        MemmoveError::InvalidDevicePath { .. } => "invalid_device_path",
         MemmoveError::InvalidLength { .. } | MemmoveError::DestinationTooSmall { .. } => {
             "copy_validation"
         }
+        MemmoveError::QueueOpen { phase, .. }
+        | MemmoveError::CompletionTimeout { phase, .. }
+        | MemmoveError::MalformedCompletion { phase, .. }
+        | MemmoveError::PageFaultRetryExhausted { phase, .. }
+        | MemmoveError::CompletionStatus { phase, .. }
+        | MemmoveError::ByteMismatch { phase, .. } => phase_label(*phase),
     };
+    let kind = err.kind();
 
     Status::internal(format!(
-        "idxd codec copy lane failure during {phase} on {}: {err}",
+        "idxd codec copy lane failure during {phase} ({kind}) on {}: {err}",
         device_path.display()
     ))
 }
@@ -380,5 +383,61 @@ fn phase_label(phase: MemmovePhase) -> &'static str {
         MemmovePhase::QueueOpen => "queue_open",
         MemmovePhase::CompletionPoll => "completion_poll",
         MemmovePhase::PageFaultRetry => "page_fault_retry",
+        MemmovePhase::PostCopyVerify => "post_copy_verify",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn translates_post_copy_verification_failures_without_collapsing_phase() {
+        let status = idxd_status(
+            Path::new("/dev/dsa/wq0.0"),
+            &MemmoveError::ByteMismatch {
+                device_path: PathBuf::from("/dev/dsa/wq0.0"),
+                phase: MemmovePhase::PostCopyVerify,
+                requested_bytes: 128,
+                mismatch_offset: 17,
+                final_status: 0,
+                page_fault_retries: 1,
+            },
+        );
+
+        assert_eq!(status.code(), tonic::Code::Internal);
+        assert!(status.message().contains("during post_copy_verify (byte_mismatch)"));
+        assert!(status.message().contains("mismatch_offset=17"));
+    }
+
+    #[test]
+    fn translates_setup_failures_with_specific_setup_label() {
+        let status = idxd_status(
+            Path::new("<configured-device>"),
+            &MemmoveError::InvalidDevicePath {
+                device_path: PathBuf::from(""),
+            },
+        );
+
+        assert_eq!(status.code(), tonic::Code::Internal);
+        assert!(status.message().contains("during invalid_device_path (invalid_device_path)"));
+    }
+
+    #[test]
+    fn preserves_page_fault_retry_label_instead_of_completion_poll() {
+        let status = idxd_status(
+            Path::new("/dev/dsa/wq0.0"),
+            &MemmoveError::PageFaultRetryExhausted {
+                device_path: PathBuf::from("/dev/dsa/wq0.0"),
+                phase: MemmovePhase::PageFaultRetry,
+                retries: 1,
+                bytes_completed: 32,
+                fault_addr: 0xfeed,
+            },
+        );
+
+        assert!(status
+            .message()
+            .contains("during page_fault_retry (page_fault_retry_exhausted)"));
     }
 }
