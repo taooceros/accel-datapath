@@ -2,7 +2,8 @@
 //!
 //! This crate deliberately stays narrow: it opens one IDXD work queue, submits
 //! one memmove descriptor at a time through `idxd-bindings`, retries recoverable
-//! page faults, and maps queue-open/completion failures into typed Rust errors.
+//! page faults, verifies copied bytes, and maps queue-open/completion failures
+//! into typed Rust errors.
 
 mod validation;
 
@@ -68,7 +69,24 @@ impl DsaSession {
         src: &[u8],
     ) -> Result<MemmoveValidationReport, MemmoveError> {
         let request = MemmoveRequest::for_buffers(dst.len(), src.len())?;
-        self.memmove_inner(dst.as_mut_ptr(), src.as_ptr(), request)
+        let report = self.memmove_inner(dst.as_mut_ptr(), src.as_ptr(), request)?;
+
+        if let Some(mismatch_offset) = dst
+            .iter()
+            .zip(src.iter())
+            .position(|(actual, expected)| actual != expected)
+        {
+            return Err(MemmoveError::ByteMismatch {
+                device_path: self.device_path().to_path_buf(),
+                phase: MemmovePhase::PostCopyVerify,
+                requested_bytes: request.len(),
+                mismatch_offset,
+                final_status: report.final_status,
+                page_fault_retries: report.page_fault_retries,
+            });
+        }
+
+        Ok(report)
     }
 
     fn memmove_inner(

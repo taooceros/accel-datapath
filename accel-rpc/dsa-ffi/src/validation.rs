@@ -171,6 +171,7 @@ pub enum MemmovePhase {
     QueueOpen,
     CompletionPoll,
     PageFaultRetry,
+    PostCopyVerify,
 }
 
 impl std::fmt::Display for MemmovePhase {
@@ -179,11 +180,13 @@ impl std::fmt::Display for MemmovePhase {
             Self::QueueOpen => f.write_str("queue_open"),
             Self::CompletionPoll => f.write_str("completion_poll"),
             Self::PageFaultRetry => f.write_str("page_fault_retry"),
+            Self::PostCopyVerify => f.write_str("post_copy_verify"),
         }
     }
 }
 
-/// Typed failure surface for queue-open, completion, and retry faults.
+/// Typed failure surface for queue-open, completion, retry, and post-copy
+/// validation faults.
 #[derive(Debug, Error)]
 pub enum MemmoveError {
     #[error("invalid DSA work-queue path: {device_path}")]
@@ -251,9 +254,35 @@ pub enum MemmoveError {
         fault_addr: u64,
         page_fault_retries: u32,
     },
+
+    #[error(
+        "post-copy verification failed for {device_path} during {phase}: mismatch_offset={mismatch_offset}, requested_bytes={requested_bytes}, final_status=0x{final_status:02x}, retries={page_fault_retries}"
+    )]
+    ByteMismatch {
+        device_path: PathBuf,
+        phase: MemmovePhase,
+        requested_bytes: usize,
+        mismatch_offset: usize,
+        final_status: u8,
+        page_fault_retries: u32,
+    },
 }
 
 impl MemmoveError {
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::InvalidDevicePath { .. } => "invalid_device_path",
+            Self::InvalidLength { .. } => "invalid_length",
+            Self::DestinationTooSmall { .. } => "destination_too_small",
+            Self::QueueOpen { .. } => "queue_open",
+            Self::CompletionTimeout { .. } => "completion_timeout",
+            Self::MalformedCompletion { .. } => "malformed_completion",
+            Self::PageFaultRetryExhausted { .. } => "page_fault_retry_exhausted",
+            Self::CompletionStatus { .. } => "completion_status",
+            Self::ByteMismatch { .. } => "byte_mismatch",
+        }
+    }
+
     pub fn device_path(&self) -> Option<&Path> {
         match self {
             Self::InvalidDevicePath { device_path }
@@ -261,7 +290,8 @@ impl MemmoveError {
             | Self::CompletionTimeout { device_path, .. }
             | Self::MalformedCompletion { device_path, .. }
             | Self::PageFaultRetryExhausted { device_path, .. }
-            | Self::CompletionStatus { device_path, .. } => Some(device_path.as_path()),
+            | Self::CompletionStatus { device_path, .. }
+            | Self::ByteMismatch { device_path, .. } => Some(device_path.as_path()),
             Self::InvalidLength { .. } | Self::DestinationTooSmall { .. } => None,
         }
     }
@@ -272,7 +302,8 @@ impl MemmoveError {
             | Self::CompletionTimeout { phase, .. }
             | Self::MalformedCompletion { phase, .. }
             | Self::PageFaultRetryExhausted { phase, .. }
-            | Self::CompletionStatus { phase, .. } => Some(*phase),
+            | Self::CompletionStatus { phase, .. }
+            | Self::ByteMismatch { phase, .. } => Some(*phase),
             Self::InvalidDevicePath { .. }
             | Self::InvalidLength { .. }
             | Self::DestinationTooSmall { .. } => None,
@@ -289,12 +320,45 @@ impl MemmoveError {
             }
             | Self::CompletionStatus {
                 page_fault_retries, ..
+            }
+            | Self::ByteMismatch {
+                page_fault_retries, ..
             } => Some(*page_fault_retries),
             Self::PageFaultRetryExhausted { retries, .. } => Some(*retries),
             Self::InvalidDevicePath { .. }
             | Self::InvalidLength { .. }
             | Self::DestinationTooSmall { .. }
             | Self::QueueOpen { .. } => None,
+        }
+    }
+
+    pub fn final_status(&self) -> Option<u8> {
+        match self {
+            Self::MalformedCompletion { status, .. }
+            | Self::CompletionStatus { status, .. }
+            | Self::ByteMismatch {
+                final_status: status, ..
+            } => Some(*status),
+            Self::InvalidDevicePath { .. }
+            | Self::InvalidLength { .. }
+            | Self::DestinationTooSmall { .. }
+            | Self::QueueOpen { .. }
+            | Self::CompletionTimeout { .. }
+            | Self::PageFaultRetryExhausted { .. } => None,
+        }
+    }
+
+    pub fn requested_bytes(&self) -> Option<usize> {
+        match self {
+            Self::InvalidLength { requested_len, .. } => Some(*requested_len),
+            Self::DestinationTooSmall { src_len, .. } => Some(*src_len),
+            Self::ByteMismatch { requested_bytes, .. } => Some(*requested_bytes),
+            Self::InvalidDevicePath { .. }
+            | Self::QueueOpen { .. }
+            | Self::CompletionTimeout { .. }
+            | Self::MalformedCompletion { .. }
+            | Self::PageFaultRetryExhausted { .. }
+            | Self::CompletionStatus { .. } => None,
         }
     }
 }
