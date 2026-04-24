@@ -11,7 +11,6 @@ Usage:
 import argparse
 import json
 import re
-from collections import defaultdict
 from pathlib import Path
 
 
@@ -41,6 +40,53 @@ def load_results(path):
         return json.load(f)
 
 
+def queue_type_label(metadata):
+    return "dedicated" if metadata.get("wq_dedicated") else "shared"
+
+
+def load_result_sets(paths):
+    result_sets = []
+    for path_str in paths:
+        path = Path(path_str)
+        data = load_results(path)
+        metadata = data["metadata"]
+        result_sets.append(
+            {
+                "path": path,
+                "data": data,
+                "metadata": metadata,
+                "queue_type": queue_type_label(metadata),
+            }
+        )
+    return result_sets
+
+
+def build_meta_text(result_sets):
+    queue_types = ", ".join(sorted({rs["queue_type"] for rs in result_sets}))
+    devices = ", ".join(sorted({rs["metadata"]["device"] for rs in result_sets}))
+    iterations = ", ".join(
+        str(v) for v in sorted({rs["metadata"]["iterations"] for rs in result_sets})
+    )
+    pinned_cores = ", ".join(
+        str(v) for v in sorted({rs["metadata"]["pinned_core"] for rs in result_sets})
+    )
+    tsc_ghz = ", ".join(
+        f"{v / 1e9:.3f}"
+        for v in sorted({rs["metadata"]["tsc_freq_hz"] for rs in result_sets})
+    )
+    cold_cache = ", ".join(
+        str(v) for v in sorted({rs["metadata"]["cold_cache"] for rs in result_sets})
+    )
+    return (
+        f"Queue Type: {queue_types}"
+        f" | Device: {devices}"
+        f" | Core: {pinned_cores}"
+        f" | TSC: {tsc_ghz} GHz"
+        f" | Iterations: {iterations}"
+        f" | Cold cache: {cold_cache}"
+    )
+
+
 def classify_benchmark(name):
     """Classify a benchmark name into (strategy, batch_size).
 
@@ -59,38 +105,57 @@ def classify_benchmark(name):
     return None, None
 
 
-def create_dashboard(data, output_path: Path):
+def create_dashboard(result_sets, output_path: Path):
     """Create interactive HTML dashboard with checkbox filters."""
 
     # Parse throughput data into records
     records = []
-    for r in data["throughput"]:
-        strategy, batch_n = classify_benchmark(r["benchmark"])
-        if strategy is None:
-            continue
-        records.append({
-            "strategy": strategy,
-            "batch_size": batch_n,
-            "concurrency": r["concurrency"],
-            "size": r["size"],
-            "ops_per_sec": r["ops_per_sec"],
-            "bandwidth_mb_s": r["bandwidth_mb_s"],
-        })
+    for result_set in result_sets:
+        queue_type = result_set["queue_type"]
+        for r in result_set["data"]["throughput"]:
+            strategy, batch_n = classify_benchmark(r["benchmark"])
+            if strategy is None:
+                continue
+            records.append(
+                {
+                    "queue_type": queue_type,
+                    "strategy": strategy,
+                    "batch_size": batch_n,
+                    "concurrency": r["concurrency"],
+                    "size": r["size"],
+                    "ops_per_sec": r["ops_per_sec"],
+                    "bandwidth_mb_s": r["bandwidth_mb_s"],
+                }
+            )
 
     # Parse latency data
     latency_records = []
-    for r in data["latency"]:
-        if r["size"] is not None and r["benchmark"] in ("memmove", "crc_gen", "copy_crc", "sw_memcpy", "sw_crc32c"):
-            latency_records.append({
-                "benchmark": r["benchmark"],
-                "size": r["size"],
-                "median_ns": r["ns"]["median"],
-                "p99_ns": r["ns"].get("p99", r["ns"]["median"]),
-            })
+    for result_set in result_sets:
+        queue_type = result_set["queue_type"]
+        for r in result_set["data"]["latency"]:
+            if r["size"] is not None and r["benchmark"] in (
+                "memmove",
+                "crc_gen",
+                "copy_crc",
+                "sw_memcpy",
+                "sw_crc32c",
+            ):
+                latency_records.append(
+                    {
+                        "queue_type": queue_type,
+                        "benchmark": r["benchmark"],
+                        "size": r["size"],
+                        "median_ns": r["ns"]["median"],
+                        "p99_ns": r["ns"].get("p99", r["ns"]["median"]),
+                    }
+                )
 
     # Extract unique dimension values
-    strategies = sorted(set(r["strategy"] for r in records),
-                        key=lambda s: list(STRATEGY_INFO.keys()).index(s) if s in STRATEGY_INFO else 99)
+    queue_types = sorted(set(r["queue_type"] for r in records))
+    strategies = sorted(
+        set(r["strategy"] for r in records),
+        key=lambda s: list(STRATEGY_INFO.keys()).index(s) if s in STRATEGY_INFO else 99,
+    )
     batch_sizes = sorted(set(r["batch_size"] for r in records))
     concurrencies = sorted(set(r["concurrency"] for r in records))
     sizes = sorted(set(r["size"] for r in records))
@@ -99,156 +164,296 @@ def create_dashboard(data, output_path: Path):
     trace_metadata = []
     traces_json = []
 
-    for si, strategy in enumerate(strategies):
-        info = STRATEGY_INFO.get(strategy, {"label": strategy, "color": COLORS[si % len(COLORS)], "dash": "solid"})
-        for bi, bs in enumerate(batch_sizes):
-            for ci, conc in enumerate(concurrencies):
-                # Filter records for this combination
-                pts = [r for r in records
-                       if r["strategy"] == strategy and r["batch_size"] == bs and r["concurrency"] == conc]
-                if not pts:
-                    continue
+    for qi, queue_type in enumerate(queue_types):
+        for si, strategy in enumerate(strategies):
+            info = STRATEGY_INFO.get(
+                strategy,
+                {"label": strategy, "color": COLORS[si % len(COLORS)], "dash": "solid"},
+            )
+            for bi, bs in enumerate(batch_sizes):
+                for ci, conc in enumerate(concurrencies):
+                    # Filter records for this combination
+                    pts = [
+                        r
+                        for r in records
+                        if r["queue_type"] == queue_type
+                        and r["strategy"] == strategy
+                        and r["batch_size"] == bs
+                        and r["concurrency"] == conc
+                    ]
+                    if not pts:
+                        continue
 
-                pts.sort(key=lambda r: r["size"])
-                xs = [p["size"] for p in pts]
-                ys_ops = [p["ops_per_sec"] / 1e6 for p in pts]
-                ys_bw = [p["bandwidth_mb_s"] / 1e3 for p in pts]  # GB/s
+                    pts.sort(key=lambda r: r["size"])
+                    xs = [p["size"] for p in pts]
+                    ys_ops = [p["ops_per_sec"] / 1e6 for p in pts]
+                    ys_bw = [p["bandwidth_mb_s"] / 1e3 for p in pts]  # GB/s
 
-                bs_label = f"b={bs}" if bs > 0 else "single"
-                trace_label = f"{info['label']} ({bs_label}, c={conc})"
+                    bs_label = f"b={bs}" if bs > 0 else "single"
+                    trace_label = (
+                        f"{queue_type} | {info['label']} ({bs_label}, c={conc})"
+                    )
 
-                marker_sym = MARKERS[ci % len(MARKERS)]
-                color = info["color"]
-                dash = info["dash"]
+                    marker_sym = MARKERS[(ci + qi) % len(MARKERS)]
+                    color = info["color"]
+                    dash = info["dash"]
 
-                # Default: show sliding_window c=1 b=0
-                visible = (strategy == strategies[0] and bs == batch_sizes[0] and conc == concurrencies[0])
+                    # Default: show first queue type and first strategy tuple
+                    visible = (
+                        queue_type == queue_types[0]
+                        and strategy == strategies[0]
+                        and bs == batch_sizes[0]
+                        and conc == concurrencies[0]
+                    )
 
-                meta = {
-                    "strategy": strategy,
-                    "batch_size": bs,
-                    "concurrency": conc,
-                    "label": trace_label,
-                }
+                    meta = {
+                        "queue_type": queue_type,
+                        "strategy": strategy,
+                        "batch_size": bs,
+                        "concurrency": conc,
+                        "label": trace_label,
+                    }
 
-                # Message rate subplot
-                traces_json.append({
-                    "x": xs, "y": ys_ops,
-                    "mode": "lines+markers",
-                    "name": trace_label,
-                    "line": {"color": color, "dash": dash, "width": 2},
-                    "marker": {"size": 7, "symbol": marker_sym},
-                    "visible": visible,
-                    "showlegend": visible,
-                    "legendgroup": trace_label,
-                    "hovertemplate": f"{trace_label}<br>%{{x}}B: %{{y:.2f}} Mops/s<extra></extra>",
-                    "xaxis": "x", "yaxis": "y",
-                })
-                trace_metadata.append({**meta, "subplot": "msg_rate"})
+                    # Message rate subplot
+                    traces_json.append(
+                        {
+                            "x": xs,
+                            "y": ys_ops,
+                            "mode": "lines+markers",
+                            "name": trace_label,
+                            "line": {"color": color, "dash": dash, "width": 2},
+                            "marker": {"size": 7, "symbol": marker_sym},
+                            "visible": visible,
+                            "showlegend": visible,
+                            "legendgroup": trace_label,
+                            "hovertemplate": f"{trace_label}<br>%{{x}}B: %{{y:.2f}} Mops/s<extra></extra>",
+                            "xaxis": "x",
+                            "yaxis": "y",
+                        }
+                    )
+                    trace_metadata.append({**meta, "subplot": "msg_rate"})
 
-                # Bandwidth subplot
-                traces_json.append({
-                    "x": xs, "y": ys_bw,
-                    "mode": "lines+markers",
-                    "name": trace_label,
-                    "line": {"color": color, "dash": dash, "width": 2},
-                    "marker": {"size": 7, "symbol": marker_sym},
-                    "visible": visible,
-                    "showlegend": False,
-                    "legendgroup": trace_label,
-                    "hovertemplate": f"{trace_label}<br>%{{x}}B: %{{y:.2f}} GB/s<extra></extra>",
-                    "xaxis": "x2", "yaxis": "y2",
-                })
-                trace_metadata.append({**meta, "subplot": "bandwidth"})
+                    # Bandwidth subplot
+                    traces_json.append(
+                        {
+                            "x": xs,
+                            "y": ys_bw,
+                            "mode": "lines+markers",
+                            "name": trace_label,
+                            "line": {"color": color, "dash": dash, "width": 2},
+                            "marker": {"size": 7, "symbol": marker_sym},
+                            "visible": visible,
+                            "showlegend": False,
+                            "legendgroup": trace_label,
+                            "hovertemplate": f"{trace_label}<br>%{{x}}B: %{{y:.2f}} GB/s<extra></extra>",
+                            "xaxis": "x2",
+                            "yaxis": "y2",
+                        }
+                    )
+                    trace_metadata.append({**meta, "subplot": "bandwidth"})
 
     # Add latency traces
     latency_benchmarks = sorted(set(r["benchmark"] for r in latency_records))
-    lat_colors = {"memmove": "#1f77b4", "crc_gen": "#ff7f0e", "copy_crc": "#2ca02c",
-                  "sw_memcpy": "#d62728", "sw_crc32c": "#9467bd"}
-    lat_markers = {"memmove": "circle", "crc_gen": "square", "copy_crc": "diamond",
-                   "sw_memcpy": "triangle-up", "sw_crc32c": "cross"}
+    lat_colors = {
+        "memmove": "#1f77b4",
+        "crc_gen": "#ff7f0e",
+        "copy_crc": "#2ca02c",
+        "sw_memcpy": "#d62728",
+        "sw_crc32c": "#9467bd",
+    }
+    lat_markers = {
+        "memmove": "circle",
+        "crc_gen": "square",
+        "copy_crc": "diamond",
+        "sw_memcpy": "triangle-up",
+        "sw_crc32c": "cross",
+    }
 
-    for bench in latency_benchmarks:
-        pts = sorted([r for r in latency_records if r["benchmark"] == bench], key=lambda r: r["size"])
-        if not pts:
-            continue
-        xs = [p["size"] for p in pts]
-        ys_med = [p["median_ns"] for p in pts]
-        ys_p99 = [p["p99_ns"] for p in pts]
-        color = lat_colors.get(bench, "#333")
-        marker = lat_markers.get(bench, "circle")
+    latency_queue_types = sorted(set(r["queue_type"] for r in latency_records))
+    for queue_type in latency_queue_types:
+        for bench in latency_benchmarks:
+            pts = sorted(
+                [
+                    r
+                    for r in latency_records
+                    if r["queue_type"] == queue_type and r["benchmark"] == bench
+                ],
+                key=lambda r: r["size"],
+            )
+            if not pts:
+                continue
+            xs = [p["size"] for p in pts]
+            ys_med = [p["median_ns"] for p in pts]
+            ys_p99 = [p["p99_ns"] for p in pts]
+            color = lat_colors.get(bench, "#333")
+            marker = lat_markers.get(bench, "circle")
+            trace_label = f"{queue_type} | {bench}"
 
-        # Median latency
-        traces_json.append({
-            "x": xs, "y": ys_med,
-            "mode": "lines+markers",
-            "name": bench,
-            "line": {"color": color, "width": 2},
-            "marker": {"size": 7, "symbol": marker},
-            "visible": True,
-            "showlegend": False,
-            "legendgroup": f"lat_{bench}",
-            "hovertemplate": f"{bench}<br>%{{x}}B: %{{y:.0f}} ns<extra></extra>",
-            "xaxis": "x3", "yaxis": "y3",
-        })
-        trace_metadata.append({"subplot": "latency_median", "latency_bench": bench})
+            # Median latency
+            traces_json.append(
+                {
+                    "x": xs,
+                    "y": ys_med,
+                    "mode": "lines+markers",
+                    "name": trace_label,
+                    "line": {"color": color, "width": 2},
+                    "marker": {"size": 7, "symbol": marker},
+                    "visible": True,
+                    "showlegend": False,
+                    "legendgroup": f"lat_{trace_label}",
+                    "hovertemplate": f"{trace_label}<br>%{{x}}B: %{{y:.0f}} ns<extra></extra>",
+                    "xaxis": "x3",
+                    "yaxis": "y3",
+                }
+            )
+            trace_metadata.append(
+                {
+                    "subplot": "latency_median",
+                    "queue_type": queue_type,
+                    "latency_bench": bench,
+                }
+            )
 
-        # P99 latency
-        traces_json.append({
-            "x": xs, "y": ys_p99,
-            "mode": "lines+markers",
-            "name": f"{bench} p99",
-            "line": {"color": color, "dash": "dash", "width": 2},
-            "marker": {"size": 7, "symbol": marker},
-            "visible": True,
-            "showlegend": False,
-            "legendgroup": f"lat_{bench}",
-            "hovertemplate": f"{bench} p99<br>%{{x}}B: %{{y:.0f}} ns<extra></extra>",
-            "xaxis": "x4", "yaxis": "y4",
-        })
-        trace_metadata.append({"subplot": "latency_p99", "latency_bench": bench})
+            # P99 latency
+            traces_json.append(
+                {
+                    "x": xs,
+                    "y": ys_p99,
+                    "mode": "lines+markers",
+                    "name": f"{trace_label} p99",
+                    "line": {"color": color, "dash": "dash", "width": 2},
+                    "marker": {"size": 7, "symbol": marker},
+                    "visible": True,
+                    "showlegend": False,
+                    "legendgroup": f"lat_{trace_label}",
+                    "hovertemplate": f"{trace_label} p99<br>%{{x}}B: %{{y:.0f}} ns<extra></extra>",
+                    "xaxis": "x4",
+                    "yaxis": "y4",
+                }
+            )
+            trace_metadata.append(
+                {
+                    "subplot": "latency_p99",
+                    "queue_type": queue_type,
+                    "latency_bench": bench,
+                }
+            )
 
     # Layout with 4 subplots (2x2)
     layout = {
-        "title": {"text": "hw-eval: DSA Hardware Benchmark Results", "x": 0.5, "xanchor": "center"},
+        "title": {
+            "text": "hw-eval: DSA Hardware Benchmark Results",
+            "x": 0.5,
+            "xanchor": "center",
+        },
         "height": 750,
         "hovermode": "closest",
         "margin": {"t": 80, "b": 80, "r": 220, "l": 80},
         "legend": {
-            "orientation": "v", "yanchor": "top", "y": 1, "xanchor": "left", "x": 1.02,
-            "font": {"size": 10}, "bgcolor": "rgba(255,255,255,0.8)",
+            "orientation": "v",
+            "yanchor": "top",
+            "y": 1,
+            "xanchor": "left",
+            "x": 1.02,
+            "font": {"size": 10},
+            "bgcolor": "rgba(255,255,255,0.8)",
         },
-        "grid": {"rows": 2, "columns": 2, "pattern": "independent", "roworder": "top to bottom"},
-        "xaxis":  {"type": "log", "title": "Message Size (bytes)", "domain": [0, 0.45], "anchor": "y"},
-        "yaxis":  {"title": "Message Rate (Mops/s)", "rangemode": "tozero", "domain": [0.55, 1], "anchor": "x"},
-        "xaxis2": {"type": "log", "title": "Message Size (bytes)", "domain": [0.55, 1], "anchor": "y2"},
-        "yaxis2": {"title": "Bandwidth (GB/s)", "rangemode": "tozero", "domain": [0.55, 1], "anchor": "x2"},
-        "xaxis3": {"type": "log", "title": "Message Size (bytes)", "domain": [0, 0.45], "anchor": "y3"},
-        "yaxis3": {"title": "Median Latency (ns)", "type": "log", "domain": [0, 0.4], "anchor": "x3"},
-        "xaxis4": {"type": "log", "title": "Message Size (bytes)", "domain": [0.55, 1], "anchor": "y4"},
-        "yaxis4": {"title": "P99 Latency (ns)", "type": "log", "domain": [0, 0.4], "anchor": "x4"},
+        "grid": {
+            "rows": 2,
+            "columns": 2,
+            "pattern": "independent",
+            "roworder": "top to bottom",
+        },
+        "xaxis": {
+            "type": "log",
+            "title": "Message Size (bytes)",
+            "domain": [0, 0.45],
+            "anchor": "y",
+        },
+        "yaxis": {
+            "title": "Message Rate (Mops/s)",
+            "rangemode": "tozero",
+            "domain": [0.55, 1],
+            "anchor": "x",
+        },
+        "xaxis2": {
+            "type": "log",
+            "title": "Message Size (bytes)",
+            "domain": [0.55, 1],
+            "anchor": "y2",
+        },
+        "yaxis2": {
+            "title": "Bandwidth (GB/s)",
+            "rangemode": "tozero",
+            "domain": [0.55, 1],
+            "anchor": "x2",
+        },
+        "xaxis3": {
+            "type": "log",
+            "title": "Message Size (bytes)",
+            "domain": [0, 0.45],
+            "anchor": "y3",
+        },
+        "yaxis3": {
+            "title": "Median Latency (ns)",
+            "type": "log",
+            "domain": [0, 0.4],
+            "anchor": "x3",
+        },
+        "xaxis4": {
+            "type": "log",
+            "title": "Message Size (bytes)",
+            "domain": [0.55, 1],
+            "anchor": "y4",
+        },
+        "yaxis4": {
+            "title": "P99 Latency (ns)",
+            "type": "log",
+            "domain": [0, 0.4],
+            "anchor": "x4",
+        },
         "annotations": [
-            {"text": "<b>Message Rate vs Size</b>", "x": 0.225, "y": 1.02, "xref": "paper", "yref": "paper",
-             "showarrow": False, "font": {"size": 14}},
-            {"text": "<b>Bandwidth vs Size</b>", "x": 0.775, "y": 1.02, "xref": "paper", "yref": "paper",
-             "showarrow": False, "font": {"size": 14}},
-            {"text": "<b>Median Latency vs Size</b>", "x": 0.225, "y": 0.43, "xref": "paper", "yref": "paper",
-             "showarrow": False, "font": {"size": 14}},
-            {"text": "<b>P99 Latency vs Size</b>", "x": 0.775, "y": 0.43, "xref": "paper", "yref": "paper",
-             "showarrow": False, "font": {"size": 14}},
+            {
+                "text": "<b>Message Rate vs Size</b>",
+                "x": 0.225,
+                "y": 1.02,
+                "xref": "paper",
+                "yref": "paper",
+                "showarrow": False,
+                "font": {"size": 14},
+            },
+            {
+                "text": "<b>Bandwidth vs Size</b>",
+                "x": 0.775,
+                "y": 1.02,
+                "xref": "paper",
+                "yref": "paper",
+                "showarrow": False,
+                "font": {"size": 14},
+            },
+            {
+                "text": "<b>Median Latency vs Size</b>",
+                "x": 0.225,
+                "y": 0.43,
+                "xref": "paper",
+                "yref": "paper",
+                "showarrow": False,
+                "font": {"size": 14},
+            },
+            {
+                "text": "<b>P99 Latency vs Size</b>",
+                "x": 0.775,
+                "y": 0.43,
+                "xref": "paper",
+                "yref": "paper",
+                "showarrow": False,
+                "font": {"size": 14},
+            },
         ],
     }
 
     # Metadata
-    meta = data["metadata"]
-    meta_text = (
-        f"Device: {meta['device']} ({'dedicated' if meta.get('wq_dedicated') else 'shared'})"
-        f" | Core: {meta['pinned_core']}"
-        f" | NUMA: CPU={meta.get('cpu_numa_node')}, DSA={meta.get('device_numa_node')}"
-        f" | TSC: {meta['tsc_freq_hz'] / 1e9:.3f} GHz"
-        f" | Iterations: {meta['iterations']}"
-        f" | Cold cache: {meta['cold_cache']}"
-    )
+    meta_text = build_meta_text(result_sets)
 
     # Generate checkboxes HTML
     def make_checkboxes(name, values, labels=None, default_all=False):
@@ -257,7 +462,9 @@ def create_dashboard(data, output_path: Path):
         items = []
         for i, (val, label) in enumerate(zip(values, labels)):
             checked = "checked" if (default_all or i == 0) else ""
-            items.append(f'<label><input type="checkbox" name="{name}" value="{val}" {checked}> {label}</label>')
+            items.append(
+                f'<label><input type="checkbox" name="{name}" value="{val}" {checked}> {label}</label>'
+            )
         return "\n                ".join(items)
 
     strategy_labels = [STRATEGY_INFO.get(s, {}).get("label", s) for s in strategies]
@@ -351,6 +558,15 @@ def create_dashboard(data, output_path: Path):
 
         <div class="controls">
             <div class="filter-group">
+                <h3>Queue Type</h3>
+                {make_checkboxes("queue_type", queue_types, default_all=True)}
+                <div class="btn-group">
+                    <button onclick="selectAll('queue_type')">All</button>
+                    <button onclick="selectNone('queue_type')">None</button>
+                </div>
+            </div>
+
+            <div class="filter-group">
                 <h3>Strategy</h3>
                 {make_checkboxes("strategy", strategies, strategy_labels, default_all=True)}
                 <div class="btn-group">
@@ -440,15 +656,16 @@ def create_dashboard(data, output_path: Path):
             saveSelections();
 
             const selStrategy = getCheckedValues('strategy');
+            const selQueueType = getCheckedValues('queue_type');
             const selBatch = getCheckedValues('batch_size').map(Number);
             const selConc = getCheckedValues('concurrency').map(Number);
 
             const visibility = traceMetadata.map(meta => {{
-                // Latency traces are always visible
                 if (meta.subplot === 'latency_median' || meta.subplot === 'latency_p99') {{
-                    return true;
+                    return selQueueType.includes(meta.queue_type);
                 }}
-                return selStrategy.includes(meta.strategy) &&
+                return selQueueType.includes(meta.queue_type) &&
+                       selStrategy.includes(meta.strategy) &&
                        selBatch.includes(meta.batch_size) &&
                        selConc.includes(meta.concurrency);
             }});
@@ -486,29 +703,37 @@ def create_dashboard(data, output_path: Path):
     print(f"Saved dashboard to: {output_path}")
 
 
-def create_heatmap_dashboard(data, output_path: Path):
+def create_heatmap_dashboard(result_sets, output_path: Path):
     """Create interactive heatmap dashboard with radio filters."""
 
     records = []
-    for r in data["throughput"]:
-        strategy, batch_n = classify_benchmark(r["benchmark"])
-        if strategy not in ("pipelined_batch", "burst_batch"):
-            continue
-        records.append({
-            "strategy": strategy,
-            "batch_size": batch_n,
-            "concurrency": r["concurrency"],
-            "size": r["size"],
-            "ops_per_sec": r["ops_per_sec"],
-            "bandwidth_mb_s": r["bandwidth_mb_s"],
-        })
+    for result_set in result_sets:
+        queue_type = result_set["queue_type"]
+        for r in result_set["data"]["throughput"]:
+            strategy, batch_n = classify_benchmark(r["benchmark"])
+            if strategy not in ("pipelined_batch", "burst_batch"):
+                continue
+            records.append(
+                {
+                    "queue_type": queue_type,
+                    "strategy": strategy,
+                    "batch_size": batch_n,
+                    "concurrency": r["concurrency"],
+                    "size": r["size"],
+                    "ops_per_sec": r["ops_per_sec"],
+                    "bandwidth_mb_s": r["bandwidth_mb_s"],
+                }
+            )
 
     if not records:
         print("No pipelined/burst-batch data for heatmap")
         return
 
-    strategies = sorted(set(r["strategy"] for r in records),
-                        key=lambda s: list(STRATEGY_INFO.keys()).index(s) if s in STRATEGY_INFO else 99)
+    queue_types = sorted(set(r["queue_type"] for r in records))
+    strategies = sorted(
+        set(r["strategy"] for r in records),
+        key=lambda s: list(STRATEGY_INFO.keys()).index(s) if s in STRATEGY_INFO else 99,
+    )
     sizes = sorted(set(r["size"] for r in records))
 
     metrics = [
@@ -519,51 +744,80 @@ def create_heatmap_dashboard(data, output_path: Path):
     traces_json = []
     trace_metadata = []
 
-    for strategy in strategies:
-        for size in sizes:
-            for metric_key, metric_label, scale in metrics:
-                pts = [r for r in records if r["strategy"] == strategy and r["size"] == size]
-                if not pts:
-                    continue
+    for queue_type in queue_types:
+        for strategy in strategies:
+            for size in sizes:
+                for metric_key, metric_label, scale in metrics:
+                    pts = [
+                        r
+                        for r in records
+                        if r["queue_type"] == queue_type
+                        and r["strategy"] == strategy
+                        and r["size"] == size
+                    ]
+                    if not pts:
+                        continue
 
-                batch_sizes = sorted(set(p["batch_size"] for p in pts))
-                conc_levels = sorted(set(p["concurrency"] for p in pts))
+                    batch_sizes = sorted(set(p["batch_size"] for p in pts))
+                    conc_levels = sorted(set(p["concurrency"] for p in pts))
 
-                # Build grid: rows=batch_size, cols=concurrency
-                grid = []
-                for bs in batch_sizes:
-                    row = []
-                    for c in conc_levels:
-                        val = [p[metric_key] * scale for p in pts if p["batch_size"] == bs and p["concurrency"] == c]
-                        row.append(val[0] if val else 0)
-                    grid.append(row)
+                    # Build grid: rows=batch_size, cols=concurrency
+                    grid = []
+                    for bs in batch_sizes:
+                        row = []
+                        for c in conc_levels:
+                            val = [
+                                p[metric_key] * scale
+                                for p in pts
+                                if p["batch_size"] == bs and p["concurrency"] == c
+                            ]
+                            row.append(val[0] if val else 0)
+                        grid.append(row)
 
-                conc_label = "Concurrency" if strategy == "pipelined_batch" else "Burst Count"
-                visible = (strategy == strategies[0] and size == sizes[0] and metric_key == "ops_per_sec")
+                    conc_label = (
+                        "Concurrency"
+                        if strategy == "pipelined_batch"
+                        else "Burst Count"
+                    )
+                    visible = (
+                        queue_type == queue_types[0]
+                        and strategy == strategies[0]
+                        and size == sizes[0]
+                        and metric_key == "ops_per_sec"
+                    )
 
-                traces_json.append({
-                    "z": grid,
-                    "x": [str(c) for c in conc_levels],
-                    "y": [str(b) for b in batch_sizes],
-                    "type": "heatmap",
-                    "colorscale": "YlOrRd",
-                    "visible": visible,
-                    "hovertemplate": f"batch=%{{y}}<br>{conc_label}=%{{x}}<br>%{{z:.1f}}<extra></extra>",
-                    "colorbar": {"title": metric_label},
-                    # Add text annotations
-                    "text": [[f"{v:.1f}" for v in row] for row in grid],
-                    "texttemplate": "%{text}",
-                    "textfont": {"size": 10},
-                })
-                trace_metadata.append({
-                    "strategy": strategy,
-                    "size": size,
-                    "metric": metric_key,
-                    "metric_label": metric_label,
-                })
+                    traces_json.append(
+                        {
+                            "z": grid,
+                            "x": [str(c) for c in conc_levels],
+                            "y": [str(b) for b in batch_sizes],
+                            "type": "heatmap",
+                            "colorscale": "YlOrRd",
+                            "reversescale": True,
+                            "visible": visible,
+                            "hovertemplate": f"batch=%{{y}}<br>{conc_label}=%{{x}}<br>%{{z:.1f}}<extra></extra>",
+                            "colorbar": {"title": metric_label},
+                            "text": [[f"{v:.1f}" for v in row] for row in grid],
+                            "texttemplate": "%{text}",
+                            "textfont": {"size": 10},
+                        }
+                    )
+                    trace_metadata.append(
+                        {
+                            "queue_type": queue_type,
+                            "strategy": strategy,
+                            "size": size,
+                            "metric": metric_key,
+                            "metric_label": metric_label,
+                        }
+                    )
 
     layout = {
-        "title": {"text": "hw-eval: Batch Strategy Heatmap", "x": 0.5, "xanchor": "center"},
+        "title": {
+            "text": "hw-eval: Batch Strategy Heatmap",
+            "x": 0.5,
+            "xanchor": "center",
+        },
         "xaxis": {"title": "Concurrency / Burst Count"},
         "yaxis": {"title": "Batch Size"},
         "height": 550,
@@ -575,7 +829,9 @@ def create_heatmap_dashboard(data, output_path: Path):
         items = []
         for i, (val, label) in enumerate(zip(values, labels)):
             checked = "checked" if i == 0 else ""
-            items.append(f'<label><input type="radio" name="{name}" value="{val}" {checked}> {label}</label>')
+            items.append(
+                f'<label><input type="radio" name="{name}" value="{val}" {checked}> {label}</label>'
+            )
         return "\n                ".join(items)
 
     strategy_labels = [STRATEGY_INFO.get(s, {}).get("label", s) for s in strategies]
@@ -583,12 +839,7 @@ def create_heatmap_dashboard(data, output_path: Path):
     metric_values = [m[0] for m in metrics]
     metric_labels = [m[1] for m in metrics]
 
-    meta = data["metadata"]
-    meta_text = (
-        f"Device: {meta['device']} ({'dedicated' if meta.get('wq_dedicated') else 'shared'})"
-        f" | Core: {meta['pinned_core']}"
-        f" | Iterations: {meta['iterations']}"
-    )
+    meta_text = build_meta_text(result_sets)
 
     html = f"""<!DOCTYPE html>
 <html>
@@ -662,6 +913,11 @@ def create_heatmap_dashboard(data, output_path: Path):
 
         <div class="controls">
             <div class="filter-group">
+                <h3>Queue Type</h3>
+                {make_radios("queue_type", queue_types)}
+            </div>
+
+            <div class="filter-group">
                 <h3>Strategy</h3>
                 {make_radios("strategy", strategies, strategy_labels)}
             </div>
@@ -723,12 +979,14 @@ def create_heatmap_dashboard(data, output_path: Path):
         function updateHeatmap() {{
             saveSelections();
 
+            const selQueueType = getSelectedValue('queue_type');
             const selStrategy = getSelectedValue('strategy');
             const selSize = parseInt(getSelectedValue('size'));
             const selMetric = getSelectedValue('metric');
 
             const visibility = traceMetadata.map(meta => {{
-                return meta.strategy === selStrategy &&
+                return meta.queue_type === selQueueType &&
+                       meta.strategy === selStrategy &&
                        meta.size === selSize &&
                        meta.metric === selMetric;
             }});
@@ -736,7 +994,7 @@ def create_heatmap_dashboard(data, output_path: Path):
             const selectedMeta = traceMetadata.find((meta, i) => visibility[i]);
             const xLabel = selStrategy === 'pipelined_batch' ? 'Concurrency' : 'Burst Count';
             const title = selectedMeta ?
-                `${{selStrategy === 'pipelined_batch' ? 'Pipelined Batch' : 'Burst-Batch'}}: ${{selectedMeta.metric_label}}` :
+                `${{selQueueType}} | ${{selStrategy === 'pipelined_batch' ? 'Pipelined Batch' : 'Burst-Batch'}}: ${{selectedMeta.metric_label}}` :
                 'Batch Heatmap';
 
             Plotly.restyle('heatmapDiv', {{ visible: visibility }});
@@ -764,21 +1022,28 @@ def create_heatmap_dashboard(data, output_path: Path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Interactive hw-eval benchmark visualization")
-    parser.add_argument("input", help="JSON results file from hw-eval --json")
+    parser = argparse.ArgumentParser(
+        description="Interactive hw-eval benchmark visualization"
+    )
+    parser.add_argument(
+        "input", nargs="+", help="One or more JSON results files from hw-eval --json"
+    )
     parser.add_argument("-o", "--outdir", default="graphs", help="Output directory")
     args = parser.parse_args()
 
-    data = load_results(args.input)
+    result_sets = load_result_sets(args.input)
     outdir = Path(args.outdir)
     outdir.mkdir(exist_ok=True)
 
-    meta = data["metadata"]
-    print(f"Device: {meta['device']} ({'dedicated' if meta.get('wq_dedicated') else 'shared'})")
-    print(f"Iterations: {meta['iterations']}")
+    for result_set in result_sets:
+        meta = result_set["metadata"]
+        print(
+            f"Loaded {result_set['path']}: {meta['device']} ({result_set['queue_type']})"
+        )
+    print(f"Queue types: {', '.join(sorted({rs['queue_type'] for rs in result_sets}))}")
 
-    create_dashboard(data, outdir / "dashboard.html")
-    create_heatmap_dashboard(data, outdir / "heatmap.html")
+    create_dashboard(result_sets, outdir / "dashboard.html")
+    create_heatmap_dashboard(result_sets, outdir / "heatmap.html")
 
     print(f"\nOpen in browser:")
     print(f"  {outdir / 'dashboard.html'}")
