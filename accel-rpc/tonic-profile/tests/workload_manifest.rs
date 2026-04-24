@@ -480,3 +480,375 @@ fn verify_only_rejects_placeholder_only_instrumentation_on_artifacts() {
         "stderr should identify the placeholder-only instrumentation-on artifact\nstderr:\n{stderr}"
     );
 }
+
+fn s03_runner_script() -> PathBuf {
+    repo_root()
+        .join("tonic-profile")
+        .join("scripts")
+        .join("run_s03_idxd_evidence.py")
+}
+
+fn s03_tracked_manifest() -> PathBuf {
+    repo_root()
+        .join("tonic-profile")
+        .join("workloads")
+        .join("s03_idxd_matrix.json")
+}
+
+fn valid_idxd_report(label: &str, endpoint_role: &str, run_id: &str, device_path: &str, encode_bytes: u64) -> Value {
+    json!({
+        "metadata": {
+            "timestamp_unix_s": 0,
+            "mode": endpoint_role,
+            "endpoint_role": endpoint_role,
+            "run_id": run_id,
+            "rpc": if label.contains("unary-bytes") { "unary-bytes" } else { "unary-proto-shape" },
+            "ordinary_path": "software",
+            "selected_path": "idxd",
+            "seam": "codec_body",
+            "workload_label": label,
+            "selection_policy": if label.contains("unary-bytes") { "echo_payload" } else { "explicit_response" },
+            "request_shape": if label.contains("fleet-small-to-fleet-response-heavy") { json!("fleet-small") } else { Value::Null },
+            "response_shape": if label.contains("fleet-small-to-fleet-response-heavy") { json!("fleet-response-heavy") } else { Value::Null },
+            "request_serialized_size": if label.contains("unary-bytes") { 69 } else { 329 },
+            "response_serialized_size": if label.contains("unary-bytes") { 69 } else { 2630 },
+            "bind": "127.0.0.1:50051",
+            "target": "127.0.0.1:50051",
+            "payload_size": if label.contains("unary-bytes") { json!(64) } else { Value::Null },
+            "payload_kind": if label.contains("unary-bytes") { json!("repeated") } else { Value::Null },
+            "compression": "off",
+            "concurrency": 1,
+            "requests_target": 1,
+            "warmup_ms": 0,
+            "measure_ms": 20,
+            "runtime": "single",
+            "instrumentation": "on",
+            "accelerated_device_path": device_path,
+            "accelerated_lane": "codec_memmove",
+            "accelerated_direction": "bidirectional",
+            "buffer_policy": "default",
+            "effective_codec_buffer_size": 8192,
+            "effective_codec_yield_threshold": 32768,
+            "server_core": Value::Null,
+            "client_core": Value::Null
+        },
+        "metrics": {
+            "requests_completed": 1,
+            "bytes_sent": encode_bytes,
+            "bytes_received": encode_bytes,
+            "duration_ms": 1.0,
+            "throughput_rps": 1.0,
+            "throughput_mib_s": 1.0,
+            "latency_us_p50": 1,
+            "latency_us_p95": 1,
+            "latency_us_p99": 1,
+            "latency_us_max": 1
+        },
+        "stages": {
+            "enabled": true,
+            "encode": {"count": 1, "nanos": 10, "millis": 0.0, "bytes": encode_bytes, "avg_nanos": 10.0},
+            "decode": {"count": 1, "nanos": 10, "millis": 0.0, "bytes": encode_bytes, "avg_nanos": 10.0},
+            "compress": {"count": 0, "nanos": 0, "millis": 0.0, "bytes": 0, "avg_nanos": 0.0},
+            "decompress": {"count": 0, "nanos": 0, "millis": 0.0, "bytes": 0, "avg_nanos": 0.0},
+            "buffer_reserve": {"count": 1, "nanos": 10, "millis": 0.0, "bytes": encode_bytes, "avg_nanos": 10.0},
+            "body_accum": {"count": 1, "nanos": 10, "millis": 0.0, "bytes": encode_bytes, "avg_nanos": 10.0},
+            "frame_header": {"count": 1, "nanos": 10, "millis": 0.0, "bytes": 15, "avg_nanos": 10.0}
+        }
+    })
+}
+
+#[test]
+fn tracked_s03_manifest_covers_boundary_workloads_and_accelerated_expectations() {
+    let raw = fs::read_to_string(s03_tracked_manifest()).expect("read tracked s03 manifest");
+    let manifest: Value = serde_json::from_str(&raw).expect("parse tracked s03 manifest");
+
+    assert_eq!(manifest["expected_metadata"]["ordinary_path"], "software");
+    assert_eq!(manifest["expected_metadata"]["selected_path"], "idxd");
+    assert_eq!(manifest["expected_metadata"]["accelerated_lane"], "codec_memmove");
+    assert_eq!(manifest["expected_metadata"]["accelerated_direction"], "bidirectional");
+    assert_eq!(manifest["expected_metadata"]["require_device_path"], true);
+
+    let workloads = manifest["workloads"]
+        .as_array()
+        .expect("tracked workloads array");
+
+    assert!(
+        workloads.iter().any(|entry| {
+            entry["label"] == "ordinary/unary-bytes/repeated-64"
+                && entry["rpc"] == "unary-bytes"
+                && entry["payload_size"] == 64
+                && entry["payload_kind"] == "repeated"
+                && entry["endpoint_artifacts"]["client"] == "idxd__unary-bytes__repeated-64.client.json"
+                && entry["endpoint_artifacts"]["server"] == "idxd__unary-bytes__repeated-64.server.json"
+        }),
+        "tracked s03 manifest should include the tiny bytes workload with explicit client/server artifacts"
+    );
+
+    assert!(
+        workloads.iter().any(|entry| {
+            entry["label"] == "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy"
+                && entry["rpc"] == "unary-proto-shape"
+                && entry["proto_shape"] == "fleet-small"
+                && entry["response_shape"] == "fleet-response-heavy"
+                && entry["endpoint_artifacts"]["client"]
+                    == "idxd__unary-proto-shape__fleet-small-to-fleet-response-heavy.client.json"
+                && entry["endpoint_artifacts"]["server"]
+                    == "idxd__unary-proto-shape__fleet-small-to-fleet-response-heavy.server.json"
+        }),
+        "tracked s03 manifest should include the response-heavy boundary workload with explicit client/server artifacts"
+    );
+}
+
+#[test]
+fn s03_validate_only_rejects_missing_expected_accelerated_metadata() {
+    let temp_dir = unique_dir("s03-missing-expected-metadata");
+    let manifest_path = temp_dir.join("broken.json");
+    write_json(
+        &manifest_path,
+        &json!({
+            "defaults": {
+                "warmup_ms": 0,
+                "measure_ms": 20,
+                "requests": 1,
+                "concurrency": 1,
+                "runtime": "single",
+                "compression": "off",
+                "buffer_policy": "default",
+                "instrumentation": "on",
+                "accelerated_path": "idxd"
+            },
+            "expected_metadata": {
+                "ordinary_path": "software",
+                "selected_path": "idxd",
+                "seam": "codec_body",
+                "accelerated_lane": "codec_memmove"
+            },
+            "workloads": [
+                {
+                    "label": "ordinary/unary-bytes/repeated-64",
+                    "rpc": "unary-bytes",
+                    "payload_size": 64,
+                    "payload_kind": "repeated",
+                    "endpoint_artifacts": {
+                        "client": "idxd__unary-bytes__repeated-64.client.json",
+                        "server": "idxd__unary-bytes__repeated-64.server.json"
+                    }
+                },
+                {
+                    "label": "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
+                    "rpc": "unary-proto-shape",
+                    "proto_shape": "fleet-small",
+                    "response_shape": "fleet-response-heavy",
+                    "endpoint_artifacts": {
+                        "client": "idxd__unary-proto-shape__fleet-small-to-fleet-response-heavy.client.json",
+                        "server": "idxd__unary-proto-shape__fleet-small-to-fleet-response-heavy.server.json"
+                    }
+                }
+            ]
+        }),
+    );
+
+    let output = Command::new("python3")
+        .arg(s03_runner_script())
+        .arg("--manifest")
+        .arg(&manifest_path)
+        .arg("--validate-only")
+        .output()
+        .expect("run s03 workload runner validate-only");
+
+    assert!(!output.status.success(), "validate-only unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("expected_metadata")
+            && (stderr.contains("accelerated_direction") || stderr.contains("require_device_path")),
+        "stderr should identify the missing accelerated metadata expectation\nstderr:\n{stderr}"
+    );
+}
+
+#[test]
+fn s03_validate_only_rejects_manifest_entries_missing_server_artifacts() {
+    let temp_dir = unique_dir("s03-missing-server-artifact");
+    let manifest_path = temp_dir.join("broken.json");
+    write_json(
+        &manifest_path,
+        &json!({
+            "defaults": {
+                "warmup_ms": 0,
+                "measure_ms": 20,
+                "requests": 1,
+                "concurrency": 1,
+                "runtime": "single",
+                "compression": "off",
+                "buffer_policy": "default",
+                "instrumentation": "on",
+                "accelerated_path": "idxd"
+            },
+            "expected_metadata": {
+                "ordinary_path": "software",
+                "selected_path": "idxd",
+                "seam": "codec_body",
+                "accelerated_lane": "codec_memmove",
+                "accelerated_direction": "bidirectional",
+                "require_device_path": true
+            },
+            "workloads": [
+                {
+                    "label": "ordinary/unary-bytes/repeated-64",
+                    "rpc": "unary-bytes",
+                    "payload_size": 64,
+                    "payload_kind": "repeated",
+                    "endpoint_artifacts": {
+                        "client": "idxd__unary-bytes__repeated-64.client.json"
+                    }
+                },
+                {
+                    "label": "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
+                    "rpc": "unary-proto-shape",
+                    "proto_shape": "fleet-small",
+                    "response_shape": "fleet-response-heavy",
+                    "endpoint_artifacts": {
+                        "client": "idxd__unary-proto-shape__fleet-small-to-fleet-response-heavy.client.json",
+                        "server": "idxd__unary-proto-shape__fleet-small-to-fleet-response-heavy.server.json"
+                    }
+                }
+            ]
+        }),
+    );
+
+    let output = Command::new("python3")
+        .arg(s03_runner_script())
+        .arg("--manifest")
+        .arg(&manifest_path)
+        .arg("--validate-only")
+        .output()
+        .expect("run s03 workload runner validate-only");
+
+    assert!(!output.status.success(), "validate-only unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("ordinary/unary-bytes/repeated-64")
+            && stderr.contains("endpoint_artifacts")
+            && stderr.contains("server"),
+        "stderr should name the offending workload label and missing server artifact\nstderr:\n{stderr}"
+    );
+}
+
+#[test]
+fn s03_verify_only_rejects_software_looking_accelerated_artifacts() {
+    let temp_dir = unique_dir("s03-software-looking-artifacts");
+    let manifest_path = temp_dir.join("manifest.json");
+    let output_dir = temp_dir.join("artifacts");
+    fs::create_dir_all(&output_dir).expect("create output dir");
+    let device_path = "/dev/dsa/wq0.0";
+
+    write_json(
+        &manifest_path,
+        &json!({
+            "defaults": {
+                "warmup_ms": 0,
+                "measure_ms": 20,
+                "requests": 1,
+                "concurrency": 1,
+                "runtime": "single",
+                "compression": "off",
+                "buffer_policy": "default",
+                "instrumentation": "on",
+                "accelerated_path": "idxd"
+            },
+            "expected_metadata": {
+                "ordinary_path": "software",
+                "selected_path": "idxd",
+                "seam": "codec_body",
+                "accelerated_lane": "codec_memmove",
+                "accelerated_direction": "bidirectional",
+                "require_device_path": true
+            },
+            "workloads": [
+                {
+                    "label": "ordinary/unary-bytes/repeated-64",
+                    "rpc": "unary-bytes",
+                    "payload_size": 64,
+                    "payload_kind": "repeated",
+                    "endpoint_artifacts": {
+                        "client": "idxd__unary-bytes__repeated-64.client.json",
+                        "server": "idxd__unary-bytes__repeated-64.server.json"
+                    }
+                },
+                {
+                    "label": "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
+                    "rpc": "unary-proto-shape",
+                    "proto_shape": "fleet-small",
+                    "response_shape": "fleet-response-heavy",
+                    "endpoint_artifacts": {
+                        "client": "idxd__unary-proto-shape__fleet-small-to-fleet-response-heavy.client.json",
+                        "server": "idxd__unary-proto-shape__fleet-small-to-fleet-response-heavy.server.json"
+                    }
+                }
+            ]
+        }),
+    );
+
+    let mut bad_client = valid_idxd_report(
+        "ordinary/unary-bytes/repeated-64",
+        "client",
+        "run-on-bytes",
+        device_path,
+        64,
+    );
+    bad_client["metadata"]["selected_path"] = json!("software");
+    write_json(
+        &output_dir.join("idxd__unary-bytes__repeated-64.client.json"),
+        &bad_client,
+    );
+    write_json(
+        &output_dir.join("idxd__unary-bytes__repeated-64.server.json"),
+        &valid_idxd_report(
+            "ordinary/unary-bytes/repeated-64",
+            "server",
+            "run-on-bytes",
+            device_path,
+            64,
+        ),
+    );
+    write_json(
+        &output_dir.join("idxd__unary-proto-shape__fleet-small-to-fleet-response-heavy.client.json"),
+        &valid_idxd_report(
+            "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
+            "client",
+            "run-on-proto",
+            device_path,
+            240,
+        ),
+    );
+    write_json(
+        &output_dir.join("idxd__unary-proto-shape__fleet-small-to-fleet-response-heavy.server.json"),
+        &valid_idxd_report(
+            "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
+            "server",
+            "run-on-proto",
+            device_path,
+            260,
+        ),
+    );
+
+    let output = Command::new("python3")
+        .arg(s03_runner_script())
+        .arg("--manifest")
+        .arg(&manifest_path)
+        .arg("--output-dir")
+        .arg(&output_dir)
+        .arg("--accelerator-device")
+        .arg(device_path)
+        .arg("--verify-only")
+        .output()
+        .expect("run s03 workload runner verify-only");
+
+    assert!(!output.status.success(), "verify-only unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("ordinary/unary-bytes/repeated-64")
+            && stderr.contains("selected_path")
+            && stderr.contains("software"),
+        "stderr should identify the software-looking accelerated artifact\nstderr:\n{stderr}"
+    );
+}

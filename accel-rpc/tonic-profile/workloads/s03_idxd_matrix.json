@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "defaults": {
+    "warmup_ms": 0,
+    "measure_ms": 20,
+    "requests": 1,
+    "concurrency": 1,
+    "runtime": "single",
+    "compression": "off",
+    "buffer_policy": "default",
+    "instrumentation": "on",
+    "accelerated_path": "idxd"
+  },
+  "expected_metadata": {
+    "ordinary_path": "software",
+    "selected_path": "idxd",
+    "seam": "codec_body",
+    "accelerated_lane": "codec_memmove",
+    "accelerated_direction": "bidirectional",
+    "require_device_path": true
+  },
+  "workloads": [
+    {
+      "label": "ordinary/unary-bytes/repeated-64",
+      "rpc": "unary-bytes",
+      "payload_size": 64,
+      "payload_kind": "repeated",
+      "endpoint_artifacts": {
+        "client": "idxd__unary-bytes__repeated-64.client.json",
+        "server": "idxd__unary-bytes__repeated-64.server.json"
+      }
+    },
+    {
+      "label": "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
+      "rpc": "unary-proto-shape",
+      "proto_shape": "fleet-small",
+      "response_shape": "fleet-response-heavy",
+      "endpoint_artifacts": {
+        "client": "idxd__unary-proto-shape__fleet-small-to-fleet-response-heavy.client.json",
+        "server": "idxd__unary-proto-shape__fleet-small-to-fleet-response-heavy.server.json"
+      }
+    }
+  ]
+}
