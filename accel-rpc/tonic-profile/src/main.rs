@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use hdrhistogram::Histogram;
 use prost::Message;
 use rand::rngs::StdRng;
@@ -16,6 +16,7 @@ use tonic::codec::CompressionEncoding;
 use tonic::transport::{Channel, Endpoint, Server};
 use tonic::{Request, Response, Status};
 
+mod cli;
 mod custom_codec;
 mod runtime_instrumentation;
 
@@ -32,6 +33,12 @@ use profile::{
     FleetSmallShape, FleetStringHeavyShape, FleetStringLeaf, ShapeKind,
 };
 
+use cli::{
+    AcceleratedDirection, AcceleratedLane, AcceleratedPath, Args, BufferPolicy, CompressionMode,
+    InstrumentationMode, Mode, PayloadKind, ProtoShape, ResponseShape, RpcMode, RuntimeMode,
+    effective_buffer_settings, resolve_accelerated_path_config, resolve_run_id, validate_args,
+};
+
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 const REQUEST_POOL_LEN: usize = 4;
 
@@ -43,187 +50,12 @@ fn set_default_buffer_settings_for_process(
         .map_err(Into::into)
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
-enum Mode {
-    Server,
-    Client,
-    Selftest,
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum, Serialize)]
-#[serde(rename_all = "kebab-case")]
-enum RpcMode {
-    #[value(alias = "unary")]
-    UnaryBytes,
-    UnaryProtoShape,
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum PayloadKind {
-    Random,
-    Structured,
-    Repeated,
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum CompressionMode {
-    Off,
-    On,
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum RuntimeMode {
-    Single,
-    Multi,
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum InstrumentationMode {
-    Off,
-    On,
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum BufferPolicy {
-    Default,
-    /// Pre-size codec buffers to a coarse payload bucket to reduce growth noise.
-    Pooled,
-    /// Pre-size codec buffers to the current payload frame size as a copy/buffer control.
-    CopyMinimized,
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum, Serialize)]
-#[serde(rename_all = "kebab-case")]
-enum ProtoShape {
-    FleetSmall,
-    FleetStringHeavy,
-    FleetResponseHeavy,
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
-enum ResponseShape {
-    Same,
-    FleetSmall,
-    FleetStringHeavy,
-    FleetResponseHeavy,
-}
-
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 enum SelectionPolicy {
     EchoPayload,
     SameAsRequest,
     ExplicitResponse,
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum AcceleratedPath {
-    Software,
-    Idxd,
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum AcceleratedLane {
-    CodecMemmove,
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum AcceleratedDirection {
-    Bidirectional,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct AcceleratedPathConfig {
-    selected_path: AcceleratedPath,
-    device_path: Option<PathBuf>,
-    lane: Option<AcceleratedLane>,
-    direction: Option<AcceleratedDirection>,
-}
-
-#[derive(Parser, Debug, Clone)]
-struct Args {
-    #[arg(long, value_enum)]
-    mode: Mode,
-
-    #[arg(long, value_enum, default_value = "unary-bytes")]
-    rpc: RpcMode,
-
-    #[arg(long, value_enum)]
-    proto_shape: Option<ProtoShape>,
-
-    #[arg(long, value_enum, default_value = "same")]
-    response_shape: ResponseShape,
-
-    #[arg(long, default_value = "127.0.0.1:50051")]
-    bind: String,
-
-    #[arg(long, default_value = "127.0.0.1:50051")]
-    target: String,
-
-    #[arg(long, default_value_t = 256)]
-    payload_size: usize,
-
-    #[arg(long, value_enum, default_value = "structured")]
-    payload_kind: PayloadKind,
-
-    #[arg(long, value_enum, default_value = "off")]
-    compression: CompressionMode,
-
-    #[arg(long, default_value_t = 1)]
-    concurrency: usize,
-
-    #[arg(long)]
-    requests: Option<u64>,
-
-    #[arg(long, default_value_t = 3000)]
-    warmup_ms: u64,
-
-    #[arg(long, default_value_t = 10000)]
-    measure_ms: u64,
-
-    #[arg(long, value_enum, default_value = "multi")]
-    runtime: RuntimeMode,
-
-    #[arg(long, value_enum, default_value = "on")]
-    instrumentation: InstrumentationMode,
-
-    #[arg(long, value_enum, default_value = "software")]
-    accelerated_path: AcceleratedPath,
-
-    #[arg(long)]
-    accelerator_device: Option<PathBuf>,
-
-    #[arg(long, value_enum)]
-    accelerator_lane: Option<AcceleratedLane>,
-
-    #[arg(long, value_enum, default_value = "default")]
-    buffer_policy: BufferPolicy,
-
-    #[arg(long)]
-    server_core: Option<usize>,
-
-    #[arg(long)]
-    client_core: Option<usize>,
-
-    #[arg(long)]
-    json_out: Option<PathBuf>,
-
-    #[arg(long)]
-    server_json_out: Option<PathBuf>,
-
-    #[arg(long)]
-    run_id: Option<String>,
-
-    #[arg(long)]
-    shutdown_after_requests: Option<u64>,
 }
 
 #[derive(Default)]
@@ -513,84 +345,10 @@ fn main() -> Result<(), BoxError> {
     runtime.block_on(async_main(args))
 }
 
-fn validate_args(args: &Args) -> Result<(), BoxError> {
-    match args.rpc {
-        RpcMode::UnaryBytes => {
-            if args.proto_shape.is_some() {
-                return Err("--proto-shape is only supported with --rpc unary-proto-shape".into());
-            }
-            if args.response_shape != ResponseShape::Same {
-                return Err(
-                    "--response-shape is only supported with --rpc unary-proto-shape".into(),
-                );
-            }
-        }
-        RpcMode::UnaryProtoShape => {
-            if args.proto_shape.is_none() {
-                return Err("--proto-shape is required with --rpc unary-proto-shape".into());
-            }
-        }
-    }
-    if args.concurrency == 0 {
-        return Err("--concurrency must be at least 1".into());
-    }
-    if args.server_json_out.is_some() && args.mode != Mode::Server {
-        return Err("--server-json-out is only supported with --mode server".into());
-    }
-    if args.shutdown_after_requests.is_some()
-        && args.mode == Mode::Server
-        && args.server_json_out.is_none()
-        && args.json_out.is_none()
-    {
-        return Err(
-            "--shutdown-after-requests requires --server-json-out or --json-out in --mode server"
-                .into(),
-        );
-    }
-    resolve_accelerated_path_config(args)?;
-    Ok(())
-}
-
-fn resolve_accelerated_path_config(args: &Args) -> Result<AcceleratedPathConfig, BoxError> {
-    match args.accelerated_path {
-        AcceleratedPath::Software => {
-            if args.accelerator_device.is_some() {
-                return Err(
-                    "--accelerator-device is only supported with --accelerated-path idxd".into(),
-                );
-            }
-            if args.accelerator_lane.is_some() {
-                return Err(
-                    "--accelerator-lane is only supported with --accelerated-path idxd".into(),
-                );
-            }
-            Ok(AcceleratedPathConfig {
-                selected_path: AcceleratedPath::Software,
-                device_path: None,
-                lane: None,
-                direction: None,
-            })
-        }
-        AcceleratedPath::Idxd => {
-            let device_path = args.accelerator_device.clone().ok_or_else(|| {
-                "--accelerator-device is required with --accelerated-path idxd".to_string()
-            })?;
-            Ok(AcceleratedPathConfig {
-                selected_path: AcceleratedPath::Idxd,
-                device_path: Some(device_path),
-                lane: Some(
-                    args.accelerator_lane
-                        .unwrap_or(AcceleratedLane::CodecMemmove),
-                ),
-                direction: Some(AcceleratedDirection::Bidirectional),
-            })
-        }
-    }
-}
-
 fn configure_process_controls(args: &Args) -> Result<(), BoxError> {
     runtime_instrumentation::set_enabled(args.instrumentation == InstrumentationMode::On);
-    let (buffer_size, yield_threshold) = effective_buffer_settings(args);
+    let workload_size = workload_probe(args).request_serialized_size;
+    let (buffer_size, yield_threshold) = effective_buffer_settings(args, workload_size);
     set_default_buffer_settings_for_process(buffer_size, yield_threshold)?;
 
     let acceleration = resolve_accelerated_path_config(args)?;
@@ -601,47 +359,6 @@ fn configure_process_controls(args: &Args) -> Result<(), BoxError> {
     custom_codec::set_process_default_acceleration(selected_path, acceleration.device_path)?;
     custom_codec::preflight_acceleration().map_err(|err| -> BoxError { err.into() })?;
     Ok(())
-}
-
-fn effective_buffer_settings(args: &Args) -> (Option<usize>, Option<usize>) {
-    const HEADER_SIZE: usize = tonic::codec::HEADER_SIZE;
-    let workload_size = workload_probe(args).request_serialized_size;
-    match args.buffer_policy {
-        BufferPolicy::Default => (None, None),
-        BufferPolicy::Pooled => {
-            let frame = workload_size
-                .saturating_add(HEADER_SIZE)
-                .max(custom_codec::DEFAULT_CODEC_BUFFER_SIZE);
-            let buffer = next_multiple(frame, custom_codec::DEFAULT_CODEC_BUFFER_SIZE);
-            (
-                Some(buffer),
-                Some(buffer.max(custom_codec::DEFAULT_CODEC_YIELD_THRESHOLD)),
-            )
-        }
-        BufferPolicy::CopyMinimized => {
-            let buffer = workload_size.saturating_add(HEADER_SIZE).max(1);
-            (
-                Some(buffer),
-                Some(buffer.max(custom_codec::DEFAULT_CODEC_YIELD_THRESHOLD)),
-            )
-        }
-    }
-}
-
-fn next_multiple(value: usize, multiple: usize) -> usize {
-    value.saturating_add(multiple.saturating_sub(1)) / multiple * multiple
-}
-
-fn resolve_run_id(args: &Args) -> String {
-    args.run_id.clone().unwrap_or_else(|| {
-        format!(
-            "run-{}",
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("system time after unix epoch")
-                .as_nanos()
-        )
-    })
 }
 
 fn stage_counters_are_placeholder_only(stages: &StageSnapshot) -> bool {
