@@ -31,6 +31,8 @@ Research monorepo for Intel DSA/IAX data-path work.
 - Keep durable detail in plans, reports, and remarks rather than transient dashboard files.
 - Keep commit headlines short and consistent with current style; use the repo-local `.gitmessage` template for the body (`Summary` / `Why` / `Details` / `Verification`).
 - Write a plan in `docs/plan/YYYY-MM-DD/NN.<topic>.<state>.md` before non-trivial changes.
+- Write plans for humans first: state the goal, scope, intended changes, verification, and completion notes in plain language so a reader can review the work without needing agent-only workflow context.
+- Do not write plans as agent-private shorthand, terse scratchpads, or control notes that only make sense to the executing agent.
 - Write findings to `docs/report/<topic>/NNN.<descriptor>.<ext>`; write single-point insights to `remark/NNN_<topic>.md`.
 - Read the nearest README before modifying a module.
 - Match code to specs, not specs to code, unless explicitly told otherwise.

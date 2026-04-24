@@ -15,6 +15,7 @@ Documentation and knowledge-base inputs. This subtree is about document placemen
 
 ## CONVENTIONS
 - Keep KB-searchable project knowledge in tracked markdown under `docs/plan/`, `docs/report/`, or `docs/specs/`.
+- Plan files under `docs/plan/` are human-readable workflow records. Write them so a project reviewer can understand the goal, scope, intended changes, verification, and outcome without needing agent-specific shorthand.
 - For `docs/report/`, use topic directories and name files as `report/<topic>/NNN.<descriptor>.<ext>`; see `docs/report/AGENTS.md` for topic meanings.
 - Use `docs/related_work/` for curated topic notes tied to the repo thesis, not as the primary dump for searchable paper extraction.
 - When a paper or PDF should become KB-searchable, extract or curate it into markdown under a tracked path, usually `docs/report/`.
@@ -24,3 +25,4 @@ Documentation and knowledge-base inputs. This subtree is about document placemen
 - Do not treat raw PDFs as KB inputs.
 - Do not put spec facts into ad hoc notes when `docs/specs/` is the authoritative source.
 - Do not duplicate root workflow rules for naming plans, reports, or remarks here.
+- Do not write plan files as agent-only scratchpads or unexplained shorthand.
