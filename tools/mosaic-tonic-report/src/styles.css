@@ -1,0 +1,11 @@
+body {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.observablehq-main {
+  max-width: 1100px;
+}
+
+.observablehq-main > blockquote {
+  color: var(--theme-foreground-muted);
+}

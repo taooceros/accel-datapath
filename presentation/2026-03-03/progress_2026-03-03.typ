@@ -1,25 +1,25 @@
 // Progress presentation 2026-03-03
 // Plain Typst with manual page breaks (no slide framework)
 
-// ── Page & typography ──────────────────────────────────────────
-#set page(
-  paper: "presentation-16-9",
+#import "../template.typ": deck, palette, slide-title, zebra-fill, callout, note, panel
+
+#show: deck.with(
   margin: (x: 52pt, y: 44pt),
+  leading: 0.85em,
+  spacing: 1.1em,
+  table-stroke: 0.4pt + luma(200),
 )
-#set text(font: "Latin Modern Sans", size: 17pt)
-#set par(leading: 0.85em, spacing: 1.1em)
-#set table(stroke: 0.4pt + luma(200), inset: 8pt)
 
 #import "@preview/cetz:0.3.4"
 #import "@preview/timeliney:0.4.0"
 
 // ── Colors ─────────────────────────────────────────────────────
-#let c-title = rgb("#1e3a5f")
-#let c-accent = rgb("#2563eb")
-#let c-head = rgb("#eff6ff")
-#let c-row = rgb("#f8fafc")
-#let c-blue = rgb("#f0f9ff")
-#let c-orange = rgb("#fff7ed")
+#let c-title = palette.title
+#let c-accent = palette.accent
+#let c-head = palette.head
+#let c-row = palette.row
+#let c-blue = palette.blue
+#let c-orange = palette.orange
 // diagram palette
 #let c-app = rgb("#dbeafe")
 #let c-sched = rgb("#bfdbfe")
@@ -32,29 +32,7 @@
 #let c-barrier = rgb("#ef4444")
 
 // ── Helpers ────────────────────────────────────────────────────
-#let slide-title(body) = {
-  block(width: 100%, below: 14pt, stroke: (bottom: 2.5pt + c-accent))[
-    #text(size: 24pt, weight: "bold", fill: c-title)[#body]
-    #v(4pt)
-  ]
-}
-#let tbl-fill(x, y) = if y == 0 { c-head } else if calc.odd(y) { white } else { c-row }
-#let callout(body) = block(
-  width: 100%,
-  radius: 5pt,
-  inset: (x: 16pt, y: 11pt),
-  fill: c-blue,
-  stroke: (left: 3.5pt + c-accent),
-  body,
-)
-#let note(body) = block(
-  width: 100%,
-  radius: 5pt,
-  inset: (x: 16pt, y: 11pt),
-  fill: c-orange,
-  stroke: (left: 3.5pt + rgb("#f97316")),
-  body,
-)
+#let tbl-fill = zebra-fill
 
 // ========================================================================
 // TITLE
@@ -74,7 +52,7 @@
 
 #slide-title[Today's Agenda]
 #v(0.4em)
-#block(inset: (x: 16pt, y: 14pt), fill: luma(247), radius: 5pt, width: 88%)[
+#panel(width: 88%)[
   #set text(size: 18pt)
   #set par(leading: 1.1em)
   + *Undergraduate project* --- Delegation-Style Lock: a brief overview

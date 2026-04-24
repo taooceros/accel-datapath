@@ -1,50 +1,46 @@
 // Progress presentation 2026-02-23
-// Plain Typst with manual page breaks (no slide framework)
 
-#set page(
-  paper: "presentation-16-9",
-  margin: (x: 40pt, y: 36pt),
+#import "../template.typ": callout, card, deck, note, palette, panel
+
+#show: deck.with(
+  margin: (x: 44pt, y: 38pt),
+  font: "New Computer Modern",
+  size: 16pt,
+  leading: 0.86em,
+  spacing: 0.9em,
+  table-inset: 6pt,
 )
-#set text(font: "New Computer Modern", size: 16pt)
-#set table(stroke: 0.5pt, inset: 6pt)
 
-// Slide title helper
-#let slide-title(body) = {
-  text(size: 22pt, weight: "bold")[#body]
-  v(8pt)
-  line(length: 100%, stroke: 0.5pt + gray)
-  v(8pt)
-}
+#let c-accent = palette.accent
+#let c-blue = palette.blue
+#let c-orange = palette.orange
 
-// ========================================================================
-// TITLE
-// ========================================================================
+= stdexec + DSA: Progress Update
 
 #align(center + horizon)[
-  #text(size: 28pt, weight: "bold")[stdexec + DSA: Progress Update]
-
-  #v(1em)
   #text(size: 18pt)[Hongtao Zhang]
-
-  #text(size: 14pt, fill: gray)[
+  #v(0.3em)
+  #text(size: 14pt, fill: luma(120))[
     Feb 23, 2026 \
     Covering Jan 21 -- Feb 22 (~4.5 weeks)
   ]
 ]
 
-// ========================================================================
-// CENTRAL QUESTION
-// ========================================================================
-#pagebreak()
+#v(1.0em)
 
-#slide-title[The Question]
+#callout(fill: c-blue, stroke: c-accent)[
+  Over the last month, the work moved from “can stdexec drive DSA cleanly?” to
+  “how much do stdexec abstractions cost once the hardware path is real and heavily batched?”
+]
+
+== The Question
 
 #align(center)[
-  #block(inset: 16pt, fill: luma(245), radius: 4pt, width: 90%)[
-    #text(size: 20pt, weight: "bold")[
+  #panel(width: 90%, fill: luma(245))[
+    #align(center)[#text(size: 20pt, weight: "bold")[
       How much do stdexec's abstractions actually cost \
       when you're talking to real hardware?
-    ]
+    ]]
   ]
 ]
 
@@ -54,15 +50,9 @@
 
 *Workload*: Small-message memory ops (8 B transfers), maximizing ops/sec
 
-*Context*: UCX and OpenSHMEM generate streams of small, independent
-DMA requests --- exactly what DSA is designed for
+*Context*: UCX and OpenSHMEM generate streams of small, independent DMA requests --- exactly what DSA is designed for
 
-// ========================================================================
-// WHAT WAS BUILT
-// ========================================================================
-#pagebreak()
-
-#slide-title[What I Built]
+== What I Built
 
 #table(
   columns: (1fr, 2.5fr),
@@ -74,12 +64,7 @@ DMA requests --- exactly what DSA is designed for
   [3 optimization strategies], [Progressive layer-removal to measure what each abstraction costs],
 )
 
-// ========================================================================
-// MOCK HARDWARE
-// ========================================================================
-#pagebreak()
-
-#slide-title[Mock Hardware Tells You Where the Time Goes]
+== Mock Hardware Tells You Where the Time Goes
 
 Swap real DSA for a mock that completes instantly:
 
@@ -97,23 +82,20 @@ Swap real DSA for a mock that completes instantly:
   [Real DSA (cold regime)], [9--11 Mpps], [~100 ns],
 )
 
-#v(0.5em)
+#v(0.6em)
 
-#text(size: 18pt, weight: "bold")[Most of the per-op cost is software, not hardware.]
+#callout(fill: c-orange, stroke: rgb("#f97316"))[
+  *Most of the per-op cost is software, not hardware.*
+]
 
-// ========================================================================
-// WHAT STDEXEC DOES PER OP
-// ========================================================================
-#pagebreak()
-
-#slide-title[What Happens Per Operation (Full stdexec Path)]
+== What Happens Per Operation (Full stdexec Path)
 
 Every 8-byte DSA transfer goes through this pipeline:
 
 #v(0.5em)
 
 #align(center)[
-  #block(inset: 10pt, fill: luma(245), radius: 4pt, width: 95%)[
+  #panel(width: 95%, fill: luma(245), inset: (x: 12pt, y: 10pt))[
     #set text(size: 14pt)
     #table(
       columns: (auto, 1fr),
@@ -135,12 +117,7 @@ Steps 1--3 are stdexec machinery. Steps 4--6 are actual work.
 
 The question is: how much do 1--3 cost?
 
-// ========================================================================
-// THREE STRATEGIES
-// ========================================================================
-#pagebreak()
-
-#slide-title[Three Strategies: Peel Off Layers One at a Time]
+== Three Strategies: Peel Off Layers One at a Time
 
 #set text(size: 15pt)
 
@@ -166,19 +143,14 @@ All three are real benchmarks --- same workload, same buffers, same polling.
 
 The *throughput delta* between adjacent strategies = *measured cost of that layer*.
 
-// ========================================================================
-// METHOD
-// ========================================================================
-#pagebreak()
-
-#slide-title[Why This Works]
+== Why This Works
 
 No instrumentation needed --- just run the benchmark at each level:
 
 #v(0.5em)
 
 #align(center)[
-  #block(inset: 12pt, fill: luma(245), radius: 4pt)[
+  #panel(fill: luma(245))[
     #text(size: 16pt)[
       `noalloc` (38 ns/op)
       #h(0.3em) $arrow.r^(- 14 "ns")$ #h(0.3em)
@@ -191,18 +163,11 @@ No instrumentation needed --- just run the benchmark at each level:
 
 #v(1em)
 
-Because each step removes a known set of abstractions, the delta
-tells us what those abstractions cost --- without timing individual
-function calls.
+Because each step removes a known set of abstractions, the delta tells us what those abstractions cost --- without timing individual function calls.
 
-This avoids the pitfall of analytical cost models (more on that later).
+#note[This avoids the pitfall of analytical cost models (more on that later).]
 
-// ========================================================================
-// MOCK RESULTS
-// ========================================================================
-#pagebreak()
-
-#slide-title[Mock DSA Results]
+== Mock DSA Results
 
 `data_move`, msg_size=8, 3-run average (Mpps --- higher is better):
 
@@ -218,12 +183,7 @@ This avoids the pitfall of analytical cost models (more on that later).
 
 Stable across 3 runs (stdev < 1 Mpps). All 8 DSA ops show similar speedups.
 
-// ========================================================================
-// DELTAS
-// ========================================================================
-#pagebreak()
-
-#slide-title[So What Does Each Layer Cost?]
+== So What Does Each Layer Cost?
 
 #table(
   columns: (2fr, 2fr, 1fr),
@@ -237,15 +197,9 @@ Stable across 3 runs (stdev < 1 Mpps). All 8 DSA ops show similar speedups.
 
 These are measured deltas, not guesses.
 
-The remaining 16.7 ns in `reusable` is the actual per-op work: \
-memset descriptors $arrow.r$ fill fields $arrow.r$ submit $arrow.r$ poll $arrow.r$ bookkeeping.
+The remaining 16.7 ns in `reusable` is the actual per-op work: memset descriptors $arrow.r$ fill fields $arrow.r$ submit $arrow.r$ poll $arrow.r$ bookkeeping.
 
-// ========================================================================
-// REAL DSA
-// ========================================================================
-#pagebreak()
-
-#slide-title[Same Story on Real Hardware]
+== Same Story on Real Hardware
 
 `data_move`, msg_size=8, batch_size=32, real DSA (Mpps):
 
@@ -263,15 +217,9 @@ memset descriptors $arrow.r$ fill fields $arrow.r$ submit $arrow.r$ poll $arrow.
 
 With batch_size=64: peaks at *35.3 Mpps* (28.3 ns/op).
 
-Gains are actually *bigger* on real DSA, because less software overhead
-also means tighter batching --- the hardware stays busier.
+Gains are actually *bigger* on real DSA, because less software overhead also means tighter batching --- the hardware stays busier.
 
-// ========================================================================
-// SUMMARY TABLE
-// ========================================================================
-#pagebreak()
-
-#slide-title[The Tradeoff Space]
+== The Tradeoff Space
 
 #table(
   columns: (1.5fr, 1fr, 1fr, 1fr, 2fr),
@@ -289,12 +237,7 @@ Units: Mpps. Three design points you can offer users:
 - *Fast*: `direct` --- still uses stdexec connect/start, 1.6x faster
 - *Fastest*: `reusable` --- bypasses stdexec entirely, 2.3x faster
 
-// ========================================================================
-// CACHE
-// ========================================================================
-#pagebreak()
-
-#slide-title[Why c=32 Is So Much Faster]
+== Why c=32 Is So Much Faster
 
 Each slot is 384--512 bytes. Working set = slots $times$ concurrency:
 
@@ -311,9 +254,7 @@ Each slot is 384--512 bytes. Working set = slots $times$ concurrency:
 )
 
 #v(0.3em)
-#text(size: 14pt)[
-  Xeon Gold 6438M --- L1d = 48 KB (12-way), L2 = 2 MB (16-way), L3 = 60 MB (15-way)
-]
+#text(size: 14pt)[Xeon Gold 6438M --- L1d = 48 KB (12-way), L2 = 2 MB (16-way), L3 = 60 MB (15-way)]
 
 #v(0.3em)
 
@@ -321,12 +262,7 @@ Going from L1 to L2 adds ~4 ns/op --- matches L2 hit latency on Sapphire Rapids.
 
 At c=32 everything fits in L1: 84 Mpps. At c=2048, ~30% of per-op time is cache misses.
 
-// ========================================================================
-// AUTO-BATCHING
-// ========================================================================
-#pagebreak()
-
-#slide-title[Auto-Batching: Free Throughput]
+== Auto-Batching: Free Throughput
 
 Each DSA submission needs an MMIO doorbell --- that caps you at ~6 Mpps for 8 B messages.
 
@@ -343,18 +279,11 @@ Each DSA submission needs an MMIO doorbell --- that caps you at ~6 Mpps for 8 B 
 
 #v(0.5em)
 
-The nice part: *scheduling code doesn't know batching exists*. \
-Same sliding-window code works on both backends.
+The nice part: *scheduling code doesn't know batching exists*. Same sliding-window code works on both backends.
 
-Maps directly to UCX/OpenSHMEM: submit individual RMA ops, \
-get batch amortization for free.
+Maps directly to UCX/OpenSHMEM: submit individual RMA ops, get batch amortization for free.
 
-// ========================================================================
-// BISTABLE
-// ========================================================================
-#pagebreak()
-
-#slide-title[A Weird Thing: Bistable Throughput]
+== A Weird Thing: Bistable Throughput
 
 Same config on real DSA can give ~20 Mpps *or* ~10 Mpps. Depends on luck.
 
@@ -373,19 +302,11 @@ It's a feedback loop:
 
 #v(0.5em)
 
-Mock DSA doesn't have this (instant completion) --- so it's a
-*hardware-software interaction*, not a software bug.
+Mock DSA doesn't have this (instant completion) --- so it's a *hardware-software interaction*, not a software bug.
 
-The `arena` strategy falls into the low regime more often than `noalloc`
-(10--12 vs 15--18 Mpps), even though the algorithms are similar ---
-their memory access patterns tickle the feedback loop differently.
+The `arena` strategy falls into the low regime more often than `noalloc` (10--12 vs 15--18 Mpps), even though the algorithms are similar --- their memory access patterns tickle the feedback loop differently.
 
-// ========================================================================
-// METHODOLOGY LESSON
-// ========================================================================
-#pagebreak()
-
-#slide-title[Don't Trust Cost Models, Measure Instead]
+== Don't Trust Cost Models, Measure Instead
 
 An earlier analytical breakdown predicted ~11 ns savings from three targeted optimizations.
 
@@ -404,15 +325,9 @@ We got *~2--3 ns*. Off by 4x.
 
 #v(0.5em)
 
-The layer-removal approach got it right because it measures actual throughput. \
-Reasoning about code structure is fine for hypotheses, not for predictions.
+The layer-removal approach got it right because it measures actual throughput. Reasoning about code structure is fine for hypotheses, not for predictions.
 
-// ========================================================================
-// NEXT STEPS
-// ========================================================================
-#pagebreak()
-
-#slide-title[What's Next]
+== What's Next
 
 #table(
   columns: (2fr, 2fr, 1fr),
@@ -425,10 +340,7 @@ Reasoning about code structure is fine for hypotheses, not for predictions.
   [Can stdexec itself be cheaper?], [Profile connect/start internals], [Open],
 )
 
-// ========================================================================
-// END
-// ========================================================================
-#pagebreak()
+== Closing takeaway
 
 #align(center + horizon)[
   #text(size: 24pt, weight: "bold")[

@@ -15,7 +15,10 @@ let
     postPatch = ''
       cp ${./package-lock.json} package-lock.json
     '';
-    npmFlags = [ "--legacy-peer-deps" "--ignore-scripts" ];
+    npmFlags = [
+      "--legacy-peer-deps"
+      "--ignore-scripts"
+    ];
     npmDepsHash = "sha256-pnK+a8qoD0bUAA3sHMffLf6rrJaYQZtASQVRi833gxc=";
     dontNpmBuild = true;
     postFixup = ''
@@ -81,11 +84,13 @@ in
     export HF_HOME="$CODEMOGGER_CACHE_DIR/huggingface"
     export TRANSFORMERS_CACHE="$CODEMOGGER_CACHE_DIR/transformers"
 
-    echo "codemogger devenv shell"
-    echo "  package: codemogger ${version}"
-    echo "  local state dir: $CODEMOGGER_HOME"
-    echo "  model cache: $TRANSFORMERS_CACHE"
-    echo "  index repo: codemogger index ."
-    echo "  search index: codemogger search \"query text\""
+    if [ -t 1 ] && [ -t 2 ]; then
+      echo "codemogger devenv shell" >&2
+      echo "  package: codemogger ${version}" >&2
+      echo "  local state dir: $CODEMOGGER_HOME" >&2
+      echo "  model cache: $TRANSFORMERS_CACHE" >&2
+      echo "  index repo: codemogger index ." >&2
+      echo "  search index: codemogger search \"query text\"" >&2
+    fi
   '';
 }
