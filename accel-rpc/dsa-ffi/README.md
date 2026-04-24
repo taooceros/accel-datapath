@@ -60,6 +60,13 @@ bash dsa-ffi/scripts/verify_live_memmove.sh
 bash dsa-ffi/scripts/verify_async_memmove.sh
 ```
 
+From the repo root, equivalent wrapper entrypoints are also available:
+
+```bash
+bash dsa-ffi/scripts/verify_live_memmove.sh
+bash dsa-ffi/scripts/verify_async_memmove.sh
+```
+
 What both verifiers do:
 
 1. find a work queue or use `DSA_FFI_VERIFY_DEVICE`,
