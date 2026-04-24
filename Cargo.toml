@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "accel-rpc/dsa-ffi",
+    "accel-rpc/tonic-profile",
     "dsa-bindings",
 ]
 resolver = "2"

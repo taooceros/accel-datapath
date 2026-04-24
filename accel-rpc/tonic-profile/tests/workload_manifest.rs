@@ -1005,8 +1005,12 @@ fn s04_validate_only_accepts_the_tracked_manifest() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
         stdout.contains("phase=manifest-parse")
-            && stdout.contains("run_root=accel-rpc/target/s04-claim-package/latest")
-            && stdout.contains("summary_path=accel-rpc/target/s04-claim-package/latest/summary/comparison_summary.json"),
+            && stdout.contains("run_root=")
+            && stdout.contains("accel-rpc/target/s04-claim-package/latest")
+            && stdout.contains("summary_path=")
+            && stdout.contains(
+                "accel-rpc/target/s04-claim-package/latest/summary/comparison_summary.json"
+            ),
         "validate-only should print the tracked run-root and summary contract\nstdout:\n{stdout}"
     );
 }

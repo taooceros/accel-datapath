@@ -440,4 +440,115 @@ mod tests {
             .message()
             .contains("during page_fault_retry (page_fault_retry_exhausted)"));
     }
+
+    #[test]
+    fn translates_all_runtime_phase_variants_with_phase_and_kind_context() {
+        let device_path = Path::new("/dev/dsa/wq0.0");
+        let runtime_cases = [
+            (
+                MemmoveError::QueueOpen {
+                    device_path: device_path.to_path_buf(),
+                    phase: MemmovePhase::QueueOpen,
+                    source: std::io::Error::other("open failed"),
+                },
+                "during queue_open (queue_open)",
+            ),
+            (
+                MemmoveError::CompletionTimeout {
+                    device_path: device_path.to_path_buf(),
+                    phase: MemmovePhase::CompletionPoll,
+                    page_fault_retries: 0,
+                },
+                "during completion_poll (completion_timeout)",
+            ),
+            (
+                MemmoveError::MalformedCompletion {
+                    device_path: device_path.to_path_buf(),
+                    phase: MemmovePhase::CompletionPoll,
+                    status: 0x13,
+                    result: 0,
+                    bytes_completed: 48,
+                    fault_addr: 0,
+                    page_fault_retries: 1,
+                    detail: "completion record missing bytes-valid flag",
+                },
+                "during completion_poll (malformed_completion)",
+            ),
+            (
+                MemmoveError::CompletionStatus {
+                    device_path: device_path.to_path_buf(),
+                    phase: MemmovePhase::CompletionPoll,
+                    status: 0x3,
+                    bytes_completed: 24,
+                    fault_addr: 0xfeed,
+                    page_fault_retries: 2,
+                },
+                "during completion_poll (completion_status)",
+            ),
+            (
+                MemmoveError::PageFaultRetryExhausted {
+                    device_path: device_path.to_path_buf(),
+                    phase: MemmovePhase::PageFaultRetry,
+                    retries: 3,
+                    bytes_completed: 64,
+                    fault_addr: 0xfeed,
+                },
+                "during page_fault_retry (page_fault_retry_exhausted)",
+            ),
+            (
+                MemmoveError::ByteMismatch {
+                    device_path: device_path.to_path_buf(),
+                    phase: MemmovePhase::PostCopyVerify,
+                    requested_bytes: 128,
+                    mismatch_offset: 11,
+                    final_status: 0,
+                    page_fault_retries: 1,
+                },
+                "during post_copy_verify (byte_mismatch)",
+            ),
+        ];
+
+        for (err, expected_context) in runtime_cases {
+            let status = idxd_status(device_path, &err);
+            assert_eq!(status.code(), tonic::Code::Internal);
+            assert!(
+                status.message().contains(expected_context),
+                "status message missing {expected_context}: {}",
+                status.message()
+            );
+        }
+    }
+
+    #[test]
+    fn preserves_copy_validation_bucket_for_preflight_length_errors() {
+        let device_path = Path::new("/dev/dsa/wq0.0");
+        let invalid_length = idxd_status(
+            device_path,
+            &MemmoveError::InvalidLength {
+                requested_len: 0,
+                max_len: 4096,
+            },
+        );
+        let destination_too_small = idxd_status(
+            device_path,
+            &MemmoveError::DestinationTooSmall {
+                src_len: 256,
+                dst_len: 128,
+            },
+        );
+
+        for status in [&invalid_length, &destination_too_small] {
+            assert!(
+                status.message().contains("during copy_validation"),
+                "unexpected status message: {}",
+                status.message()
+            );
+        }
+        assert!(invalid_length
+            .message()
+            .contains("(invalid_length)"));
+        assert!(destination_too_small
+            .message()
+            .contains("(destination_too_small)"));
+    }
 }
