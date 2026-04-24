@@ -14,16 +14,14 @@ Research monorepo for Intel DSA/IAX data-path work.
 3. Local indexes and tools: `codemogger`, Turso KB, `read`, `grep`, `glob`, `lsp_*`
 4. External docs and web search
 
-## EXPLORER WORKFLOW
+## DELEGATION
 - Explorer workflow details live in `.agents/workflows/explorer.md`.
 - Use `@explorer` for bounded candidate discovery, not final synthesis.
-- When delegating, follow the workflow doc and cite the exact explorer template when one exists.
-
-## AGENT TEMPLATES
 - Agent-specific task templates live under `.agents/templates/`.
 - Use `.agents/templates/<agent_name>_*.md` naming.
-- When delegating, cite the exact matching template file when one exists; do not reference `.agents/templates/` generically.
-- Restate critical task budgets and stop conditions inline even when a template is provided.
+- When delegating, follow the relevant workflow doc and cite the exact matching template when one exists.
+- Do not reference `.agents/templates/` generically.
+- Restate critical task budgets and stop conditions inline even when a workflow doc or template is provided.
 
 ## CONVENTIONS
 - Before acting, read the latest relevant plan or report.
