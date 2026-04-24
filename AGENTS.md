@@ -4,20 +4,20 @@ Research monorepo for Intel DSA/IAX data-path work.
 
 ## DEFAULT MODE: SPEED FIRST
 - Prefer response time over exhaustive verification unless the user asks for high confidence.
-- Answer from local context first; escalate only when the risk or uncertainty is meaningful.
+- Answer from local context first; escalate only when uncertainty or risk is meaningful.
 - If external lookup may help but is not blocking, answer first and enrich later.
-- For code discovery, use codemogger first (it can search semantically or by keyword); use other search tools only as fallback.
+- For code discovery, use codemogger first; use other search tools only as fallback.
 
 ## SOURCE ORDER
 1. Current conversation
 2. Repo docs in `docs/` and `remark/`
-3. Local indexes/tools: `codemogger`, Turso KB, `read`, `grep`, `glob`, `lsp_*`
+3. Local indexes and tools: `codemogger`, Turso KB, `read`, `grep`, `glob`, `lsp_*`
 4. External docs and web search
 
 ## EXPLORER WORKFLOW
 - Explorer workflow details live in `.agents/workflows/explorer.md`.
 - Use `@explorer` for bounded candidate discovery, not final synthesis.
-- When delegating, follow the separate workflow doc and cite the exact explorer template when one exists.
+- When delegating, follow the workflow doc and cite the exact explorer template when one exists.
 
 ## AGENT TEMPLATES
 - Agent-specific task templates live under `.agents/templates/`.
@@ -26,15 +26,14 @@ Research monorepo for Intel DSA/IAX data-path work.
 - Restate critical task budgets and stop conditions inline even when a template is provided.
 
 ## CONVENTIONS
-- Read the latest relevant plan/report before acting.
-- On resume, read the latest relevant plan/report and any linked durable artifacts before continuing.
-- Keep durable detail in plans, reports, and remarks rather than transient dashboard files.
+- Before acting, read the latest relevant plan or report. On resume, also read any linked durable artifacts needed to continue.
+- Keep durable detail in plans, reports, and remarks rather than transient notes.
 - Keep commit headlines short and consistent with current style; use the repo-local `.gitmessage` template for the body (`Summary` / `Why` / `Details` / `Verification`).
-- Write commits in focused, reviewable increments, but do not make them so small that they lose a coherent unit of work.
+- Write commits in focused, reviewable increments, but not so small that they lose a coherent unit of work.
 - Write a plan in `docs/plan/YYYY-MM-DD/NN.<topic>.<state>.md` before non-trivial changes.
-- Write plans for humans first: state the goal, scope, intended changes, verification, and completion notes in plain language so a reader can review the work without needing agent-only workflow context.
+- Write plans for humans first. State the goal, scope, intended changes, verification, and completion notes in plain language.
 - Do not write plans as agent-private shorthand, terse scratchpads, or control notes that only make sense to the executing agent.
-- Write findings to `docs/report/<topic>/NNN.<descriptor>.<ext>`; write single-point insights to `remark/NNN_<topic>.md`.
+- Write findings to `docs/report/<topic>/NNN.<descriptor>.<ext>` and single-point insights to `remark/NNN_<topic>.md`.
 - Read the nearest README before modifying a module.
 - Match code to specs, not specs to code, unless explicitly told otherwise.
 - Keep child `AGENTS.md` files lean and local; do not repeat parent guidance.
@@ -42,7 +41,7 @@ Research monorepo for Intel DSA/IAX data-path work.
 ## DO NOT
 - Guess DSA/IAX behavior if `docs/specs/*.md` or `docs/report/architecture/001.design_decisions.md` already cover it.
 - Treat raw PDFs as KB-ingested content; searchable paper content belongs in tracked markdown.
-- Run hardware-facing binaries directly when the documented flow requires `launch` / `dsa_launcher`.
+- Run hardware-facing binaries directly when the documented flow requires `launch` or `dsa_launcher`.
 
 ## REPO MAP
 ```text
