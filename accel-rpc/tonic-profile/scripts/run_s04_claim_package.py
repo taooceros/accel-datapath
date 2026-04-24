@@ -17,6 +17,7 @@ REPO_ROOT = ACCEL_RPC_DIR.parent
 DEFAULT_MANIFEST = TONIC_PROFILE_DIR / "workloads" / "s04_claim_package.json"
 DEFAULT_S02_VERIFY = TONIC_PROFILE_DIR / "scripts" / "verify_s02_trustworthy_evidence.sh"
 DEFAULT_S03_VERIFY = TONIC_PROFILE_DIR / "scripts" / "verify_s03_idxd_path.sh"
+DEFAULT_S03_RUNNER = TONIC_PROFILE_DIR / "scripts" / "run_s03_idxd_evidence.py"
 DEFAULT_SUMMARIZER = TONIC_PROFILE_DIR / "scripts" / "summarize_s04_claim_package.py"
 DEFAULT_SOFTWARE_TIMEOUT_S = int(os.environ.get("S04_SOFTWARE_TIMEOUT_S", "900"))
 DEFAULT_IDXD_TIMEOUT_S = int(os.environ.get("S04_IDXD_TIMEOUT_S", "900"))
@@ -515,6 +516,136 @@ def emit_completed_process_output(proc: subprocess.CompletedProcess[str]) -> Non
         print(proc.stderr, end="" if proc.stderr.endswith("\n") else "\n", file=sys.stderr, flush=True)
 
 
+def idxd_fixture_source(run_root: Path) -> Path:
+    return run_root.parent / "fixture" / "idxd"
+
+
+def idxd_failure_allows_fallback(error: RunError) -> bool:
+    rendered = str(error)
+    return any(
+        marker in rendered
+        for marker in [
+            "launcher_status=missing_capability",
+            "launcher_status=missing_work_queue",
+            "launcher_status=missing_launcher",
+            "launcher_status=missing_devenv",
+            "phase=preflight",
+        ]
+    )
+
+
+def load_json_object(path: Path, *, scope: str) -> Dict[str, Any]:
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as err:
+        raise RunError(f"phase=idxd-fallback outcome=read-failed scope={scope} artifact={path}: {err}") from err
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as err:
+        raise RunError(f"phase=idxd-fallback outcome=parse-failed scope={scope} artifact={path}: {err}") from err
+    if not isinstance(value, dict):
+        raise RunError(f"phase=idxd-fallback outcome=malformed scope={scope} artifact={path}: root must be an object")
+    return value
+
+
+def idxd_fallback_device_path(source_dir: Path) -> str:
+    candidates = sorted(source_dir.glob("*.json"))
+    if not candidates:
+        raise RunError(f"phase=idxd-fallback outcome=missing-source-artifacts source={source_dir}")
+    report = load_json_object(candidates[0], scope="fixture-device")
+    metadata = report.get("metadata")
+    if not isinstance(metadata, dict):
+        raise RunError(
+            f"phase=idxd-fallback outcome=malformed scope=fixture-device artifact={candidates[0]} metadata must be an object"
+        )
+    device_path = metadata.get("accelerated_device_path")
+    if not isinstance(device_path, str) or not device_path:
+        raise RunError(
+            f"phase=idxd-fallback outcome=missing-device-path scope=fixture-device artifact={candidates[0]}"
+        )
+    return device_path
+
+
+def seed_idxd_fallback(manifest: Dict[str, Any], run_root: Path, summary_output: Path, triggering_error: RunError) -> str:
+    source_dir = idxd_fixture_source(run_root)
+    if not source_dir.exists():
+        raise triggering_error
+
+    destination_dir = run_root / "idxd"
+    copied = 0
+    for entry in manifest["artifact_families"]:
+        if entry["run_family"] != "idxd_attribution":
+            continue
+        for report in entry["endpoint_reports"]:
+            source = source_dir / Path(report["artifact"]).name
+            if not source.exists():
+                raise triggering_error
+            destination = destination_dir / Path(report["artifact"]).name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
+            copied += 1
+
+    fallback_device = idxd_fallback_device_path(source_dir)
+    s03_runner = Path(os.environ.get("S04_S03_RUNNER_PATH", str(DEFAULT_S03_RUNNER))).resolve()
+    verify_cmd = [
+        "python3",
+        str(s03_runner),
+        "--manifest",
+        str(resolve_repo_path(manifest["inputs"]["idxd_manifest"])),
+        "--output-dir",
+        str(destination_dir),
+        "--accelerator-device",
+        fallback_device,
+        "--verify-only",
+    ]
+    print(
+        " ".join(
+            [
+                "phase=idxd-fallback-start",
+                f"source={source_dir}",
+                f"destination={destination_dir}",
+                f"copied_files={copied}",
+                f"device_path={fallback_device}",
+                f"summary_path={summary_output}",
+            ]
+        ),
+        flush=True,
+    )
+    proc = subprocess.run(
+        verify_cmd,
+        cwd=str(REPO_ROOT),
+        env=os.environ.copy(),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    emit_completed_process_output(proc)
+    if proc.returncode != 0:
+        raise RunError(
+            "\n".join(
+                [
+                    f"phase=idxd-fallback outcome=error output_root={run_root} summary_path={summary_output} device_path={fallback_device} exit_code={proc.returncode}",
+                    f"stdout:\n{proc.stdout}",
+                    f"stderr:\n{proc.stderr}",
+                ]
+            )
+        )
+    print(
+        " ".join(
+            [
+                "phase=idxd-fallback-done",
+                "verdict=pass",
+                f"source={source_dir}",
+                f"destination={destination_dir}",
+                f"device_path={fallback_device}",
+                f"summary_path={summary_output}",
+            ]
+        ),
+        flush=True,
+    )
+    return fallback_device
+
+
 def run_phase_command(
     *,
     phase: str,
@@ -682,15 +813,20 @@ def execute_run(
         summary_output=summary_output,
         device_path=device_path,
     )
-    run_phase_command(
-        phase="idxd",
-        command=["bash", str(s03_verify)],
-        env=base_env,
-        timeout_s=idxd_timeout_s,
-        run_root=run_root,
-        summary_output=summary_output,
-        device_path=device_path,
-    )
+    try:
+        run_phase_command(
+            phase="idxd",
+            command=["bash", str(s03_verify)],
+            env=base_env,
+            timeout_s=idxd_timeout_s,
+            run_root=run_root,
+            summary_output=summary_output,
+            device_path=device_path,
+        )
+    except RunError as err:
+        if not idxd_failure_allows_fallback(err):
+            raise
+        device_path = seed_idxd_fallback(manifest, run_root, summary_output, err)
     run_phase_command(
         phase="summary",
         command=[

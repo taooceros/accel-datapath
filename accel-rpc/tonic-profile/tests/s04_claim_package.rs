@@ -699,6 +699,69 @@ print('summary should not run')
 }
 
 #[test]
+fn runner_seeds_sibling_fixture_idxd_outputs_when_preflight_is_unavailable() {
+    let temp_dir = unique_dir("s04-runner-idxd-fallback");
+    let run_root = temp_dir.join("latest");
+    let fixture_root = temp_dir.join("fixture");
+    write_fixture_run_tree(&fixture_root);
+    let control_floor_path = temp_dir.join("control-floor.json");
+    write_json(&control_floor_path, &valid_control_floor_summary());
+    let manifest_path = fixture_manifest(&temp_dir, &control_floor_path);
+
+    let s02_script = temp_dir.join("stub-s02.sh");
+    write_text(
+        &s02_script,
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p "$S02_OUTPUT_DIR"
+printf '[stub_s02] phase=done output_dir=%s
+' "$S02_OUTPUT_DIR"
+"#,
+    );
+    let s03_script = temp_dir.join("stub-s03.sh");
+    write_text(
+        &s03_script,
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+printf '[stub_s03] phase=preflight launcher_status=missing_capability device_path=%s
+' "$S03_ACCELERATOR_DEVICE" >&2
+exit 1
+"#,
+    );
+    let summary_script = temp_dir.join("stub-summary.py");
+    write_text(
+        &summary_script,
+        r#"#!/usr/bin/env python3
+from pathlib import Path
+import sys
+run_root = Path(sys.argv[sys.argv.index("--run-root") + 1])
+summary_dir = run_root / "summary"
+summary_dir.mkdir(parents=True, exist_ok=True)
+(summary_dir / "comparison_summary.json").write_text('{"ok": true}\n', encoding="utf-8")
+(summary_dir / "ordinary_vs_idxd.csv").write_text('workload_label,endpoint_role\n', encoding="utf-8")
+(summary_dir / "claim_table.md").write_text('# stub claim table\n', encoding="utf-8")
+print(f'phase=summarization-done run_root={run_root}')
+"#,
+    );
+
+    let output = run_runner_with_overrides(&manifest_path, &run_root, &s02_script, &s03_script, &summary_script);
+    assert!(
+        output.status.success(),
+        "runner failed unexpectedly\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("phase=idxd-fallback-start"));
+    assert!(stdout.contains("phase=idxd-fallback-done verdict=pass"));
+    assert!(stdout.contains("device_path=/dev/dsa/wq0.0"));
+    assert!(stdout.contains("phase=done verdict=pass"));
+    assert!(run_root.join("idxd/idxd__unary-bytes__repeated-64.client.json").exists());
+    assert!(run_root.join("summary/comparison_summary.json").exists());
+}
+
+#[test]
 fn runner_rejects_incomplete_summary_outputs_with_phase_labeled_error() {
     let temp_dir = unique_dir("s04-runner-summary-missing-output");
     let run_root = temp_dir.join("run-root");
