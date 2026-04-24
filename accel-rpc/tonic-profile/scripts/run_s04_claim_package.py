@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
@@ -12,6 +15,12 @@ TONIC_PROFILE_DIR = SCRIPT_DIR.parent
 ACCEL_RPC_DIR = TONIC_PROFILE_DIR.parent
 REPO_ROOT = ACCEL_RPC_DIR.parent
 DEFAULT_MANIFEST = TONIC_PROFILE_DIR / "workloads" / "s04_claim_package.json"
+DEFAULT_S02_VERIFY = TONIC_PROFILE_DIR / "scripts" / "verify_s02_trustworthy_evidence.sh"
+DEFAULT_S03_VERIFY = TONIC_PROFILE_DIR / "scripts" / "verify_s03_idxd_path.sh"
+DEFAULT_SUMMARIZER = TONIC_PROFILE_DIR / "scripts" / "summarize_s04_claim_package.py"
+DEFAULT_SOFTWARE_TIMEOUT_S = int(os.environ.get("S04_SOFTWARE_TIMEOUT_S", "900"))
+DEFAULT_IDXD_TIMEOUT_S = int(os.environ.get("S04_IDXD_TIMEOUT_S", "900"))
+DEFAULT_SUMMARY_TIMEOUT_S = int(os.environ.get("S04_SUMMARY_TIMEOUT_S", "120"))
 REQUIRED_LABELS = {
     "ordinary/unary-bytes/repeated-64",
     "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
@@ -419,24 +428,335 @@ def summary_path(manifest: Dict[str, Any]) -> str:
     return f"{manifest['run_root']}/{manifest['derived_outputs']['comparison_summary_json']}"
 
 
+def resolve_run_root(raw: str) -> Path:
+    return resolve_repo_path(raw).resolve()
+
+
+def selected_device_path(cli_value: str | None) -> str:
+    return cli_value or os.environ.get("S03_ACCELERATOR_DEVICE", "<auto>")
+
+
+def manifest_copy_path(run_root: Path) -> Path:
+    return run_root / "manifest.json"
+
+
+def summary_output_paths(manifest: Dict[str, Any], run_root: Path) -> Dict[str, Path]:
+    return {
+        key: run_root / relpath for key, relpath in manifest["derived_outputs"].items()
+    }
+
+
+def log_artifact_plan(manifest: Dict[str, Any], run_root: Path, device_path: str) -> None:
+    outputs = summary_output_paths(manifest, run_root)
+    for family in manifest["artifact_families"]:
+        for entry in family["endpoint_reports"]:
+            print(
+                " ".join(
+                    [
+                        "phase=plan",
+                        f"workload_label={entry['workload_label']}",
+                        f"endpoint_role={entry['endpoint_role']}",
+                        f"run_family={family['run_family']}",
+                        f"instrumentation={family['instrumentation']}",
+                        f"output_root={run_root}",
+                        f"summary_path={outputs['comparison_summary_json']}",
+                        f"device_path={device_path}",
+                    ]
+                ),
+                flush=True,
+            )
+
+
+def prepare_run_root(manifest_path: Path, manifest: Dict[str, Any], run_root: Path) -> Path:
+    run_root.mkdir(parents=True, exist_ok=True)
+    (run_root / "software").mkdir(parents=True, exist_ok=True)
+    (run_root / "idxd").mkdir(parents=True, exist_ok=True)
+    (run_root / "summary").mkdir(parents=True, exist_ok=True)
+    copied_manifest_path = manifest_copy_path(run_root)
+    copied_manifest_path.write_text(manifest_path.read_text(encoding="utf-8"), encoding="utf-8")
+    print(
+        " ".join(
+            [
+                "phase=run-root-ready",
+                f"manifest={manifest_path}",
+                f"manifest_copy={copied_manifest_path}",
+                f"output_root={run_root}",
+                f"summary_path={summary_output_paths(manifest, run_root)['comparison_summary_json']}",
+            ]
+        ),
+        flush=True,
+    )
+    return copied_manifest_path
+
+
+def copy_control_floor_reference(manifest: Dict[str, Any], run_root: Path) -> Path:
+    source = resolve_repo_path(manifest["inputs"]["control_floor_summary"]).resolve()
+    destination = run_root / "control-floor" / "async_control_floor_summary.json"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+    print(
+        " ".join(
+            [
+                "phase=control-floor-reference",
+                f"source={source}",
+                f"destination={destination}",
+                f"output_root={run_root}",
+            ]
+        ),
+        flush=True,
+    )
+    return destination
+
+
+def emit_completed_process_output(proc: subprocess.CompletedProcess[str]) -> None:
+    if proc.stdout:
+        print(proc.stdout, end="" if proc.stdout.endswith("\n") else "\n", flush=True)
+    if proc.stderr:
+        print(proc.stderr, end="" if proc.stderr.endswith("\n") else "\n", file=sys.stderr, flush=True)
+
+
+def run_phase_command(
+    *,
+    phase: str,
+    command: List[str],
+    env: Dict[str, str],
+    timeout_s: int,
+    run_root: Path,
+    summary_output: Path,
+    device_path: str,
+) -> None:
+    print(
+        " ".join(
+            [
+                f"phase={phase}-start",
+                f"output_root={run_root}",
+                f"summary_path={summary_output}",
+                f"device_path={device_path}",
+                f"timeout_s={timeout_s}",
+                f"command={json.dumps(command)}",
+            ]
+        ),
+        flush=True,
+    )
+    try:
+        proc = subprocess.run(
+            command,
+            cwd=str(REPO_ROOT),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as err:
+        stdout = (err.stdout or "") if isinstance(err.stdout, str) else (err.stdout or b"").decode("utf-8", errors="replace")
+        stderr = (err.stderr or "") if isinstance(err.stderr, str) else (err.stderr or b"").decode("utf-8", errors="replace")
+        raise RunError(
+            "\n".join(
+                [
+                    f"phase={phase} outcome=timeout output_root={run_root} summary_path={summary_output} device_path={device_path} timeout_s={timeout_s}",
+                    f"stdout:\n{stdout}",
+                    f"stderr:\n{stderr}",
+                ]
+            )
+        ) from err
+
+    emit_completed_process_output(proc)
+    if proc.returncode != 0:
+        raise RunError(
+            "\n".join(
+                [
+                    f"phase={phase} outcome=error output_root={run_root} summary_path={summary_output} device_path={device_path} exit_code={proc.returncode}",
+                    f"stdout:\n{proc.stdout}",
+                    f"stderr:\n{proc.stderr}",
+                ]
+            )
+        )
+
+    print(
+        " ".join(
+            [
+                f"phase={phase}-done",
+                f"output_root={run_root}",
+                f"summary_path={summary_output}",
+                f"device_path={device_path}",
+                f"exit_code={proc.returncode}",
+            ]
+        ),
+        flush=True,
+    )
+
+
+def validate_summary_outputs(manifest: Dict[str, Any], run_root: Path, summary_output: Path, device_path: str) -> None:
+    for key, path in summary_output_paths(manifest, run_root).items():
+        if not path.exists():
+            raise RunError(
+                f"phase=summary outcome=missing-output output_key={key} output_root={run_root} summary_path={summary_output} device_path={device_path} artifact={path}"
+            )
+        if path.stat().st_size == 0:
+            raise RunError(
+                f"phase=summary outcome=empty-output output_key={key} output_root={run_root} summary_path={summary_output} device_path={device_path} artifact={path}"
+            )
+
+
+def validate_report_references(manifest: Dict[str, Any], run_root: Path, summary_output: Path, device_path: str) -> None:
+    manifest_root = manifest["run_root"]
+    actual_outputs = summary_output_paths(manifest, run_root)
+    report_contract = resolve_repo_path(manifest["inputs"]["report_contract"]).resolve()
+    if not report_contract.exists():
+        raise RunError(
+            f"phase=report-reference-validation outcome=missing-report-contract output_root={run_root} summary_path={summary_output} device_path={device_path} artifact={report_contract}"
+        )
+
+    expected_refs: List[str] = []
+    for relpath in manifest["derived_outputs"].values():
+        expected_refs.append(str((run_root / relpath).resolve()))
+    actual_refs: List[str] = []
+    for ref in manifest["report"]["required_references"]:
+        if not ref.startswith(f"{manifest_root}/"):
+            raise RunError(
+                f"phase=report-reference-validation outcome=bad-reference output_root={run_root} summary_path={summary_output} device_path={device_path} reference={ref}"
+            )
+        suffix = ref.removeprefix(f"{manifest_root}/")
+        actual_refs.append(str((run_root / suffix).resolve()))
+    if actual_refs != expected_refs:
+        raise RunError(
+            "phase=report-reference-validation outcome=reference-mismatch "
+            f"output_root={run_root} summary_path={summary_output} device_path={device_path} "
+            f"expected={expected_refs} actual={actual_refs}"
+        )
+    for key, path in actual_outputs.items():
+        if not path.exists():
+            raise RunError(
+                f"phase=report-reference-validation outcome=missing-derived-output output_key={key} output_root={run_root} summary_path={summary_output} device_path={device_path} artifact={path}"
+            )
+    print(
+        " ".join(
+            [
+                "phase=report-reference-validation",
+                "verdict=pass",
+                f"output_root={run_root}",
+                f"summary_path={summary_output}",
+                f"device_path={device_path}",
+                f"report_contract={report_contract}",
+                f"report_path={manifest['report']['path']}",
+            ]
+        ),
+        flush=True,
+    )
+
+
+def execute_run(
+    manifest_path: Path,
+    manifest: Dict[str, Any],
+    *,
+    run_root_override: str | None,
+    device_path_override: str | None,
+    software_timeout_s: int,
+    idxd_timeout_s: int,
+    summary_timeout_s: int,
+) -> None:
+    run_root = resolve_run_root(run_root_override or manifest["run_root"])
+    device_path = selected_device_path(device_path_override)
+    summary_output = summary_output_paths(manifest, run_root)["comparison_summary_json"]
+    copied_manifest = prepare_run_root(manifest_path, manifest, run_root)
+    copy_control_floor_reference(manifest, run_root)
+    log_artifact_plan(manifest, run_root, device_path)
+
+    base_env = os.environ.copy()
+    base_env["S02_OUTPUT_DIR"] = str((run_root / "software").resolve())
+    base_env["S03_OUTPUT_DIR"] = str((run_root / "idxd").resolve())
+    if device_path_override:
+        base_env["S03_ACCELERATOR_DEVICE"] = device_path_override
+
+    s02_verify = Path(os.environ.get("S04_VERIFY_S02_PATH", str(DEFAULT_S02_VERIFY))).resolve()
+    s03_verify = Path(os.environ.get("S04_VERIFY_S03_PATH", str(DEFAULT_S03_VERIFY))).resolve()
+    summarizer = Path(os.environ.get("S04_SUMMARIZER_PATH", str(DEFAULT_SUMMARIZER))).resolve()
+
+    run_phase_command(
+        phase="software",
+        command=["bash", str(s02_verify)],
+        env=base_env,
+        timeout_s=software_timeout_s,
+        run_root=run_root,
+        summary_output=summary_output,
+        device_path=device_path,
+    )
+    run_phase_command(
+        phase="idxd",
+        command=["bash", str(s03_verify)],
+        env=base_env,
+        timeout_s=idxd_timeout_s,
+        run_root=run_root,
+        summary_output=summary_output,
+        device_path=device_path,
+    )
+    run_phase_command(
+        phase="summary",
+        command=[
+            "python3",
+            str(summarizer),
+            "--manifest",
+            str(copied_manifest),
+            "--run-root",
+            str(run_root),
+        ],
+        env=base_env,
+        timeout_s=summary_timeout_s,
+        run_root=run_root,
+        summary_output=summary_output,
+        device_path=device_path,
+    )
+    validate_summary_outputs(manifest, run_root, summary_output, device_path)
+    validate_report_references(manifest, run_root, summary_output, device_path)
+    print(
+        " ".join(
+            [
+                "phase=done",
+                "verdict=pass",
+                f"manifest={copied_manifest}",
+                f"output_root={run_root}",
+                f"summary_path={summary_output}",
+                f"device_path={device_path}",
+            ]
+        ),
+        flush=True,
+    )
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Validate or run the tracked S04 ordinary-vs-IDXD claim package contract."
     )
     parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST))
     parser.add_argument("--validate-only", action="store_true")
+    parser.add_argument(
+        "--run-root",
+        help="Override the stable run_root for fixture-driven execution while keeping the tracked manifest contract intact.",
+    )
+    parser.add_argument(
+        "--device-path",
+        help="Override the IDXD work queue path passed through to the S03 verifier.",
+    )
+    parser.add_argument("--software-timeout-s", type=int, default=DEFAULT_SOFTWARE_TIMEOUT_S)
+    parser.add_argument("--idxd-timeout-s", type=int, default=DEFAULT_IDXD_TIMEOUT_S)
+    parser.add_argument("--summary-timeout-s", type=int, default=DEFAULT_SUMMARY_TIMEOUT_S)
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     try:
         manifest_path = Path(args.manifest).resolve()
         manifest = load_manifest(manifest_path)
+        effective_run_root = resolve_run_root(args.run_root or manifest["run_root"])
+        effective_summary_path = summary_output_paths(manifest, effective_run_root)[
+            "comparison_summary_json"
+        ]
         print(
             " ".join(
                 [
                     f"phase=manifest-parse",
                     f"manifest={manifest_path}",
-                    f"run_root={manifest['run_root']}",
-                    f"summary_path={summary_path(manifest)}",
+                    f"run_root={effective_run_root}",
+                    f"summary_path={effective_summary_path}",
                     f"report_path={manifest['report']['path']}",
                     f"families={len(manifest['artifact_families'])}",
                 ]
@@ -445,9 +765,16 @@ def main(argv: Iterable[str] | None = None) -> int:
         )
         if args.validate_only:
             return 0
-        raise RunError(
-            "phase=execution message=run_s04_claim_package.py execution path lands in T03; use --validate-only for the T01 contract gate"
+        execute_run(
+            manifest_path,
+            manifest,
+            run_root_override=args.run_root,
+            device_path_override=args.device_path,
+            software_timeout_s=args.software_timeout_s,
+            idxd_timeout_s=args.idxd_timeout_s,
+            summary_timeout_s=args.summary_timeout_s,
         )
+        return 0
     except (ManifestError, RunError) as err:
         fail(str(err))
         return 1

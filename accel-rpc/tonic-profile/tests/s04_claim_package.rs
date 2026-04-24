@@ -84,6 +84,35 @@ fn run_summarizer(manifest_path: &Path, run_root: &Path, verify_only: bool) -> s
     command.output().expect("run s04 summarizer")
 }
 
+fn run_runner_with_overrides(
+    manifest_path: &Path,
+    run_root: &Path,
+    s02_script: &Path,
+    s03_script: &Path,
+    summary_script: &Path,
+) -> std::process::Output {
+    Command::new("python3")
+        .arg(runner_script())
+        .arg("--manifest")
+        .arg(manifest_path)
+        .arg("--run-root")
+        .arg(run_root)
+        .arg("--device-path")
+        .arg("/dev/dsa/wq-test")
+        .env("S04_VERIFY_S02_PATH", s02_script)
+        .env("S04_VERIFY_S03_PATH", s03_script)
+        .env("S04_SUMMARIZER_PATH", summary_script)
+        .output()
+        .expect("run s04 workflow with overrides")
+}
+
+fn write_text(path: &Path, contents: &str) {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).expect("create text parent dir");
+    }
+    fs::write(path, contents).expect("write text file");
+}
+
 fn valid_control_floor_summary() -> Value {
     json!({
         "schema_version": 1,
@@ -530,4 +559,196 @@ fn summarizer_rejects_client_server_pairing_mismatches() {
     assert!(stderr.contains("phase=pairing-mismatch"));
     assert!(stderr.contains("ordinary/unary-bytes/repeated-64"));
     assert!(stderr.contains("run_family=idxd_attribution"));
+}
+
+#[test]
+fn runner_composes_software_idxd_and_summary_into_stable_run_root() {
+    let temp_dir = unique_dir("s04-runner-success");
+    let run_root = temp_dir.join("run-root");
+    let control_floor_path = temp_dir.join("control-floor.json");
+    write_json(&control_floor_path, &valid_control_floor_summary());
+    let manifest_path = fixture_manifest(&temp_dir, &control_floor_path);
+
+    let s02_script = temp_dir.join("stub-s02.sh");
+    write_text(
+        &s02_script,
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p "$S02_OUTPUT_DIR"
+printf '{"phase":"software"}
+' > "$S02_OUTPUT_DIR/software-marker.json"
+printf '[stub_s02] phase=done output_dir=%s
+' "$S02_OUTPUT_DIR"
+"#,
+    );
+    let s03_script = temp_dir.join("stub-s03.sh");
+    write_text(
+        &s03_script,
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p "$S03_OUTPUT_DIR"
+printf '{"phase":"idxd","device":"%s"}
+' "$S03_ACCELERATOR_DEVICE" > "$S03_OUTPUT_DIR/idxd-marker.json"
+printf '[stub_s03] phase=done output_dir=%s device_path=%s
+' "$S03_OUTPUT_DIR" "$S03_ACCELERATOR_DEVICE"
+"#,
+    );
+    let summary_script = temp_dir.join("stub-summary.py");
+    write_text(
+        &summary_script,
+        r#"#!/usr/bin/env python3
+from pathlib import Path
+import sys
+run_root = Path(sys.argv[sys.argv.index("--run-root") + 1])
+summary_dir = run_root / "summary"
+summary_dir.mkdir(parents=True, exist_ok=True)
+(summary_dir / "comparison_summary.json").write_text('{"ok": true}\n', encoding="utf-8")
+(summary_dir / "ordinary_vs_idxd.csv").write_text('workload_label,endpoint_role\n', encoding="utf-8")
+(summary_dir / "claim_table.md").write_text('# stub claim table\n', encoding="utf-8")
+print(f'phase=summarization-done run_root={run_root}')
+"#,
+    );
+
+    let output = run_runner_with_overrides(&manifest_path, &run_root, &s02_script, &s03_script, &summary_script);
+    assert!(
+        output.status.success(),
+        "runner failed unexpectedly\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("phase=software-start"));
+    assert!(stdout.contains("phase=idxd-start"));
+    assert!(stdout.contains("phase=summary-start"));
+    assert!(stdout.contains("phase=report-reference-validation verdict=pass"));
+    assert!(stdout.contains("phase=done verdict=pass"));
+    assert!(stdout.contains("workload_label=ordinary/unary-bytes/repeated-64"));
+    assert!(stdout.contains("endpoint_role=client"));
+    assert!(stdout.contains("device_path=/dev/dsa/wq-test"));
+
+    assert!(run_root.join("manifest.json").exists(), "copied manifest should exist");
+    assert!(run_root.join("software/software-marker.json").exists(), "software subtree marker should exist");
+    assert!(run_root.join("idxd/idxd-marker.json").exists(), "idxd subtree marker should exist");
+    assert!(run_root.join("summary/comparison_summary.json").exists(), "summary json should exist");
+    assert!(run_root.join("summary/ordinary_vs_idxd.csv").exists(), "summary csv should exist");
+    assert!(run_root.join("summary/claim_table.md").exists(), "summary markdown should exist");
+    assert!(
+        run_root
+            .join("control-floor/async_control_floor_summary.json")
+            .exists(),
+        "control-floor reference copy should exist"
+    );
+}
+
+#[test]
+fn runner_surfaces_idxd_phase_failures_without_running_summary() {
+    let temp_dir = unique_dir("s04-runner-idxd-failure");
+    let run_root = temp_dir.join("run-root");
+    let control_floor_path = temp_dir.join("control-floor.json");
+    write_json(&control_floor_path, &valid_control_floor_summary());
+    let manifest_path = fixture_manifest(&temp_dir, &control_floor_path);
+
+    let s02_script = temp_dir.join("stub-s02.sh");
+    write_text(
+        &s02_script,
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p "$S02_OUTPUT_DIR"
+printf '[stub_s02] phase=done output_dir=%s
+' "$S02_OUTPUT_DIR"
+"#,
+    );
+    let s03_script = temp_dir.join("stub-s03.sh");
+    write_text(
+        &s03_script,
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+printf '[stub_s03] phase=preflight launcher_status=missing_capability device_path=%s
+' "$S03_ACCELERATOR_DEVICE" >&2
+exit 1
+"#,
+    );
+    let summary_script = temp_dir.join("stub-summary.py");
+    write_text(
+        &summary_script,
+        r#"#!/usr/bin/env python3
+from pathlib import Path
+import sys
+Path(sys.argv[sys.argv.index("--run-root") + 1]).joinpath("summary", "unexpected.txt").parent.mkdir(parents=True, exist_ok=True)
+print('summary should not run')
+"#,
+    );
+
+    let output = run_runner_with_overrides(&manifest_path, &run_root, &s02_script, &s03_script, &summary_script);
+    assert!(
+        !output.status.success(),
+        "runner unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("phase=idxd outcome=error"), "stderr should identify idxd phase failure\nstderr:\n{stderr}");
+    assert!(stderr.contains("launcher_status=missing_capability"), "stderr should preserve launcher diagnostics\nstderr:\n{stderr}");
+    assert!(stderr.contains("device_path=/dev/dsa/wq-test"), "stderr should include device path\nstderr:\n{stderr}");
+    assert!(
+        !run_root.join("summary/comparison_summary.json").exists(),
+        "summary outputs should not exist after idxd failure"
+    );
+}
+
+#[test]
+fn runner_rejects_incomplete_summary_outputs_with_phase_labeled_error() {
+    let temp_dir = unique_dir("s04-runner-summary-missing-output");
+    let run_root = temp_dir.join("run-root");
+    let control_floor_path = temp_dir.join("control-floor.json");
+    write_json(&control_floor_path, &valid_control_floor_summary());
+    let manifest_path = fixture_manifest(&temp_dir, &control_floor_path);
+
+    let s02_script = temp_dir.join("stub-s02.sh");
+    write_text(
+        &s02_script,
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p "$S02_OUTPUT_DIR"
+printf '[stub_s02] phase=done output_dir=%s
+' "$S02_OUTPUT_DIR"
+"#,
+    );
+    let s03_script = temp_dir.join("stub-s03.sh");
+    write_text(
+        &s03_script,
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p "$S03_OUTPUT_DIR"
+printf '[stub_s03] phase=done output_dir=%s device_path=%s
+' "$S03_OUTPUT_DIR" "$S03_ACCELERATOR_DEVICE"
+"#,
+    );
+    let summary_script = temp_dir.join("stub-summary.py");
+    write_text(
+        &summary_script,
+        r#"#!/usr/bin/env python3
+from pathlib import Path
+import sys
+run_root = Path(sys.argv[sys.argv.index("--run-root") + 1])
+summary_dir = run_root / "summary"
+summary_dir.mkdir(parents=True, exist_ok=True)
+(summary_dir / "comparison_summary.json").write_text('{"ok": true}\n', encoding="utf-8")
+print(f'phase=summarization-partial run_root={run_root}')
+"#,
+    );
+
+    let output = run_runner_with_overrides(&manifest_path, &run_root, &s02_script, &s03_script, &summary_script);
+    assert!(
+        !output.status.success(),
+        "runner unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("phase=summary outcome=missing-output"), "stderr should identify summary output failure\nstderr:\n{stderr}");
+    assert!(stderr.contains("output_key=ordinary_vs_idxd_csv") || stderr.contains("output_key=claim_table_md"), "stderr should name the missing derived output\nstderr:\n{stderr}");
 }
