@@ -32,7 +32,7 @@ Write a literature review report that aligns external work with the repository's
 - `docs/report/stdexec_overhead_results.md`
 - `docs/report/perf_analysis_20mpps.md`
 - `docs/report/design_decisions.md`
-- `docs/plan/2026-03-05/01_accelerator_driven_rpc.in_progress.md`
+- `docs/plan/2026-03-05/01_accelerator_driven_rpc.cancelled.md`
 - `remark/002_layer_removal_measures_abstraction_cost.md`
 - `remark/006_research_positioning_notes.md`
 - `remark/007_batching_regime_change_is_general.md`

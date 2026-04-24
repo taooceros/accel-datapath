@@ -14,11 +14,13 @@ This note covers the best top-tier RPC papers to position `accel-rpc`. The liter
 
 - **Shenango** — 2019, **NSDI**. Helps separate runtime wins from true datapath wins.
 - **Caladan** — 2020, **OSDI**. Same role, with stronger interference/isolation framing.
+- **A Cloud-Scale Characterization of Remote Procedure Calls** — 2023, **SOSP**. Best evidence that queueing and RPC-stack tax, not just wire time, dominate tail RPC behavior. Paper folder: [`../report/literature/papers/cloud-scale-characterization-of-remote-procedure-calls/README.md`](../report/literature/papers/cloud-scale-characterization-of-remote-procedure-calls/README.md)
+- **RR-Compound: RDMA-Fused gRPC for Low Latency, High Throughput, and Easy Interface** — 2024, **TPDS**. Useful gRPC-preserving transport baseline, even though the current repo grounding for it is stronger on metadata and code than on full-paper ingestion. Paper folder: [`../report/literature/papers/rr-compound-rdma-fused-grpc-for-low-latency-high-throughput-and-easy-interface/README.md`](../report/literature/papers/rr-compound-rdma-fused-grpc-for-low-latency-high-throughput-and-easy-interface/README.md)
 - **Rethinking RPC Communication for Microservices-based Applications** — 2025, **HotOS**. Good motivation for why current microservice RPC stacks mismatch modern hardware.
 
 ## Why these matter here
 
-`accel-rpc` is trying to answer a question the literature has not fully resolved: can a drop-in, semantics-preserving RPC stack use on-die accelerators for copy, checksum, and compression while still fitting an async runtime model? eRPC and R2P2 give the software RPC baseline, RpcNIC and Turbo give accelerator-aware or SmartNIC-aware comparisons, and FaSST grounds the RDMA transport side.
+`accel-rpc` is trying to answer a question the literature has not fully resolved: can a drop-in, semantics-preserving RPC stack use on-die accelerators for copy, checksum, and compression while still fitting an async runtime model? eRPC and R2P2 give the software RPC baseline, RpcNIC and Turbo give accelerator-aware or SmartNIC-aware comparisons, FaSST grounds the RDMA transport side, Cloud-Scale RPC Characterization gives the strongest queueing/RPC-tax framing, and RR-Compound sharpens the gRPC-preserving transport lane. For paper-oriented detail instead of topic-oriented positioning, jump from this note into the linked paper folders under `docs/report/literature/papers/`.
 
 ## Gap relative to this repo
 

@@ -18,6 +18,15 @@ in
     cplusplus = {
       enable = true;
     };
+    javascript = {
+      enable = true;
+      directory = "./tools/mosaic-tonic-report";
+      bun = {
+        enable = true;
+        package = pkgs.bun;
+        install.enable = true;
+      };
+    };
     rust = {
       enable = true;
     };
@@ -57,8 +66,9 @@ in
     fmt_12
     ninja
     samply
+    cargo-flamegraph
     mold-wrapped
-    linuxPackages.perf
+    linuxPackages_latest.perf
     glibc.out
     glibc.debug
     numactl
@@ -70,9 +80,17 @@ in
     python3Packages.pandas
     python3Packages.matplotlib
     python3Packages.numpy
+    # PDF workflow dependencies
+    python3Packages.pypdf
+    python3Packages.reportlab
+    python3Packages.pdf2image
+    python3Packages.pytesseract
+    poppler-utils
+    qpdf
+    tesseract
     pkgs-stable.python3Packages.plotly
+    pkgs-stable.python3Packages.pdfplumber
   ];
-
   # 1. Force C/C++ Compiler Flags
   # -g: Generate debug info
   # -fno-omit-frame-pointer: Crucial for 'perf' to unwind stacks correctly
@@ -145,6 +163,47 @@ in
     exec launch samply record "$BENCHMARK" "$@"
   '';
 
+  scripts.mosaic-report-build.exec = ''
+    set -euo pipefail
+    REPO_ROOT="$(git rev-parse --show-toplevel)"
+    cd "$REPO_ROOT/tools/mosaic-tonic-report"
+    bun install --frozen-lockfile
+    bun run build:artifact
+    echo "Wrote Mosaic dashboard to $REPO_ROOT/docs/report/artifacts/003.tonic_bounded_matrix_mosaic"
+  '';
+
+  scripts.mosaic-report-dev.exec = ''
+    set -euo pipefail
+    REPO_ROOT="$(git rev-parse --show-toplevel)"
+    cd "$REPO_ROOT/tools/mosaic-tonic-report"
+    echo "Starting Observable Framework preview at http://127.0.0.1:4173/"
+    bun install --frozen-lockfile
+    exec bun run dev
+  '';
+
+  scripts.mosaic-report-serve.exec = ''
+        REPO_ROOT="$(git rev-parse --show-toplevel)"
+        echo "Serving repo root with no-cache headers at http://127.0.0.1:8000/"
+        cd "$REPO_ROOT"
+        exec python - <<'PY'
+    from functools import partial
+    from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+
+
+    class NoCacheHandler(SimpleHTTPRequestHandler):
+        def end_headers(self):
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
+            super().end_headers()
+
+
+    server = ThreadingHTTPServer(("127.0.0.1", 8000), partial(NoCacheHandler, directory="."))
+    print("Serving repo root with no-cache headers at http://127.0.0.1:8000/")
+    server.serve_forever()
+    PY
+  '';
+
   # https://devenv.sh/basics/
   enterShell = ''
     # 1. Ask the wrapped GCC where its headers are
@@ -152,7 +211,9 @@ in
     # 3. Export to CPLUS_INCLUDE_PATH so clangd sees it
     export CPLUS_INCLUDE_PATH=$(gcc -E -Wp,-v -xc++ /dev/null 2>&1 | grep '^ ' | awk '{print $1}' | tr '\n' ':')
 
-    echo "Updated CPLUS_INCLUDE_PATH for gcc15"
+    if [ -t 1 ] && [ -t 2 ]; then
+      echo "Updated CPLUS_INCLUDE_PATH for gcc15" >&2
+    fi
   '';
 
   # https://devenv.sh/tasks/

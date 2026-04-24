@@ -8,6 +8,7 @@ This topic groups the strongest prior work on queue structure, polling, completi
 - **IX** — 2014, **OSDI**. A direct fast-path and completion-policy paper for poll-mode design.
 - **Shenango: Achieving High CPU Efficiency for Latency-sensitive Datacenter Workloads** — 2019, **NSDI**. Important for showing that low-latency poll-mode execution has real CPU-efficiency tradeoffs.
 - **Caladan: Mitigating Interference at Microsecond Timescales** — 2020, **OSDI**. Strong evidence that runtime and scheduling policy still matter at very small timescales.
+- **Hermes: Enhancing Layer-7 Cloud Load Balancers with Userspace-Directed I/O Event Notification** — 2025, **SIGCOMM**. Strong recent evidence that userspace-visible worker state and event-notification policy can drive better dispatch than fixed kernel heuristics alone.
 - **Shinjuku: Preemptive Scheduling for μsecond-scale Tail Latency** — 2019, **NSDI**. Useful counterpoint to run-to-completion and bounded-batch designs: it shows where preemption becomes the right runtime tool once microsecond tail latency matters more than pure polling efficiency.
 
 ## Key contrast paper
@@ -16,7 +17,7 @@ This topic groups the strongest prior work on queue structure, polling, completi
 
 ## Why these matter here
 
-The repo's strongest internal claim is not merely that DSA is fast; it is that once DSA is fast enough, the **software stack above it** becomes the bottleneck. These papers justify that framing by showing that scheduling, queue partitioning, batching, event delivery, and preemption policy are often the real determinants of throughput and latency after lower-level overhead is reduced.
+The repo's strongest internal claim is not merely that DSA is fast; it is that once DSA is fast enough, the **software stack above it** becomes the bottleneck. These papers justify that framing by showing that scheduling, queue partitioning, batching, event delivery, userspace-guided dispatch, and preemption policy are often the real determinants of throughput and latency after lower-level overhead is reduced.
 
 ## Gap relative to this repo
 
