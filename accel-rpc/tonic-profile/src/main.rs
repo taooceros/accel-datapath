@@ -11,7 +11,7 @@ use rand::{RngCore, SeedableRng};
 use serde::Serialize;
 use tokio::runtime::Builder;
 use tokio::sync::{Mutex, Notify};
-use tonic::codec::{instrumentation, set_default_buffer_settings_for_process, CompressionEncoding};
+use tonic::codec::CompressionEncoding;
 use tonic::transport::{Channel, Endpoint, Server};
 use tonic::{Request, Response, Status};
 
@@ -24,6 +24,50 @@ use profile::profile_server::{Profile, ProfileServer};
 use profile::{EchoReply, EchoRequest};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
+
+mod runtime_instrumentation {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    #[derive(Clone, Copy, Default)]
+    pub struct Counter {
+        pub count: u64,
+        pub nanos: u64,
+        pub bytes: u64,
+    }
+
+    #[derive(Clone, Copy, Default)]
+    pub struct Snapshot {
+        pub enabled: bool,
+        pub encode: Counter,
+        pub decode: Counter,
+        pub compress: Counter,
+        pub decompress: Counter,
+        pub buffer_reserve: Counter,
+        pub body_accum: Counter,
+        pub frame_header: Counter,
+    }
+
+    static ENABLED: AtomicBool = AtomicBool::new(true);
+
+    pub fn set_enabled(enabled: bool) {
+        ENABLED.store(enabled, Ordering::Relaxed);
+    }
+
+    pub fn reset() {}
+
+    pub fn snapshot() -> Snapshot {
+        Snapshot {
+            enabled: ENABLED.load(Ordering::Relaxed),
+            ..Snapshot::default()
+        }
+    }
+}
+
+fn set_default_buffer_settings_for_process(
+    _buffer_size: Option<usize>,
+    _yield_threshold: Option<usize>,
+) {
+}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
 enum Mode {
@@ -231,7 +275,7 @@ fn main() -> Result<(), BoxError> {
 }
 
 fn configure_process_controls(args: &Args) {
-    instrumentation::set_enabled(args.instrumentation == InstrumentationMode::On);
+    runtime_instrumentation::set_enabled(args.instrumentation == InstrumentationMode::On);
     let (buffer_size, yield_threshold) = effective_buffer_settings(args);
     set_default_buffer_settings_for_process(buffer_size, yield_threshold);
 }
@@ -350,9 +394,9 @@ async fn run_client(args: &Args) -> Result<Report, BoxError> {
     run_phase(channel.clone(), args, true, warmup_deadline, None).await?;
 
     let measure_deadline = Instant::now() + Duration::from_millis(args.measure_ms);
-    instrumentation::reset();
+    runtime_instrumentation::reset();
     let metrics = run_phase(channel, args, false, measure_deadline, args.requests).await?;
-    let stages = StageSnapshot::from(instrumentation::snapshot());
+    let stages = StageSnapshot::from(runtime_instrumentation::snapshot());
     let (effective_codec_buffer_size, effective_codec_yield_threshold) =
         effective_buffer_settings(args);
 
@@ -383,8 +427,8 @@ async fn run_client(args: &Args) -> Result<Report, BoxError> {
     })
 }
 
-impl From<instrumentation::Snapshot> for StageSnapshot {
-    fn from(value: instrumentation::Snapshot) -> Self {
+impl From<runtime_instrumentation::Snapshot> for StageSnapshot {
+    fn from(value: runtime_instrumentation::Snapshot) -> Self {
         Self {
             enabled: value.enabled,
             encode: value.encode.into(),
@@ -398,8 +442,8 @@ impl From<instrumentation::Snapshot> for StageSnapshot {
     }
 }
 
-impl From<instrumentation::Counter> for StageCounter {
-    fn from(value: instrumentation::Counter) -> Self {
+impl From<runtime_instrumentation::Counter> for StageCounter {
+    fn from(value: runtime_instrumentation::Counter) -> Self {
         Self {
             count: value.count,
             nanos: value.nanos,

@@ -37,6 +37,8 @@ Research monorepo for Intel DSA/IAX data-path work.
 - Write single-point insights to `remark/NNN_<topic>.md`.
 - Read the nearest README before modifying a module.
 - Match code to specs, not specs to code, unless explicitly told otherwise.
+- Keep the code lean; before adding another copy of logic, stop and decide whether duplication is really necessary.
+- Favor code that stays manageable, clean, lean, and elegant over expedient duplication.
 - Keep child `AGENTS.md` files lean and local.
 - Do not repeat parent guidance in child `AGENTS.md` files.
 
