@@ -13,8 +13,9 @@ use crate::profile::echo_reply::Body as EchoReplyBody;
 use crate::profile::echo_request::Body as EchoRequestBody;
 use crate::profile::profile_server::{Profile, ProfileServer};
 use crate::profile::{EchoReply, EchoRequest};
+use crate::report::Metrics;
 use crate::workload::{proto_shape_from_message, proto_shape_from_wire, ProtoPools};
-use crate::{BoxError, Metrics};
+use crate::BoxError;
 
 #[derive(Default)]
 pub(crate) struct SharedState {
@@ -85,7 +86,11 @@ impl ServerMetrics {
             } else {
                 hist.value_at_quantile(0.99)
             },
-            latency_us_max: if requests_completed == 0 { 0 } else { hist.max() },
+            latency_us_max: if requests_completed == 0 {
+                0
+            } else {
+                hist.max()
+            },
         }
     }
 }
@@ -166,7 +171,10 @@ impl Profile for EchoSvc {
             )
             .await;
         if let Some(target) = self.shutdown_after_requests {
-            let completed = self.server_metrics.requests_completed.load(Ordering::Relaxed);
+            let completed = self
+                .server_metrics
+                .requests_completed
+                .load(Ordering::Relaxed);
             if completed >= target {
                 self.shutdown.notify_waiters();
             }
