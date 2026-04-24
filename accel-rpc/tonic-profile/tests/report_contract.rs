@@ -56,6 +56,8 @@ fn validate_report(report: &Value) -> Result<(), String> {
     for field in [
         "timestamp_unix_s",
         "mode",
+        "endpoint_role",
+        "run_id",
         "rpc",
         "ordinary_path",
         "seam",
@@ -99,6 +101,20 @@ fn validate_report(report: &Value) -> Result<(), String> {
         .ok_or_else(|| {
             "metadata.effective_codec_yield_threshold must be a positive integer".to_string()
         })?;
+    let endpoint_role = metadata
+        .get("endpoint_role")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "metadata.endpoint_role must be a string".to_string())?;
+    let run_id = metadata
+        .get("run_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "metadata.run_id must be a string".to_string())?;
+    if endpoint_role.is_empty() {
+        return Err("metadata.endpoint_role must not be empty".to_string());
+    }
+    if run_id.is_empty() {
+        return Err("metadata.run_id must not be empty".to_string());
+    }
     if effective_codec_buffer_size == 0 {
         return Err("metadata.effective_codec_buffer_size must be > 0".to_string());
     }
@@ -205,6 +221,11 @@ fn selftest_report_exposes_required_contract_fields() {
 
     let report = load_and_validate_report(&json_out).expect("valid selftest report");
     assert_eq!(report["metadata"]["mode"], "selftest");
+    assert_eq!(report["metadata"]["endpoint_role"], "selftest");
+    assert!(report["metadata"]["run_id"]
+        .as_str()
+        .expect("run_id as str")
+        .starts_with("run-"));
     assert_eq!(report["metadata"]["rpc"], "unary-bytes");
     assert_eq!(report["metadata"]["ordinary_path"], "software");
     assert_eq!(report["metadata"]["seam"], "codec_body");

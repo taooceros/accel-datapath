@@ -17,6 +17,7 @@ use tonic::transport::{Channel, Endpoint, Server};
 use tonic::{Request, Response, Status};
 
 mod custom_codec;
+mod runtime_instrumentation;
 
 pub mod profile {
     tonic::include_proto!("tonicprofile");
@@ -33,44 +34,6 @@ use profile::{
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 const REQUEST_POOL_LEN: usize = 4;
-
-mod runtime_instrumentation {
-    use std::sync::atomic::{AtomicBool, Ordering};
-
-    #[derive(Clone, Copy, Default)]
-    pub struct Counter {
-        pub count: u64,
-        pub nanos: u64,
-        pub bytes: u64,
-    }
-
-    #[derive(Clone, Copy, Default)]
-    pub struct Snapshot {
-        pub enabled: bool,
-        pub encode: Counter,
-        pub decode: Counter,
-        pub compress: Counter,
-        pub decompress: Counter,
-        pub buffer_reserve: Counter,
-        pub body_accum: Counter,
-        pub frame_header: Counter,
-    }
-
-    static ENABLED: AtomicBool = AtomicBool::new(true);
-
-    pub fn set_enabled(enabled: bool) {
-        ENABLED.store(enabled, Ordering::Relaxed);
-    }
-
-    pub fn reset() {}
-
-    pub fn snapshot() -> Snapshot {
-        Snapshot {
-            enabled: ENABLED.load(Ordering::Relaxed),
-            ..Snapshot::default()
-        }
-    }
-}
 
 fn set_default_buffer_settings_for_process(
     buffer_size: Option<usize>,
@@ -216,17 +179,93 @@ struct Args {
 
     #[arg(long)]
     json_out: Option<PathBuf>,
+
+    #[arg(long)]
+    server_json_out: Option<PathBuf>,
+
+    #[arg(long)]
+    run_id: Option<String>,
+
+    #[arg(long)]
+    shutdown_after_requests: Option<u64>,
 }
 
 #[derive(Default)]
 struct SharedState {
-    shutdown: Notify,
+    shutdown: Arc<Notify>,
+}
+
+struct ServerMetrics {
+    requests_completed: AtomicU64,
+    bytes_sent: AtomicU64,
+    bytes_received: AtomicU64,
+    latency_hist: Mutex<Histogram<u64>>,
+    started_at: Instant,
+}
+
+impl ServerMetrics {
+    fn new() -> Result<Self, BoxError> {
+        Ok(Self {
+            requests_completed: AtomicU64::new(0),
+            bytes_sent: AtomicU64::new(0),
+            bytes_received: AtomicU64::new(0),
+            latency_hist: Mutex::new(Histogram::<u64>::new(3)?),
+            started_at: Instant::now(),
+        })
+    }
+
+    async fn record_request(&self, request_bytes: usize, response_bytes: usize, latency_us: u64) {
+        self.requests_completed.fetch_add(1, Ordering::Relaxed);
+        self.bytes_received
+            .fetch_add(request_bytes as u64, Ordering::Relaxed);
+        self.bytes_sent
+            .fetch_add(response_bytes as u64, Ordering::Relaxed);
+        let mut hist = self.latency_hist.lock().await;
+        let _ = hist.record(latency_us.max(1));
+    }
+
+    async fn snapshot(&self) -> Metrics {
+        let duration = self.started_at.elapsed();
+        let duration_s = duration.as_secs_f64().max(1e-9);
+        let requests_completed = self.requests_completed.load(Ordering::Relaxed);
+        let bytes_sent = self.bytes_sent.load(Ordering::Relaxed);
+        let bytes_received = self.bytes_received.load(Ordering::Relaxed);
+        let hist = self.latency_hist.lock().await;
+
+        Metrics {
+            requests_completed,
+            bytes_sent,
+            bytes_received,
+            duration_ms: duration.as_secs_f64() * 1000.0,
+            throughput_rps: requests_completed as f64 / duration_s,
+            throughput_mib_s: bytes_sent as f64 / duration_s / (1024.0 * 1024.0),
+            latency_us_p50: if requests_completed == 0 {
+                0
+            } else {
+                hist.value_at_quantile(0.50)
+            },
+            latency_us_p95: if requests_completed == 0 {
+                0
+            } else {
+                hist.value_at_quantile(0.95)
+            },
+            latency_us_p99: if requests_completed == 0 {
+                0
+            } else {
+                hist.value_at_quantile(0.99)
+            },
+            latency_us_max: if requests_completed == 0 { 0 } else { hist.max() },
+        }
+    }
 }
 
 struct EchoSvc {
     compression: CompressionMode,
     proto_pools: Arc<ProtoPools>,
     next_proto_index: AtomicU64,
+    shutdown: Arc<Notify>,
+    shutdown_after_requests: Option<u64>,
+    server_metrics: Arc<ServerMetrics>,
 }
 
 #[tonic::async_trait]
@@ -235,7 +274,9 @@ impl Profile for EchoSvc {
         &self,
         request: Request<EchoRequest>,
     ) -> Result<Response<EchoReply>, Status> {
+        let started = Instant::now();
         let request = request.into_inner();
+        let request_bytes = request.encoded_len();
         let body = request
             .body
             .ok_or_else(|| Status::invalid_argument("missing request body"))?;
@@ -255,13 +296,28 @@ impl Profile for EchoSvc {
             }
         };
 
-        let mut response = Response::new(EchoReply {
+        let response_message = EchoReply {
             body: Some(reply_body),
-        });
+        };
+        let response_bytes = response_message.encoded_len();
+        let mut response = Response::new(response_message);
         if self.compression == CompressionMode::On {
             response
                 .metadata_mut()
                 .insert("x-tonic-profile", "gzip".parse().unwrap());
+        }
+        self.server_metrics
+            .record_request(
+                request_bytes,
+                response_bytes,
+                started.elapsed().as_micros() as u64,
+            )
+            .await;
+        if let Some(target) = self.shutdown_after_requests {
+            let completed = self.server_metrics.requests_completed.load(Ordering::Relaxed);
+            if completed >= target {
+                self.shutdown.notify_waiters();
+            }
         }
         Ok(response)
     }
@@ -271,6 +327,8 @@ impl Profile for EchoSvc {
 struct Metadata {
     timestamp_unix_s: u64,
     mode: &'static str,
+    endpoint_role: &'static str,
+    run_id: String,
     rpc: RpcMode,
     ordinary_path: &'static str,
     seam: &'static str,
@@ -429,6 +487,19 @@ fn validate_args(args: &Args) -> Result<(), BoxError> {
     if args.concurrency == 0 {
         return Err("--concurrency must be at least 1".into());
     }
+    if args.server_json_out.is_some() && args.mode != Mode::Server {
+        return Err("--server-json-out is only supported with --mode server".into());
+    }
+    if args.shutdown_after_requests.is_some()
+        && args.mode == Mode::Server
+        && args.server_json_out.is_none()
+        && args.json_out.is_none()
+    {
+        return Err(
+            "--shutdown-after-requests requires --server-json-out or --json-out in --mode server"
+                .into(),
+        );
+    }
     Ok(())
 }
 
@@ -468,6 +539,53 @@ fn next_multiple(value: usize, multiple: usize) -> usize {
     value.saturating_add(multiple.saturating_sub(1)) / multiple * multiple
 }
 
+fn resolve_run_id(args: &Args) -> String {
+    args.run_id.clone().unwrap_or_else(|| {
+        format!(
+            "run-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time after unix epoch")
+                .as_nanos()
+        )
+    })
+}
+
+fn stage_counters_are_placeholder_only(stages: &StageSnapshot) -> bool {
+    [
+        &stages.encode,
+        &stages.decode,
+        &stages.compress,
+        &stages.decompress,
+        &stages.buffer_reserve,
+        &stages.body_accum,
+        &stages.frame_header,
+    ]
+    .iter()
+    .all(|counter| counter.count == 0 && counter.nanos == 0 && counter.bytes == 0)
+}
+
+fn validate_stage_evidence(report: &Report) -> Result<(), BoxError> {
+    if report.metadata.instrumentation == InstrumentationMode::On
+        && stage_counters_are_placeholder_only(&report.stages)
+    {
+        return Err(format!(
+            "instrumentation-on report for workload {} endpoint {} stayed placeholder-only",
+            report.metadata.workload_label, report.metadata.endpoint_role
+        )
+        .into());
+    }
+    Ok(())
+}
+
+fn server_report_path(args: &Args) -> Option<&PathBuf> {
+    if args.mode == Mode::Server {
+        args.server_json_out.as_ref().or(args.json_out.as_ref())
+    } else {
+        None
+    }
+}
+
 fn build_runtime(mode: RuntimeMode) -> Result<tokio::runtime::Runtime, BoxError> {
     let mut builder = match mode {
         RuntimeMode::Single => Builder::new_current_thread(),
@@ -482,38 +600,48 @@ fn build_runtime(mode: RuntimeMode) -> Result<tokio::runtime::Runtime, BoxError>
 }
 
 async fn async_main(args: Args) -> Result<(), BoxError> {
+    let run_id = resolve_run_id(&args);
     match args.mode {
         Mode::Server => {
             if let Some(core) = args.server_core {
                 pin_current_thread(core)?;
             }
-            run_server(args).await
+            run_server(args, &run_id).await
         }
         Mode::Client => {
             if let Some(core) = args.client_core {
                 pin_current_thread(core)?;
             }
-            let report = run_client(&args).await?;
-            emit_report(&args, "client", report)?;
+            let report = run_client(&args, "client", &run_id).await?;
+            emit_report(args.json_out.as_ref(), "client", report)?;
             Ok(())
         }
-        Mode::Selftest => run_selftest(args).await,
+        Mode::Selftest => run_selftest(args, &run_id).await,
     }
 }
 
-async fn run_selftest(args: Args) -> Result<(), BoxError> {
+async fn run_selftest(args: Args, run_id: &str) -> Result<(), BoxError> {
     let bind: SocketAddr = args.bind.parse()?;
     let shared = Arc::new(SharedState::default());
+    let server_metrics = Arc::new(ServerMetrics::new()?);
     let server_args = args.clone();
     let server_shared = shared.clone();
-    let server_handle =
-        tokio::spawn(
-            async move { run_server_with_shutdown(server_args, bind, server_shared).await },
-        );
+    let server_metrics_clone = server_metrics.clone();
+    let server_run_id = run_id.to_string();
+    let server_handle = tokio::spawn(async move {
+        run_server_with_shutdown(
+            server_args,
+            bind,
+            server_shared,
+            server_metrics_clone,
+            &server_run_id,
+        )
+        .await
+    });
 
     tokio::time::sleep(Duration::from_millis(300)).await;
 
-    let report = match run_client(&args).await {
+    let report = match run_client(&args, "selftest", run_id).await {
         Ok(report) => report,
         Err(err) => {
             shared.shutdown.notify_waiters();
@@ -521,27 +649,35 @@ async fn run_selftest(args: Args) -> Result<(), BoxError> {
             return Err(format!("selftest client execution failed: {err}").into());
         }
     };
-    emit_report(&args, "selftest", report)?;
+    emit_report(args.json_out.as_ref(), "selftest", report)?;
     shared.shutdown.notify_waiters();
     server_handle.await??;
     Ok(())
 }
 
-async fn run_server(args: Args) -> Result<(), BoxError> {
+async fn run_server(args: Args, run_id: &str) -> Result<(), BoxError> {
     let bind: SocketAddr = args.bind.parse()?;
     let shared = Arc::new(SharedState::default());
-    run_server_with_shutdown(args, bind, shared).await
+    let server_metrics = Arc::new(ServerMetrics::new()?);
+    run_server_with_shutdown(args, bind, shared, server_metrics, run_id).await
 }
 
 async fn run_server_with_shutdown(
     args: Args,
     bind: SocketAddr,
     shared: Arc<SharedState>,
+    server_metrics: Arc<ServerMetrics>,
+    run_id: &str,
 ) -> Result<(), BoxError> {
+    custom_codec::reset_observations();
+    runtime_instrumentation::reset();
     let mut svc = ProfileServer::new(EchoSvc {
         compression: args.compression,
         proto_pools: Arc::new(ProtoPools::new()),
         next_proto_index: AtomicU64::new(0),
+        shutdown: shared.shutdown.clone(),
+        shutdown_after_requests: args.shutdown_after_requests,
+        server_metrics: server_metrics.clone(),
     });
     if args.compression == CompressionMode::On {
         svc = svc
@@ -555,10 +691,15 @@ async fn run_server_with_shutdown(
             shared.shutdown.notified().await;
         })
         .await?;
+
+    if let Some(path) = server_report_path(&args) {
+        let report = build_server_report(&args, &server_metrics, run_id).await?;
+        emit_report(Some(path), "server", report)?;
+    }
     Ok(())
 }
 
-async fn run_client(args: &Args) -> Result<Report, BoxError> {
+async fn run_client(args: &Args, endpoint_role: &'static str, run_id: &str) -> Result<Report, BoxError> {
     let descriptor = workload_probe(args);
     let endpoint = Endpoint::from_shared(format!("http://{}", args.target))?;
     let channel = endpoint.connect().await?;
@@ -574,10 +715,12 @@ async fn run_client(args: &Args) -> Result<Report, BoxError> {
     let observed_codec_settings = custom_codec::observed_settings()
         .ok_or("custom codec observations were missing for this run")?;
 
-    Ok(Report {
+    let report = Report {
         metadata: Metadata {
             timestamp_unix_s: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(),
             mode: "client",
+            endpoint_role,
+            run_id: run_id.to_string(),
             rpc: args.rpc,
             ordinary_path: "software",
             seam: "codec_body",
@@ -606,7 +749,59 @@ async fn run_client(args: &Args) -> Result<Report, BoxError> {
         },
         metrics,
         stages,
-    })
+    };
+    validate_stage_evidence(&report)?;
+    Ok(report)
+}
+
+async fn build_server_report(
+    args: &Args,
+    server_metrics: &Arc<ServerMetrics>,
+    run_id: &str,
+) -> Result<Report, BoxError> {
+    let descriptor = workload_probe(args);
+    let stages = StageSnapshot::from(runtime_instrumentation::snapshot());
+    let metrics = server_metrics.snapshot().await;
+    let observed_codec_settings = custom_codec::observed_settings()
+        .ok_or("custom codec observations were missing for this server run")?;
+
+    let report = Report {
+        metadata: Metadata {
+            timestamp_unix_s: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(),
+            mode: "server",
+            endpoint_role: "server",
+            run_id: run_id.to_string(),
+            rpc: args.rpc,
+            ordinary_path: "software",
+            seam: "codec_body",
+            workload_label: descriptor.workload_label,
+            selection_policy: descriptor.selection_policy,
+            request_shape: descriptor.request_shape,
+            response_shape: descriptor.response_shape,
+            request_serialized_size: descriptor.request_serialized_size,
+            response_serialized_size: descriptor.response_serialized_size,
+            bind: args.bind.clone(),
+            target: args.target.clone(),
+            payload_size: descriptor.payload_size,
+            payload_kind: descriptor.payload_kind,
+            compression: args.compression,
+            concurrency: args.concurrency,
+            requests_target: args.requests,
+            warmup_ms: args.warmup_ms,
+            measure_ms: args.measure_ms,
+            runtime: args.runtime,
+            instrumentation: args.instrumentation,
+            buffer_policy: args.buffer_policy,
+            effective_codec_buffer_size: Some(observed_codec_settings.buffer_size),
+            effective_codec_yield_threshold: Some(observed_codec_settings.yield_threshold),
+            server_core: args.server_core,
+            client_core: args.client_core,
+        },
+        metrics,
+        stages,
+    };
+    validate_stage_evidence(&report)?;
+    Ok(report)
 }
 
 impl From<runtime_instrumentation::Snapshot> for StageSnapshot {
@@ -742,10 +937,11 @@ async fn run_phase(
     })
 }
 
-fn emit_report(args: &Args, mode: &'static str, mut report: Report) -> Result<(), BoxError> {
+fn emit_report(path: Option<&PathBuf>, mode: &'static str, mut report: Report) -> Result<(), BoxError> {
     report.metadata.mode = mode;
+    validate_stage_evidence(&report)?;
     let json = serde_json::to_string_pretty(&report)?;
-    if let Some(path) = &args.json_out {
+    if let Some(path) = path {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
