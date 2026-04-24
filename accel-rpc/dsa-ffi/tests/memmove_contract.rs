@@ -1,7 +1,6 @@
 use dsa_ffi::{
     classify_memmove_completion, CompletionAction, CompletionSnapshot, DsaSession, MemmoveError,
-    MemmovePhase, MemmoveRequest, MemmoveRetry, MemmoveValidationConfig,
-    MemmoveValidationReport,
+    MemmovePhase, MemmoveRequest, MemmoveRetry, MemmoveValidationConfig, MemmoveValidationReport,
 };
 
 fn test_config() -> MemmoveValidationConfig {
@@ -83,13 +82,9 @@ fn builds_validation_report_with_requested_bytes_and_retry_metadata() {
 
 #[test]
 fn classifies_success_completion() {
-    let action = classify_memmove_completion(
-        &test_config(),
-        1024,
-        CompletionSnapshot::new(1, 0, 0, 0),
-        0,
-    )
-    .expect("success status should pass");
+    let action =
+        classify_memmove_completion(&test_config(), 1024, CompletionSnapshot::new(1, 0, 0, 0), 0)
+            .expect("success status should pass");
 
     assert_eq!(action, CompletionAction::Success);
 }
@@ -247,7 +242,10 @@ fn error_accessors_preserve_phase_path_and_retry_context() {
     )
     .expect_err("non-success statuses should surface directly");
 
-    assert_eq!(err.device_path().and_then(|path| path.to_str()), Some("/dev/dsa/wq0.0"));
+    assert_eq!(
+        err.device_path().and_then(|path| path.to_str()),
+        Some("/dev/dsa/wq0.0")
+    );
     assert_eq!(err.phase(), Some(MemmovePhase::CompletionPoll));
     assert_eq!(err.page_fault_retries(), Some(2));
 }

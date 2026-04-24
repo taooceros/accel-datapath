@@ -5,7 +5,9 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use dsa_ffi::{DsaSession, MemmoveError, MemmoveRequest, MemmoveValidationReport, DEFAULT_DEVICE_PATH};
+use dsa_ffi::{
+    DsaSession, MemmoveError, MemmoveRequest, MemmoveValidationReport, DEFAULT_DEVICE_PATH,
+};
 
 fn main() -> ExitCode {
     match run() {
@@ -224,11 +226,7 @@ fn render_text(outcome: &RunOutcome) -> String {
             .unwrap_or_else(|| "null".to_string())
     );
     let _ = writeln!(text, "phase={}", outcome.phase);
-    let _ = writeln!(
-        text,
-        "error_kind={}",
-        outcome.error_kind.unwrap_or("null")
-    );
+    let _ = writeln!(text, "error_kind={}", outcome.error_kind.unwrap_or("null"));
     let _ = write!(text, "message={}", outcome.message);
     text
 }
@@ -298,7 +296,9 @@ fn validate_artifact_path(path: &Path) -> Result<(), String> {
 }
 
 fn deterministic_src(len: usize) -> Vec<u8> {
-    (0..len).map(|index| ((index * 31 + 17) % 251) as u8).collect()
+    (0..len)
+        .map(|index| ((index * 31 + 17) % 251) as u8)
+        .collect()
 }
 
 fn hex_status(status: u8) -> String {

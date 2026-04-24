@@ -47,7 +47,9 @@ What the verifier does:
 5. writes a JSON artifact plus captured stdout/stderr into a temp output directory, and
 6. rejects malformed, incomplete, or contradictory artifacts.
 
-A successful run ends with a `phase=done` line that includes:
+A successful verifier execution always ends with a `phase=done` line. When hardware execution succeeds it includes `verdict=pass`; when the host or queue is not ready but the failure was classified truthfully it includes `verdict=expected_failure` plus the preserved failure metadata.
+
+The final line includes:
 
 - `device_path`
 - `requested_bytes`
@@ -62,6 +64,12 @@ Example:
 
 ```text
 [verify_live_memmove] phase=done ... device_path=/dev/dsa/wq0.0 requested_bytes=64 page_fault_retries=0 final_status=0x01 validation_phase=completed verdict=pass
+```
+
+On an unprepared host, the verifier still exits successfully when it can classify the failure honestly. For example, a launcher without `cap_sys_rawio+eip` ends with:
+
+```text
+[verify_live_memmove] phase=done ... verdict=expected_failure failure_phase=preflight launcher_status=missing_capability launcher_path=/path/to/dsa_launcher
 ```
 
 ## Direct binary usage

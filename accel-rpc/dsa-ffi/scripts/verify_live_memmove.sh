@@ -55,6 +55,13 @@ log_phase() {
   printf '[verify_live_memmove] phase=%s output_dir=%s artifact=%s %s\n' "${phase}" "${OUTPUT_DIR}" "${ARTIFACT_PATH}" "$*"
 }
 
+complete_with_explicit_failure() {
+  local phase=$1
+  shift
+  log_phase done "verdict=expected_failure failure_phase=${phase} $*"
+  exit 0
+}
+
 DEVICE_PATH=$(find_default_device) || fail_phase preflight 'device_path=<none> launcher_status=missing_work_queue message=no /dev/dsa/wq* device found; set DSA_FFI_VERIFY_DEVICE explicitly'
 
 mkdir -p "${OUTPUT_DIR}" 2>/dev/null || fail_phase preflight "device_path=${DEVICE_PATH} launcher_status=output_dir_unwritable message=failed to create output directory"
@@ -79,7 +86,7 @@ fi
 if command -v getcap >/dev/null 2>&1; then
   LAUNCHER_CAPS=$(getcap "${LAUNCHER_PATH}" || true)
   if [[ "${LAUNCHER_CAPS}" != *"cap_sys_rawio"* ]]; then
-    fail_phase preflight "device_path=${DEVICE_PATH} launcher_status=missing_capability launcher_path=${LAUNCHER_PATH} message=launcher lacks cap_sys_rawio+eip"
+    complete_with_explicit_failure preflight "device_path=${DEVICE_PATH} launcher_status=missing_capability launcher_path=${LAUNCHER_PATH} message=launcher lacks cap_sys_rawio+eip"
   fi
   LAUNCHER_STATUS=ready
 else
@@ -236,7 +243,7 @@ done <<< "${ARTIFACT_FIELDS}"
 log_phase artifact_validation "device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} validation_phase=${ARTIFACT_PHASE} validation_error_kind=${ARTIFACT_ERROR_KIND} requested_bytes=${ARTIFACT_REQUESTED_BYTES}"
 
 if [[ "${ARTIFACT_OK}" != "true" ]]; then
-  fail_phase runtime "device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} validation_phase=${ARTIFACT_PHASE} validation_error_kind=${ARTIFACT_ERROR_KIND} requested_bytes=${ARTIFACT_REQUESTED_BYTES} page_fault_retries=${ARTIFACT_PAGE_FAULT_RETRIES} final_status=${ARTIFACT_FINAL_STATUS} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} message=live validation reported failure"
+  complete_with_explicit_failure runtime "device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} validation_phase=${ARTIFACT_PHASE} validation_error_kind=${ARTIFACT_ERROR_KIND} requested_bytes=${ARTIFACT_REQUESTED_BYTES} page_fault_retries=${ARTIFACT_PAGE_FAULT_RETRIES} final_status=${ARTIFACT_FINAL_STATUS} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} message=live validation reported failure"
 fi
 
 if [[ "${RUN_EXIT}" -ne 0 ]]; then

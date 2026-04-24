@@ -5,13 +5,18 @@
 //! page faults, verifies copied bytes, and maps queue-open/completion failures
 //! into typed Rust errors.
 
+mod async_session;
 mod validation;
 
+pub use async_session::{
+    AsyncDsaSession, AsyncMemmoveError, AsyncMemmoveRequest, AsyncMemmoveResult,
+    AsyncMemmoveWorker, AsyncWorkerFailureKind,
+};
 pub use validation::{
-    classify_memmove_completion, CompletionAction, CompletionSnapshot, MemmoveError,
-    MemmovePhase, MemmoveRequest, MemmoveRetry, MemmoveValidationConfig,
-    MemmoveValidationReport, COMPLETION_TIMEOUT_STATUS, DEFAULT_DEVICE_PATH,
-    DEFAULT_MAX_PAGE_FAULT_RETRIES, MAX_MEMMOVE_BYTES,
+    classify_memmove_completion, CompletionAction, CompletionSnapshot, MemmoveError, MemmovePhase,
+    MemmoveRequest, MemmoveRetry, MemmoveValidationConfig, MemmoveValidationReport,
+    COMPLETION_TIMEOUT_STATUS, DEFAULT_DEVICE_PATH, DEFAULT_MAX_PAGE_FAULT_RETRIES,
+    MAX_MEMMOVE_BYTES,
 };
 
 use std::path::Path;
@@ -41,11 +46,12 @@ impl DsaSession {
         max_page_fault_retries: u32,
     ) -> Result<Self, MemmoveError> {
         let config = MemmoveValidationConfig::with_retries(device_path, max_page_fault_retries)?;
-        let portal = WqPortal::open(config.device_path()).map_err(|source| MemmoveError::QueueOpen {
-            device_path: config.device_path().to_path_buf(),
-            phase: MemmovePhase::QueueOpen,
-            source,
-        })?;
+        let portal =
+            WqPortal::open(config.device_path()).map_err(|source| MemmoveError::QueueOpen {
+                device_path: config.device_path().to_path_buf(),
+                phase: MemmovePhase::QueueOpen,
+                source,
+            })?;
 
         Ok(Self { config, portal })
     }

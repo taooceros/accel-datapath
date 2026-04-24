@@ -337,7 +337,8 @@ impl MemmoveError {
             Self::MalformedCompletion { status, .. }
             | Self::CompletionStatus { status, .. }
             | Self::ByteMismatch {
-                final_status: status, ..
+                final_status: status,
+                ..
             } => Some(*status),
             Self::InvalidDevicePath { .. }
             | Self::InvalidLength { .. }
@@ -352,7 +353,9 @@ impl MemmoveError {
         match self {
             Self::InvalidLength { requested_len, .. } => Some(*requested_len),
             Self::DestinationTooSmall { src_len, .. } => Some(*src_len),
-            Self::ByteMismatch { requested_bytes, .. } => Some(*requested_bytes),
+            Self::ByteMismatch {
+                requested_bytes, ..
+            } => Some(*requested_bytes),
             Self::InvalidDevicePath { .. }
             | Self::QueueOpen { .. }
             | Self::CompletionTimeout { .. }

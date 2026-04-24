@@ -428,6 +428,7 @@ version = "0.1.0"
 dependencies = [
  "idxd-bindings",
  "thiserror",
+ "tokio",
 ]
 
 [[package]]

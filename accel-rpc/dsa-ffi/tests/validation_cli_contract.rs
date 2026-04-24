@@ -37,8 +37,9 @@ fn rejects_zero_bytes_before_touching_hardware() {
 
     assert_eq!(output.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&output.stdout).is_empty());
-    assert!(String::from_utf8_lossy(&output.stderr)
-        .contains("invalid memmove length 0; expected 1..="));
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("invalid memmove length 0; expected 1..=")
+    );
 }
 
 #[test]
@@ -56,8 +57,7 @@ fn rejects_directory_artifact_path_before_touching_hardware() {
 
     assert_eq!(output.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&output.stdout).is_empty());
-    assert!(String::from_utf8_lossy(&output.stderr)
-        .contains("expected a writable file path"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("expected a writable file path"));
 
     fs::remove_dir_all(&temp_dir).expect("temp dir cleanup should succeed");
 }
@@ -87,7 +87,9 @@ fn reports_queue_open_failure_as_stable_json_schema() {
     assert!(stdout.contains("\"final_status\":null"));
     assert!(stdout.contains("\"phase\":\"queue_open\""));
     assert!(stdout.contains("\"error_kind\":\"queue_open\""));
-    assert!(stdout.contains("failed to open DSA work queue /dev/dsa/does-not-exist during queue_open"));
+    assert!(
+        stdout.contains("failed to open DSA work queue /dev/dsa/does-not-exist during queue_open")
+    );
 }
 
 #[test]

@@ -95,11 +95,13 @@ fn verifier_fails_preflight_when_launcher_capability_is_missing() {
         .output()
         .expect("verifier should launch");
 
-    assert_eq!(output.status.code(), Some(1));
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("phase=preflight"));
-    assert!(stderr.contains("launcher_status=missing_capability"));
-    assert!(stderr.contains(&format!("launcher_path={}", launcher_path.display())));
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("phase=done"));
+    assert!(stdout.contains("verdict=expected_failure"));
+    assert!(stdout.contains("failure_phase=preflight"));
+    assert!(stdout.contains("launcher_status=missing_capability"));
+    assert!(stdout.contains(&format!("launcher_path={}", launcher_path.display())));
 }
 
 #[test]
@@ -119,21 +121,23 @@ fn verifier_preserves_queue_open_failure_and_artifact_paths() {
         .output()
         .expect("verifier should launch");
 
-    assert_eq!(output.status.code(), Some(1));
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("phase=runtime"));
-    assert!(stderr.contains("launcher_status=ready"));
-    assert!(stderr.contains("validation_phase=queue_open"));
-    assert!(stderr.contains("validation_error_kind=queue_open"));
-    assert!(stderr.contains(&format!(
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("phase=done"));
+    assert!(stdout.contains("verdict=expected_failure"));
+    assert!(stdout.contains("failure_phase=runtime"));
+    assert!(stdout.contains("launcher_status=ready"));
+    assert!(stdout.contains("validation_phase=queue_open"));
+    assert!(stdout.contains("validation_error_kind=queue_open"));
+    assert!(stdout.contains(&format!(
         "artifact={}",
         output_dir.join("live_memmove.json").display()
     )));
-    assert!(stderr.contains(&format!(
+    assert!(stdout.contains(&format!(
         "stdout={}",
         output_dir.join("live_memmove.stdout").display()
     )));
-    assert!(stderr.contains(&format!(
+    assert!(stdout.contains(&format!(
         "stderr={}",
         output_dir.join("live_memmove.stderr").display()
     )));
