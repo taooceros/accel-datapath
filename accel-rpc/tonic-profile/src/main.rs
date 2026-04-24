@@ -592,6 +592,14 @@ fn configure_process_controls(args: &Args) -> Result<(), BoxError> {
     runtime_instrumentation::set_enabled(args.instrumentation == InstrumentationMode::On);
     let (buffer_size, yield_threshold) = effective_buffer_settings(args);
     set_default_buffer_settings_for_process(buffer_size, yield_threshold)?;
+
+    let acceleration = resolve_accelerated_path_config(args)?;
+    let selected_path = match acceleration.selected_path {
+        AcceleratedPath::Software => custom_codec::AcceleratedCopyPath::Software,
+        AcceleratedPath::Idxd => custom_codec::AcceleratedCopyPath::Idxd,
+    };
+    custom_codec::set_process_default_acceleration(selected_path, acceleration.device_path)?;
+    custom_codec::preflight_acceleration().map_err(|err| -> BoxError { err.into() })?;
     Ok(())
 }
 

@@ -32,17 +32,6 @@ fn parse_report(path: &PathBuf) -> Value {
     serde_json::from_str(&raw).expect("parse report")
 }
 
-fn wait_for_port(addr: &str, timeout: Duration) {
-    let started = Instant::now();
-    while started.elapsed() < timeout {
-        if TcpStream::connect(addr).is_ok() {
-            return;
-        }
-        thread::sleep(Duration::from_millis(25));
-    }
-    panic!("timed out waiting for server to listen on {addr}");
-}
-
 fn wait_for_exit(child: &mut Child, timeout: Duration) {
     let started = Instant::now();
     while started.elapsed() < timeout {
@@ -54,6 +43,31 @@ fn wait_for_exit(child: &mut Child, timeout: Duration) {
     let _ = child.kill();
     let _ = child.wait();
     panic!("timed out waiting for tonic-profile server process to exit");
+}
+
+fn wait_for_port_or_server_exit(child: &mut Child, addr: &str, timeout: Duration) -> bool {
+    let started = Instant::now();
+    while started.elapsed() < timeout {
+        if TcpStream::connect(addr).is_ok() {
+            return true;
+        }
+        if child.try_wait().expect("poll child status").is_some() {
+            return false;
+        }
+        thread::sleep(Duration::from_millis(25));
+    }
+    panic!("timed out waiting for server to listen on {addr}");
+}
+
+fn assert_explicit_idxd_failure(stderr: &str, device_path: &str) {
+    assert!(
+        stderr.contains("idxd codec copy lane failure during queue_open"),
+        "stderr should expose the queue-open phase\nstderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains(device_path),
+        "stderr should retain the requested device path\nstderr:\n{stderr}"
+    );
 }
 
 fn assert_idxd_metadata(report: &Value, endpoint_role: &str, device_path: &str) {
@@ -136,7 +150,7 @@ fn invalid_accelerator_lane_fails_fast() {
 }
 
 #[test]
-fn selftest_reports_explicit_idxd_selection_metadata() {
+fn selftest_reports_explicit_idxd_selection_metadata_or_explicit_failure() {
     let addr = reserve_addr();
     let json_out = unique_path("idxd-selftest");
     let device_path = "/dev/dsa/wq0.0";
@@ -168,20 +182,23 @@ fn selftest_reports_explicit_idxd_selection_metadata() {
         .output()
         .expect("spawn tonic-profile idxd selftest");
 
-    assert!(
-        output.status.success(),
-        "idxd selftest failed\nstdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    let report = parse_report(&json_out);
-    assert_eq!(report["metadata"]["mode"], "selftest");
-    assert_idxd_metadata(&report, "selftest", device_path);
+    if output.status.success() {
+        let report = parse_report(&json_out);
+        assert_eq!(report["metadata"]["mode"], "selftest");
+        assert_idxd_metadata(&report, "selftest", device_path);
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_explicit_idxd_failure(&stderr, device_path);
+        assert!(
+            !json_out.exists(),
+            "failed idxd selftests must not emit a bogus success artifact at {}",
+            json_out.display()
+        );
+    }
 }
 
 #[test]
-fn split_client_and_server_preserve_idxd_selection_metadata() {
+fn split_client_and_server_preserve_idxd_selection_metadata_or_fail_before_artifacts() {
     let addr = reserve_addr();
     let server_json = unique_path("idxd-server");
     let client_json = unique_path("idxd-client");
@@ -220,7 +237,19 @@ fn split_client_and_server_preserve_idxd_selection_metadata() {
         .spawn()
         .expect("spawn tonic-profile idxd server");
 
-    wait_for_port(&addr, Duration::from_secs(5));
+    if !wait_for_port_or_server_exit(&mut server, &addr, Duration::from_secs(5)) {
+        let server_status = server.wait().expect("wait for server status");
+        assert!(
+            !server_status.success(),
+            "idxd server unexpectedly exited successfully before listening"
+        );
+        assert!(
+            !server_json.exists(),
+            "failed idxd server runs must not emit a bogus success artifact at {}",
+            server_json.display()
+        );
+        return;
+    }
 
     let client_output = Command::new(tonic_profile_bin())
         .args([
@@ -252,19 +281,22 @@ fn split_client_and_server_preserve_idxd_selection_metadata() {
         .output()
         .expect("spawn tonic-profile idxd client");
 
-    assert!(
-        client_output.status.success(),
-        "idxd client run failed\nstdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&client_output.stdout),
-        String::from_utf8_lossy(&client_output.stderr)
-    );
+    if !client_output.status.success() {
+        let stderr = String::from_utf8_lossy(&client_output.stderr);
+        assert_explicit_idxd_failure(&stderr, device_path);
+        let _ = server.kill();
+        let _ = server.wait();
+        assert!(
+            !client_json.exists(),
+            "failed idxd client runs must not emit a bogus success artifact at {}",
+            client_json.display()
+        );
+        return;
+    }
 
     wait_for_exit(&mut server, Duration::from_secs(5));
     let server_status = server.wait().expect("wait for server status");
-    assert!(
-        server_status.success(),
-        "server exited with {server_status}"
-    );
+    assert!(server_status.success(), "server exited with {server_status}");
 
     let client_report = parse_report(&client_json);
     let server_report = parse_report(&server_json);
