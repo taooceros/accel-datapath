@@ -75,3 +75,25 @@ tools/mosaic-tonic-report/src/.observablehq
 
 .omx/
 .sisyphus/
+
+# ── GSD baseline (auto-generated) ──
+.gsd
+.gsd-id
+.mcp.json
+.bg-shell/
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+*.code-workspace
+.env
+.env.*
+!.env.example
+.next/
+.venv/
+venv/
+vendor/
+*.log
+coverage/
+tmp/
