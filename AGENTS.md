@@ -26,17 +26,21 @@ Research monorepo for Intel DSA/IAX data-path work.
 - Restate critical task budgets and stop conditions inline even when a template is provided.
 
 ## CONVENTIONS
-- Before acting, read the latest relevant plan or report. On resume, also read any linked durable artifacts needed to continue.
+- Before acting, read the latest relevant plan or report.
+- On resume, read any linked durable artifacts needed to continue.
 - Keep durable detail in plans, reports, and remarks rather than transient notes.
-- Keep commit headlines short and consistent with current style; use the repo-local `.gitmessage` template for the body (`Summary` / `Why` / `Details` / `Verification`).
+- Keep commit headlines short and consistent with current style.
+- Use the repo-local `.gitmessage` template for commit bodies (`Summary` / `Why` / `Details` / `Verification`).
 - Write commits in focused, reviewable increments, but not so small that they lose a coherent unit of work.
 - Write a plan in `docs/plan/YYYY-MM-DD/NN.<topic>.<state>.md` before non-trivial changes.
 - Write plans for humans first. State the goal, scope, intended changes, verification, and completion notes in plain language.
 - Do not write plans as agent-private shorthand, terse scratchpads, or control notes that only make sense to the executing agent.
-- Write findings to `docs/report/<topic>/NNN.<descriptor>.<ext>` and single-point insights to `remark/NNN_<topic>.md`.
+- Write findings to `docs/report/<topic>/NNN.<descriptor>.<ext>`.
+- Write single-point insights to `remark/NNN_<topic>.md`.
 - Read the nearest README before modifying a module.
 - Match code to specs, not specs to code, unless explicitly told otherwise.
-- Keep child `AGENTS.md` files lean and local; do not repeat parent guidance.
+- Keep child `AGENTS.md` files lean and local.
+- Do not repeat parent guidance in child `AGENTS.md` files.
 
 ## DO NOT
 - Guess DSA/IAX behavior if `docs/specs/*.md` or `docs/report/architecture/001.design_decisions.md` already cover it.
