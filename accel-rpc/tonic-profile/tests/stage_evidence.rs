@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 fn tonic_profile_bin() -> &'static str {
     env!("CARGO_BIN_EXE_tonic-profile")
@@ -95,8 +95,12 @@ fn require_real_stage_evidence(report: &Value) -> Result<(), String> {
     if report["metadata"]["instrumentation"] == "on" && placeholder_only(report) {
         return Err(format!(
             "instrumentation-on report for workload {} endpoint {} stayed placeholder-only",
-            report["metadata"]["workload_label"].as_str().unwrap_or("<unknown>"),
-            report["metadata"]["endpoint_role"].as_str().unwrap_or("<unknown>")
+            report["metadata"]["workload_label"]
+                .as_str()
+                .unwrap_or("<unknown>"),
+            report["metadata"]["endpoint_role"]
+                .as_str()
+                .unwrap_or("<unknown>")
         ));
     }
     Ok(())
@@ -130,7 +134,10 @@ fn instrumentation_on_selftest_emits_real_nonzero_stage_counters() {
     );
 
     assert_eq!(bytes_report["metadata"]["endpoint_role"], "selftest");
-    assert_eq!(response_heavy_report["metadata"]["endpoint_role"], "selftest");
+    assert_eq!(
+        response_heavy_report["metadata"]["endpoint_role"],
+        "selftest"
+    );
     require_real_stage_evidence(&bytes_report).expect("bytes report should be non-placeholder");
     require_real_stage_evidence(&response_heavy_report)
         .expect("response-heavy report should be non-placeholder");
@@ -179,7 +186,10 @@ fn instrumentation_off_selftest_remains_structurally_valid_baseline() {
     assert_eq!(report["metadata"]["endpoint_role"], "selftest");
     assert_eq!(report["stages"]["enabled"], false);
     assert_eq!(report["metrics"]["requests_completed"], 1);
-    assert!(report["metadata"]["run_id"].as_str().unwrap().starts_with("run-"));
+    assert!(report["metadata"]["run_id"]
+        .as_str()
+        .unwrap()
+        .starts_with("run-"));
     assert!(
         report["metrics"]["duration_ms"].as_f64().unwrap() >= 0.0,
         "baseline report should remain structurally valid even when instrumentation is off"
@@ -208,6 +218,9 @@ fn placeholder_only_instrumentation_on_artifacts_are_rejected() {
     });
 
     let err = require_real_stage_evidence(&report).expect_err("placeholder-only stages must fail");
-    assert!(err.contains("ordinary/unary-bytes/repeated-64"), "unexpected error: {err}");
+    assert!(
+        err.contains("ordinary/unary-bytes/repeated-64"),
+        "unexpected error: {err}"
+    );
     assert!(err.contains("client"), "unexpected error: {err}");
 }

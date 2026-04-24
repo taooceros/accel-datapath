@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -134,7 +134,9 @@ fn tracked_manifest_covers_boundary_workloads_and_expected_benchmarks() {
         );
     }
 
-    let workloads = manifest["workloads"].as_array().expect("tracked workloads array");
+    let workloads = manifest["workloads"]
+        .as_array()
+        .expect("tracked workloads array");
 
     assert!(
         workloads.iter().any(|entry| {
@@ -404,7 +406,9 @@ fn verify_only_rejects_placeholder_only_instrumentation_on_artifacts() {
         ),
     );
     write_json(
-        &output_dir.join("ordinary__unary-proto-shape__fleet-small-to-fleet-response-heavy.client.off.json"),
+        &output_dir.join(
+            "ordinary__unary-proto-shape__fleet-small-to-fleet-response-heavy.client.off.json",
+        ),
         &valid_report(
             "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
             "off",
@@ -414,7 +418,9 @@ fn verify_only_rejects_placeholder_only_instrumentation_on_artifacts() {
         ),
     );
     write_json(
-        &output_dir.join("ordinary__unary-proto-shape__fleet-small-to-fleet-response-heavy.server.off.json"),
+        &output_dir.join(
+            "ordinary__unary-proto-shape__fleet-small-to-fleet-response-heavy.server.off.json",
+        ),
         &valid_report(
             "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
             "off",
@@ -424,7 +430,9 @@ fn verify_only_rejects_placeholder_only_instrumentation_on_artifacts() {
         ),
     );
     write_json(
-        &output_dir.join("ordinary__unary-proto-shape__fleet-small-to-fleet-response-heavy.client.on.json"),
+        &output_dir.join(
+            "ordinary__unary-proto-shape__fleet-small-to-fleet-response-heavy.client.on.json",
+        ),
         &valid_report(
             "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
             "on",
@@ -434,7 +442,9 @@ fn verify_only_rejects_placeholder_only_instrumentation_on_artifacts() {
         ),
     );
     write_json(
-        &output_dir.join("ordinary__unary-proto-shape__fleet-small-to-fleet-response-heavy.server.on.json"),
+        &output_dir.join(
+            "ordinary__unary-proto-shape__fleet-small-to-fleet-response-heavy.server.on.json",
+        ),
         &valid_report(
             "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
             "on",

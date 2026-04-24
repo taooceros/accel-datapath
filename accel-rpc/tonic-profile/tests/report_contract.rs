@@ -60,6 +60,7 @@ fn validate_report(report: &Value) -> Result<(), String> {
         "run_id",
         "rpc",
         "ordinary_path",
+        "selected_path",
         "seam",
         "workload_label",
         "selection_policy",
@@ -78,6 +79,9 @@ fn validate_report(report: &Value) -> Result<(), String> {
         "measure_ms",
         "runtime",
         "instrumentation",
+        "accelerated_device_path",
+        "accelerated_lane",
+        "accelerated_direction",
         "buffer_policy",
         "effective_codec_buffer_size",
         "effective_codec_yield_threshold",
@@ -109,6 +113,10 @@ fn validate_report(report: &Value) -> Result<(), String> {
         .get("run_id")
         .and_then(Value::as_str)
         .ok_or_else(|| "metadata.run_id must be a string".to_string())?;
+    let selected_path = metadata
+        .get("selected_path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "metadata.selected_path must be a string".to_string())?;
     if endpoint_role.is_empty() {
         return Err("metadata.endpoint_role must not be empty".to_string());
     }
@@ -126,6 +134,68 @@ fn validate_report(report: &Value) -> Result<(), String> {
             "metadata.effective_codec_yield_threshold must be >= metadata.effective_codec_buffer_size ({} < {})",
             effective_codec_yield_threshold, effective_codec_buffer_size
         ));
+    }
+    match selected_path {
+        "software" => {
+            if !metadata
+                .get("accelerated_device_path")
+                .unwrap_or(&Value::Null)
+                .is_null()
+            {
+                return Err(
+                    "metadata.accelerated_device_path must be null for software mode".to_string(),
+                );
+            }
+            if !metadata
+                .get("accelerated_lane")
+                .unwrap_or(&Value::Null)
+                .is_null()
+            {
+                return Err("metadata.accelerated_lane must be null for software mode".to_string());
+            }
+            if !metadata
+                .get("accelerated_direction")
+                .unwrap_or(&Value::Null)
+                .is_null()
+            {
+                return Err(
+                    "metadata.accelerated_direction must be null for software mode".to_string(),
+                );
+            }
+        }
+        "idxd" => {
+            let device_path = metadata
+                .get("accelerated_device_path")
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    "metadata.accelerated_device_path must be a string for idxd mode".to_string()
+                })?;
+            if device_path.is_empty() {
+                return Err(
+                    "metadata.accelerated_device_path must not be empty for idxd mode".to_string(),
+                );
+            }
+            if metadata.get("accelerated_lane").and_then(Value::as_str) != Some("codec_memmove") {
+                return Err(
+                    "metadata.accelerated_lane must be codec_memmove for idxd mode".to_string(),
+                );
+            }
+            if metadata
+                .get("accelerated_direction")
+                .and_then(Value::as_str)
+                != Some("bidirectional")
+            {
+                return Err(
+                    "metadata.accelerated_direction must be bidirectional for idxd mode"
+                        .to_string(),
+                );
+            }
+        }
+        other => {
+            return Err(format!(
+                "metadata.selected_path must be software or idxd, got {other}"
+            ));
+        }
     }
 
     let metrics = report
@@ -228,6 +298,10 @@ fn selftest_report_exposes_required_contract_fields() {
         .starts_with("run-"));
     assert_eq!(report["metadata"]["rpc"], "unary-bytes");
     assert_eq!(report["metadata"]["ordinary_path"], "software");
+    assert_eq!(report["metadata"]["selected_path"], "software");
+    assert!(report["metadata"]["accelerated_device_path"].is_null());
+    assert!(report["metadata"]["accelerated_lane"].is_null());
+    assert!(report["metadata"]["accelerated_direction"].is_null());
     assert_eq!(report["metadata"]["seam"], "codec_body");
     assert_eq!(report["metadata"]["instrumentation"], "on");
     assert_eq!(report["metadata"]["buffer_policy"], "default");

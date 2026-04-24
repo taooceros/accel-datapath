@@ -121,6 +121,33 @@ enum SelectionPolicy {
     ExplicitResponse,
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum AcceleratedPath {
+    Software,
+    Idxd,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum AcceleratedLane {
+    CodecMemmove,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum AcceleratedDirection {
+    Bidirectional,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AcceleratedPathConfig {
+    selected_path: AcceleratedPath,
+    device_path: Option<PathBuf>,
+    lane: Option<AcceleratedLane>,
+    direction: Option<AcceleratedDirection>,
+}
+
 #[derive(Parser, Debug, Clone)]
 struct Args {
     #[arg(long, value_enum)]
@@ -167,6 +194,15 @@ struct Args {
 
     #[arg(long, value_enum, default_value = "on")]
     instrumentation: InstrumentationMode,
+
+    #[arg(long, value_enum, default_value = "software")]
+    accelerated_path: AcceleratedPath,
+
+    #[arg(long)]
+    accelerator_device: Option<PathBuf>,
+
+    #[arg(long, value_enum)]
+    accelerator_lane: Option<AcceleratedLane>,
 
     #[arg(long, value_enum, default_value = "default")]
     buffer_policy: BufferPolicy,
@@ -254,7 +290,11 @@ impl ServerMetrics {
             } else {
                 hist.value_at_quantile(0.99)
             },
-            latency_us_max: if requests_completed == 0 { 0 } else { hist.max() },
+            latency_us_max: if requests_completed == 0 {
+                0
+            } else {
+                hist.max()
+            },
         }
     }
 }
@@ -314,7 +354,10 @@ impl Profile for EchoSvc {
             )
             .await;
         if let Some(target) = self.shutdown_after_requests {
-            let completed = self.server_metrics.requests_completed.load(Ordering::Relaxed);
+            let completed = self
+                .server_metrics
+                .requests_completed
+                .load(Ordering::Relaxed);
             if completed >= target {
                 self.shutdown.notify_waiters();
             }
@@ -331,6 +374,7 @@ struct Metadata {
     run_id: String,
     rpc: RpcMode,
     ordinary_path: &'static str,
+    selected_path: AcceleratedPath,
     seam: &'static str,
     workload_label: String,
     selection_policy: SelectionPolicy,
@@ -349,6 +393,9 @@ struct Metadata {
     measure_ms: u64,
     runtime: RuntimeMode,
     instrumentation: InstrumentationMode,
+    accelerated_device_path: Option<PathBuf>,
+    accelerated_lane: Option<AcceleratedLane>,
+    accelerated_direction: Option<AcceleratedDirection>,
     buffer_policy: BufferPolicy,
     effective_codec_buffer_size: Option<usize>,
     effective_codec_yield_threshold: Option<usize>,
@@ -500,7 +547,45 @@ fn validate_args(args: &Args) -> Result<(), BoxError> {
                 .into(),
         );
     }
+    resolve_accelerated_path_config(args)?;
     Ok(())
+}
+
+fn resolve_accelerated_path_config(args: &Args) -> Result<AcceleratedPathConfig, BoxError> {
+    match args.accelerated_path {
+        AcceleratedPath::Software => {
+            if args.accelerator_device.is_some() {
+                return Err(
+                    "--accelerator-device is only supported with --accelerated-path idxd".into(),
+                );
+            }
+            if args.accelerator_lane.is_some() {
+                return Err(
+                    "--accelerator-lane is only supported with --accelerated-path idxd".into(),
+                );
+            }
+            Ok(AcceleratedPathConfig {
+                selected_path: AcceleratedPath::Software,
+                device_path: None,
+                lane: None,
+                direction: None,
+            })
+        }
+        AcceleratedPath::Idxd => {
+            let device_path = args.accelerator_device.clone().ok_or_else(|| {
+                "--accelerator-device is required with --accelerated-path idxd".to_string()
+            })?;
+            Ok(AcceleratedPathConfig {
+                selected_path: AcceleratedPath::Idxd,
+                device_path: Some(device_path),
+                lane: Some(
+                    args.accelerator_lane
+                        .unwrap_or(AcceleratedLane::CodecMemmove),
+                ),
+                direction: Some(AcceleratedDirection::Bidirectional),
+            })
+        }
+    }
 }
 
 fn configure_process_controls(args: &Args) -> Result<(), BoxError> {
@@ -699,8 +784,13 @@ async fn run_server_with_shutdown(
     Ok(())
 }
 
-async fn run_client(args: &Args, endpoint_role: &'static str, run_id: &str) -> Result<Report, BoxError> {
+async fn run_client(
+    args: &Args,
+    endpoint_role: &'static str,
+    run_id: &str,
+) -> Result<Report, BoxError> {
     let descriptor = workload_probe(args);
+    let acceleration = resolve_accelerated_path_config(args)?;
     let endpoint = Endpoint::from_shared(format!("http://{}", args.target))?;
     let channel = endpoint.connect().await?;
     let warmup_deadline = Instant::now() + Duration::from_millis(args.warmup_ms);
@@ -723,6 +813,7 @@ async fn run_client(args: &Args, endpoint_role: &'static str, run_id: &str) -> R
             run_id: run_id.to_string(),
             rpc: args.rpc,
             ordinary_path: "software",
+            selected_path: acceleration.selected_path,
             seam: "codec_body",
             workload_label: descriptor.workload_label,
             selection_policy: descriptor.selection_policy,
@@ -741,6 +832,9 @@ async fn run_client(args: &Args, endpoint_role: &'static str, run_id: &str) -> R
             measure_ms: args.measure_ms,
             runtime: args.runtime,
             instrumentation: args.instrumentation,
+            accelerated_device_path: acceleration.device_path,
+            accelerated_lane: acceleration.lane,
+            accelerated_direction: acceleration.direction,
             buffer_policy: args.buffer_policy,
             effective_codec_buffer_size: Some(observed_codec_settings.buffer_size),
             effective_codec_yield_threshold: Some(observed_codec_settings.yield_threshold),
@@ -760,6 +854,7 @@ async fn build_server_report(
     run_id: &str,
 ) -> Result<Report, BoxError> {
     let descriptor = workload_probe(args);
+    let acceleration = resolve_accelerated_path_config(args)?;
     let stages = StageSnapshot::from(runtime_instrumentation::snapshot());
     let metrics = server_metrics.snapshot().await;
     let observed_codec_settings = custom_codec::observed_settings()
@@ -773,6 +868,7 @@ async fn build_server_report(
             run_id: run_id.to_string(),
             rpc: args.rpc,
             ordinary_path: "software",
+            selected_path: acceleration.selected_path,
             seam: "codec_body",
             workload_label: descriptor.workload_label,
             selection_policy: descriptor.selection_policy,
@@ -791,6 +887,9 @@ async fn build_server_report(
             measure_ms: args.measure_ms,
             runtime: args.runtime,
             instrumentation: args.instrumentation,
+            accelerated_device_path: acceleration.device_path,
+            accelerated_lane: acceleration.lane,
+            accelerated_direction: acceleration.direction,
             buffer_policy: args.buffer_policy,
             effective_codec_buffer_size: Some(observed_codec_settings.buffer_size),
             effective_codec_yield_threshold: Some(observed_codec_settings.yield_threshold),
@@ -937,7 +1036,11 @@ async fn run_phase(
     })
 }
 
-fn emit_report(path: Option<&PathBuf>, mode: &'static str, mut report: Report) -> Result<(), BoxError> {
+fn emit_report(
+    path: Option<&PathBuf>,
+    mode: &'static str,
+    mut report: Report,
+) -> Result<(), BoxError> {
     report.metadata.mode = mode;
     validate_stage_evidence(&report)?;
     let json = serde_json::to_string_pretty(&report)?;
