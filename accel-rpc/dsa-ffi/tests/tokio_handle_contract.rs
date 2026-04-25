@@ -1,76 +1,309 @@
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
-    Arc,
+    Arc, Condvar, Mutex,
 };
+use std::time::Duration;
 
 use dsa_ffi::{
     AsyncDsaSession, AsyncLifecycleFailureKind, AsyncMemmoveError, AsyncMemmoveRequest,
     AsyncMemmoveWorker, MemmoveError, MemmoveRequest, MemmoveValidationReport,
 };
+use tokio::sync::Notify;
+use tokio::time::timeout;
 
-struct FakeWorker {
-    calls: Arc<AtomicUsize>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WorkerEvent {
+    Started(usize),
+    Finished(usize),
 }
 
-impl AsyncMemmoveWorker for FakeWorker {
+#[derive(Default)]
+struct ReleaseGate {
+    released: Mutex<bool>,
+    cv: Condvar,
+}
+
+impl ReleaseGate {
+    fn wait(&self) {
+        let mut released = self.released.lock().expect("gate lock should not poison");
+        while !*released {
+            released = self
+                .cv
+                .wait(released)
+                .expect("gate lock should not poison");
+        }
+    }
+
+    fn release(&self) {
+        let mut released = self.released.lock().expect("gate lock should not poison");
+        *released = true;
+        self.cv.notify_all();
+    }
+}
+
+#[derive(Default)]
+struct EventLog {
+    events: Mutex<Vec<WorkerEvent>>,
+    notify: Notify,
+}
+
+impl EventLog {
+    fn push(&self, event: WorkerEvent) {
+        self.events
+            .lock()
+            .expect("event log lock should not poison")
+            .push(event);
+        self.notify.notify_waiters();
+    }
+
+    fn snapshot(&self) -> Vec<WorkerEvent> {
+        self.events
+            .lock()
+            .expect("event log lock should not poison")
+            .clone()
+    }
+
+    async fn wait_for_event(&self, expected: WorkerEvent) {
+        timeout(Duration::from_secs(1), async {
+            loop {
+                if self.snapshot().contains(&expected) {
+                    return;
+                }
+                self.notify.notified().await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| panic!("timed out waiting for worker event {expected:?}"));
+    }
+
+    async fn assert_event_absent_for(&self, unexpected: WorkerEvent, duration: Duration) {
+        let result = timeout(duration, async {
+            loop {
+                if self.snapshot().contains(&unexpected) {
+                    return;
+                }
+                self.notify.notified().await;
+            }
+        })
+        .await;
+
+        assert!(
+            result.is_err(),
+            "unexpected worker event {unexpected:?} appeared while request 1 was still blocked: {:?}",
+            self.snapshot()
+        );
+    }
+}
+
+struct BlockingWorker {
+    calls: Arc<AtomicUsize>,
+    active_calls: Arc<AtomicUsize>,
+    max_active: Arc<AtomicUsize>,
+    events: Arc<EventLog>,
+    first_release: Arc<ReleaseGate>,
+}
+
+impl AsyncMemmoveWorker for BlockingWorker {
     fn memmove(
         &mut self,
         dst: &mut [u8],
         src: &[u8],
     ) -> Result<MemmoveValidationReport, MemmoveError> {
-        self.calls.fetch_add(1, Ordering::SeqCst);
+        let call_id = self.calls.fetch_add(1, Ordering::SeqCst) + 1;
+        let active = self.active_calls.fetch_add(1, Ordering::SeqCst) + 1;
+        self.max_active.fetch_max(active, Ordering::SeqCst);
+        self.events.push(WorkerEvent::Started(call_id));
+
+        if call_id == 1 {
+            self.first_release.wait();
+        }
+
         dst[..src.len()].copy_from_slice(src);
+        self.events.push(WorkerEvent::Finished(call_id));
+        self.active_calls.fetch_sub(1, Ordering::SeqCst);
+
         MemmoveValidationReport::new("/dev/dsa/test0.0", MemmoveRequest::new(src.len())?, 0, 1)
     }
 }
 
+struct BlockingWorkerHarness {
+    calls: Arc<AtomicUsize>,
+    factory_calls: Arc<AtomicUsize>,
+    max_active: Arc<AtomicUsize>,
+    events: Arc<EventLog>,
+    first_release: Arc<ReleaseGate>,
+}
+
+impl BlockingWorkerHarness {
+    fn spawn_session() -> (AsyncDsaSession, Self) {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let factory_calls = Arc::new(AtomicUsize::new(0));
+        let active_calls = Arc::new(AtomicUsize::new(0));
+        let max_active = Arc::new(AtomicUsize::new(0));
+        let events = Arc::new(EventLog::default());
+        let first_release = Arc::new(ReleaseGate::default());
+
+        let session = AsyncDsaSession::spawn_with_factory({
+            let calls = Arc::clone(&calls);
+            let factory_calls = Arc::clone(&factory_calls);
+            let active_calls = Arc::clone(&active_calls);
+            let max_active = Arc::clone(&max_active);
+            let events = Arc::clone(&events);
+            let first_release = Arc::clone(&first_release);
+            move || {
+                factory_calls.fetch_add(1, Ordering::SeqCst);
+                Ok(BlockingWorker {
+                    calls: Arc::clone(&calls),
+                    active_calls: Arc::clone(&active_calls),
+                    max_active: Arc::clone(&max_active),
+                    events: Arc::clone(&events),
+                    first_release: Arc::clone(&first_release),
+                })
+            }
+        })
+        .expect("worker should start");
+
+        (
+            session,
+            Self {
+                calls,
+                factory_calls,
+                max_active,
+                events,
+                first_release,
+            },
+        )
+    }
+
+    async fn wait_for_first_start(&self) {
+        self.events.wait_for_event(WorkerEvent::Started(1)).await;
+    }
+
+    async fn assert_second_request_stays_queued_until_release(&self) {
+        self.events
+            .assert_event_absent_for(WorkerEvent::Started(2), Duration::from_millis(100))
+            .await;
+    }
+
+    fn release_first_request(&self) {
+        self.first_release.release();
+    }
+
+    fn assert_serialized(&self) {
+        assert_eq!(
+            self.factory_calls.load(Ordering::SeqCst),
+            1,
+            "cloned handles should share one worker-owned session"
+        );
+        assert_eq!(
+            self.calls.load(Ordering::SeqCst),
+            2,
+            "both overlapped requests should reach the same worker"
+        );
+        assert_eq!(
+            self.max_active.load(Ordering::SeqCst),
+            1,
+            "single-worker contract should never execute more than one request at once"
+        );
+        assert_eq!(
+            self.events.snapshot(),
+            vec![
+                WorkerEvent::Started(1),
+                WorkerEvent::Finished(1),
+                WorkerEvent::Started(2),
+                WorkerEvent::Finished(2),
+            ],
+            "worker event order should make queue serialization explicit"
+        );
+    }
+}
+
 #[tokio::test(flavor = "current_thread")]
-async fn cloned_handles_share_one_worker_without_duplicating_ownership() {
-    let calls = Arc::new(AtomicUsize::new(0));
-    let session = AsyncDsaSession::spawn_with_factory({
-        let calls = Arc::clone(&calls);
-        move || {
-            Ok(FakeWorker {
-                calls: Arc::clone(&calls),
-            })
-        }
-    })
-    .expect("worker should start");
+async fn cloned_handles_compose_with_tokio_join_and_serialize_through_one_worker() {
+    let (session, harness) = BlockingWorkerHarness::spawn_session();
     let first_handle = session.handle();
     let second_handle = first_handle.clone();
 
-    let first = first_handle
-        .memmove(AsyncMemmoveRequest::new(vec![1, 2, 3]).unwrap())
+    let joined = tokio::spawn(async move {
+        tokio::join!(
+            first_handle.memmove(AsyncMemmoveRequest::new(vec![1, 2, 3]).unwrap()),
+            second_handle.memmove(AsyncMemmoveRequest::new(vec![4, 5, 6, 7]).unwrap())
+        )
+    });
+
+    harness.wait_for_first_start().await;
+    harness.assert_second_request_stays_queued_until_release().await;
+    assert!(
+        !joined.is_finished(),
+        "join! composition should still be waiting on the blocked first request"
+    );
+
+    harness.release_first_request();
+
+    let (first, second) = timeout(Duration::from_secs(1), joined)
         .await
-        .expect("first cloned handle should succeed");
-    let second = second_handle
-        .memmove(AsyncMemmoveRequest::new(vec![4, 5, 6, 7]).unwrap())
-        .await
-        .expect("second cloned handle should also succeed");
+        .expect("join! composition should complete after release")
+        .expect("join! driver task should not panic");
+    let first = first.expect("first cloned handle should succeed");
+    let second = second.expect("second cloned handle should succeed");
 
     assert_eq!(first.bytes, vec![1, 2, 3]);
     assert_eq!(second.bytes, vec![4, 5, 6, 7]);
-    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    harness.assert_serialized();
+
+    session.shutdown().expect("owner shutdown should succeed");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn cloned_handles_compose_in_spawned_tasks_and_still_share_one_worker() {
+    let (session, harness) = BlockingWorkerHarness::spawn_session();
+    let first_handle = session.handle();
+    let second_handle = first_handle.clone();
+
+    let first_task = tokio::spawn(async move {
+        first_handle
+            .memmove(AsyncMemmoveRequest::new(vec![8, 9]).unwrap())
+            .await
+    });
+    let second_task = tokio::spawn(async move {
+        second_handle
+            .memmove(AsyncMemmoveRequest::new(vec![10, 11, 12]).unwrap())
+            .await
+    });
+
+    harness.wait_for_first_start().await;
+    harness.assert_second_request_stays_queued_until_release().await;
+    assert!(
+        !first_task.is_finished() && !second_task.is_finished(),
+        "spawned composition should stay pending until the blocked worker call is released"
+    );
+
+    harness.release_first_request();
+
+    let (first, second) = timeout(Duration::from_secs(1), async {
+        (first_task.await.expect("first spawned task should not panic"), second_task.await.expect("second spawned task should not panic"))
+    })
+    .await
+    .expect("spawned-task composition should complete after release");
+
+    let first = first.expect("first spawned handle should succeed");
+    let second = second.expect("second spawned handle should succeed");
+
+    assert_eq!(first.bytes, vec![8, 9]);
+    assert_eq!(second.bytes, vec![10, 11, 12]);
+    harness.assert_serialized();
 
     session.shutdown().expect("owner shutdown should succeed");
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn dropping_one_clone_does_not_shut_down_another_clone() {
-    let calls = Arc::new(AtomicUsize::new(0));
-    let session = AsyncDsaSession::spawn_with_factory({
-        let calls = Arc::clone(&calls);
-        move || {
-            Ok(FakeWorker {
-                calls: Arc::clone(&calls),
-            })
-        }
-    })
-    .expect("worker should start");
+    let (session, harness) = BlockingWorkerHarness::spawn_session();
     let retained_handle = session.handle();
     let dropped_handle = retained_handle.clone();
 
     drop(dropped_handle);
+    harness.release_first_request();
 
     let result = retained_handle
         .memmove(AsyncMemmoveRequest::new(vec![8, 9]).unwrap())
@@ -78,19 +311,13 @@ async fn dropping_one_clone_does_not_shut_down_another_clone() {
         .expect("remaining clone should keep working");
 
     assert_eq!(result.bytes, vec![8, 9]);
-    assert_eq!(calls.load(Ordering::SeqCst), 1);
 
     session.shutdown().expect("owner shutdown should succeed");
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn explicit_owner_shutdown_is_distinct_from_worker_failure() {
-    let session = AsyncDsaSession::spawn_with_factory(|| {
-        Ok(FakeWorker {
-            calls: Arc::new(AtomicUsize::new(0)),
-        })
-    })
-    .expect("worker should start");
+    let (session, _harness) = BlockingWorkerHarness::spawn_session();
     let handle = session.handle();
 
     session.shutdown().expect("owner shutdown should succeed");
