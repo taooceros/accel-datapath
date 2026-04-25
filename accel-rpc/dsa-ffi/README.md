@@ -58,7 +58,10 @@ The async surface is intentionally split in two.
 
 - `AsyncDsaSession` owns the worker thread and therefore owns shutdown.
 - `AsyncDsaHandle` is what Tokio tasks clone and await.
-- Ordinary Tokio composition such as `tokio::join!` or spawned tasks still shares that same handle surface; cloned handles queue through one worker instead of duplicating hardware ownership.
+- Ordinary Tokio composition such as `tokio::join!` or spawned tasks still uses that same cloneable handle surface; cloned handles do not create extra sessions or extra hardware owners.
+- All submissions funnel through one worker-owned `DsaSession`, so overlapped requests queue FIFO and execute one at a time even when multiple Tokio tasks are awaiting them concurrently.
+- Once a request has crossed that enqueue boundary, aborting or dropping the awaiting Tokio task does not cancel the worker-side memmove. The worker still finishes the request, and later submissions can continue using the shared handle.
+- Shutdown is drain-then-stop: work that was already queued drains before the worker thread exits, and submissions attempted after shutdown are rejected with `owner_shutdown`.
 - The worker thread owns the real `DsaSession`, so all hardware access still crosses one explicit boundary as owned requests and owned replies.
 
 That split matters operationally because it makes failure interpretation honest:

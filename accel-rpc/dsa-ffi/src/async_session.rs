@@ -203,17 +203,23 @@ impl SharedWorkerState {
 
 /// Cloneable Tokio-facing handle over one worker-owned `DsaSession`.
 ///
-/// This type makes serialization explicit: one worker thread owns one session,
-/// requests cross the boundary as owned data, and replies return owned bytes
-/// plus the original synchronous validation report. Cloning the handle shares
-/// that one worker; it never duplicates hardware ownership.
+/// Cloned handles compose naturally in ordinary Tokio code such as
+/// `tokio::join!` or spawned tasks, but they still share one worker thread and
+/// one session. Requests cross the boundary as owned data, queue FIFO, and
+/// execute one at a time; cloning the handle never duplicates hardware
+/// ownership or implies parallel execution.
 #[derive(Debug, Clone)]
 pub struct AsyncDsaHandle {
     shared: Arc<SharedWorkerState>,
 }
 
 impl AsyncDsaHandle {
-    /// Submit one owned request through the single worker-owned session.
+    /// Submit one owned request through the shared worker-owned session.
+    ///
+    /// Once the request has been enqueued successfully, dropping or aborting
+    /// the awaiting Tokio task does not cancel the worker-side memmove. The
+    /// worker still finishes the request and later submissions can continue to
+    /// use the shared handle.
     pub async fn memmove(
         &self,
         request: AsyncMemmoveRequest,
@@ -349,6 +355,10 @@ impl AsyncDsaSession {
     }
 
     /// Borrow the cloneable Tokio-facing handle.
+    ///
+    /// Every clone still feeds the same worker-owned `DsaSession`, so Tokio
+    /// callers can share the handle freely without widening the ownership
+    /// boundary or changing the one-worker serialization contract.
     pub fn handle(&self) -> AsyncDsaHandle {
         self.handle.clone()
     }
@@ -362,6 +372,10 @@ impl AsyncDsaSession {
     }
 
     /// Close the shared worker explicitly and wait for the worker thread to exit.
+    ///
+    /// Shutdown is drain-then-stop: already-queued requests are allowed to run
+    /// to completion before the worker exits, and later submissions through any
+    /// cloned handle fail with `owner_shutdown`.
     pub fn shutdown(mut self) -> Result<(), AsyncMemmoveError> {
         self.shutdown_inner()
     }
