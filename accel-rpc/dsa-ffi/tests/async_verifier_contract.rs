@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+const TEST_SCENARIO_ENV: &str = "DSA_FFI_AWAIT_MEMMOVE_TEST_SCENARIO";
+
 fn unique_temp_path(name: &str) -> PathBuf {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -151,6 +153,7 @@ fn verifier_preserves_queue_open_failure_and_async_fields() {
     assert!(stdout.contains("failure_phase=runtime"));
     assert!(stdout.contains("launcher_status=ready"));
     assert!(stdout.contains("error_kind=validation_failure"));
+    assert!(stdout.contains("async_lifecycle_failure_kind=null"));
     assert!(stdout.contains("async_worker_failure_kind=null"));
     assert!(stdout.contains("validation_phase=queue_open"));
     assert!(stdout.contains("validation_error_kind=queue_open"));
@@ -166,6 +169,36 @@ fn verifier_preserves_queue_open_failure_and_async_fields() {
         "stderr={}",
         output_dir.join("await_memmove.stderr").display()
     )));
+}
+
+#[test]
+fn verifier_preserves_async_lifecycle_failure_kind() {
+    let (_temp_root, launcher_path, path_override) = fake_launcher_env(true);
+    let output_dir = unique_temp_path("lifecycle-failure-output");
+    fs::create_dir_all(&output_dir).expect("output dir should be creatable");
+
+    let output = Command::new("bash")
+        .arg(verifier_script())
+        .env("PATH", path_override)
+        .env("DSA_FFI_VERIFY_SKIP_BUILD", "1")
+        .env("DSA_FFI_VERIFY_BINARY", env!("CARGO_BIN_EXE_await_memmove"))
+        .env("DSA_FFI_VERIFY_DEVICE", "/dev/dsa/test0.0")
+        .env("DSA_FFI_VERIFY_LAUNCHER_PATH", &launcher_path)
+        .env("DSA_FFI_VERIFY_OUTPUT_DIR", &output_dir)
+        .env(TEST_SCENARIO_ENV, "owner_shutdown")
+        .output()
+        .expect("verifier should launch");
+
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("phase=done"));
+    assert!(stdout.contains("verdict=expected_failure"));
+    assert!(stdout.contains("failure_phase=runtime"));
+    assert!(stdout.contains("error_kind=lifecycle_failure"));
+    assert!(stdout.contains("async_lifecycle_failure_kind=owner_shutdown"));
+    assert!(stdout.contains("async_worker_failure_kind=null"));
+    assert!(stdout.contains("validation_phase=null"));
+    assert!(stdout.contains("validation_error_kind=null"));
 }
 
 #[test]
@@ -205,7 +238,7 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
-json=$(printf '{"ok":false,"device_path":"%s","requested_bytes":%s,"page_fault_retries":null,"final_status":null,"phase":"async_worker","error_kind":"worker_failure","worker_failure_kind":"response_channel_closed","validation_phase":null,"validation_error_kind":null,"message":"async memmove worker failure: response_channel_closed"}' "$device" "$bytes")
+json=$(printf '{"ok":false,"device_path":"%s","requested_bytes":%s,"page_fault_retries":null,"final_status":null,"phase":"async_worker","error_kind":"worker_failure","lifecycle_failure_kind":null,"worker_failure_kind":"response_channel_closed","validation_phase":null,"validation_error_kind":null,"message":"async memmove worker failure: response_channel_closed"}' "$device" "$bytes")
 printf '%s\n' "$json" | tee "$artifact"
 exit 1
 "#,
@@ -228,6 +261,7 @@ exit 1
     assert!(stdout.contains("verdict=expected_failure"));
     assert!(stdout.contains("failure_phase=runtime"));
     assert!(stdout.contains("error_kind=worker_failure"));
+    assert!(stdout.contains("async_lifecycle_failure_kind=null"));
     assert!(stdout.contains("async_worker_failure_kind=response_channel_closed"));
     assert!(stdout.contains("validation_phase=null"));
     assert!(stdout.contains("validation_error_kind=null"));
@@ -270,7 +304,7 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
-json=$(printf '{"ok":true,"device_path":"%s","requested_bytes":%s,"page_fault_retries":0,"final_status":"0x01","phase":"completed","error_kind":null,"worker_failure_kind":"request_channel_closed","validation_phase":"completed","validation_error_kind":null,"message":"verified %s copied bytes via async wrapper on %s"}' "$device" "$bytes" "$bytes" "$device")
+json=$(printf '{"ok":true,"device_path":"%s","requested_bytes":%s,"page_fault_retries":0,"final_status":"0x01","phase":"completed","error_kind":null,"lifecycle_failure_kind":"owner_shutdown","worker_failure_kind":null,"validation_phase":"completed","validation_error_kind":null,"message":"verified %s copied bytes via async wrapper on %s"}' "$device" "$bytes" "$bytes" "$device")
 printf '%s\n' "$json" | tee "$artifact"
 exit 0
 "#,

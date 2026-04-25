@@ -49,7 +49,7 @@ bash dsa-ffi/scripts/verify_async_memmove.sh
 In short:
 
 - **`live_memmove`** answers "did the direct `DsaSession` path behave truthfully?"
-- **`await_memmove`** answers "did the async wrapper await the same truthful path and preserve worker-vs-validation failures?"
+- **`await_memmove`** answers "did the async wrapper await the same truthful path and preserve lifecycle-vs-worker-vs-validation failures?"
 
 ## One-command truthful proof
 
@@ -92,6 +92,7 @@ The synchronous verifier final line includes:
 The async verifier final line includes those same fields plus:
 
 - `error_kind`
+- `async_lifecycle_failure_kind`
 - `async_worker_failure_kind`
 - `validation_phase`
 - `validation_error_kind`
@@ -100,7 +101,7 @@ Examples:
 
 ```text
 [verify_live_memmove] phase=done ... device_path=/dev/dsa/wq0.0 requested_bytes=64 page_fault_retries=0 final_status=0x01 validation_phase=completed verdict=pass
-[verify_async_memmove] phase=done ... device_path=/dev/dsa/wq0.0 requested_bytes=64 page_fault_retries=0 final_status=0x01 error_kind=null async_worker_failure_kind=null validation_phase=completed validation_error_kind=null verdict=pass
+[verify_async_memmove] phase=done ... device_path=/dev/dsa/wq0.0 requested_bytes=64 page_fault_retries=0 final_status=0x01 error_kind=null async_lifecycle_failure_kind=null async_worker_failure_kind=null validation_phase=completed validation_error_kind=null verdict=pass
 ```
 
 On an unprepared host, the verifier still exits successfully when it can classify the failure honestly. For example, a launcher without `cap_sys_rawio+eip` ends with:
@@ -153,6 +154,7 @@ The async binary always reports these fields:
 - `final_status`
 - `phase`
 - `error_kind`
+- `lifecycle_failure_kind`
 - `worker_failure_kind`
 - `validation_phase`
 - `validation_error_kind`
@@ -188,7 +190,7 @@ These come from the Rust binaries and are preserved by the verifiers as validati
 - `completion_status` — the completion status byte reported a real failure.
 - `byte_mismatch` — completion reported success, but the copied bytes did not match.
 
-In async verifier output, wrapper-only failures stay separate: `error_kind=worker_failure` with `async_worker_failure_kind=worker_init_closed|request_channel_closed|response_channel_closed|worker_panicked` means the async shell failed before a trustworthy validation result existed. `error_kind=validation_failure` means the wrapper successfully propagated the underlying `MemmoveError`, which is preserved as `validation_phase` and `validation_error_kind`.
+In async verifier output, wrapper-only failures stay separate: `error_kind=lifecycle_failure` with `async_lifecycle_failure_kind=owner_shutdown` means the explicit owner closed the shared handle before a trustworthy validation result existed. `error_kind=worker_failure` with `async_worker_failure_kind=worker_init_closed|request_channel_closed|response_channel_closed|worker_panicked` means the async shell failed before a trustworthy validation result existed. `error_kind=validation_failure` means the wrapper successfully propagated the underlying `MemmoveError`, which is preserved as `validation_phase` and `validation_error_kind`.
 
 ## Useful overrides
 

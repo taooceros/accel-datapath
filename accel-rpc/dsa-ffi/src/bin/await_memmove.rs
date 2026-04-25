@@ -6,9 +6,11 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use dsa_ffi::{
-    AsyncDsaSession, AsyncMemmoveError, MemmoveError, MemmoveRequest, MemmoveValidationReport,
-    DEFAULT_DEVICE_PATH,
+    AsyncDsaSession, AsyncMemmoveError, AsyncMemmoveRequest, AsyncMemmoveWorker, MemmoveError,
+    MemmovePhase, MemmoveRequest, MemmoveValidationReport, DEFAULT_DEVICE_PATH,
 };
+
+const TEST_SCENARIO_ENV: &str = "DSA_FFI_AWAIT_MEMMOVE_TEST_SCENARIO";
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
@@ -45,6 +47,38 @@ impl OutputFormat {
             "json" => Ok(Self::Json),
             other => Err(format!(
                 "unsupported output format `{other}`; expected `text` or `json`"
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TestScenario {
+    Success,
+    OwnerShutdown,
+    WorkerFailure,
+    CompletionTimeout,
+}
+
+impl TestScenario {
+    fn from_env() -> Result<Option<Self>, String> {
+        match env::var(TEST_SCENARIO_ENV) {
+            Ok(value) => Self::parse(&value).map(Some),
+            Err(env::VarError::NotPresent) => Ok(None),
+            Err(env::VarError::NotUnicode(_)) => Err(format!(
+                "environment variable `{TEST_SCENARIO_ENV}` must be valid UTF-8"
+            )),
+        }
+    }
+
+    fn parse(raw: &str) -> Result<Self, String> {
+        match raw {
+            "success" => Ok(Self::Success),
+            "owner_shutdown" => Ok(Self::OwnerShutdown),
+            "worker_failure" => Ok(Self::WorkerFailure),
+            "completion_timeout" => Ok(Self::CompletionTimeout),
+            other => Err(format!(
+                "unsupported `{TEST_SCENARIO_ENV}` value `{other}`; expected success, owner_shutdown, worker_failure, or completion_timeout"
             )),
         }
     }
@@ -139,6 +173,7 @@ struct RunOutcome {
     final_status: Option<u8>,
     phase: String,
     error_kind: Option<&'static str>,
+    lifecycle_failure_kind: Option<&'static str>,
     worker_failure_kind: Option<&'static str>,
     validation_phase: Option<String>,
     validation_error_kind: Option<&'static str>,
@@ -147,19 +182,128 @@ struct RunOutcome {
 
 async fn execute(args: &CliArgs) -> RunOutcome {
     let src = deterministic_src(args.requested_bytes);
-    let request = match dsa_ffi::AsyncMemmoveRequest::new(src.clone()) {
+    let request = match AsyncMemmoveRequest::new(src) {
         Ok(request) => request,
         Err(err) => return validation_failure_outcome(args, err),
     };
 
+    match TestScenario::from_env() {
+        Ok(Some(scenario)) => execute_test_scenario(args, request, scenario).await,
+        Ok(None) => execute_live(args, request).await,
+        Err(err) => RunOutcome {
+            ok: false,
+            device_path: args.device_path.display().to_string(),
+            requested_bytes: args.requested_bytes,
+            page_fault_retries: None,
+            final_status: None,
+            phase: "argument_validation".to_string(),
+            error_kind: Some("validation_failure"),
+            lifecycle_failure_kind: None,
+            worker_failure_kind: None,
+            validation_phase: Some("argument_validation".to_string()),
+            validation_error_kind: Some("invalid_test_scenario"),
+            message: err,
+        },
+    }
+}
+
+async fn execute_live(args: &CliArgs, request: AsyncMemmoveRequest) -> RunOutcome {
     let session = match AsyncDsaSession::open(&args.device_path) {
         Ok(session) => session,
         Err(err) => return async_failure_outcome(args, err),
     };
 
-    let memmove_result = session.memmove(request).await;
-    let shutdown_result = session.shutdown();
+    execute_with_handle(args, session, request).await
+}
 
+async fn execute_test_scenario(
+    args: &CliArgs,
+    request: AsyncMemmoveRequest,
+    scenario: TestScenario,
+) -> RunOutcome {
+    match scenario {
+        TestScenario::Success => {
+            let device_path = args.device_path.clone();
+            let session = match AsyncDsaSession::spawn_with_factory(move || {
+                Ok(SuccessWorker { device_path })
+            }) {
+                Ok(session) => session,
+                Err(err) => return async_failure_outcome(args, err),
+            };
+            execute_with_handle(args, session, request).await
+        }
+        TestScenario::OwnerShutdown => {
+            let device_path = args.device_path.clone();
+            let session = match AsyncDsaSession::spawn_with_factory(move || {
+                Ok(SuccessWorker { device_path })
+            }) {
+                Ok(session) => session,
+                Err(err) => return async_failure_outcome(args, err),
+            };
+            execute_after_owner_shutdown(args, session, request).await
+        }
+        TestScenario::WorkerFailure => {
+            let previous_hook = std::panic::take_hook();
+            std::panic::set_hook(Box::new(|_| {}));
+
+            let outcome = match AsyncDsaSession::spawn_with_factory(|| Ok(PanicWorker)) {
+                Ok(session) => execute_with_handle(args, session, request).await,
+                Err(err) => async_failure_outcome(args, err),
+            };
+
+            std::panic::set_hook(previous_hook);
+            outcome
+        }
+        TestScenario::CompletionTimeout => {
+            let device_path = args.device_path.clone();
+            let session = match AsyncDsaSession::spawn_with_factory(move || {
+                Ok(ErrorWorker {
+                    error: Some(MemmoveError::CompletionTimeout {
+                        device_path,
+                        phase: MemmovePhase::CompletionPoll,
+                        page_fault_retries: 2,
+                    }),
+                })
+            }) {
+                Ok(session) => session,
+                Err(err) => return async_failure_outcome(args, err),
+            };
+            execute_with_handle(args, session, request).await
+        }
+    }
+}
+
+async fn execute_with_handle(
+    args: &CliArgs,
+    session: AsyncDsaSession,
+    request: AsyncMemmoveRequest,
+) -> RunOutcome {
+    let handle = session.handle();
+    let memmove_result = handle.memmove(request).await;
+    let shutdown_result = session.shutdown();
+    map_execution_outcome(args, memmove_result, shutdown_result)
+}
+
+async fn execute_after_owner_shutdown(
+    args: &CliArgs,
+    session: AsyncDsaSession,
+    request: AsyncMemmoveRequest,
+) -> RunOutcome {
+    let handle = session.handle();
+    match session.shutdown() {
+        Ok(()) => {
+            let memmove_result = handle.memmove(request).await;
+            map_execution_outcome(args, memmove_result, Ok(()))
+        }
+        Err(err) => async_failure_outcome(args, err),
+    }
+}
+
+fn map_execution_outcome(
+    args: &CliArgs,
+    memmove_result: Result<dsa_ffi::AsyncMemmoveResult, AsyncMemmoveError>,
+    shutdown_result: Result<(), AsyncMemmoveError>,
+) -> RunOutcome {
     match (memmove_result, shutdown_result) {
         (Ok(result), Ok(())) => success_outcome(result.report),
         (Err(err), Ok(())) => async_failure_outcome(args, err),
@@ -177,6 +321,7 @@ fn success_outcome(report: MemmoveValidationReport) -> RunOutcome {
         final_status: Some(report.final_status),
         phase: "completed".to_string(),
         error_kind: None,
+        lifecycle_failure_kind: None,
         worker_failure_kind: None,
         validation_phase: Some("completed".to_string()),
         validation_error_kind: None,
@@ -199,7 +344,8 @@ fn async_failure_outcome(args: &CliArgs, err: AsyncMemmoveError) -> RunOutcome {
             final_status: None,
             phase: "async_lifecycle".to_string(),
             error_kind: Some("lifecycle_failure"),
-            worker_failure_kind: Some(kind.as_str()),
+            lifecycle_failure_kind: Some(kind.as_str()),
+            worker_failure_kind: None,
             validation_phase: None,
             validation_error_kind: None,
             message: format!("async memmove lifecycle failure: {}", kind.as_str()),
@@ -212,6 +358,7 @@ fn async_failure_outcome(args: &CliArgs, err: AsyncMemmoveError) -> RunOutcome {
             final_status: None,
             phase: "async_worker".to_string(),
             error_kind: Some("worker_failure"),
+            lifecycle_failure_kind: None,
             worker_failure_kind: Some(kind.as_str()),
             validation_phase: None,
             validation_error_kind: None,
@@ -238,6 +385,7 @@ fn validation_failure_outcome(args: &CliArgs, err: MemmoveError) -> RunOutcome {
         final_status: err.final_status(),
         phase: validation_phase.clone(),
         error_kind: Some("validation_failure"),
+        lifecycle_failure_kind: None,
         worker_failure_kind: None,
         validation_phase: Some(validation_phase),
         validation_error_kind: Some(err.kind()),
@@ -284,6 +432,11 @@ fn render_text(outcome: &RunOutcome) -> String {
     let _ = writeln!(text, "error_kind={}", outcome.error_kind.unwrap_or("null"));
     let _ = writeln!(
         text,
+        "lifecycle_failure_kind={}",
+        outcome.lifecycle_failure_kind.unwrap_or("null")
+    );
+    let _ = writeln!(
+        text,
         "worker_failure_kind={}",
         outcome.worker_failure_kind.unwrap_or("null")
     );
@@ -312,6 +465,7 @@ fn render_json(outcome: &RunOutcome) -> String {
             "\"final_status\":{},",
             "\"phase\":\"{}\",",
             "\"error_kind\":{},",
+            "\"lifecycle_failure_kind\":{},",
             "\"worker_failure_kind\":{},",
             "\"validation_phase\":{},",
             "\"validation_error_kind\":{},",
@@ -332,6 +486,10 @@ fn render_json(outcome: &RunOutcome) -> String {
         escape_json(&outcome.phase),
         outcome
             .error_kind
+            .map(|value| format!("\"{}\"", escape_json(value)))
+            .unwrap_or_else(|| "null".to_string()),
+        outcome
+            .lifecycle_failure_kind
             .map(|value| format!("\"{}\"", escape_json(value)))
             .unwrap_or_else(|| "null".to_string()),
         outcome
@@ -410,4 +568,48 @@ fn print_help() {
         "Usage: await_memmove [--device PATH] [--bytes N] [--format text|json] [--artifact PATH]"
     );
     println!("Runs one real DSA memmove through the async wrapper and prints a stable report.");
+}
+
+struct SuccessWorker {
+    device_path: PathBuf,
+}
+
+impl AsyncMemmoveWorker for SuccessWorker {
+    fn memmove(
+        &mut self,
+        dst: &mut [u8],
+        src: &[u8],
+    ) -> Result<MemmoveValidationReport, MemmoveError> {
+        dst[..src.len()].copy_from_slice(src);
+        MemmoveValidationReport::new(&self.device_path, MemmoveRequest::new(src.len())?, 0, 1)
+    }
+}
+
+struct ErrorWorker {
+    error: Option<MemmoveError>,
+}
+
+impl AsyncMemmoveWorker for ErrorWorker {
+    fn memmove(
+        &mut self,
+        _dst: &mut [u8],
+        _src: &[u8],
+    ) -> Result<MemmoveValidationReport, MemmoveError> {
+        Err(self
+            .error
+            .take()
+            .expect("test scenario should only issue one request"))
+    }
+}
+
+struct PanicWorker;
+
+impl AsyncMemmoveWorker for PanicWorker {
+    fn memmove(
+        &mut self,
+        _dst: &mut [u8],
+        _src: &[u8],
+    ) -> Result<MemmoveValidationReport, MemmoveError> {
+        panic!("worker dropped before replying");
+    }
 }
