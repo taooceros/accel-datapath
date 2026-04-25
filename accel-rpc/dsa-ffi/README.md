@@ -11,14 +11,15 @@ After reading, you should be able to:
 
 1. run the hardware-backed verifier on a prepared host,
 2. run the proof binaries directly when you need a narrower repro, and
-3. interpret the failure class without cross-referencing milestone notes.
+3. interpret the shared-handle lifecycle, worker, and validation failure classes without cross-referencing milestone notes.
 
 ## What lives here
 
 - `DsaSession` is the only live submission path.
-- `AsyncDsaSession` is the minimal awaitable wrapper over one worker-owned `DsaSession`.
+- `AsyncDsaSession` is the explicit lifecycle owner for the async path.
+- `AsyncDsaHandle` is the only cloneable Tokio-facing surface. Cloning it shares one worker-owned `DsaSession`; it never duplicates hardware ownership.
 - `live_memmove` is the crate-local synchronous validation binary.
-- `await_memmove` is the crate-local async validation binary that awaits the wrapper directly.
+- `await_memmove` is the crate-local async validation binary that exercises the public owner-plus-handle contract.
 - `verify_live_memmove.sh` and `verify_async_memmove.sh` are the operational verifiers that wrap the binaries in the repo's `launch` capability flow and check the machine-readable artifacts they emit.
 
 ## Prerequisites
@@ -40,7 +41,7 @@ Use the synchronous proof path when you are isolating the raw crate-owned DSA me
 bash dsa-ffi/scripts/verify_live_memmove.sh
 ```
 
-Use the async proof path when you need to prove that the worker-owned awaitable wrapper preserves the same typed outcomes while adding explicit worker-failure classification:
+Use the async proof path when you need to prove that ordinary Tokio callers can clone a handle, await real work, and still distinguish owner shutdown, worker failure, and wrapped validation errors:
 
 ```bash
 bash dsa-ffi/scripts/verify_async_memmove.sh
@@ -49,7 +50,23 @@ bash dsa-ffi/scripts/verify_async_memmove.sh
 In short:
 
 - **`live_memmove`** answers "did the direct `DsaSession` path behave truthfully?"
-- **`await_memmove`** answers "did the async wrapper await the same truthful path and preserve lifecycle-vs-worker-vs-validation failures?"
+- **`await_memmove`** answers "did the public async owner-plus-handle surface preserve truthful lifecycle-vs-worker-vs-validation failures?"
+
+## Async ownership model
+
+The async surface is intentionally split in two.
+
+- `AsyncDsaSession` owns the worker thread and therefore owns shutdown.
+- `AsyncDsaHandle` is what Tokio tasks clone and await.
+- The worker thread owns the real `DsaSession`, so all hardware access still crosses one explicit boundary as owned requests and owned replies.
+
+That split matters operationally because it makes failure interpretation honest:
+
+- if the owner shuts down before a reply exists, the async proof surface reports `error_kind=lifecycle_failure` with `lifecycle_failure_kind=owner_shutdown`,
+- if the worker path breaks before a reply exists, it reports `error_kind=worker_failure` with a `worker_failure_kind`, and
+- if the worker successfully propagates a real memmove problem, it reports `error_kind=validation_failure` plus the underlying validation phase and error kind.
+
+This is why the async verifier is the main operator entrypoint for the shared Tokio handle proof path rather than just another wrapper around the synchronous binary.
 
 ## One-command truthful proof
 
@@ -63,8 +80,8 @@ bash dsa-ffi/scripts/verify_async_memmove.sh
 From the repo root, equivalent wrapper entrypoints are also available:
 
 ```bash
-bash dsa-ffi/scripts/verify_live_memmove.sh
-bash dsa-ffi/scripts/verify_async_memmove.sh
+bash accel-rpc/dsa-ffi/scripts/verify_live_memmove.sh
+bash accel-rpc/dsa-ffi/scripts/verify_async_memmove.sh
 ```
 
 What both verifiers do:
@@ -102,6 +119,7 @@ Examples:
 ```text
 [verify_live_memmove] phase=done ... device_path=/dev/dsa/wq0.0 requested_bytes=64 page_fault_retries=0 final_status=0x01 validation_phase=completed verdict=pass
 [verify_async_memmove] phase=done ... device_path=/dev/dsa/wq0.0 requested_bytes=64 page_fault_retries=0 final_status=0x01 error_kind=null async_lifecycle_failure_kind=null async_worker_failure_kind=null validation_phase=completed validation_error_kind=null verdict=pass
+[verify_async_memmove] phase=done ... device_path=/dev/dsa/wq0.0 requested_bytes=64 error_kind=lifecycle_failure async_lifecycle_failure_kind=owner_shutdown async_worker_failure_kind=null validation_phase=null validation_error_kind=null verdict=expected_failure
 ```
 
 On an unprepared host, the verifier still exits successfully when it can classify the failure honestly. For example, a launcher without `cap_sys_rawio+eip` ends with:
@@ -175,8 +193,8 @@ These come from the shell wrapper before the memmove result is trusted:
 - `launcher_status=missing_launcher` — `tools/build/dsa_launcher` is absent or not executable.
 - `launcher_status=missing_capability` — the launcher exists but does not carry `cap_sys_rawio`.
 - `launcher_status=contradictory_overrides` — a binary override was supplied without `DSA_FFI_VERIFY_SKIP_BUILD=1`, which would otherwise build one binary and execute another.
-- `phase=runtime_timeout` — the launch-wrapped validation run hung past the configured timeout.
-- `phase=artifact_validation` — the binary ran, but the artifact was missing, malformed, incomplete, or inconsistent with stdout.
+- `phase=preflight` or `phase=runtime` with a timeout message — the launch-wrapped validation run exceeded the configured timeout while still preserving the output paths and launcher state.
+- `phase=artifact_validation` — the binary ran, but the artifact was missing, malformed, incomplete, inconsistent with stdout, or internally contradictory.
 
 ### Validation failure classes from the Rust binaries
 
@@ -190,7 +208,13 @@ These come from the Rust binaries and are preserved by the verifiers as validati
 - `completion_status` — the completion status byte reported a real failure.
 - `byte_mismatch` — completion reported success, but the copied bytes did not match.
 
-In async verifier output, wrapper-only failures stay separate: `error_kind=lifecycle_failure` with `async_lifecycle_failure_kind=owner_shutdown` means the explicit owner closed the shared handle before a trustworthy validation result existed. `error_kind=worker_failure` with `async_worker_failure_kind=worker_init_closed|request_channel_closed|response_channel_closed|worker_panicked` means the async shell failed before a trustworthy validation result existed. `error_kind=validation_failure` means the wrapper successfully propagated the underlying `MemmoveError`, which is preserved as `validation_phase` and `validation_error_kind`.
+In async verifier output, wrapper-only failures stay separate:
+
+- `error_kind=lifecycle_failure` with `async_lifecycle_failure_kind=owner_shutdown` means the explicit owner closed the shared handle before a trustworthy validation result existed.
+- `error_kind=worker_failure` with `async_worker_failure_kind=worker_init_closed|request_channel_closed|response_channel_closed|worker_panicked` means the async shell failed before a trustworthy validation result existed.
+- `error_kind=validation_failure` means the wrapper successfully propagated the underlying `MemmoveError`, which is preserved as `validation_phase` and `validation_error_kind`.
+
+If you need the exact machine-readable payload, inspect the JSON artifact next to the captured stdout/stderr files. The verifier treats any disagreement between stdout and the artifact as a hard `phase=artifact_validation` failure.
 
 ## Useful overrides
 
@@ -212,10 +236,9 @@ From the repo root:
 
 ```bash
 cd accel-rpc && cargo test -p dsa-ffi --test validation_cli_contract -- --nocapture
-cd accel-rpc && cargo test -p dsa-ffi --test async_validation_cli_contract -- --nocapture
-cd accel-rpc && cargo test -p dsa-ffi --test async_verifier_contract -- --nocapture
+cd accel-rpc && cargo test -p dsa-ffi --test tokio_handle_contract --test async_validation_cli_contract --test async_verifier_contract -- --nocapture
 bash accel-rpc/dsa-ffi/scripts/verify_live_memmove.sh
 bash accel-rpc/dsa-ffi/scripts/verify_async_memmove.sh
 ```
 
-The CLI contract tests exercise the non-hardware schemas. The shell verifiers are the truthful end-to-end proof commands for prepared hosts and the expected-failure proof commands for unprepared ones.
+The Tokio-handle and CLI contract tests exercise the non-hardware schemas for the public async surface. The shell verifiers are the truthful end-to-end proof commands for prepared hosts and the expected-failure proof commands for unprepared ones.

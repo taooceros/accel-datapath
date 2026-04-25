@@ -80,6 +80,44 @@ printf '%s' {:?}
     (temp_root, launcher_path, joined_path)
 }
 
+fn write_fake_binary(path: &Path, body: &str) {
+    write_executable(
+        path,
+        &format!(
+            r##"#!/usr/bin/env bash
+set -euo pipefail
+if [[ ${{1:-}} == --bytes && ${{2:-}} == abc ]]; then
+  echo 'await_memmove: invalid value `abc` for `--bytes`; expected a positive integer' >&2
+  exit 2
+fi
+artifact=
+device=/dev/dsa/wq0.0
+bytes=64
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --artifact)
+      artifact=$2
+      shift 2
+      ;;
+    --device)
+      device=$2
+      shift 2
+      ;;
+    --bytes)
+      bytes=$2
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+{body}
+"##,
+        ),
+    );
+}
+
 #[test]
 fn verifier_fails_preflight_when_binary_override_and_build_flags_conflict() {
     let (_temp_root, launcher_path, path_override) = fake_launcher_env(true);
@@ -208,40 +246,11 @@ fn verifier_preserves_async_worker_failure_kind() {
     fs::create_dir_all(&output_dir).expect("output dir should be creatable");
 
     let fake_binary = temp_root.join("fake_await_memmove");
-    write_executable(
+    write_fake_binary(
         &fake_binary,
-        r#"#!/usr/bin/env bash
-set -euo pipefail
-if [[ ${1:-} == --bytes && ${2:-} == abc ]]; then
-  echo 'await_memmove: invalid value `abc` for `--bytes`; expected a positive integer' >&2
-  exit 2
-fi
-artifact=
-device=/dev/dsa/wq0.0
-bytes=64
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --artifact)
-      artifact=$2
-      shift 2
-      ;;
-    --device)
-      device=$2
-      shift 2
-      ;;
-    --bytes)
-      bytes=$2
-      shift 2
-      ;;
-    *)
-      shift
-      ;;
-  esac
-done
-json=$(printf '{"ok":false,"device_path":"%s","requested_bytes":%s,"page_fault_retries":null,"final_status":null,"phase":"async_worker","error_kind":"worker_failure","lifecycle_failure_kind":null,"worker_failure_kind":"response_channel_closed","validation_phase":null,"validation_error_kind":null,"message":"async memmove worker failure: response_channel_closed"}' "$device" "$bytes")
+        r#"json=$(printf '{"ok":false,"device_path":"%s","requested_bytes":%s,"page_fault_retries":null,"final_status":null,"phase":"async_worker","error_kind":"worker_failure","lifecycle_failure_kind":null,"worker_failure_kind":"response_channel_closed","validation_phase":null,"validation_error_kind":null,"message":"async memmove worker failure: response_channel_closed"}' "$device" "$bytes")
 printf '%s\n' "$json" | tee "$artifact"
-exit 1
-"#,
+exit 1"#,
     );
 
     let output = Command::new("bash")
@@ -274,40 +283,11 @@ fn verifier_rejects_contradictory_artifact_fields() {
     fs::create_dir_all(&output_dir).expect("output dir should be creatable");
 
     let fake_binary = temp_root.join("fake_await_memmove");
-    write_executable(
+    write_fake_binary(
         &fake_binary,
-        r#"#!/usr/bin/env bash
-set -euo pipefail
-if [[ ${1:-} == --bytes && ${2:-} == abc ]]; then
-  echo 'await_memmove: invalid value `abc` for `--bytes`; expected a positive integer' >&2
-  exit 2
-fi
-artifact=
-device=/dev/dsa/wq0.0
-bytes=64
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --artifact)
-      artifact=$2
-      shift 2
-      ;;
-    --device)
-      device=$2
-      shift 2
-      ;;
-    --bytes)
-      bytes=$2
-      shift 2
-      ;;
-    *)
-      shift
-      ;;
-  esac
-done
-json=$(printf '{"ok":true,"device_path":"%s","requested_bytes":%s,"page_fault_retries":0,"final_status":"0x01","phase":"completed","error_kind":null,"lifecycle_failure_kind":"owner_shutdown","worker_failure_kind":null,"validation_phase":"completed","validation_error_kind":null,"message":"verified %s copied bytes via async wrapper on %s"}' "$device" "$bytes" "$bytes" "$device")
+        r#"json=$(printf '{"ok":true,"device_path":"%s","requested_bytes":%s,"page_fault_retries":0,"final_status":"0x01","phase":"completed","error_kind":null,"lifecycle_failure_kind":"owner_shutdown","worker_failure_kind":null,"validation_phase":"completed","validation_error_kind":null,"message":"verified %s copied bytes via async wrapper on %s"}' "$device" "$bytes" "$bytes" "$device")
 printf '%s\n' "$json" | tee "$artifact"
-exit 0
-"#,
+exit 0"#,
     );
 
     let output = Command::new("bash")
@@ -328,5 +308,73 @@ exit 0
     assert!(stderr.contains(&format!(
         "artifact={}",
         output_dir.join("await_memmove.json").display()
+    )));
+}
+
+#[test]
+fn verifier_rejects_missing_lifecycle_classification() {
+    let (temp_root, launcher_path, path_override) = fake_launcher_env(true);
+    let output_dir = unique_temp_path("missing-lifecycle-output");
+    fs::create_dir_all(&output_dir).expect("output dir should be creatable");
+
+    let fake_binary = temp_root.join("fake_await_memmove");
+    write_fake_binary(
+        &fake_binary,
+        r#"json=$(printf '{"ok":false,"device_path":"%s","requested_bytes":%s,"page_fault_retries":null,"final_status":null,"phase":"async_lifecycle","error_kind":"lifecycle_failure","lifecycle_failure_kind":null,"worker_failure_kind":null,"validation_phase":null,"validation_error_kind":null,"message":"async memmove lifecycle failure: owner_shutdown"}' "$device" "$bytes")
+printf '%s\n' "$json" | tee "$artifact"
+exit 1"#,
+    );
+
+    let output = Command::new("bash")
+        .arg(verifier_script())
+        .env("PATH", path_override)
+        .env("DSA_FFI_VERIFY_SKIP_BUILD", "1")
+        .env("DSA_FFI_VERIFY_BINARY", &fake_binary)
+        .env("DSA_FFI_VERIFY_DEVICE", "/dev/dsa/test0.0")
+        .env("DSA_FFI_VERIFY_LAUNCHER_PATH", &launcher_path)
+        .env("DSA_FFI_VERIFY_OUTPUT_DIR", &output_dir)
+        .output()
+        .expect("verifier should launch");
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("phase=artifact_validation"));
+    assert!(stderr.contains("lifecycle-failure artifact lifecycle_failure_kind must be a non-empty string"));
+}
+
+#[test]
+fn verifier_rejects_stdout_artifact_divergence() {
+    let (temp_root, launcher_path, path_override) = fake_launcher_env(true);
+    let output_dir = unique_temp_path("divergent-stdout-output");
+    fs::create_dir_all(&output_dir).expect("output dir should be creatable");
+
+    let fake_binary = temp_root.join("fake_await_memmove");
+    write_fake_binary(
+        &fake_binary,
+        r#"artifact_json=$(printf '{"ok":false,"device_path":"%s","requested_bytes":%s,"page_fault_retries":null,"final_status":null,"phase":"async_worker","error_kind":"worker_failure","lifecycle_failure_kind":null,"worker_failure_kind":"response_channel_closed","validation_phase":null,"validation_error_kind":null,"message":"async memmove worker failure: response_channel_closed"}' "$device" "$bytes")
+stdout_json=$(printf '{"ok":false,"device_path":"%s","requested_bytes":%s,"page_fault_retries":null,"final_status":null,"phase":"async_worker","error_kind":"worker_failure","lifecycle_failure_kind":null,"worker_failure_kind":"worker_panicked","validation_phase":null,"validation_error_kind":null,"message":"async memmove worker failure: worker_panicked"}' "$device" "$bytes")
+printf '%s\n' "$artifact_json" > "$artifact"
+printf '%s\n' "$stdout_json"
+exit 1"#,
+    );
+
+    let output = Command::new("bash")
+        .arg(verifier_script())
+        .env("PATH", path_override)
+        .env("DSA_FFI_VERIFY_SKIP_BUILD", "1")
+        .env("DSA_FFI_VERIFY_BINARY", &fake_binary)
+        .env("DSA_FFI_VERIFY_DEVICE", "/dev/dsa/test0.0")
+        .env("DSA_FFI_VERIFY_LAUNCHER_PATH", &launcher_path)
+        .env("DSA_FFI_VERIFY_OUTPUT_DIR", &output_dir)
+        .output()
+        .expect("verifier should launch");
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("phase=artifact_validation"));
+    assert!(stderr.contains("stdout and artifact diverged"));
+    assert!(stderr.contains(&format!(
+        "stdout={}",
+        output_dir.join("await_memmove.stdout").display()
     )));
 }
