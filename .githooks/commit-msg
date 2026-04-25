@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+msg_file=${1:?commit message path required}
+subject=$(head -n 1 "$msg_file" || true)
+
+trimmed_subject=${subject%$'\r'}
+
+fail() {
+  printf 'commit-msg: %s\n' "$1" >&2
+  exit 1
+}
+
+if [[ -z "${trimmed_subject}" ]]; then
+  fail "empty commit subject"
+fi
+
+if [[ "${trimmed_subject}" =~ (\.\.\.|…)$ ]]; then
+  fail "subject appears truncated: ${trimmed_subject}"
+fi
+
+subject_len=$(python3 - <<'PY' "$trimmed_subject"
+import sys
+print(len(sys.argv[1]))
+PY
+)
+
+if (( subject_len > 72 )); then
+  fail "subject is ${subject_len} chars; rewrite it to <= 72 chars instead of truncating"
+fi
+
+line_count=$(wc -l < "$msg_file" | tr -d ' ')
+if (( line_count > 1 )); then
+  second_line=$(sed -n '2p' "$msg_file" | tr -d '\r')
+  if [[ -n "${second_line}" ]]; then
+    fail "commit body must start after a blank line following the subject"
+  fi
+fi
+
+required_sections=("## Summary" "## Why" "## Details" "## Verification")
+missing_sections=()
+for section in "${required_sections[@]}"; do
+  if ! grep -Fqx "$section" "$msg_file"; then
+    missing_sections+=("$section")
+  fi
+done
+
+if (( ${#missing_sections[@]} > 0 )); then
+  printf 'commit-msg: missing required sections from .gitmessage:' >&2
+  for section in "${missing_sections[@]}"; do
+    printf ' %s' "$section" >&2
+  done
+  printf '\n' >&2
+  exit 1
+fi
+
+exit 0
