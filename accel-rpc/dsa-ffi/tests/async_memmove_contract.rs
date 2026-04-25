@@ -5,8 +5,9 @@ use std::sync::{
 };
 
 use dsa_ffi::{
-    AsyncDsaSession, AsyncMemmoveError, AsyncMemmoveRequest, AsyncMemmoveWorker,
-    AsyncWorkerFailureKind, MemmoveError, MemmovePhase, MemmoveRequest, MemmoveValidationReport,
+    AsyncDsaSession, AsyncLifecycleFailureKind, AsyncMemmoveError, AsyncMemmoveRequest,
+    AsyncMemmoveWorker, AsyncWorkerFailureKind, MemmoveError, MemmovePhase, MemmoveRequest,
+    MemmoveValidationReport,
 };
 
 struct FakeWorker {
@@ -204,6 +205,38 @@ async fn preserves_underlying_completion_timeout_error() {
             page_fault_retries: 2,
             ..
         })
+    ));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn handle_use_after_explicit_shutdown_is_a_lifecycle_error() {
+    let session = AsyncDsaSession::spawn_with_factory(|| {
+        Ok(FakeWorker {
+            calls: Arc::new(AtomicUsize::new(0)),
+        })
+    })
+    .expect("worker should start");
+    let handle = session.handle();
+
+    session
+        .shutdown()
+        .expect("idle worker should shut down cleanly");
+
+    let err = handle
+        .memmove(AsyncMemmoveRequest::new(vec![1, 2, 3]).unwrap())
+        .await
+        .expect_err("shut down owners must reject cloned handle use");
+
+    assert_eq!(err.kind(), "owner_shutdown");
+    assert_eq!(
+        err.lifecycle_failure_kind(),
+        Some(AsyncLifecycleFailureKind::OwnerShutdown)
+    );
+    assert!(matches!(
+        err,
+        AsyncMemmoveError::LifecycleFailure {
+            kind: AsyncLifecycleFailureKind::OwnerShutdown,
+        }
     ));
 }
 

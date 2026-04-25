@@ -9,8 +9,8 @@ mod async_session;
 mod validation;
 
 pub use async_session::{
-    AsyncDsaSession, AsyncMemmoveError, AsyncMemmoveRequest, AsyncMemmoveResult,
-    AsyncMemmoveWorker, AsyncWorkerFailureKind,
+    AsyncDsaHandle, AsyncDsaSession, AsyncLifecycleFailureKind, AsyncMemmoveError,
+    AsyncMemmoveRequest, AsyncMemmoveResult, AsyncMemmoveWorker, AsyncWorkerFailureKind,
 };
 pub use validation::{
     classify_memmove_completion, CompletionAction, CompletionSnapshot, MemmoveError, MemmovePhase,

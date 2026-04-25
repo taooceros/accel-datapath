@@ -1,4 +1,8 @@
 use std::path::Path;
+use std::sync::{
+    atomic::{AtomicU8, Ordering},
+    Arc,
+};
 use std::thread::{self, JoinHandle};
 
 use thiserror::Error;
@@ -8,6 +12,10 @@ use crate::{
     DsaSession, MemmoveError, MemmoveRequest, MemmoveValidationReport, DEFAULT_DEVICE_PATH,
     DEFAULT_MAX_PAGE_FAULT_RETRIES,
 };
+
+const LIFECYCLE_RUNNING: u8 = 0;
+const LIFECYCLE_SHUTDOWN_REQUESTED: u8 = 1;
+const LIFECYCLE_SHUTDOWN_COMPLETE: u8 = 2;
 
 /// Owned memmove request that can safely cross the worker-thread boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,6 +57,26 @@ pub struct AsyncMemmoveResult {
     pub report: MemmoveValidationReport,
 }
 
+/// Explicit owner/lifecycle failure kinds that are distinct from worker failures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AsyncLifecycleFailureKind {
+    OwnerShutdown,
+}
+
+impl AsyncLifecycleFailureKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::OwnerShutdown => "owner_shutdown",
+        }
+    }
+}
+
+impl std::fmt::Display for AsyncLifecycleFailureKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// Narrow async-structural failure kinds. Real DSA failures remain `MemmoveError`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AsyncWorkerFailureKind {
@@ -81,6 +109,9 @@ pub enum AsyncMemmoveError {
     #[error(transparent)]
     Memmove(#[from] MemmoveError),
 
+    #[error("async memmove lifecycle failure: {kind}")]
+    LifecycleFailure { kind: AsyncLifecycleFailureKind },
+
     #[error("async memmove worker failure: {kind}")]
     WorkerFailure { kind: AsyncWorkerFailureKind },
 }
@@ -89,21 +120,29 @@ impl AsyncMemmoveError {
     pub fn kind(&self) -> &'static str {
         match self {
             Self::Memmove(err) => err.kind(),
+            Self::LifecycleFailure { kind } => kind.as_str(),
             Self::WorkerFailure { kind } => kind.as_str(),
+        }
+    }
+
+    pub fn lifecycle_failure_kind(&self) -> Option<AsyncLifecycleFailureKind> {
+        match self {
+            Self::LifecycleFailure { kind } => Some(*kind),
+            Self::Memmove(_) | Self::WorkerFailure { .. } => None,
         }
     }
 
     pub fn worker_failure_kind(&self) -> Option<AsyncWorkerFailureKind> {
         match self {
             Self::WorkerFailure { kind } => Some(*kind),
-            Self::Memmove(_) => None,
+            Self::Memmove(_) | Self::LifecycleFailure { .. } => None,
         }
     }
 
     pub fn memmove_error(&self) -> Option<&MemmoveError> {
         match self {
             Self::Memmove(err) => Some(err),
-            Self::WorkerFailure { .. } => None,
+            Self::LifecycleFailure { .. } | Self::WorkerFailure { .. } => None,
         }
     }
 }
@@ -133,16 +172,100 @@ enum WorkerCommand {
         request: AsyncMemmoveRequest,
         reply_tx: oneshot::Sender<Result<AsyncMemmoveResult, MemmoveError>>,
     },
+    Shutdown,
 }
 
-/// Minimal awaitable wrapper over one worker-owned DSA session.
+#[derive(Debug)]
+struct SharedWorkerState {
+    request_tx: mpsc::UnboundedSender<WorkerCommand>,
+    lifecycle: AtomicU8,
+}
+
+impl SharedWorkerState {
+    fn lifecycle_state(&self) -> u8 {
+        self.lifecycle.load(Ordering::Acquire)
+    }
+
+    fn is_shutdown_requested(&self) -> bool {
+        self.lifecycle_state() >= LIFECYCLE_SHUTDOWN_REQUESTED
+    }
+
+    fn mark_shutdown_requested(&self) {
+        self.lifecycle
+            .store(LIFECYCLE_SHUTDOWN_REQUESTED, Ordering::Release);
+    }
+
+    fn mark_shutdown_complete(&self) {
+        self.lifecycle
+            .store(LIFECYCLE_SHUTDOWN_COMPLETE, Ordering::Release);
+    }
+}
+
+/// Cloneable Tokio-facing handle over one worker-owned `DsaSession`.
 ///
 /// This type makes serialization explicit: one worker thread owns one session,
 /// requests cross the boundary as owned data, and replies return owned bytes
-/// plus the original synchronous validation report.
+/// plus the original synchronous validation report. Cloning the handle shares
+/// that one worker; it never duplicates hardware ownership.
+#[derive(Debug, Clone)]
+pub struct AsyncDsaHandle {
+    shared: Arc<SharedWorkerState>,
+}
+
+impl AsyncDsaHandle {
+    /// Submit one owned request through the single worker-owned session.
+    pub async fn memmove(
+        &self,
+        request: AsyncMemmoveRequest,
+    ) -> Result<AsyncMemmoveResult, AsyncMemmoveError> {
+        if self.shared.is_shutdown_requested() {
+            return Err(AsyncMemmoveError::LifecycleFailure {
+                kind: AsyncLifecycleFailureKind::OwnerShutdown,
+            });
+        }
+
+        let (reply_tx, reply_rx) = oneshot::channel();
+
+        self.shared
+            .request_tx
+            .send(WorkerCommand::Memmove { request, reply_tx })
+            .map_err(|_| self.classify_send_failure())?;
+
+        reply_rx
+            .await
+            .map_err(|_| self.classify_reply_failure())?
+            .map_err(AsyncMemmoveError::from)
+    }
+
+    fn classify_send_failure(&self) -> AsyncMemmoveError {
+        if self.shared.is_shutdown_requested() {
+            AsyncMemmoveError::LifecycleFailure {
+                kind: AsyncLifecycleFailureKind::OwnerShutdown,
+            }
+        } else {
+            AsyncMemmoveError::WorkerFailure {
+                kind: AsyncWorkerFailureKind::RequestChannelClosed,
+            }
+        }
+    }
+
+    fn classify_reply_failure(&self) -> AsyncMemmoveError {
+        if self.shared.is_shutdown_requested() {
+            AsyncMemmoveError::LifecycleFailure {
+                kind: AsyncLifecycleFailureKind::OwnerShutdown,
+            }
+        } else {
+            AsyncMemmoveError::WorkerFailure {
+                kind: AsyncWorkerFailureKind::ResponseChannelClosed,
+            }
+        }
+    }
+}
+
+/// Explicit owner/shutdown control for one shared async DSA worker.
 #[derive(Debug)]
 pub struct AsyncDsaSession {
-    request_tx: Option<mpsc::Sender<WorkerCommand>>,
+    handle: AsyncDsaHandle,
     worker_thread: Option<JoinHandle<()>>,
 }
 
@@ -173,7 +296,7 @@ impl AsyncDsaSession {
         F: FnOnce() -> Result<W, MemmoveError> + Send + 'static,
         W: AsyncMemmoveWorker,
     {
-        let (request_tx, mut request_rx) = mpsc::channel(1);
+        let (request_tx, mut request_rx) = mpsc::unbounded_channel();
         let (ready_tx, ready_rx) = std::sync::mpsc::sync_channel(1);
 
         let worker_thread = thread::spawn(move || {
@@ -194,15 +317,24 @@ impl AsyncDsaSession {
                         let result = run_memmove(&mut worker, request);
                         let _ = reply_tx.send(result);
                     }
+                    WorkerCommand::Shutdown => break,
                 }
             }
         });
 
         match ready_rx.recv() {
-            Ok(Ok(())) => Ok(Self {
-                request_tx: Some(request_tx),
-                worker_thread: Some(worker_thread),
-            }),
+            Ok(Ok(())) => {
+                let handle = AsyncDsaHandle {
+                    shared: Arc::new(SharedWorkerState {
+                        request_tx,
+                        lifecycle: AtomicU8::new(LIFECYCLE_RUNNING),
+                    }),
+                };
+                Ok(Self {
+                    handle,
+                    worker_thread: Some(worker_thread),
+                })
+            }
             Ok(Err(err)) => {
                 let _ = worker_thread.join();
                 Err(err.into())
@@ -216,37 +348,33 @@ impl AsyncDsaSession {
         }
     }
 
-    /// Submit one owned request through the single worker-owned session.
+    /// Borrow the cloneable Tokio-facing handle.
+    pub fn handle(&self) -> AsyncDsaHandle {
+        self.handle.clone()
+    }
+
+    /// Backward-compatible convenience that delegates through the shared handle.
     pub async fn memmove(
         &self,
         request: AsyncMemmoveRequest,
     ) -> Result<AsyncMemmoveResult, AsyncMemmoveError> {
-        let request_tx = self
-            .request_tx
-            .as_ref()
-            .ok_or(AsyncMemmoveError::WorkerFailure {
-                kind: AsyncWorkerFailureKind::RequestChannelClosed,
-            })?;
-        let (reply_tx, reply_rx) = oneshot::channel();
-
-        request_tx
-            .send(WorkerCommand::Memmove { request, reply_tx })
-            .await
-            .map_err(|_| AsyncMemmoveError::WorkerFailure {
-                kind: AsyncWorkerFailureKind::RequestChannelClosed,
-            })?;
-
-        reply_rx
-            .await
-            .map_err(|_| AsyncMemmoveError::WorkerFailure {
-                kind: AsyncWorkerFailureKind::ResponseChannelClosed,
-            })?
-            .map_err(AsyncMemmoveError::from)
+        self.handle.memmove(request).await
     }
 
-    /// Close the request channel and wait for the worker thread to exit.
+    /// Close the shared worker explicitly and wait for the worker thread to exit.
     pub fn shutdown(mut self) -> Result<(), AsyncMemmoveError> {
-        let _ = self.request_tx.take();
+        self.shutdown_inner()
+    }
+
+    fn shutdown_inner(&mut self) -> Result<(), AsyncMemmoveError> {
+        if self.worker_thread.is_none() {
+            self.handle.shared.mark_shutdown_complete();
+            return Ok(());
+        }
+
+        self.handle.shared.mark_shutdown_requested();
+        let _ = self.handle.shared.request_tx.send(WorkerCommand::Shutdown);
+
         if let Some(worker_thread) = self.worker_thread.take() {
             worker_thread
                 .join()
@@ -254,13 +382,15 @@ impl AsyncDsaSession {
                     kind: AsyncWorkerFailureKind::WorkerPanicked,
                 })?;
         }
+
+        self.handle.shared.mark_shutdown_complete();
         Ok(())
     }
 }
 
 impl Drop for AsyncDsaSession {
     fn drop(&mut self) {
-        let _ = self.request_tx.take();
+        let _ = self.shutdown_inner();
     }
 }
 

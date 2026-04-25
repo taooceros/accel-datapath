@@ -191,6 +191,19 @@ fn success_outcome(report: MemmoveValidationReport) -> RunOutcome {
 fn async_failure_outcome(args: &CliArgs, err: AsyncMemmoveError) -> RunOutcome {
     match err {
         AsyncMemmoveError::Memmove(err) => validation_failure_outcome(args, err),
+        AsyncMemmoveError::LifecycleFailure { kind } => RunOutcome {
+            ok: false,
+            device_path: args.device_path.display().to_string(),
+            requested_bytes: args.requested_bytes,
+            page_fault_retries: None,
+            final_status: None,
+            phase: "async_lifecycle".to_string(),
+            error_kind: Some("lifecycle_failure"),
+            worker_failure_kind: Some(kind.as_str()),
+            validation_phase: None,
+            validation_error_kind: None,
+            message: format!("async memmove lifecycle failure: {}", kind.as_str()),
+        },
         AsyncMemmoveError::WorkerFailure { kind } => RunOutcome {
             ok: false,
             device_path: args.device_path.display().to_string(),
