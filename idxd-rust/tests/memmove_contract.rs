@@ -2,9 +2,32 @@ use idxd_rust::{
     classify_memmove_completion, CompletionAction, CompletionSnapshot, DsaSession, MemmoveError,
     MemmovePhase, MemmoveRequest, MemmoveRetry, MemmoveValidationConfig, MemmoveValidationReport,
 };
+use idxd_sys::{DsaCompletionRecord, DsaHwDesc};
+use std::mem::{align_of, size_of};
 
 fn test_config() -> MemmoveValidationConfig {
     MemmoveValidationConfig::with_retries("/dev/dsa/wq0.0", 1).expect("test config")
+}
+
+#[test]
+fn descriptor_helpers_are_aligned_over_generated_uapi_records() {
+    assert_eq!(
+        size_of::<DsaHwDesc>(),
+        size_of::<idxd_sys::idxd_uapi::dsa_hw_desc>()
+    );
+    assert_eq!(align_of::<DsaHwDesc>(), 64);
+    assert_eq!(
+        size_of::<DsaCompletionRecord>(),
+        size_of::<idxd_sys::idxd_uapi::dsa_completion_record>()
+    );
+    assert_eq!(align_of::<DsaCompletionRecord>(), 32);
+
+    let src = [0u8; 8];
+    let mut dst = [0u8; 8];
+    let mut desc = DsaHwDesc::default();
+    let mut comp = DsaCompletionRecord::default();
+    desc.fill_memmove(src.as_ptr(), dst.as_mut_ptr(), src.len() as u32);
+    desc.set_completion(&mut comp);
 }
 
 #[test]
