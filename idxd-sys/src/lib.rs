@@ -8,17 +8,22 @@ use std::os::unix::io::AsRawFd;
 use std::path::Path;
 use std::ptr;
 
-/// Bindgen-backed subset of the kernel `linux/idxd.h` UAPI used by IAX
-/// consumers.
-pub mod idxd {
+/// Bindgen-backed subset of the kernel `linux/idxd.h` UAPI used by IDXD
+/// accelerator consumers, including DSA descriptor/completion ABI and IAX
+/// definitions.
+pub mod idxd_uapi {
     #![allow(
         non_camel_case_types,
         non_upper_case_globals,
         non_snake_case,
         dead_code
     )]
-    include!(concat!(env!("OUT_DIR"), "/idxd_iax_bindings.rs"));
+    include!(concat!(env!("OUT_DIR"), "/idxd_uapi_bindings.rs"));
 }
+
+/// Backward-compatible alias for existing callers that imported the generated
+/// IDXD UAPI subset as `idxd_sys::idxd`.
+pub use idxd_uapi as idxd;
 
 // ============================================================================
 // Hardware descriptor and completion record (mirrors linux/idxd.h)
