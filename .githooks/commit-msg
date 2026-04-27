@@ -25,11 +25,11 @@ print(len(sys.argv[1]))
 PY
 )
 
-if (( subject_len > 72 )); then
-  fail "subject is ${subject_len} chars; rewrite it to <= 72 chars instead of truncating"
+line_count=$(wc -l < "$msg_file" | tr -d ' ')
+if (( subject_len > 72 && line_count <= 1 )); then
+  fail "single-line subject is ${subject_len} chars; add a body instead of cramming the commit into one line"
 fi
 
-line_count=$(wc -l < "$msg_file" | tr -d ' ')
 if (( line_count > 1 )); then
   second_line=$(sed -n '2p' "$msg_file" | tr -d '\r')
   if [[ -n "${second_line}" ]]; then
