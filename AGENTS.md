@@ -28,7 +28,6 @@ Research monorepo for Intel DSA/IAX data-path work.
 - On resume, read any linked durable artifacts needed to continue.
 - Keep durable detail in plans, reports, and remarks rather than transient notes.
 - Keep commit headlines short and consistent with current style.
-- Use the repo-local `.gitmessage` template for commit bodies (`Summary` / `Why` / `Details` / `Verification`).
 - Write commits in focused, reviewable increments, but not so small that they lose a coherent unit of work.
 - Write a plan in `docs/plan/YYYY-MM-DD/NN.<topic>.<state>.md` before non-trivial changes.
 - Write plans for humans first. State the goal, scope, intended changes, verification, and completion notes in plain language.
