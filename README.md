@@ -43,12 +43,14 @@ This repo ships a tracked `commit-msg` hook in `.githooks/commit-msg`.
 It blocks:
 - truncated subjects ending in `...` or `…`
 - subjects longer than 72 chars
-- commit bodies that skip the `.gitmessage` sections
+- bodies whose second line is not blank
+- commit bodies that use neither the `.gitmessage` sections nor a GSD footer (`GSD-Task:` / `GSD-Quick-Task:`)
 
 Enable it for your local checkout:
 
 ```bash
 git config core.hooksPath .githooks
+git config commit.template .gitmessage
 ```
 
 ## Dependencies

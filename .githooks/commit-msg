@@ -37,6 +37,11 @@ if (( line_count > 1 )); then
   fi
 fi
 
+has_gsd_task_footer=false
+if grep -Eq '^GSD-(Task|Quick-Task): ' "$msg_file"; then
+  has_gsd_task_footer=true
+fi
+
 required_sections=("## Summary" "## Why" "## Details" "## Verification")
 missing_sections=()
 for section in "${required_sections[@]}"; do
@@ -45,8 +50,8 @@ for section in "${required_sections[@]}"; do
   fi
 done
 
-if (( ${#missing_sections[@]} > 0 )); then
-  printf 'commit-msg: missing required sections from .gitmessage:' >&2
+if (( ${#missing_sections[@]} > 0 )) && [[ "${has_gsd_task_footer}" == "false" ]]; then
+  printf 'commit-msg: missing required sections from .gitmessage or GSD-Task footer:' >&2
   for section in "${missing_sections[@]}"; do
     printf ' %s' "$section" >&2
   done
