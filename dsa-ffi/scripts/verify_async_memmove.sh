@@ -4,4 +4,4 @@ set -euo pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd -- "${SCRIPT_DIR}/../.." && pwd)
 
-exec bash "${REPO_ROOT}/accel-rpc/dsa-ffi/scripts/verify_async_memmove.sh" "$@"
+exec bash "${REPO_ROOT}/accel-rpc/idxd-rust/scripts/verify_async_memmove.sh" "$@"

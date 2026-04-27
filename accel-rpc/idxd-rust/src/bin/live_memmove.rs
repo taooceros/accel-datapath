@@ -5,7 +5,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use dsa_ffi::{
+use idxd_rust::{
     DsaSession, MemmoveError, MemmoveRequest, MemmoveValidationReport, DEFAULT_DEVICE_PATH,
 };
 

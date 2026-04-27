@@ -1,14 +1,14 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use idxd_bindings::{
+use idxd_sys::{
     DsaCompletionRecord, DSA_COMP_PAGE_FAULT_NOBOF, DSA_COMP_STATUS_MASK, DSA_COMP_SUCCESS,
 };
 use thiserror::Error;
 
 /// Repo-wide default DSA work-queue path.
 pub const DEFAULT_DEVICE_PATH: &str = "/dev/dsa/wq0.0";
-/// `idxd-bindings` returns `0xFF` when polling times out.
+/// `idxd-sys` returns `0xFF` when polling times out.
 pub const COMPLETION_TIMEOUT_STATUS: u8 = 0xFF;
 /// Keep the first bridge conservative: touch-and-retry once.
 pub const DEFAULT_MAX_PAGE_FAULT_RETRIES: u32 = 1;

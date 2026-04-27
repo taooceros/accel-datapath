@@ -1,4 +1,4 @@
-use dsa_ffi::{
+use idxd_rust::{
     classify_memmove_completion, CompletionAction, CompletionSnapshot, DsaSession, MemmoveError,
     MemmovePhase, MemmoveRequest, MemmoveRetry, MemmoveValidationConfig, MemmoveValidationReport,
 };

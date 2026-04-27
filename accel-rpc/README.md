@@ -16,7 +16,7 @@ cargo check                                     # Type-check workspace
 tonic/                            Submodule: taooceros/tonic fork
 accel-codec/                      Custom Tonic Codec with pooled buffers
 accel-middleware/                  Tower CRC/compression middleware
-dsa-ffi/                          FFI bridge to C++ DSA
+idxd-rust/                          FFI bridge to C++ DSA
 iax-ffi/                          FFI bridge to IAX
 async-bench/                      Async framework overhead characterization
 tonic-profile/                    Tonic profiling harness

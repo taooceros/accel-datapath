@@ -5,7 +5,7 @@ use std::sync::{OnceLock, RwLock};
 use std::time::Instant;
 
 use bytes::{BufMut, BytesMut};
-use dsa_ffi::{DsaSession, MemmoveError, MemmovePhase};
+use idxd_rust::{DsaSession, MemmoveError, MemmovePhase};
 use prost::Message;
 use tonic::codec::instrumentation::{record_stage, StageKind};
 use tonic::codec::{BufferSettings, Codec, DecodeBuf, Decoder, EncodeBuf, Encoder};

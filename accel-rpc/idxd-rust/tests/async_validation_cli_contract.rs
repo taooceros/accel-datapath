@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::process::{Command, Output};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const TEST_SCENARIO_ENV: &str = "DSA_FFI_AWAIT_MEMMOVE_TEST_SCENARIO";
+const TEST_SCENARIO_ENV: &str = "IDXD_RUST_AWAIT_MEMMOVE_TEST_SCENARIO";
 
 fn await_memmove_bin() -> &'static str {
     env!("CARGO_BIN_EXE_await_memmove")
@@ -14,7 +14,7 @@ fn unique_temp_path(name: &str) -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .expect("clock should be after unix epoch")
         .as_nanos();
-    std::env::temp_dir().join(format!("dsa-ffi-async-{name}-{nanos}"))
+    std::env::temp_dir().join(format!("idxd-rust-async-{name}-{nanos}"))
 }
 
 fn run_with_optional_scenario(args: &[&str], scenario: Option<&str>) -> Output {

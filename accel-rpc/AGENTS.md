@@ -11,7 +11,7 @@ Rust workspace for accelerator-aware RPC components around Tonic, plus small ben
 | Workspace membership | `Cargo.toml` | `tonic` is excluded even though it is present as a submodule. |
 | Codec work | `accel-codec/` | Pooled-buffer codec crate. |
 | Middleware work | `accel-middleware/` | Tower CRC/compression middleware. |
-| FFI bridges | `dsa-ffi/`, `iax-ffi/` | Accelerator bridge crates. |
+| FFI bridges | `idxd-rust/`, `iax-ffi/` | Accelerator bridge crates. |
 | Async overhead bench | `async-bench/` | `cargo bench` is the real measurement path. |
 | Profiling harness | `tonic-profile/` | Still marked TODO. |
 

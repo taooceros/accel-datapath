@@ -1,9 +1,9 @@
 [package]
-name = "dsa-ffi"
+name = "idxd-rust"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-idxd-bindings = { path = "../../dsa-bindings" }
+idxd-sys = { path = "../idxd-sys" }
 thiserror = "1"
 tokio = { workspace = true }

@@ -5,12 +5,12 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use dsa_ffi::{
+use idxd_rust::{
     AsyncDsaSession, AsyncMemmoveError, AsyncMemmoveRequest, AsyncMemmoveWorker, MemmoveError,
     MemmovePhase, MemmoveRequest, MemmoveValidationReport, DEFAULT_DEVICE_PATH,
 };
 
-const TEST_SCENARIO_ENV: &str = "DSA_FFI_AWAIT_MEMMOVE_TEST_SCENARIO";
+const TEST_SCENARIO_ENV: &str = "IDXD_RUST_AWAIT_MEMMOVE_TEST_SCENARIO";
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
@@ -301,7 +301,7 @@ async fn execute_after_owner_shutdown(
 
 fn map_execution_outcome(
     args: &CliArgs,
-    memmove_result: Result<dsa_ffi::AsyncMemmoveResult, AsyncMemmoveError>,
+    memmove_result: Result<idxd_rust::AsyncMemmoveResult, AsyncMemmoveError>,
     shutdown_result: Result<(), AsyncMemmoveError>,
 ) -> RunOutcome {
     match (memmove_result, shutdown_result) {

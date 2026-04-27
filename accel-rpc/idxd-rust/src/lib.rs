@@ -1,7 +1,7 @@
 //! Thin Intel DSA memmove bridge for `tonic-profile`.
 //!
 //! This crate deliberately stays narrow: it opens one IDXD work queue, submits
-//! one memmove descriptor at a time through `idxd-bindings`, retries recoverable
+//! one memmove descriptor at a time through `idxd-sys`, retries recoverable
 //! page faults, verifies copied bytes, and maps queue-open/completion failures
 //! into typed Rust errors.
 
@@ -21,7 +21,7 @@ pub use validation::{
 
 use std::path::Path;
 
-use idxd_bindings::{
+use idxd_sys::{
     poll_completion, reset_completion, touch_fault_page, DsaCompletionRecord, DsaHwDesc, WqPortal,
 };
 

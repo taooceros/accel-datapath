@@ -9,7 +9,7 @@ fn unique_temp_path(name: &str) -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .expect("clock should be after unix epoch")
         .as_nanos();
-    std::env::temp_dir().join(format!("dsa-ffi-verifier-{name}-{nanos}"))
+    std::env::temp_dir().join(format!("idxd-rust-verifier-{name}-{nanos}"))
 }
 
 fn write_executable(path: &Path, content: &str) {
@@ -87,11 +87,11 @@ fn verifier_fails_preflight_when_launcher_capability_is_missing() {
     let output = Command::new("bash")
         .arg(verifier_script())
         .env("PATH", path_override)
-        .env("DSA_FFI_VERIFY_SKIP_BUILD", "1")
-        .env("DSA_FFI_VERIFY_BINARY", env!("CARGO_BIN_EXE_live_memmove"))
-        .env("DSA_FFI_VERIFY_DEVICE", "/dev/dsa/does-not-exist")
-        .env("DSA_FFI_VERIFY_LAUNCHER_PATH", &launcher_path)
-        .env("DSA_FFI_VERIFY_OUTPUT_DIR", &output_dir)
+        .env("IDXD_RUST_VERIFY_SKIP_BUILD", "1")
+        .env("IDXD_RUST_VERIFY_BINARY", env!("CARGO_BIN_EXE_live_memmove"))
+        .env("IDXD_RUST_VERIFY_DEVICE", "/dev/dsa/does-not-exist")
+        .env("IDXD_RUST_VERIFY_LAUNCHER_PATH", &launcher_path)
+        .env("IDXD_RUST_VERIFY_OUTPUT_DIR", &output_dir)
         .output()
         .expect("verifier should launch");
 
@@ -113,11 +113,11 @@ fn verifier_preserves_queue_open_failure_and_artifact_paths() {
     let output = Command::new("bash")
         .arg(verifier_script())
         .env("PATH", path_override)
-        .env("DSA_FFI_VERIFY_SKIP_BUILD", "1")
-        .env("DSA_FFI_VERIFY_BINARY", env!("CARGO_BIN_EXE_live_memmove"))
-        .env("DSA_FFI_VERIFY_DEVICE", "/dev/dsa/does-not-exist")
-        .env("DSA_FFI_VERIFY_LAUNCHER_PATH", &launcher_path)
-        .env("DSA_FFI_VERIFY_OUTPUT_DIR", &output_dir)
+        .env("IDXD_RUST_VERIFY_SKIP_BUILD", "1")
+        .env("IDXD_RUST_VERIFY_BINARY", env!("CARGO_BIN_EXE_live_memmove"))
+        .env("IDXD_RUST_VERIFY_DEVICE", "/dev/dsa/does-not-exist")
+        .env("IDXD_RUST_VERIFY_LAUNCHER_PATH", &launcher_path)
+        .env("IDXD_RUST_VERIFY_OUTPUT_DIR", &output_dir)
         .output()
         .expect("verifier should launch");
 
@@ -179,11 +179,11 @@ exit 1
     let output = Command::new("bash")
         .arg(verifier_script())
         .env("PATH", path_override)
-        .env("DSA_FFI_VERIFY_SKIP_BUILD", "1")
-        .env("DSA_FFI_VERIFY_BINARY", &fake_binary)
-        .env("DSA_FFI_VERIFY_DEVICE", "/dev/dsa/does-not-exist")
-        .env("DSA_FFI_VERIFY_LAUNCHER_PATH", &launcher_path)
-        .env("DSA_FFI_VERIFY_OUTPUT_DIR", &output_dir)
+        .env("IDXD_RUST_VERIFY_SKIP_BUILD", "1")
+        .env("IDXD_RUST_VERIFY_BINARY", &fake_binary)
+        .env("IDXD_RUST_VERIFY_DEVICE", "/dev/dsa/does-not-exist")
+        .env("IDXD_RUST_VERIFY_LAUNCHER_PATH", &launcher_path)
+        .env("IDXD_RUST_VERIFY_OUTPUT_DIR", &output_dir)
         .output()
         .expect("verifier should launch");
 

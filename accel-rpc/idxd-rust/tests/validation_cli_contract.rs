@@ -12,7 +12,7 @@ fn unique_temp_path(name: &str) -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .expect("clock should be after unix epoch")
         .as_nanos();
-    std::env::temp_dir().join(format!("dsa-ffi-{name}-{nanos}"))
+    std::env::temp_dir().join(format!("idxd-rust-{name}-{nanos}"))
 }
 
 #[test]

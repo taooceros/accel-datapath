@@ -5,7 +5,7 @@ use std::sync::{
 };
 use std::time::Duration;
 
-use dsa_ffi::{
+use idxd_rust::{
     AsyncDsaSession, AsyncLifecycleFailureKind, AsyncMemmoveError, AsyncMemmoveRequest,
     AsyncMemmoveWorker, AsyncWorkerFailureKind, MemmoveError, MemmovePhase, MemmoveRequest,
     MemmoveValidationReport,

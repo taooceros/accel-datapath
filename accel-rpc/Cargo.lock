@@ -423,15 +423,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
 
 [[package]]
-name = "dsa-ffi"
-version = "0.1.0"
-dependencies = [
- "idxd-bindings",
- "thiserror",
- "tokio",
-]
-
-[[package]]
 name = "either"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -773,7 +764,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d3067d79b975e8844ca9eb072e16b31c3c1c36928edf9c6789548c524d0d954"
 
 [[package]]
-name = "idxd-bindings"
+name = "idxd-rust"
+version = "0.1.0"
+dependencies = [
+ "idxd-sys",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "idxd-sys"
 version = "0.1.0"
 dependencies = [
  "bindgen",
@@ -1668,8 +1668,8 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "clap",
- "dsa-ffi",
  "hdrhistogram",
+ "idxd-rust",
  "libc",
  "prost",
  "protoc-bin-vendored",

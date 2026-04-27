@@ -1,5 +1,5 @@
 [package]
-name = "idxd-bindings"
+name = "idxd-sys"
 version = "0.1.0"
 edition = "2021"
 description = "Low-level Intel IDXD hardware bindings — handwritten DSA path plus bindgen-backed idxd UAPI"
