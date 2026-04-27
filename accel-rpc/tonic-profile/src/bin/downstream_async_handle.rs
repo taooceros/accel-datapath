@@ -14,7 +14,7 @@ const TEST_SCENARIO_ENV: &str = "IDXD_TONIC_ASYNC_HANDLE_TEST_SCENARIO";
 const PROOF_SEAM: &str = "downstream_async_handle";
 const CONSUMER_PACKAGE: &str = "tonic-profile";
 const BINDING_PACKAGE: &str = "idxd-rust";
-const COMPOSITION: &str = "tokio_join_cloned_handles";
+const COMPOSITION: &str = "tokio_join";
 const OPERATION_COUNT: usize = 2;
 
 #[tokio::main(flavor = "current_thread")]
@@ -282,13 +282,7 @@ async fn execute_test_scenario(
         TestScenario::CompletionTimeout => {
             let device_path = args.device_path.clone();
             let session = match AsyncDsaSession::spawn_with_factory(move || {
-                Ok(ErrorWorker {
-                    error: Some(MemmoveError::CompletionTimeout {
-                        device_path,
-                        phase: MemmovePhase::CompletionPoll,
-                        page_fault_retries: 2,
-                    }),
-                })
+                Ok(CompletionTimeoutWorker { device_path })
             }) {
                 Ok(session) => session,
                 Err(err) => return async_failure_outcome(args, err),
@@ -674,20 +668,21 @@ impl AsyncMemmoveWorker for SuccessWorker {
     }
 }
 
-struct ErrorWorker {
-    error: Option<MemmoveError>,
+struct CompletionTimeoutWorker {
+    device_path: PathBuf,
 }
 
-impl AsyncMemmoveWorker for ErrorWorker {
+impl AsyncMemmoveWorker for CompletionTimeoutWorker {
     fn memmove(
         &mut self,
         _dst: &mut [u8],
         _src: &[u8],
     ) -> Result<MemmoveValidationReport, MemmoveError> {
-        Err(self
-            .error
-            .take()
-            .expect("completion_timeout scenario should fail on the first request"))
+        Err(MemmoveError::CompletionTimeout {
+            device_path: self.device_path.clone(),
+            phase: MemmovePhase::CompletionPoll,
+            page_fault_retries: 2,
+        })
     }
 }
 
