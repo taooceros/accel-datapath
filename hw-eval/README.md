@@ -49,9 +49,10 @@ Backend notes:
 - `dsa`: runs the full suite above.
 - `iax`: runs `noop` plus `crc64` latency, burst throughput, and sliding-window
   throughput. The IAX path does not use the old `memmove` benchmark anymore.
-- `iax` descriptor/completion layouts are sourced through the sibling
-  `idxd-sys` crate, which runs bindgen against the local kernel
-  `linux/idxd.h` at build time.
+- `dsa` and `iax` descriptor/completion layouts are sourced through the
+  root-level `idxd-sys` crate, which runs bindgen against the local kernel
+  `linux/idxd.h` at build time. `hw-eval` keeps benchmark-specific helper
+  APIs, but the hardware ABI boundary is owned by `idxd-sys`.
 
 ## Timing
 
@@ -85,8 +86,8 @@ Requires: `pip install matplotlib numpy`
 
 ```
 src/submit.rs                     Shared WQ submission and low-level polling/timing/topology helpers
-src/dsa.rs                        DSA-specific descriptors/completions/opcodes/helpers
-src/iax.rs                        IAX-specific descriptors/completions/opcodes/helpers
+src/dsa.rs                        DSA helper façade over root-level idxd-sys descriptor/completion ABI
+src/iax.rs                        IAX helper façade over root-level idxd-sys descriptor/completion ABI
 src/sw.rs                         Software memcpy/CRC baselines
 src/main.rs                       All benchmarks, CLI, JSON output
 benches/dsa_raw.rs                Criterion benchmarks (SW baselines only)
@@ -97,8 +98,8 @@ Cargo.toml
 ## Dependencies
 
 Managed via Cargo: libc, clap, serde, serde_json, criterion (dev), and the
-root-level `idxd-sys` crate for IAX UAPI access.
-Build-time for IAX bindings: `idxd-sys` uses `bindgen` plus a working
+root-level `idxd-sys` crate for DSA/IAX UAPI access.
+Build-time for DSA/IAX bindings: `idxd-sys` uses `bindgen` plus a working
 `libclang`, reading `/usr/include/linux/idxd.h` by default (override with
 `IDXD_HEADER`).
 Graphing: matplotlib, numpy (Python 3).

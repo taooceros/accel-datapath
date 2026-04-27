@@ -543,7 +543,7 @@ fn bench_pipelined_batch(
                 if status != DSA_COMP_SUCCESS && status != 0x05 {
                     // Drain all in-flight batch descriptors before panic
                     for s in &slots {
-                        let st = unsafe { std::ptr::read_volatile(&s.batch_comp.status) };
+                        let st = s.batch_comp.status();
                         if st == DSA_COMP_NONE {
                             poll_completion(&s.batch_comp);
                         }
@@ -563,7 +563,7 @@ fn bench_pipelined_batch(
 
             // Drain remaining
             for s in &slots {
-                let status = unsafe { std::ptr::read_volatile(&s.batch_comp.status) };
+                let status = s.batch_comp.status();
                 if status == DSA_COMP_NONE {
                     poll_completion(&s.batch_comp);
                 }
@@ -805,7 +805,7 @@ fn bench_burst_batch(
                     if status != DSA_COMP_SUCCESS && status != 0x05 {
                         // Drain all in-flight before panic
                         for s2 in &slots {
-                            let st = unsafe { std::ptr::read_volatile(&s2.batch_comp.status) };
+                            let st = s2.batch_comp.status();
                             if st == DSA_COMP_NONE {
                                 poll_completion(&s2.batch_comp);
                             }
