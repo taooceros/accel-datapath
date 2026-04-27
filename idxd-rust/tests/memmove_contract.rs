@@ -1,6 +1,6 @@
 use idxd_rust::{
-    classify_memmove_completion, CompletionAction, CompletionSnapshot, DsaSession, MemmoveError,
-    MemmovePhase, MemmoveRequest, MemmoveRetry, MemmoveValidationConfig, MemmoveValidationReport,
+    CompletionAction, CompletionSnapshot, DsaSession, MemmoveError, MemmovePhase, MemmoveRequest,
+    MemmoveRetry, MemmoveValidationConfig, MemmoveValidationReport, classify_memmove_completion,
 };
 use idxd_sys::{DsaCompletionRecord, DsaHwDesc};
 use std::mem::{align_of, size_of};
@@ -81,6 +81,25 @@ fn rejects_destination_too_small_before_queue_open() {
             dst_len: 255,
         }
     ));
+}
+
+#[test]
+fn accepts_destination_capacity_larger_than_requested_source_length() {
+    let request = MemmoveRequest::for_buffers(4096, 1024)
+        .expect("destination capacity may exceed the requested source length");
+
+    assert_eq!(request.len(), 1024);
+    assert!(!request.is_empty());
+}
+
+#[test]
+fn validation_report_records_requested_bytes_not_destination_capacity() {
+    let request = MemmoveRequest::for_buffers(16, 4)
+        .expect("oversized destinations should still validate against source length");
+    let report = MemmoveValidationReport::new("/dev/dsa/wq0.1", request, 0, 1)
+        .expect("valid report inputs should build");
+
+    assert_eq!(report.requested_bytes, 4);
 }
 
 #[test]

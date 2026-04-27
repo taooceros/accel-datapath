@@ -18,6 +18,11 @@ const LIFECYCLE_SHUTDOWN_REQUESTED: u8 = 1;
 const LIFECYCLE_SHUTDOWN_COMPLETE: u8 = 2;
 
 /// Owned memmove request that can safely cross the worker-thread boundary.
+///
+/// The source length is the requested transfer size. The destination is caller
+/// supplied and may be larger than the request; on success the owned async
+/// result returns that destination with only the requested prefix guaranteed to
+/// have been overwritten by the memmove operation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AsyncMemmoveRequest {
     source: Vec<u8>,
@@ -218,7 +223,10 @@ impl SharedWorkerState {
 /// `tokio::join!` or spawned tasks, but they still share one worker thread and
 /// one session. Requests cross the boundary as owned data, queue FIFO, and
 /// execute one at a time; cloning the handle never duplicates hardware
-/// ownership or implies parallel execution.
+/// ownership or implies parallel execution. Use `memmove` with an
+/// `AsyncMemmoveRequest` for spawn-friendly owned work; `memmove_into` is a
+/// scoped borrowed-destination convenience that allocates owned worker buffers
+/// and copies the successful prefix back before returning.
 #[derive(Debug, Clone)]
 pub struct AsyncDsaHandle {
     shared: Arc<SharedWorkerState>,
@@ -252,6 +260,33 @@ impl AsyncDsaHandle {
             .await
             .map_err(|_| self.classify_reply_failure())?
             .map_err(AsyncMemmoveError::from)
+    }
+
+    /// Scoped borrowed-destination convenience over the owned async request API.
+    ///
+    /// This method validates the borrowed buffers before enqueue, copies `src`
+    /// and a zeroed destination into an owned `AsyncMemmoveRequest`, awaits the
+    /// worker-owned result, and then copies only the requested source-length
+    /// prefix back into `dst`. The borrowed slices are never stored in
+    /// `WorkerCommand`; they remain scoped to this future, so callers that need
+    /// `tokio::spawn`-friendly or high-composition requests should use
+    /// `AsyncMemmoveRequest::copy_into` with `memmove` instead.
+    pub async fn memmove_into(
+        &self,
+        dst: &mut [u8],
+        src: &[u8],
+    ) -> Result<MemmoveValidationReport, AsyncMemmoveError> {
+        let request = MemmoveRequest::for_buffers(dst.len(), src.len())?;
+        let requested_bytes = request.len();
+        let owned_request = AsyncMemmoveRequest {
+            source: src.to_vec(),
+            destination: vec![0u8; dst.len()],
+        };
+
+        let result = self.memmove(owned_request).await?;
+        dst[..requested_bytes].copy_from_slice(&result.destination[..requested_bytes]);
+
+        Ok(result.report)
     }
 
     fn classify_send_failure(&self) -> AsyncMemmoveError {

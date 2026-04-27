@@ -67,7 +67,10 @@ The async surface is intentionally split in two.
 
 - `AsyncDsaSession` owns the worker thread and therefore owns shutdown.
 - `AsyncDsaHandle` is what Tokio tasks clone and await.
-- Ordinary Tokio composition such as `tokio::join!` or spawned tasks still uses that same cloneable handle surface; cloned handles do not create extra sessions or extra hardware owners.
+- `AsyncMemmoveRequest` is the canonical async request shape. It owns both the source bytes and the destination buffer before it enters the queue.
+- `AsyncMemmoveResult` returns the explicit owned destination buffer plus the validation report; callers should inspect `report.requested_bytes` to distinguish requested source bytes from any extra destination capacity.
+- `AsyncDsaHandle::memmove_into(&mut dst, src)` is only a scoped borrowed-destination convenience. It validates the borrowed slices, allocates one owned source copy and one owned destination buffer, awaits the worker-owned request, and copies only the successful source-length prefix back into `dst`.
+- Ordinary Tokio composition such as `tokio::join!` or spawned tasks still uses that same cloneable handle surface; cloned handles do not create extra sessions or extra hardware owners. For `tokio::spawn`-friendly work, build an owned `AsyncMemmoveRequest` and call `memmove`; do not rely on `memmove_into` to smuggle borrowed slices across the worker boundary.
 - All submissions funnel through one worker-owned `DsaSession`, so overlapped requests queue FIFO and execute one at a time even when multiple Tokio tasks are awaiting them concurrently.
 - Once a request has crossed that enqueue boundary, aborting or dropping the awaiting Tokio task does not cancel the worker-side memmove. The worker still finishes the request, and later submissions can continue using the shared handle.
 - Shutdown is drain-then-stop: work that was already queued drains before the worker thread exits, and submissions attempted after shutdown are rejected with `owner_shutdown`.

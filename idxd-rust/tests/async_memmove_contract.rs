@@ -305,6 +305,97 @@ async fn copy_into_preserves_destination_tail_after_copied_prefix() {
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn memmove_into_copies_only_requested_prefix_back_to_borrowed_destination() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let session = AsyncDsaSession::spawn_with_factory({
+        let calls = Arc::clone(&calls);
+        move || {
+            Ok(FakeWorker {
+                calls: Arc::clone(&calls),
+            })
+        }
+    })
+    .expect("worker should start");
+    let handle = session.handle();
+    let mut destination = vec![7, 7, 7, 7, 7, 7];
+
+    let report = handle
+        .memmove_into(&mut destination, &[1, 2, 3, 4])
+        .await
+        .expect("borrowed convenience should succeed through owned worker request");
+
+    assert_eq!(destination, vec![1, 2, 3, 4, 7, 7]);
+    assert_eq!(report.requested_bytes, 4);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn memmove_into_rejects_malformed_borrowed_buffers_before_enqueue() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let session = AsyncDsaSession::spawn_with_factory({
+        let calls = Arc::clone(&calls);
+        move || {
+            Ok(FakeWorker {
+                calls: Arc::clone(&calls),
+            })
+        }
+    })
+    .expect("worker should start");
+    let handle = session.handle();
+
+    let mut destination = vec![9, 9, 9];
+    let err = handle
+        .memmove_into(&mut destination, &[1, 2, 3, 4])
+        .await
+        .expect_err("short destination should fail before worker dispatch");
+    assert!(matches!(
+        err,
+        AsyncMemmoveError::Memmove(MemmoveError::DestinationTooSmall { .. })
+    ));
+    assert_eq!(destination, vec![9, 9, 9]);
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+
+    let err = handle
+        .memmove_into(&mut destination, &[])
+        .await
+        .expect_err("empty source should fail before worker dispatch");
+    assert!(matches!(
+        err,
+        AsyncMemmoveError::Memmove(MemmoveError::InvalidLength { .. })
+    ));
+    assert_eq!(destination, vec![9, 9, 9]);
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn memmove_into_propagates_worker_error_without_copying_into_borrowed_destination() {
+    let session = AsyncDsaSession::spawn_with_factory(|| {
+        Ok(ErrorWorker {
+            error: Some(MemmoveError::CompletionTimeout {
+                device_path: PathBuf::from("/dev/dsa/test0.0"),
+                phase: MemmovePhase::CompletionPoll,
+                page_fault_retries: 2,
+            }),
+        })
+    })
+    .expect("worker should start");
+    let handle = session.handle();
+    let mut destination = vec![9, 9, 9, 9];
+
+    let err = handle
+        .memmove_into(&mut destination, &[1, 2, 3, 4])
+        .await
+        .expect_err("worker error should propagate through borrowed convenience");
+
+    assert_eq!(err.kind(), "completion_timeout");
+    assert!(matches!(
+        err,
+        AsyncMemmoveError::Memmove(MemmoveError::CompletionTimeout { .. })
+    ));
+    assert_eq!(destination, vec![9, 9, 9, 9]);
+}
+
 #[test]
 fn rejects_zero_length_owned_requests_before_worker_dispatch() {
     let err =

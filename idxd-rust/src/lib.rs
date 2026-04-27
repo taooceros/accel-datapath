@@ -4,6 +4,17 @@
 //! one memmove descriptor at a time through `idxd-sys`, retries recoverable
 //! page faults, verifies copied bytes, and maps queue-open/completion failures
 //! into typed Rust errors.
+//!
+//! Synchronous callers pass explicit source and destination slices to
+//! `DsaSession::memmove`; request validation always treats the source length as
+//! the requested transfer size and only requires destination capacity to be at
+//! least that large. Async callers should prefer `AsyncMemmoveRequest` when work
+//! must cross Tokio tasks or the worker thread: requests own both source and
+//! destination buffers, and `AsyncMemmoveResult` returns the owned destination
+//! plus validation report. `AsyncDsaHandle::memmove_into` is a scoped borrowed
+//! convenience that copies into an owned worker request, awaits it, and copies
+//! the successful prefix back into the caller's destination; it does not make
+//! borrowed buffers `tokio::spawn`-friendly.
 
 mod async_session;
 mod validation;
@@ -13,16 +24,15 @@ pub use async_session::{
     AsyncMemmoveRequest, AsyncMemmoveResult, AsyncMemmoveWorker, AsyncWorkerFailureKind,
 };
 pub use validation::{
-    classify_memmove_completion, CompletionAction, CompletionSnapshot, MemmoveError, MemmovePhase,
-    MemmoveRequest, MemmoveRetry, MemmoveValidationConfig, MemmoveValidationReport,
-    COMPLETION_TIMEOUT_STATUS, DEFAULT_DEVICE_PATH, DEFAULT_MAX_PAGE_FAULT_RETRIES,
-    MAX_MEMMOVE_BYTES,
+    COMPLETION_TIMEOUT_STATUS, CompletionAction, CompletionSnapshot, DEFAULT_DEVICE_PATH,
+    DEFAULT_MAX_PAGE_FAULT_RETRIES, MAX_MEMMOVE_BYTES, MemmoveError, MemmovePhase, MemmoveRequest,
+    MemmoveRetry, MemmoveValidationConfig, MemmoveValidationReport, classify_memmove_completion,
 };
 
 use std::path::Path;
 
 use idxd_sys::{
-    poll_completion, reset_completion, touch_fault_page, DsaCompletionRecord, DsaHwDesc, WqPortal,
+    DsaCompletionRecord, DsaHwDesc, WqPortal, poll_completion, reset_completion, touch_fault_page,
 };
 
 /// Thin reusable session over one mapped DSA work queue.
