@@ -47,10 +47,19 @@ Use the async proof path when you need to prove that ordinary Tokio callers can 
 bash idxd-rust/scripts/verify_async_memmove.sh
 ```
 
+Use the downstream S05 proof path when you need to prove that a repo-local package outside `idxd-rust` can consume the public async owner/handle API from ordinary Tokio code:
+
+```bash
+bash accel-rpc/tonic-profile/scripts/verify_downstream_async_handle.sh
+```
+
+The downstream proof runs `tonic-profile`'s `downstream_async_handle` binary and validates `proof_seam=downstream_async_handle`, `consumer_package=tonic-profile`, `binding_package=idxd-rust`, `composition=tokio_join`, and the typed lifecycle/worker/validation fields. It deliberately does not call `idxd-rust`'s crate-local `await_memmove` binary, and it does not make `tonic-profile`'s `custom_codec.rs` an async integration seam.
+
 In short:
 
 - **`live_memmove`** answers "did the direct `DsaSession` path behave truthfully?"
 - **`await_memmove`** answers "did the public async owner-plus-handle surface preserve truthful lifecycle-vs-worker-vs-validation failures?"
+- **`tonic-profile` `downstream_async_handle`** answers "can a downstream Tokio consumer outside the binding crate use cloned public handles for real awaited operations without changing the synchronous codec seam?"
 
 ## Async ownership model
 

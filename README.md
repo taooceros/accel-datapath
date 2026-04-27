@@ -50,6 +50,14 @@ bash idxd-rust/scripts/verify_package_inventory.sh
 
 The historical `dsa-ffi` wrapper paths are compatibility shims only. New integration and S05 downstream proof work should consume `idxd-rust`, not `dsa-ffi` or `idxd-bindings`.
 
+S05's downstream async proof lives outside the canonical binding crate, in `tonic-profile`:
+
+```bash
+bash accel-rpc/tonic-profile/scripts/verify_downstream_async_handle.sh
+```
+
+That verifier runs `tonic-profile`'s `downstream_async_handle` binary over the public `idxd-rust` async owner/handle API and validates `proof_seam=downstream_async_handle`, `consumer_package=tonic-profile`, `binding_package=idxd-rust`, `composition=tokio_join`, typed lifecycle/worker/validation fields, and `operation_count=2`. It is not a wrapper around the crate-local `idxd-rust` `await_memmove` binary. Keep `accel-rpc/tonic-profile/src/custom_codec.rs` synchronous; do not force async into the codec seam for this proof.
+
 ## Hardware Requirements
 
 - Intel 4th Gen Xeon Scalable (Sapphire Rapids) or later

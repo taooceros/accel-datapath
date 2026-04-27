@@ -1,5 +1,6 @@
 use std::fs;
-use std::path::PathBuf;
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -10,6 +11,10 @@ const DEVICE_PATH: &str = "/dev/dsa/test0.0";
 
 fn downstream_async_handle_bin() -> &'static str {
     env!("CARGO_BIN_EXE_downstream_async_handle")
+}
+
+fn verifier_script() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("scripts/verify_downstream_async_handle.sh")
 }
 
 fn unique_temp_path(name: &str) -> PathBuf {
@@ -34,6 +39,106 @@ fn run_with_scenario(args: &[&str], scenario: Option<&str>) -> Output {
     command
         .output()
         .expect("downstream_async_handle should launch")
+}
+
+fn write_executable(path: &Path, content: &str) {
+    fs::write(path, content).expect("script should be writable");
+    let mut perms = fs::metadata(path)
+        .expect("script metadata should exist")
+        .permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(path, perms).expect("script should be executable");
+}
+
+fn fake_launcher_env(capability_ok: bool) -> (PathBuf, PathBuf, String) {
+    let temp_root = unique_temp_path(if capability_ok {
+        "launcher-ready"
+    } else {
+        "launcher-missing-cap"
+    });
+    let shim_dir = temp_root.join("bin");
+    fs::create_dir_all(&shim_dir).expect("shim dir should be creatable");
+
+    let launcher_path = temp_root.join("dsa_launcher");
+    write_executable(
+        &launcher_path,
+        "#!/usr/bin/env bash\nset -euo pipefail\nexec \"$@\"\n",
+    );
+
+    write_executable(
+        &shim_dir.join("devenv"),
+        "#!/usr/bin/env bash
+set -euo pipefail
+if [[ ${1:-} != shell || ${2:-} != -- || ${3:-} != launch ]]; then
+  echo \"unexpected devenv invocation: $*\" >&2
+  exit 90
+fi
+shift 3
+exec \"$@\"
+",
+    );
+
+    let getcap_output = if capability_ok {
+        format!("{} cap_sys_rawio+eip\n", launcher_path.display())
+    } else {
+        format!("{} cap_net_raw+eip\n", launcher_path.display())
+    };
+    write_executable(
+        &shim_dir.join("getcap"),
+        &format!(
+            "#!/usr/bin/env bash
+set -euo pipefail
+printf '%s' {:?}
+",
+            getcap_output
+        ),
+    );
+
+    let mut path_entries = vec![shim_dir.display().to_string()];
+    if let Some(existing) = std::env::var_os("PATH") {
+        path_entries.push(existing.to_string_lossy().into_owned());
+    }
+    let joined_path = path_entries.join(":");
+
+    (temp_root, launcher_path, joined_path)
+}
+
+fn write_fake_downstream_binary(path: &Path, body: &str) {
+    write_executable(
+        path,
+        &format!(
+            r##"#!/usr/bin/env bash
+set -euo pipefail
+if [[ ${{1:-}} == --bytes && ${{2:-}} == abc ]]; then
+  echo 'downstream_async_handle: invalid value `abc` for `--bytes`; expected a positive integer' >&2
+  exit 2
+fi
+artifact=
+device=/dev/dsa/test0.0
+bytes=64
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --artifact)
+      artifact=$2
+      shift 2
+      ;;
+    --device)
+      device=$2
+      shift 2
+      ;;
+    --bytes)
+      bytes=$2
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+{body}
+"##,
+        ),
+    );
 }
 
 fn parse_stdout_json(output: &Output) -> Value {
@@ -284,6 +389,153 @@ fn invalid_artifact_paths_are_rejected_before_scenario_execution() {
     assert!(String::from_utf8_lossy(&directory_output.stderr)
         .contains("is a directory; expected a writable file path"));
     fs::remove_dir_all(&artifact_dir).expect("artifact dir cleanup should succeed");
+}
+
+#[test]
+fn verifier_reports_missing_launcher_capability_as_expected_failure() {
+    let (_temp_root, launcher_path, path_override) = fake_launcher_env(false);
+    let output_dir = unique_temp_path("verifier-missing-cap-output");
+    fs::create_dir_all(&output_dir).expect("output dir should be creatable");
+
+    let output = Command::new("bash")
+        .arg(verifier_script())
+        .env("PATH", path_override)
+        .env("TONIC_PROFILE_DOWNSTREAM_ASYNC_SKIP_BUILD", "1")
+        .env(
+            "TONIC_PROFILE_DOWNSTREAM_ASYNC_BINARY",
+            downstream_async_handle_bin(),
+        )
+        .env("TONIC_PROFILE_DOWNSTREAM_ASYNC_DEVICE", DEVICE_PATH)
+        .env(
+            "TONIC_PROFILE_DOWNSTREAM_ASYNC_LAUNCHER_PATH",
+            &launcher_path,
+        )
+        .env("TONIC_PROFILE_DOWNSTREAM_ASYNC_OUTPUT_DIR", &output_dir)
+        .output()
+        .expect("verifier should launch");
+
+    assert_status(&output, 0);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("phase=done"));
+    assert!(stdout.contains("verdict=expected_failure"));
+    assert!(stdout.contains("failure_phase=preflight"));
+    assert!(stdout.contains("launcher_status=missing_capability"));
+    assert!(stdout.contains(&format!("launcher_path={}", launcher_path.display())));
+}
+
+#[test]
+fn verifier_preserves_queue_open_failure_with_downstream_metadata() {
+    let (_temp_root, launcher_path, path_override) = fake_launcher_env(true);
+    let output_dir = unique_temp_path("verifier-queue-open-output");
+    fs::create_dir_all(&output_dir).expect("output dir should be creatable");
+
+    let output = Command::new("bash")
+        .arg(verifier_script())
+        .env("PATH", path_override)
+        .env("TONIC_PROFILE_DOWNSTREAM_ASYNC_SKIP_BUILD", "1")
+        .env(
+            "TONIC_PROFILE_DOWNSTREAM_ASYNC_BINARY",
+            downstream_async_handle_bin(),
+        )
+        .env(
+            "TONIC_PROFILE_DOWNSTREAM_ASYNC_DEVICE",
+            "/dev/dsa/does-not-exist",
+        )
+        .env(
+            "TONIC_PROFILE_DOWNSTREAM_ASYNC_LAUNCHER_PATH",
+            &launcher_path,
+        )
+        .env("TONIC_PROFILE_DOWNSTREAM_ASYNC_OUTPUT_DIR", &output_dir)
+        .output()
+        .expect("verifier should launch");
+
+    assert_status(&output, 0);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("phase=done"));
+    assert!(stdout.contains("verdict=expected_failure"));
+    assert!(stdout.contains("failure_phase=runtime"));
+    assert!(stdout.contains("proof_seam=downstream_async_handle"));
+    assert!(stdout.contains("consumer_package=tonic-profile"));
+    assert!(stdout.contains("binding_package=idxd-rust"));
+    assert!(stdout.contains("composition=tokio_join"));
+    assert!(stdout.contains("operation_count=2"));
+    assert!(stdout.contains("error_kind=validation_failure"));
+    assert!(stdout.contains("validation_phase=queue_open"));
+    assert!(stdout.contains("validation_error_kind=queue_open"));
+    assert!(stdout.contains(&format!(
+        "artifact={}",
+        output_dir.join("downstream_async_handle.json").display()
+    )));
+}
+
+#[test]
+fn verifier_rejects_wrong_downstream_proof_metadata() {
+    let (temp_root, launcher_path, path_override) = fake_launcher_env(true);
+    let output_dir = unique_temp_path("verifier-wrong-metadata-output");
+    fs::create_dir_all(&output_dir).expect("output dir should be creatable");
+
+    let fake_binary = temp_root.join("fake_downstream_async_handle");
+    write_fake_downstream_binary(
+        &fake_binary,
+        r#"json=$(printf '{"ok":true,"proof_seam":"await_memmove","consumer_package":"idxd-rust","binding_package":"idxd-rust","composition":"tokio_join","operation_count":2,"device_path":"%s","requested_bytes":%s,"phase":"completed","error_kind":null,"lifecycle_failure_kind":null,"worker_failure_kind":null,"validation_phase":"completed","validation_error_kind":null,"message":"verified 2 joined cloned-handle async memmoves"}' "$device" "$bytes")
+printf '%s\n' "$json" | tee "$artifact"
+exit 0"#,
+    );
+
+    let output = Command::new("bash")
+        .arg(verifier_script())
+        .env("PATH", path_override)
+        .env("TONIC_PROFILE_DOWNSTREAM_ASYNC_SKIP_BUILD", "1")
+        .env("TONIC_PROFILE_DOWNSTREAM_ASYNC_BINARY", &fake_binary)
+        .env("TONIC_PROFILE_DOWNSTREAM_ASYNC_DEVICE", DEVICE_PATH)
+        .env(
+            "TONIC_PROFILE_DOWNSTREAM_ASYNC_LAUNCHER_PATH",
+            &launcher_path,
+        )
+        .env("TONIC_PROFILE_DOWNSTREAM_ASYNC_OUTPUT_DIR", &output_dir)
+        .output()
+        .expect("verifier should launch");
+
+    assert_status(&output, 1);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("phase=artifact_validation"));
+    assert!(
+        stderr.contains("artifact proof_seam='await_memmove' expected 'downstream_async_handle'")
+    );
+}
+
+#[test]
+fn verifier_rejects_malformed_downstream_artifact() {
+    let (temp_root, launcher_path, path_override) = fake_launcher_env(true);
+    let output_dir = unique_temp_path("verifier-malformed-output");
+    fs::create_dir_all(&output_dir).expect("output dir should be creatable");
+
+    let fake_binary = temp_root.join("fake_downstream_async_handle");
+    write_fake_downstream_binary(
+        &fake_binary,
+        r#"printf '{"ok":' > "$artifact"
+printf '{"ok":\n'
+exit 1"#,
+    );
+
+    let output = Command::new("bash")
+        .arg(verifier_script())
+        .env("PATH", path_override)
+        .env("TONIC_PROFILE_DOWNSTREAM_ASYNC_SKIP_BUILD", "1")
+        .env("TONIC_PROFILE_DOWNSTREAM_ASYNC_BINARY", &fake_binary)
+        .env("TONIC_PROFILE_DOWNSTREAM_ASYNC_DEVICE", DEVICE_PATH)
+        .env(
+            "TONIC_PROFILE_DOWNSTREAM_ASYNC_LAUNCHER_PATH",
+            &launcher_path,
+        )
+        .env("TONIC_PROFILE_DOWNSTREAM_ASYNC_OUTPUT_DIR", &output_dir)
+        .output()
+        .expect("verifier should launch");
+
+    assert_status(&output, 1);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("phase=artifact_validation"));
+    assert!(stderr.contains("artifact is not valid JSON"));
 }
 
 #[test]
