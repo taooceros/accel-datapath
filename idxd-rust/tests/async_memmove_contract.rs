@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::{
-    atomic::{AtomicUsize, Ordering},
     Arc, Condvar, Mutex,
+    atomic::{AtomicUsize, Ordering},
 };
 use std::time::Duration;
 
@@ -74,10 +74,7 @@ impl ReleaseGate {
     fn wait(&self) {
         let mut released = self.released.lock().expect("gate lock should not poison");
         while !*released {
-            released = self
-                .cv
-                .wait(released)
-                .expect("gate lock should not poison");
+            released = self.cv.wait(released).expect("gate lock should not poison");
         }
     }
 
@@ -214,11 +211,15 @@ impl BlockingWorkerHarness {
     }
 
     async fn wait_for_finish(&self, call_id: usize) {
-        self.events.wait_for_event(WorkerEvent::Finished(call_id)).await;
+        self.events
+            .wait_for_event(WorkerEvent::Finished(call_id))
+            .await;
     }
 
     async fn wait_for_start(&self, call_id: usize) {
-        self.events.wait_for_event(WorkerEvent::Started(call_id)).await;
+        self.events
+            .wait_for_event(WorkerEvent::Started(call_id))
+            .await;
     }
 
     async fn assert_second_request_stays_queued_until_release(&self) {
@@ -246,7 +247,7 @@ impl BlockingWorkerHarness {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn async_wrapper_returns_owned_bytes_on_success() {
+async fn async_wrapper_returns_owned_destination_on_success() {
     let calls = Arc::new(AtomicUsize::new(0));
     let session = AsyncDsaSession::spawn_with_factory({
         let calls = Arc::clone(&calls);
@@ -259,11 +260,13 @@ async fn async_wrapper_returns_owned_bytes_on_success() {
     .expect("worker should start");
 
     let result = session
-        .memmove(AsyncMemmoveRequest::new(vec![1, 2, 3, 4]).expect("request should validate"))
+        .memmove(
+            AsyncMemmoveRequest::copy_exact(vec![1, 2, 3, 4]).expect("request should validate"),
+        )
         .await
         .expect("fake worker should succeed");
 
-    assert_eq!(result.bytes, vec![1, 2, 3, 4]);
+    assert_eq!(result.destination, vec![1, 2, 3, 4]);
     assert_eq!(result.report.device_path.to_str(), Some("/dev/dsa/test0.0"));
     assert_eq!(result.report.requested_bytes, 4);
     assert_eq!(result.report.page_fault_retries, 0);
@@ -271,9 +274,132 @@ async fn async_wrapper_returns_owned_bytes_on_success() {
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn copy_into_preserves_destination_tail_after_copied_prefix() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let session = AsyncDsaSession::spawn_with_factory({
+        let calls = Arc::clone(&calls);
+        move || {
+            Ok(FakeWorker {
+                calls: Arc::clone(&calls),
+            })
+        }
+    })
+    .expect("worker should start");
+
+    let request = AsyncMemmoveRequest::copy_into(vec![1, 2, 3, 4], vec![9, 9, 9, 9, 9, 9])
+        .expect("oversized destination should validate");
+
+    assert_eq!(request.requested_bytes(), 4);
+    assert_eq!(request.destination_len(), 6);
+    assert_eq!(request.source_bytes(), &[1, 2, 3, 4]);
+    assert_eq!(request.destination_bytes(), &[9, 9, 9, 9, 9, 9]);
+
+    let result = session
+        .memmove(request)
+        .await
+        .expect("fake worker should succeed");
+
+    assert_eq!(result.destination, vec![1, 2, 3, 4, 9, 9]);
+    assert_eq!(result.report.requested_bytes, 4);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn memmove_into_copies_only_requested_prefix_back_to_borrowed_destination() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let session = AsyncDsaSession::spawn_with_factory({
+        let calls = Arc::clone(&calls);
+        move || {
+            Ok(FakeWorker {
+                calls: Arc::clone(&calls),
+            })
+        }
+    })
+    .expect("worker should start");
+    let handle = session.handle();
+    let mut destination = vec![7, 7, 7, 7, 7, 7];
+
+    let report = handle
+        .memmove_into(&mut destination, &[1, 2, 3, 4])
+        .await
+        .expect("borrowed convenience should succeed through owned worker request");
+
+    assert_eq!(destination, vec![1, 2, 3, 4, 7, 7]);
+    assert_eq!(report.requested_bytes, 4);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn memmove_into_rejects_malformed_borrowed_buffers_before_enqueue() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let session = AsyncDsaSession::spawn_with_factory({
+        let calls = Arc::clone(&calls);
+        move || {
+            Ok(FakeWorker {
+                calls: Arc::clone(&calls),
+            })
+        }
+    })
+    .expect("worker should start");
+    let handle = session.handle();
+
+    let mut destination = vec![9, 9, 9];
+    let err = handle
+        .memmove_into(&mut destination, &[1, 2, 3, 4])
+        .await
+        .expect_err("short destination should fail before worker dispatch");
+    assert!(matches!(
+        err,
+        AsyncMemmoveError::Memmove(MemmoveError::DestinationTooSmall { .. })
+    ));
+    assert_eq!(destination, vec![9, 9, 9]);
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+
+    let err = handle
+        .memmove_into(&mut destination, &[])
+        .await
+        .expect_err("empty source should fail before worker dispatch");
+    assert!(matches!(
+        err,
+        AsyncMemmoveError::Memmove(MemmoveError::InvalidLength { .. })
+    ));
+    assert_eq!(destination, vec![9, 9, 9]);
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn memmove_into_propagates_worker_error_without_copying_into_borrowed_destination() {
+    let session = AsyncDsaSession::spawn_with_factory(|| {
+        Ok(ErrorWorker {
+            error: Some(MemmoveError::CompletionTimeout {
+                device_path: PathBuf::from("/dev/dsa/test0.0"),
+                phase: MemmovePhase::CompletionPoll,
+                page_fault_retries: 2,
+            }),
+        })
+    })
+    .expect("worker should start");
+    let handle = session.handle();
+    let mut destination = vec![9, 9, 9, 9];
+
+    let err = handle
+        .memmove_into(&mut destination, &[1, 2, 3, 4])
+        .await
+        .expect_err("worker error should propagate through borrowed convenience");
+
+    assert_eq!(err.kind(), "completion_timeout");
+    assert!(matches!(
+        err,
+        AsyncMemmoveError::Memmove(MemmoveError::CompletionTimeout { .. })
+    ));
+    assert_eq!(destination, vec![9, 9, 9, 9]);
+}
+
 #[test]
 fn rejects_zero_length_owned_requests_before_worker_dispatch() {
-    let err = AsyncMemmoveRequest::new(Vec::new()).expect_err("zero-length requests should fail");
+    let err =
+        AsyncMemmoveRequest::copy_exact(Vec::new()).expect_err("zero-length requests should fail");
 
     assert!(matches!(
         err,
@@ -286,16 +412,10 @@ fn rejects_zero_length_owned_requests_before_worker_dispatch() {
 
 #[test]
 fn rejects_destination_size_mismatch_before_worker_dispatch() {
-    let err = AsyncMemmoveRequest::with_destination_len(vec![1, 2, 3, 4], 3)
+    let err = AsyncMemmoveRequest::copy_into(vec![1, 2, 3, 4], vec![0, 0, 0])
         .expect_err("destination sizing mismatches should fail before worker startup");
 
-    assert!(matches!(
-        err,
-        MemmoveError::DestinationTooSmall {
-            src_len: 4,
-            dst_len: 3,
-        }
-    ));
+    assert!(matches!(err, MemmoveError::DestinationTooSmall { .. }));
 }
 
 #[test]
@@ -323,16 +443,16 @@ async fn reuses_one_worker_for_repeated_sequential_requests() {
     .expect("worker should start");
 
     let first = session
-        .memmove(AsyncMemmoveRequest::new(vec![1, 2, 3]).unwrap())
+        .memmove(AsyncMemmoveRequest::copy_exact(vec![1, 2, 3]).unwrap())
         .await
         .expect("first request should succeed");
     let second = session
-        .memmove(AsyncMemmoveRequest::new(vec![4, 5, 6, 7]).unwrap())
+        .memmove(AsyncMemmoveRequest::copy_exact(vec![4, 5, 6, 7]).unwrap())
         .await
         .expect("second request should also succeed");
 
-    assert_eq!(first.bytes, vec![1, 2, 3]);
-    assert_eq!(second.bytes, vec![4, 5, 6, 7]);
+    assert_eq!(first.destination, vec![1, 2, 3]);
+    assert_eq!(second.destination, vec![4, 5, 6, 7]);
     assert_eq!(calls.load(Ordering::SeqCst), 2);
 }
 
@@ -357,7 +477,7 @@ async fn surfaces_dropped_worker_reply_channel_as_structural_error() {
         AsyncDsaSession::spawn_with_factory(|| Ok(PanicWorker)).expect("worker should start");
 
     let err = session
-        .memmove(AsyncMemmoveRequest::new(vec![9, 9, 9]).unwrap())
+        .memmove(AsyncMemmoveRequest::copy_exact(vec![9, 9, 9]).unwrap())
         .await
         .expect_err("worker panic should close the reply channel");
 
@@ -383,7 +503,7 @@ async fn preserves_underlying_completion_timeout_error() {
     .expect("worker should start");
 
     let err = session
-        .memmove(AsyncMemmoveRequest::new(vec![1, 2, 3, 4]).unwrap())
+        .memmove(AsyncMemmoveRequest::copy_exact(vec![1, 2, 3, 4]).unwrap())
         .await
         .expect_err("underlying memmove error should be preserved");
 
@@ -406,7 +526,7 @@ async fn aborting_after_enqueue_does_not_cancel_worker_and_follow_up_still_succe
 
     let aborted_task = tokio::spawn(async move {
         aborted_handle
-            .memmove(AsyncMemmoveRequest::new(vec![1, 2, 3]).unwrap())
+            .memmove(AsyncMemmoveRequest::copy_exact(vec![1, 2, 3]).unwrap())
             .await
     });
 
@@ -415,21 +535,24 @@ async fn aborting_after_enqueue_does_not_cancel_worker_and_follow_up_still_succe
     let join_err = aborted_task
         .await
         .expect_err("aborted awaiter should report task cancellation");
-    assert!(join_err.is_cancelled(), "aborting the awaiter should stay at the Tokio task boundary");
+    assert!(
+        join_err.is_cancelled(),
+        "aborting the awaiter should stay at the Tokio task boundary"
+    );
 
     harness.release_first_request();
     harness.wait_for_finish(1).await;
     harness.assert_calls(1);
 
     let follow_up = handle
-        .memmove(AsyncMemmoveRequest::new(vec![4, 5, 6, 7]).unwrap())
+        .memmove(AsyncMemmoveRequest::copy_exact(vec![4, 5, 6, 7]).unwrap())
         .await
         .expect("abandoned reply must not poison later work");
 
     harness.wait_for_start(2).await;
     harness.wait_for_finish(2).await;
     harness.assert_calls(2);
-    assert_eq!(follow_up.bytes, vec![4, 5, 6, 7]);
+    assert_eq!(follow_up.destination, vec![4, 5, 6, 7]);
     assert_eq!(
         harness.events.snapshot(),
         vec![
@@ -453,7 +576,7 @@ async fn shutdown_drains_queued_work_before_refusing_new_submissions() {
 
     let first_task = tokio::spawn(async move {
         first_handle
-            .memmove(AsyncMemmoveRequest::new(vec![8, 9]).unwrap())
+            .memmove(AsyncMemmoveRequest::copy_exact(vec![8, 9]).unwrap())
             .await
     });
 
@@ -461,11 +584,13 @@ async fn shutdown_drains_queued_work_before_refusing_new_submissions() {
 
     let second_task = tokio::spawn(async move {
         second_handle
-            .memmove(AsyncMemmoveRequest::new(vec![10, 11, 12]).unwrap())
+            .memmove(AsyncMemmoveRequest::copy_exact(vec![10, 11, 12]).unwrap())
             .await
     });
 
-    harness.assert_second_request_stays_queued_until_release().await;
+    harness
+        .assert_second_request_stays_queued_until_release()
+        .await;
 
     let shutdown_thread = std::thread::spawn(move || session.shutdown());
     std::thread::sleep(Duration::from_millis(20));
@@ -491,8 +616,8 @@ async fn shutdown_drains_queued_work_before_refusing_new_submissions() {
         .expect("shutdown thread should not panic")
         .expect("shutdown should complete after queued work drains");
 
-    assert_eq!(first.bytes, vec![8, 9]);
-    assert_eq!(second.bytes, vec![10, 11, 12]);
+    assert_eq!(first.destination, vec![8, 9]);
+    assert_eq!(second.destination, vec![10, 11, 12]);
     harness.assert_calls(2);
     assert_eq!(
         harness.events.snapshot(),
@@ -506,7 +631,7 @@ async fn shutdown_drains_queued_work_before_refusing_new_submissions() {
     );
 
     let err = post_shutdown_handle
-        .memmove(AsyncMemmoveRequest::new(vec![13, 14, 15]).unwrap())
+        .memmove(AsyncMemmoveRequest::copy_exact(vec![13, 14, 15]).unwrap())
         .await
         .expect_err("new submissions after shutdown must fail with a lifecycle error");
 
@@ -540,7 +665,7 @@ async fn handle_use_after_explicit_shutdown_is_a_lifecycle_error() {
         .expect("idle worker should shut down cleanly");
 
     let err = handle
-        .memmove(AsyncMemmoveRequest::new(vec![1, 2, 3]).unwrap())
+        .memmove(AsyncMemmoveRequest::copy_exact(vec![1, 2, 3]).unwrap())
         .await
         .expect_err("shut down owners must reject cloned handle use");
 

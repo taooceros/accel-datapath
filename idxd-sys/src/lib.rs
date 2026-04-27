@@ -8,66 +8,109 @@ use std::os::unix::io::AsRawFd;
 use std::path::Path;
 use std::ptr;
 
-/// Bindgen-backed subset of the kernel `linux/idxd.h` UAPI used by IAX
-/// consumers.
-pub mod idxd {
+/// Bindgen-backed subset of the kernel `linux/idxd.h` UAPI used by IDXD
+/// accelerator consumers, including DSA descriptor/completion ABI and IAX
+/// definitions.
+pub mod idxd_uapi {
     #![allow(
         non_camel_case_types,
         non_upper_case_globals,
         non_snake_case,
         dead_code
     )]
-    include!(concat!(env!("OUT_DIR"), "/idxd_iax_bindings.rs"));
+    include!(concat!(env!("OUT_DIR"), "/idxd_uapi_bindings.rs"));
 }
 
+/// Backward-compatible alias for existing callers that imported the generated
+/// IDXD UAPI subset as `idxd_sys::idxd`.
+pub use idxd_uapi as idxd;
+
 // ============================================================================
-// Hardware descriptor and completion record (mirrors linux/idxd.h)
+// Bindgen-backed hardware descriptor and completion helpers
 // ============================================================================
 
-/// DSA hardware descriptor — 64 bytes, must be 64-byte aligned.
+/// Bindgen-backed DSA hardware descriptor storage.
+///
+/// The ABI fields come from `linux/idxd.h` via bindgen (`idxd_uapi::dsa_hw_desc`).
+/// This wrapper only restores the 64-byte alignment required by MOVDIR64B
+/// descriptor submission; it does not define an independent descriptor layout.
 #[repr(C, align(64))]
 #[derive(Clone, Copy)]
-pub struct DsaHwDesc {
-    pub pasid_priv: u32,   // pasid:20, rsvd:11, priv:1
-    pub flags_opcode: u32, // flags:24, opcode:8
-    pub completion_addr: u64,
-    pub src_addr: u64,
-    pub dst_addr: u64,
-    pub xfer_size: u32,
-    pub int_handle: u16,
-    pub rsvd1: u16,
-    // op_specific fields (24 bytes)
-    pub op_specific: [u8; 24],
+pub struct BindgenDsaHwDesc {
+    raw: idxd_uapi::dsa_hw_desc,
 }
 
-impl Default for DsaHwDesc {
+/// Public descriptor helper type used by higher-level Rust bindings.
+pub type DsaHwDesc = BindgenDsaHwDesc;
+
+impl Default for BindgenDsaHwDesc {
     fn default() -> Self {
-        unsafe { std::mem::zeroed() }
+        Self {
+            raw: unsafe { std::mem::zeroed() },
+        }
     }
 }
 
-/// DSA completion record — 32 bytes, must be 32-byte aligned.
+/// Bindgen-backed DSA completion record storage.
+///
+/// The ABI fields come from `linux/idxd.h` via bindgen
+/// (`idxd_uapi::dsa_completion_record`). This wrapper only restores the
+/// 32-byte alignment expected by the DSA completion record contract.
 #[repr(C, align(32))]
 #[derive(Clone, Copy)]
-pub struct DsaCompletionRecord {
-    pub status: u8, // volatile — hardware writes this
-    pub result: u8,
-    pub rsvd: u16,
-    pub bytes_completed: u32,
-    pub fault_addr: u64,
-    pub op_specific: [u8; 16],
+pub struct BindgenDsaCompletionRecord {
+    raw: idxd_uapi::dsa_completion_record,
 }
 
-impl Default for DsaCompletionRecord {
+/// Public completion helper type used by higher-level Rust bindings.
+pub type DsaCompletionRecord = BindgenDsaCompletionRecord;
+
+impl Default for BindgenDsaCompletionRecord {
     fn default() -> Self {
-        unsafe { std::mem::zeroed() }
+        Self {
+            raw: unsafe { std::mem::zeroed() },
+        }
     }
 }
 
-impl DsaCompletionRecord {
+impl BindgenDsaCompletionRecord {
+    #[inline(always)]
+    fn as_raw_ptr(&self) -> *const idxd_uapi::dsa_completion_record {
+        ptr::addr_of!(self.raw)
+    }
+
+    #[inline(always)]
+    fn as_raw_mut_ptr(&mut self) -> *mut idxd_uapi::dsa_completion_record {
+        ptr::addr_of_mut!(self.raw)
+    }
+
+    /// Read the volatile hardware completion status byte.
+    #[inline(always)]
+    pub fn status(&self) -> u8 {
+        unsafe { ptr::read_volatile(ptr::addr_of!((*self.as_raw_ptr()).status)) }
+    }
+
+    /// Read the result byte from the generated completion union.
+    #[inline(always)]
+    pub fn result(&self) -> u8 {
+        unsafe { ptr::read_unaligned(ptr::addr_of!((*self.as_raw_ptr()).__bindgen_anon_1.result)) }
+    }
+
+    /// Read bytes completed from the generated completion record.
+    #[inline(always)]
+    pub fn bytes_completed(&self) -> u32 {
+        unsafe { ptr::read_unaligned(ptr::addr_of!((*self.as_raw_ptr()).bytes_completed)) }
+    }
+
+    /// Read the faulting address from the generated completion record.
+    #[inline(always)]
+    pub fn fault_addr(&self) -> u64 {
+        unsafe { ptr::read_unaligned(ptr::addr_of!((*self.as_raw_ptr()).fault_addr)) }
+    }
+
     /// Read CRC value from completion record (for crc_gen / copy_crc ops).
     pub fn crc_value(&self) -> u64 {
-        u64::from_le_bytes(self.op_specific[..8].try_into().unwrap())
+        unsafe { ptr::read_unaligned(ptr::addr_of!((*self.as_raw_ptr()).__bindgen_anon_2.crc_val)) }
     }
 }
 
@@ -75,96 +118,229 @@ impl DsaCompletionRecord {
 // DSA opcodes and flags
 // ============================================================================
 
-pub const DSA_OPCODE_NOOP: u8 = 0x00;
-pub const DSA_OPCODE_BATCH: u8 = 0x01;
-pub const DSA_OPCODE_MEMMOVE: u8 = 0x03;
-pub const DSA_OPCODE_MEMFILL: u8 = 0x04;
-pub const DSA_OPCODE_COMPARE: u8 = 0x05;
-pub const DSA_OPCODE_COMPVAL: u8 = 0x06;
-pub const DSA_OPCODE_DUALCAST: u8 = 0x09;
-pub const DSA_OPCODE_CRCGEN: u8 = 0x10;
-pub const DSA_OPCODE_COPY_CRC: u8 = 0x11;
-pub const DSA_OPCODE_CFLUSH: u8 = 0x20;
+pub const DSA_OPCODE_NOOP: u8 = idxd_uapi::dsa_opcode::DSA_OPCODE_NOOP as u8;
+pub const DSA_OPCODE_BATCH: u8 = idxd_uapi::dsa_opcode::DSA_OPCODE_BATCH as u8;
+pub const DSA_OPCODE_MEMMOVE: u8 = idxd_uapi::dsa_opcode::DSA_OPCODE_MEMMOVE as u8;
+pub const DSA_OPCODE_MEMFILL: u8 = idxd_uapi::dsa_opcode::DSA_OPCODE_MEMFILL as u8;
+pub const DSA_OPCODE_COMPARE: u8 = idxd_uapi::dsa_opcode::DSA_OPCODE_COMPARE as u8;
+pub const DSA_OPCODE_COMPVAL: u8 = idxd_uapi::dsa_opcode::DSA_OPCODE_COMPVAL as u8;
+pub const DSA_OPCODE_DUALCAST: u8 = idxd_uapi::dsa_opcode::DSA_OPCODE_DUALCAST as u8;
+pub const DSA_OPCODE_CRCGEN: u8 = idxd_uapi::dsa_opcode::DSA_OPCODE_CRCGEN as u8;
+pub const DSA_OPCODE_COPY_CRC: u8 = idxd_uapi::dsa_opcode::DSA_OPCODE_COPY_CRC as u8;
+pub const DSA_OPCODE_CFLUSH: u8 = idxd_uapi::dsa_opcode::DSA_OPCODE_CFLUSH as u8;
 
-pub const IDXD_OP_FLAG_CRAV: u32 = 0x0004;
-pub const IDXD_OP_FLAG_RCR: u32 = 0x0008;
-pub const IDXD_OP_FLAG_CC: u32 = 0x0100;
+pub const IDXD_OP_FLAG_CRAV: u32 = idxd_uapi::IDXD_OP_FLAG_CRAV;
+pub const IDXD_OP_FLAG_RCR: u32 = idxd_uapi::IDXD_OP_FLAG_RCR;
+pub const IDXD_OP_FLAG_CC: u32 = idxd_uapi::IDXD_OP_FLAG_CC;
 
-pub const DSA_COMP_NONE: u8 = 0;
-pub const DSA_COMP_SUCCESS: u8 = 1;
-pub const DSA_COMP_PAGE_FAULT_NOBOF: u8 = 3;
-pub const DSA_COMP_STATUS_MASK: u8 = 0x7f;
+pub const DSA_COMP_NONE: u8 = idxd_uapi::dsa_completion_status::DSA_COMP_NONE as u8;
+pub const DSA_COMP_SUCCESS: u8 = idxd_uapi::dsa_completion_status::DSA_COMP_SUCCESS as u8;
+pub const DSA_COMP_PAGE_FAULT_NOBOF: u8 =
+    idxd_uapi::dsa_completion_status::DSA_COMP_PAGE_FAULT_NOBOF as u8;
+pub const DSA_COMP_STATUS_MASK: u8 = idxd_uapi::DSA_COMP_STATUS_MASK as u8;
 
 // ============================================================================
 // Descriptor builders
 // ============================================================================
 
-impl DsaHwDesc {
+impl BindgenDsaHwDesc {
+    #[inline(always)]
+    fn as_raw_ptr(&self) -> *const idxd_uapi::dsa_hw_desc {
+        ptr::addr_of!(self.raw)
+    }
+
+    #[inline(always)]
+    fn as_raw_mut_ptr(&mut self) -> *mut idxd_uapi::dsa_hw_desc {
+        ptr::addr_of_mut!(self.raw)
+    }
+
+    /// Read the generated descriptor opcode bitfield.
+    #[inline(always)]
+    pub fn opcode(&self) -> u8 {
+        self.raw.opcode() as u8
+    }
+
+    /// Read the generated descriptor flags bitfield.
+    #[inline(always)]
+    pub fn flags(&self) -> u32 {
+        self.raw.flags()
+    }
+
+    /// Read the generated descriptor completion record address field.
+    #[inline(always)]
+    pub fn completion_addr(&self) -> u64 {
+        unsafe { ptr::read_unaligned(ptr::addr_of!((*self.as_raw_ptr()).completion_addr)) }
+    }
+
+    /// Read the generated descriptor source address field used by memmove.
+    #[inline(always)]
+    pub fn src_addr(&self) -> u64 {
+        unsafe {
+            ptr::read_unaligned(ptr::addr_of!(
+                (*self.as_raw_ptr()).__bindgen_anon_1.src_addr
+            ))
+        }
+    }
+
+    /// Read the generated descriptor destination address field used by memmove.
+    #[inline(always)]
+    pub fn dst_addr(&self) -> u64 {
+        unsafe {
+            ptr::read_unaligned(ptr::addr_of!(
+                (*self.as_raw_ptr()).__bindgen_anon_2.dst_addr
+            ))
+        }
+    }
+
+    /// Read the generated descriptor transfer size field used by memmove.
+    #[inline(always)]
+    pub fn xfer_size(&self) -> u32 {
+        unsafe {
+            ptr::read_unaligned(ptr::addr_of!(
+                (*self.as_raw_ptr()).__bindgen_anon_3.xfer_size
+            ))
+        }
+    }
+
     /// Set opcode and standard flags (RCR + CRAV).
     fn set_opcode_flags(&mut self, opcode: u8, extra_flags: u32) {
         let flags = IDXD_OP_FLAG_RCR | IDXD_OP_FLAG_CRAV | extra_flags;
-        self.flags_opcode = (flags & 0x00FF_FFFF) | ((opcode as u32) << 24);
+        self.raw.set_flags(flags & 0x00FF_FFFF);
+        self.raw.set_opcode(opcode as u32);
     }
 
     /// Set completion record address.
     pub fn set_completion(&mut self, comp: &mut DsaCompletionRecord) {
-        self.completion_addr = comp as *mut DsaCompletionRecord as u64;
+        unsafe {
+            ptr::write_unaligned(
+                ptr::addr_of_mut!((*self.as_raw_mut_ptr()).completion_addr),
+                comp.as_raw_mut_ptr() as u64,
+            );
+        }
     }
 
     /// Fill for memmove (data_move) operation.
     pub fn fill_memmove(&mut self, src: *const u8, dst: *mut u8, size: u32) {
         *self = Self::default();
         self.set_opcode_flags(DSA_OPCODE_MEMMOVE, IDXD_OP_FLAG_CC);
-        self.src_addr = src as u64;
-        self.dst_addr = dst as u64;
-        self.xfer_size = size;
+        unsafe {
+            ptr::write_unaligned(
+                ptr::addr_of_mut!((*self.as_raw_mut_ptr()).__bindgen_anon_1.src_addr),
+                src as u64,
+            );
+            ptr::write_unaligned(
+                ptr::addr_of_mut!((*self.as_raw_mut_ptr()).__bindgen_anon_2.dst_addr),
+                dst as u64,
+            );
+            ptr::write_unaligned(
+                ptr::addr_of_mut!((*self.as_raw_mut_ptr()).__bindgen_anon_3.xfer_size),
+                size,
+            );
+        }
     }
 
     /// Fill for CRC generation operation.
     pub fn fill_crc_gen(&mut self, src: *const u8, size: u32, seed: u32) {
         *self = Self::default();
         self.set_opcode_flags(DSA_OPCODE_CRCGEN, 0);
-        self.src_addr = src as u64;
-        self.xfer_size = size;
-        // crc_seed is at op_specific[0..4]
-        self.op_specific[0..4].copy_from_slice(&seed.to_le_bytes());
+        unsafe {
+            ptr::write_unaligned(
+                ptr::addr_of_mut!((*self.as_raw_mut_ptr()).__bindgen_anon_1.src_addr),
+                src as u64,
+            );
+            ptr::write_unaligned(
+                ptr::addr_of_mut!((*self.as_raw_mut_ptr()).__bindgen_anon_3.xfer_size),
+                size,
+            );
+            ptr::copy_nonoverlapping(
+                seed.to_le_bytes().as_ptr(),
+                ptr::addr_of_mut!((*self.as_raw_mut_ptr()).__bindgen_anon_4.op_specific)
+                    .cast::<u8>(),
+                std::mem::size_of::<u32>(),
+            );
+        }
     }
 
     /// Fill for copy + CRC operation (fused copy and CRC-32C).
     pub fn fill_copy_crc(&mut self, src: *const u8, dst: *mut u8, size: u32, seed: u32) {
         *self = Self::default();
         self.set_opcode_flags(DSA_OPCODE_COPY_CRC, 0);
-        self.src_addr = src as u64;
-        self.dst_addr = dst as u64;
-        self.xfer_size = size;
-        // crc_seed is at op_specific[0..4]
-        self.op_specific[0..4].copy_from_slice(&seed.to_le_bytes());
+        unsafe {
+            ptr::write_unaligned(
+                ptr::addr_of_mut!((*self.as_raw_mut_ptr()).__bindgen_anon_1.src_addr),
+                src as u64,
+            );
+            ptr::write_unaligned(
+                ptr::addr_of_mut!((*self.as_raw_mut_ptr()).__bindgen_anon_2.dst_addr),
+                dst as u64,
+            );
+            ptr::write_unaligned(
+                ptr::addr_of_mut!((*self.as_raw_mut_ptr()).__bindgen_anon_3.xfer_size),
+                size,
+            );
+            ptr::copy_nonoverlapping(
+                seed.to_le_bytes().as_ptr(),
+                ptr::addr_of_mut!((*self.as_raw_mut_ptr()).__bindgen_anon_4.op_specific)
+                    .cast::<u8>(),
+                std::mem::size_of::<u32>(),
+            );
+        }
     }
 
     /// Fill for memory fill operation.
     pub fn fill_memfill(&mut self, dst: *mut u8, size: u32, pattern: u64) {
         *self = Self::default();
         self.set_opcode_flags(DSA_OPCODE_MEMFILL, IDXD_OP_FLAG_CC);
-        self.src_addr = pattern; // pattern goes in src_addr union
-        self.dst_addr = dst as u64;
-        self.xfer_size = size;
+        unsafe {
+            ptr::write_unaligned(
+                ptr::addr_of_mut!((*self.as_raw_mut_ptr()).__bindgen_anon_1.pattern),
+                pattern,
+            );
+            ptr::write_unaligned(
+                ptr::addr_of_mut!((*self.as_raw_mut_ptr()).__bindgen_anon_2.dst_addr),
+                dst as u64,
+            );
+            ptr::write_unaligned(
+                ptr::addr_of_mut!((*self.as_raw_mut_ptr()).__bindgen_anon_3.xfer_size),
+                size,
+            );
+        }
     }
 
     /// Fill for compare operation.
     pub fn fill_compare(&mut self, src1: *const u8, src2: *const u8, size: u32) {
         *self = Self::default();
         self.set_opcode_flags(DSA_OPCODE_COMPARE, 0);
-        self.src_addr = src1 as u64;
-        self.dst_addr = src2 as u64; // src2_addr is in dst_addr union
-        self.xfer_size = size;
+        unsafe {
+            ptr::write_unaligned(
+                ptr::addr_of_mut!((*self.as_raw_mut_ptr()).__bindgen_anon_1.src_addr),
+                src1 as u64,
+            );
+            ptr::write_unaligned(
+                ptr::addr_of_mut!((*self.as_raw_mut_ptr()).__bindgen_anon_2.src2_addr),
+                src2 as u64,
+            );
+            ptr::write_unaligned(
+                ptr::addr_of_mut!((*self.as_raw_mut_ptr()).__bindgen_anon_3.xfer_size),
+                size,
+            );
+        }
     }
 
     /// Fill for batch operation.
     pub fn fill_batch(&mut self, desc_list: *const DsaHwDesc, count: u32) {
         *self = Self::default();
         self.set_opcode_flags(DSA_OPCODE_BATCH, 0);
-        self.src_addr = desc_list as u64; // desc_list_addr union
-        self.xfer_size = count; // desc_count union
+        unsafe {
+            ptr::write_unaligned(
+                ptr::addr_of_mut!((*self.as_raw_mut_ptr()).__bindgen_anon_1.desc_list_addr),
+                desc_list as u64,
+            );
+            ptr::write_unaligned(
+                ptr::addr_of_mut!((*self.as_raw_mut_ptr()).__bindgen_anon_3.desc_count),
+                count,
+            );
+        }
     }
 
     /// Fill for noop operation (useful for measuring submission overhead).
@@ -229,12 +405,18 @@ impl WqPortal {
     /// remain valid until the operation completes.
     #[inline(always)]
     pub unsafe fn submit_movdir64b(&self, desc: &DsaHwDesc) {
-        core::arch::asm!(
-            "movdir64b ({src}), {dst}",
-            dst = in(reg) self.portal,
-            src = in(reg) desc as *const DsaHwDesc,
-            options(nostack, preserves_flags, att_syntax),
-        );
+        // SAFETY: The caller guarantees that `desc` points to a valid,
+        // 64-byte-aligned DSA descriptor and that its completion record stays
+        // alive until hardware completion. `self.portal` is a live WQ portal
+        // mapping owned by this `WqPortal`.
+        unsafe {
+            core::arch::asm!(
+                "movdir64b ({src}), {dst}",
+                dst = in(reg) self.portal,
+                src = in(reg) desc.as_raw_ptr(),
+                options(nostack, preserves_flags, att_syntax),
+            );
+        }
     }
 
     /// Submit a descriptor via ENQCMD (shared WQ). Returns true if accepted.
@@ -244,15 +426,21 @@ impl WqPortal {
     #[inline(always)]
     pub unsafe fn submit_enqcmd(&self, desc: &DsaHwDesc) -> bool {
         let mut retry: u8;
-        core::arch::asm!(
-            "enqcmd {dst}, [{src}]", // Intel syntax: dst, [src]
-            "setnz {result}",        // ZF=0 (success) -> result=1
-            dst = in(reg) self.portal,
-            src = in(reg) desc,
-            result = out(reg_byte) retry,
-            // Removed preserves_flags because we modify ZF
-            options(nostack),
-        );
+        // SAFETY: The caller guarantees that `desc` points to a valid,
+        // 64-byte-aligned DSA descriptor and that its completion record stays
+        // alive until hardware completion. `self.portal` is a live WQ portal
+        // mapping owned by this `WqPortal`.
+        unsafe {
+            core::arch::asm!(
+                "enqcmd {dst}, [{src}]", // Intel syntax: dst, [src]
+                "setnz {result}",        // ZF=0 (success) -> result=1
+                dst = in(reg) self.portal,
+                src = in(reg) desc.as_raw_ptr(),
+                result = out(reg_byte) retry,
+                // Removed preserves_flags because we modify ZF
+                options(nostack),
+            );
+        }
         retry != 0
     }
 
@@ -263,10 +451,17 @@ impl WqPortal {
     #[inline(always)]
     pub unsafe fn submit(&self, desc: &DsaHwDesc) {
         if self.dedicated {
-            self.submit_movdir64b(desc);
+            // SAFETY: Forwarding this unsafe API's descriptor/completion
+            // validity requirements to the dedicated-WQ submission primitive.
+            unsafe { self.submit_movdir64b(desc) };
         } else {
             // Retry until accepted (shared WQ may reject under contention)
-            while !self.submit_enqcmd(desc) {
+            loop {
+                // SAFETY: Forwarding this unsafe API's descriptor/completion
+                // validity requirements to the shared-WQ submission primitive.
+                if unsafe { self.submit_enqcmd(desc) } {
+                    break;
+                }
                 core::hint::spin_loop();
             }
         }
@@ -293,7 +488,7 @@ pub fn poll_completion(comp: &DsaCompletionRecord) -> u8 {
     let mut spins: u64 = 0;
     loop {
         // Volatile read — hardware writes this field
-        let status = unsafe { ptr::read_volatile(&comp.status) };
+        let status = comp.status();
         if status != DSA_COMP_NONE {
             return status & DSA_COMP_STATUS_MASK;
         }
@@ -319,7 +514,7 @@ pub fn reset_completion(comp: &mut DsaCompletionRecord) {
 /// otherwise closing the WQ fd with in-flight DMA causes kernel D-state hang.
 pub fn drain_completions(comps: &[DsaCompletionRecord]) {
     for comp in comps {
-        let status = unsafe { ptr::read_volatile(&comp.status) };
+        let status = comp.status();
         if status == DSA_COMP_NONE {
             poll_completion(comp);
         }
@@ -329,7 +524,7 @@ pub fn drain_completions(comps: &[DsaCompletionRecord]) {
 /// Touch the faulted page reported in a completion record (write touch for
 /// destination faults, ensuring the PTE is mapped writable for DMA).
 pub fn touch_fault_page(comp: &DsaCompletionRecord) {
-    let addr = unsafe { ptr::read_volatile(&comp.fault_addr) };
+    let addr = comp.fault_addr();
     if addr != 0 {
         unsafe {
             let p = addr as *mut u8;

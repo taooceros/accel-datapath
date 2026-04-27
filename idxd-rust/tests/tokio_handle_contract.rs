@@ -1,6 +1,6 @@
 use std::sync::{
-    atomic::{AtomicUsize, Ordering},
     Arc, Condvar, Mutex,
+    atomic::{AtomicUsize, Ordering},
 };
 use std::time::Duration;
 
@@ -27,10 +27,7 @@ impl ReleaseGate {
     fn wait(&self) {
         let mut released = self.released.lock().expect("gate lock should not poison");
         while !*released {
-            released = self
-                .cv
-                .wait(released)
-                .expect("gate lock should not poison");
+            released = self.cv.wait(released).expect("gate lock should not poison");
         }
     }
 
@@ -226,13 +223,15 @@ async fn cloned_handles_compose_with_tokio_join_and_serialize_through_one_worker
 
     let joined = tokio::spawn(async move {
         tokio::join!(
-            first_handle.memmove(AsyncMemmoveRequest::new(vec![1, 2, 3]).unwrap()),
-            second_handle.memmove(AsyncMemmoveRequest::new(vec![4, 5, 6, 7]).unwrap())
+            first_handle.memmove(AsyncMemmoveRequest::copy_exact(vec![1, 2, 3]).unwrap()),
+            second_handle.memmove(AsyncMemmoveRequest::copy_exact(vec![4, 5, 6, 7]).unwrap())
         )
     });
 
     harness.wait_for_first_start().await;
-    harness.assert_second_request_stays_queued_until_release().await;
+    harness
+        .assert_second_request_stays_queued_until_release()
+        .await;
     assert!(
         !joined.is_finished(),
         "join! composition should still be waiting on the blocked first request"
@@ -247,8 +246,8 @@ async fn cloned_handles_compose_with_tokio_join_and_serialize_through_one_worker
     let first = first.expect("first cloned handle should succeed");
     let second = second.expect("second cloned handle should succeed");
 
-    assert_eq!(first.bytes, vec![1, 2, 3]);
-    assert_eq!(second.bytes, vec![4, 5, 6, 7]);
+    assert_eq!(first.destination, vec![1, 2, 3]);
+    assert_eq!(second.destination, vec![4, 5, 6, 7]);
     harness.assert_serialized();
 
     session.shutdown().expect("owner shutdown should succeed");
@@ -262,17 +261,19 @@ async fn cloned_handles_compose_in_spawned_tasks_and_still_share_one_worker() {
 
     let first_task = tokio::spawn(async move {
         first_handle
-            .memmove(AsyncMemmoveRequest::new(vec![8, 9]).unwrap())
+            .memmove(AsyncMemmoveRequest::copy_exact(vec![8, 9]).unwrap())
             .await
     });
     let second_task = tokio::spawn(async move {
         second_handle
-            .memmove(AsyncMemmoveRequest::new(vec![10, 11, 12]).unwrap())
+            .memmove(AsyncMemmoveRequest::copy_exact(vec![10, 11, 12]).unwrap())
             .await
     });
 
     harness.wait_for_first_start().await;
-    harness.assert_second_request_stays_queued_until_release().await;
+    harness
+        .assert_second_request_stays_queued_until_release()
+        .await;
     assert!(
         !first_task.is_finished() && !second_task.is_finished(),
         "spawned composition should stay pending until the blocked worker call is released"
@@ -281,7 +282,14 @@ async fn cloned_handles_compose_in_spawned_tasks_and_still_share_one_worker() {
     harness.release_first_request();
 
     let (first, second) = timeout(Duration::from_secs(1), async {
-        (first_task.await.expect("first spawned task should not panic"), second_task.await.expect("second spawned task should not panic"))
+        (
+            first_task
+                .await
+                .expect("first spawned task should not panic"),
+            second_task
+                .await
+                .expect("second spawned task should not panic"),
+        )
     })
     .await
     .expect("spawned-task composition should complete after release");
@@ -289,8 +297,8 @@ async fn cloned_handles_compose_in_spawned_tasks_and_still_share_one_worker() {
     let first = first.expect("first spawned handle should succeed");
     let second = second.expect("second spawned handle should succeed");
 
-    assert_eq!(first.bytes, vec![8, 9]);
-    assert_eq!(second.bytes, vec![10, 11, 12]);
+    assert_eq!(first.destination, vec![8, 9]);
+    assert_eq!(second.destination, vec![10, 11, 12]);
     harness.assert_serialized();
 
     session.shutdown().expect("owner shutdown should succeed");
@@ -306,11 +314,11 @@ async fn dropping_one_clone_does_not_shut_down_another_clone() {
     harness.release_first_request();
 
     let result = retained_handle
-        .memmove(AsyncMemmoveRequest::new(vec![8, 9]).unwrap())
+        .memmove(AsyncMemmoveRequest::copy_exact(vec![8, 9]).unwrap())
         .await
         .expect("remaining clone should keep working");
 
-    assert_eq!(result.bytes, vec![8, 9]);
+    assert_eq!(result.destination, vec![8, 9]);
 
     session.shutdown().expect("owner shutdown should succeed");
 }
@@ -323,7 +331,7 @@ async fn explicit_owner_shutdown_is_distinct_from_worker_failure() {
     session.shutdown().expect("owner shutdown should succeed");
 
     let err = handle
-        .memmove(AsyncMemmoveRequest::new(vec![1, 2, 3]).unwrap())
+        .memmove(AsyncMemmoveRequest::copy_exact(vec![1, 2, 3]).unwrap())
         .await
         .expect_err("use after owner shutdown must fail structurally");
 

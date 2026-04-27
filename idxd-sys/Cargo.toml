@@ -1,8 +1,8 @@
 [package]
 name = "idxd-sys"
 version = "0.1.0"
-edition = "2021"
-description = "Low-level Intel IDXD hardware bindings — handwritten DSA path plus bindgen-backed idxd UAPI"
+edition = "2024"
+description = "Low-level Intel IDXD hardware bindings — bindgen-backed idxd UAPI plus DSA submission helpers"
 
 [dependencies]
 libc = "0.2"

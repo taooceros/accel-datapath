@@ -23,8 +23,19 @@ fn write_executable(path: &Path, content: &str) {
     fs::set_permissions(path, perms).expect("script should be executable");
 }
 
-fn verifier_script() -> PathBuf {
+fn async_verifier_script() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("scripts/verify_async_memmove.sh")
+}
+
+fn live_verifier_script() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("scripts/verify_live_memmove.sh")
+}
+
+fn repo_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("idxd-rust should live at the repository root")
+        .to_path_buf()
 }
 
 fn fake_launcher_env(capability_ok: bool) -> (PathBuf, PathBuf, String) {
@@ -119,18 +130,109 @@ done
 }
 
 #[test]
+fn live_verifier_fails_preflight_when_binary_override_and_build_flags_conflict() {
+    let (_temp_root, launcher_path, path_override) = fake_launcher_env(true);
+    let output_dir = unique_temp_path("live-contradictory-output");
+    fs::create_dir_all(&output_dir).expect("output dir should be creatable");
+
+    let output = Command::new("bash")
+        .arg(live_verifier_script())
+        .env("PATH", path_override)
+        .env("IDXD_RUST_VERIFY_DEVICE", "/dev/dsa/does-not-exist")
+        .env("IDXD_RUST_VERIFY_LAUNCHER_PATH", &launcher_path)
+        .env("IDXD_RUST_VERIFY_OUTPUT_DIR", &output_dir)
+        .env(
+            "IDXD_RUST_VERIFY_BINARY",
+            env!("CARGO_BIN_EXE_live_memmove"),
+        )
+        .output()
+        .expect("verifier should launch");
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("phase=preflight"));
+    assert!(stderr.contains("launcher_status=contradictory_overrides"));
+    assert!(stderr.contains("IDXD_RUST_VERIFY_BINARY requires IDXD_RUST_VERIFY_SKIP_BUILD=1"));
+}
+
+#[test]
+fn live_verifier_reports_default_root_launcher_path_as_expected_failure() {
+    let output_dir = unique_temp_path("live-default-launcher-output");
+    fs::create_dir_all(&output_dir).expect("output dir should be creatable");
+
+    let output = Command::new("bash")
+        .arg(live_verifier_script())
+        .env("IDXD_RUST_VERIFY_SKIP_BUILD", "1")
+        .env(
+            "IDXD_RUST_VERIFY_BINARY",
+            env!("CARGO_BIN_EXE_live_memmove"),
+        )
+        .env("IDXD_RUST_VERIFY_DEVICE", "/dev/dsa/does-not-exist")
+        .env("IDXD_RUST_VERIFY_OUTPUT_DIR", &output_dir)
+        .output()
+        .expect("verifier should launch");
+
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let expected_launcher = repo_root().join("tools/build/dsa_launcher");
+    assert!(stdout.contains("phase=done"));
+    assert!(stdout.contains("verdict=expected_failure"));
+    assert!(stdout.contains("failure_phase=preflight"));
+    assert!(stdout.contains("launcher_status=missing_launcher"));
+    assert!(stdout.contains(&format!("launcher_path={}", expected_launcher.display())));
+    assert!(!stdout.contains(&format!(
+        "launcher_path={}",
+        repo_root().parent().unwrap().join("tools/build/dsa_launcher").display()
+    )));
+}
+
+#[test]
+fn async_verifier_reports_default_root_launcher_path_as_expected_failure() {
+    let output_dir = unique_temp_path("async-default-launcher-output");
+    fs::create_dir_all(&output_dir).expect("output dir should be creatable");
+
+    let output = Command::new("bash")
+        .arg(async_verifier_script())
+        .env("IDXD_RUST_VERIFY_SKIP_BUILD", "1")
+        .env(
+            "IDXD_RUST_VERIFY_BINARY",
+            env!("CARGO_BIN_EXE_await_memmove"),
+        )
+        .env("IDXD_RUST_VERIFY_DEVICE", "/dev/dsa/does-not-exist")
+        .env("IDXD_RUST_VERIFY_OUTPUT_DIR", &output_dir)
+        .output()
+        .expect("verifier should launch");
+
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let expected_launcher = repo_root().join("tools/build/dsa_launcher");
+    assert!(stdout.contains("phase=done"));
+    assert!(stdout.contains("verdict=expected_failure"));
+    assert!(stdout.contains("failure_phase=preflight"));
+    assert!(stdout.contains("launcher_status=missing_launcher"));
+    assert!(stdout.contains(&format!("launcher_path={}", expected_launcher.display())));
+    assert!(!stdout.contains(&format!(
+        "launcher_path={}",
+        repo_root().parent().unwrap().join("tools/build/dsa_launcher").display()
+    )));
+}
+
+#[test]
 fn verifier_fails_preflight_when_binary_override_and_build_flags_conflict() {
     let (_temp_root, launcher_path, path_override) = fake_launcher_env(true);
     let output_dir = unique_temp_path("contradictory-output");
     fs::create_dir_all(&output_dir).expect("output dir should be creatable");
 
     let output = Command::new("bash")
-        .arg(verifier_script())
+        .arg(async_verifier_script())
         .env("PATH", path_override)
         .env("IDXD_RUST_VERIFY_DEVICE", "/dev/dsa/does-not-exist")
         .env("IDXD_RUST_VERIFY_LAUNCHER_PATH", &launcher_path)
         .env("IDXD_RUST_VERIFY_OUTPUT_DIR", &output_dir)
-        .env("IDXD_RUST_VERIFY_BINARY", env!("CARGO_BIN_EXE_await_memmove"))
+        .env(
+            "IDXD_RUST_VERIFY_BINARY",
+            env!("CARGO_BIN_EXE_await_memmove"),
+        )
         .output()
         .expect("verifier should launch");
 
@@ -148,10 +250,13 @@ fn verifier_fails_preflight_when_launcher_capability_is_missing() {
     fs::create_dir_all(&output_dir).expect("output dir should be creatable");
 
     let output = Command::new("bash")
-        .arg(verifier_script())
+        .arg(async_verifier_script())
         .env("PATH", path_override)
         .env("IDXD_RUST_VERIFY_SKIP_BUILD", "1")
-        .env("IDXD_RUST_VERIFY_BINARY", env!("CARGO_BIN_EXE_await_memmove"))
+        .env(
+            "IDXD_RUST_VERIFY_BINARY",
+            env!("CARGO_BIN_EXE_await_memmove"),
+        )
         .env("IDXD_RUST_VERIFY_DEVICE", "/dev/dsa/does-not-exist")
         .env("IDXD_RUST_VERIFY_LAUNCHER_PATH", &launcher_path)
         .env("IDXD_RUST_VERIFY_OUTPUT_DIR", &output_dir)
@@ -174,10 +279,13 @@ fn verifier_preserves_queue_open_failure_and_async_fields() {
     fs::create_dir_all(&output_dir).expect("output dir should be creatable");
 
     let output = Command::new("bash")
-        .arg(verifier_script())
+        .arg(async_verifier_script())
         .env("PATH", path_override)
         .env("IDXD_RUST_VERIFY_SKIP_BUILD", "1")
-        .env("IDXD_RUST_VERIFY_BINARY", env!("CARGO_BIN_EXE_await_memmove"))
+        .env(
+            "IDXD_RUST_VERIFY_BINARY",
+            env!("CARGO_BIN_EXE_await_memmove"),
+        )
         .env("IDXD_RUST_VERIFY_DEVICE", "/dev/dsa/does-not-exist")
         .env("IDXD_RUST_VERIFY_LAUNCHER_PATH", &launcher_path)
         .env("IDXD_RUST_VERIFY_OUTPUT_DIR", &output_dir)
@@ -216,10 +324,13 @@ fn verifier_preserves_async_lifecycle_failure_kind() {
     fs::create_dir_all(&output_dir).expect("output dir should be creatable");
 
     let output = Command::new("bash")
-        .arg(verifier_script())
+        .arg(async_verifier_script())
         .env("PATH", path_override)
         .env("IDXD_RUST_VERIFY_SKIP_BUILD", "1")
-        .env("IDXD_RUST_VERIFY_BINARY", env!("CARGO_BIN_EXE_await_memmove"))
+        .env(
+            "IDXD_RUST_VERIFY_BINARY",
+            env!("CARGO_BIN_EXE_await_memmove"),
+        )
         .env("IDXD_RUST_VERIFY_DEVICE", "/dev/dsa/test0.0")
         .env("IDXD_RUST_VERIFY_LAUNCHER_PATH", &launcher_path)
         .env("IDXD_RUST_VERIFY_OUTPUT_DIR", &output_dir)
@@ -254,7 +365,7 @@ exit 1"#,
     );
 
     let output = Command::new("bash")
-        .arg(verifier_script())
+        .arg(async_verifier_script())
         .env("PATH", path_override)
         .env("IDXD_RUST_VERIFY_SKIP_BUILD", "1")
         .env("IDXD_RUST_VERIFY_BINARY", &fake_binary)
@@ -291,7 +402,7 @@ exit 0"#,
     );
 
     let output = Command::new("bash")
-        .arg(verifier_script())
+        .arg(async_verifier_script())
         .env("PATH", path_override)
         .env("IDXD_RUST_VERIFY_SKIP_BUILD", "1")
         .env("IDXD_RUST_VERIFY_BINARY", &fake_binary)
@@ -326,7 +437,7 @@ exit 1"#,
     );
 
     let output = Command::new("bash")
-        .arg(verifier_script())
+        .arg(async_verifier_script())
         .env("PATH", path_override)
         .env("IDXD_RUST_VERIFY_SKIP_BUILD", "1")
         .env("IDXD_RUST_VERIFY_BINARY", &fake_binary)
@@ -339,7 +450,11 @@ exit 1"#,
     assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("phase=artifact_validation"));
-    assert!(stderr.contains("lifecycle-failure artifact lifecycle_failure_kind must be a non-empty string"));
+    assert!(
+        stderr.contains(
+            "lifecycle-failure artifact lifecycle_failure_kind must be a non-empty string"
+        )
+    );
 }
 
 #[test]
@@ -359,7 +474,7 @@ exit 1"#,
     );
 
     let output = Command::new("bash")
-        .arg(verifier_script())
+        .arg(async_verifier_script())
         .env("PATH", path_override)
         .env("IDXD_RUST_VERIFY_SKIP_BUILD", "1")
         .env("IDXD_RUST_VERIFY_BINARY", &fake_binary)

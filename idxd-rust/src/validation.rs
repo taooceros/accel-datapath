@@ -118,9 +118,9 @@ impl CompletionSnapshot {
     pub(crate) fn from_record(record: &DsaCompletionRecord, polled_status: u8) -> Self {
         Self {
             status: polled_status,
-            result: record.result,
-            bytes_completed: record.bytes_completed,
-            fault_addr: record.fault_addr,
+            result: record.result(),
+            bytes_completed: record.bytes_completed(),
+            fault_addr: record.fault_addr(),
         }
     }
 }
