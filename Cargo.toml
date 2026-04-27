@@ -1,9 +1,10 @@
 [workspace]
 members = [
-    "accel-rpc/dsa-ffi",
+    "accel-rpc/idxd-sys",
+    "accel-rpc/idxd-rust",
     "accel-rpc/tonic-profile",
-    "dsa-bindings",
 ]
+exclude = ["accel-rpc/tonic"]
 resolver = "2"
 
 [workspace.package]

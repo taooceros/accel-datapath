@@ -28,7 +28,27 @@ tools/                       dsa_launcher capability helper
 docs/specs/                  Local DSA / IAX hardware specification copies
 test/                        Unit and integration tests
 dsa-config/                  accel-config device configurations
+accel-rpc/idxd-sys/          Canonical low-level Rust IDXD/UAPI/MMIO binding crate
+accel-rpc/idxd-rust/         Canonical safe Rust and Tokio-facing IDXD binding crate
 ```
+
+## Canonical Rust IDXD binding stack
+
+M003/S04 consolidates the active Rust IDXD package surface to two crates:
+
+- `idxd-sys` owns raw C/UAPI/MMIO integration.
+- `idxd-rust` owns the safe Rust memmove API, async owner/handle API, proof binaries, and verifier scripts.
+
+Run package checks from the `accel-rpc` workspace root when validating this stack:
+
+```bash
+cd accel-rpc
+cargo metadata --no-deps >/tmp/m003-s04-cargo-metadata.json
+cargo test -p idxd-rust -- --nocapture
+bash idxd-rust/scripts/verify_package_inventory.sh
+```
+
+The historical `dsa-ffi` wrapper paths are compatibility shims only. New integration and S05 downstream proof work should consume `idxd-rust`, not `dsa-ffi` or `idxd-bindings`.
 
 ## Hardware Requirements
 
