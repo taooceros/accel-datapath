@@ -154,6 +154,54 @@ impl BindgenDsaHwDesc {
         ptr::addr_of_mut!(self.raw)
     }
 
+    /// Read the generated descriptor opcode bitfield.
+    #[inline(always)]
+    pub fn opcode(&self) -> u8 {
+        self.raw.opcode() as u8
+    }
+
+    /// Read the generated descriptor flags bitfield.
+    #[inline(always)]
+    pub fn flags(&self) -> u32 {
+        self.raw.flags()
+    }
+
+    /// Read the generated descriptor completion record address field.
+    #[inline(always)]
+    pub fn completion_addr(&self) -> u64 {
+        unsafe { ptr::read_unaligned(ptr::addr_of!((*self.as_raw_ptr()).completion_addr)) }
+    }
+
+    /// Read the generated descriptor source address field used by memmove.
+    #[inline(always)]
+    pub fn src_addr(&self) -> u64 {
+        unsafe {
+            ptr::read_unaligned(ptr::addr_of!(
+                (*self.as_raw_ptr()).__bindgen_anon_1.src_addr
+            ))
+        }
+    }
+
+    /// Read the generated descriptor destination address field used by memmove.
+    #[inline(always)]
+    pub fn dst_addr(&self) -> u64 {
+        unsafe {
+            ptr::read_unaligned(ptr::addr_of!(
+                (*self.as_raw_ptr()).__bindgen_anon_2.dst_addr
+            ))
+        }
+    }
+
+    /// Read the generated descriptor transfer size field used by memmove.
+    #[inline(always)]
+    pub fn xfer_size(&self) -> u32 {
+        unsafe {
+            ptr::read_unaligned(ptr::addr_of!(
+                (*self.as_raw_ptr()).__bindgen_anon_3.xfer_size
+            ))
+        }
+    }
+
     /// Set opcode and standard flags (RCR + CRAV).
     fn set_opcode_flags(&mut self, opcode: u8, extra_flags: u32) {
         let flags = IDXD_OP_FLAG_RCR | IDXD_OP_FLAG_CRAV | extra_flags;
@@ -357,12 +405,18 @@ impl WqPortal {
     /// remain valid until the operation completes.
     #[inline(always)]
     pub unsafe fn submit_movdir64b(&self, desc: &DsaHwDesc) {
-        core::arch::asm!(
-            "movdir64b ({src}), {dst}",
-            dst = in(reg) self.portal,
-            src = in(reg) desc.as_raw_ptr(),
-            options(nostack, preserves_flags, att_syntax),
-        );
+        // SAFETY: The caller guarantees that `desc` points to a valid,
+        // 64-byte-aligned DSA descriptor and that its completion record stays
+        // alive until hardware completion. `self.portal` is a live WQ portal
+        // mapping owned by this `WqPortal`.
+        unsafe {
+            core::arch::asm!(
+                "movdir64b ({src}), {dst}",
+                dst = in(reg) self.portal,
+                src = in(reg) desc.as_raw_ptr(),
+                options(nostack, preserves_flags, att_syntax),
+            );
+        }
     }
 
     /// Submit a descriptor via ENQCMD (shared WQ). Returns true if accepted.
@@ -372,15 +426,21 @@ impl WqPortal {
     #[inline(always)]
     pub unsafe fn submit_enqcmd(&self, desc: &DsaHwDesc) -> bool {
         let mut retry: u8;
-        core::arch::asm!(
-            "enqcmd {dst}, [{src}]", // Intel syntax: dst, [src]
-            "setnz {result}",        // ZF=0 (success) -> result=1
-            dst = in(reg) self.portal,
-            src = in(reg) desc.as_raw_ptr(),
-            result = out(reg_byte) retry,
-            // Removed preserves_flags because we modify ZF
-            options(nostack),
-        );
+        // SAFETY: The caller guarantees that `desc` points to a valid,
+        // 64-byte-aligned DSA descriptor and that its completion record stays
+        // alive until hardware completion. `self.portal` is a live WQ portal
+        // mapping owned by this `WqPortal`.
+        unsafe {
+            core::arch::asm!(
+                "enqcmd {dst}, [{src}]", // Intel syntax: dst, [src]
+                "setnz {result}",        // ZF=0 (success) -> result=1
+                dst = in(reg) self.portal,
+                src = in(reg) desc.as_raw_ptr(),
+                result = out(reg_byte) retry,
+                // Removed preserves_flags because we modify ZF
+                options(nostack),
+            );
+        }
         retry != 0
     }
 
@@ -391,10 +451,17 @@ impl WqPortal {
     #[inline(always)]
     pub unsafe fn submit(&self, desc: &DsaHwDesc) {
         if self.dedicated {
-            self.submit_movdir64b(desc);
+            // SAFETY: Forwarding this unsafe API's descriptor/completion
+            // validity requirements to the dedicated-WQ submission primitive.
+            unsafe { self.submit_movdir64b(desc) };
         } else {
             // Retry until accepted (shared WQ may reject under contention)
-            while !self.submit_enqcmd(desc) {
+            loop {
+                // SAFETY: Forwarding this unsafe API's descriptor/completion
+                // validity requirements to the shared-WQ submission primitive.
+                if unsafe { self.submit_enqcmd(desc) } {
+                    break;
+                }
                 core::hint::spin_loop();
             }
         }
