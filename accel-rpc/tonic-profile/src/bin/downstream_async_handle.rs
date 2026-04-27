@@ -207,21 +207,29 @@ async fn execute(args: &CliArgs) -> RunOutcome {
             };
             execute_live(args, requests).await
         }
-        Err(err) => base_outcome(args, false, "argument_validation", Some("validation_failure"), err)
-            .with_validation("argument_validation", Some("invalid_test_scenario")),
+        Err(err) => base_outcome(
+            args,
+            false,
+            "argument_validation",
+            Some("validation_failure"),
+            err,
+        )
+        .with_validation("argument_validation", Some("invalid_test_scenario")),
     }
 }
 
-fn build_requests(requested_bytes: usize) -> Result<[AsyncMemmoveRequest; OPERATION_COUNT], MemmoveError> {
-    let first = AsyncMemmoveRequest::new(deterministic_src(requested_bytes, 0))?;
-    let second = AsyncMemmoveRequest::new(deterministic_src(requested_bytes, 1))?;
+fn build_requests(
+    requested_bytes: usize,
+) -> Result<[AsyncMemmoveRequest; OPERATION_COUNT], MemmoveError> {
+    let first = AsyncMemmoveRequest::copy_exact(deterministic_src(requested_bytes, 0))?;
+    let second = AsyncMemmoveRequest::copy_exact(deterministic_src(requested_bytes, 1))?;
     Ok([first, second])
 }
 
 fn execute_invalid_destination_len(args: &CliArgs) -> RunOutcome {
     let src = deterministic_src(args.requested_bytes, 0);
-    let invalid_dst_len = args.requested_bytes.saturating_sub(1);
-    match AsyncMemmoveRequest::with_destination_len(src, invalid_dst_len) {
+    let invalid_destination_len = args.requested_bytes.saturating_sub(1);
+    match AsyncMemmoveRequest::copy_into(src, vec![0u8; invalid_destination_len]) {
         Ok(_) => base_outcome(
             args,
             false,
@@ -234,7 +242,10 @@ fn execute_invalid_destination_len(args: &CliArgs) -> RunOutcome {
     }
 }
 
-async fn execute_live(args: &CliArgs, requests: [AsyncMemmoveRequest; OPERATION_COUNT]) -> RunOutcome {
+async fn execute_live(
+    args: &CliArgs,
+    requests: [AsyncMemmoveRequest; OPERATION_COUNT],
+) -> RunOutcome {
     let session = match AsyncDsaSession::open(&args.device_path) {
         Ok(session) => session,
         Err(err) => return async_failure_outcome(args, err),
@@ -349,23 +360,23 @@ fn map_joined_outcome(
 ) -> RunOutcome {
     match (first_result, second_result, shutdown_result) {
         (Ok(first), Ok(second), Ok(())) => {
-            if first.bytes != expected[0] {
+            if first.destination != expected[0] {
                 return base_outcome(
                     args,
                     false,
                     "post_copy_verify",
                     Some("validation_failure"),
-                    "first downstream async memmove returned unexpected bytes".to_string(),
+                    "first downstream async memmove returned unexpected destination".to_string(),
                 )
                 .with_validation("post_copy_verify", Some("byte_mismatch"));
             }
-            if second.bytes != expected[1] {
+            if second.destination != expected[1] {
                 return base_outcome(
                     args,
                     false,
                     "post_copy_verify",
                     Some("validation_failure"),
-                    "second downstream async memmove returned unexpected bytes".to_string(),
+                    "second downstream async memmove returned unexpected destination".to_string(),
                 )
                 .with_validation("post_copy_verify", Some("byte_mismatch"));
             }
@@ -400,7 +411,10 @@ fn async_failure_outcome(args: &CliArgs, err: AsyncMemmoveError) -> RunOutcome {
             false,
             "async_lifecycle",
             Some("lifecycle_failure"),
-            format!("downstream async-handle lifecycle failure: {}", kind.as_str()),
+            format!(
+                "downstream async-handle lifecycle failure: {}",
+                kind.as_str()
+            ),
         )
         .with_lifecycle(kind.as_str()),
         AsyncMemmoveError::WorkerFailure { kind } => base_outcome(
