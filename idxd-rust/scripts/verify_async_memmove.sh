@@ -3,8 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 CRATE_DIR=$(cd -- "${SCRIPT_DIR}/.." && pwd)
-ACCEL_RPC_DIR=$(cd -- "${CRATE_DIR}/.." && pwd)
-REPO_ROOT=$(cd -- "${ACCEL_RPC_DIR}/.." && pwd)
+REPO_ROOT=$(cd -- "${CRATE_DIR}/.." && pwd)
 
 OUTPUT_DIR=${IDXD_RUST_VERIFY_OUTPUT_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/idxd-rust-await-memmove.XXXXXX")}
 REQUEST_BYTES=${IDXD_RUST_VERIFY_BYTES:-64}
@@ -23,7 +22,7 @@ STDERR_PATH="${OUTPUT_DIR}/await_memmove.stderr"
 PREFLIGHT_STDOUT_PATH="${OUTPUT_DIR}/preflight.stdout"
 PREFLIGHT_STDERR_PATH="${OUTPUT_DIR}/preflight.stderr"
 LAUNCHER_PATH=${IDXD_RUST_VERIFY_LAUNCHER_PATH:-${REPO_ROOT}/tools/build/dsa_launcher}
-BINARY_PATH=${IDXD_RUST_VERIFY_BINARY:-${ACCEL_RPC_DIR}/target/${TARGET_SUBDIR}/await_memmove}
+BINARY_PATH=${IDXD_RUST_VERIFY_BINARY:-${REPO_ROOT}/target/${TARGET_SUBDIR}/await_memmove}
 
 find_default_device() {
   if [[ -n "${IDXD_RUST_VERIFY_DEVICE:-}" ]]; then
@@ -62,7 +61,7 @@ complete_with_explicit_failure() {
   exit 0
 }
 
-DEVICE_PATH=$(find_default_device) || fail_phase preflight 'device_path=<none> launcher_status=missing_work_queue message=no /dev/dsa/wq* device found; set IDXD_RUST_VERIFY_DEVICE explicitly'
+DEVICE_PATH=$(find_default_device) || complete_with_explicit_failure preflight 'device_path=<none> launcher_status=missing_work_queue message=no /dev/dsa/wq* device found; set IDXD_RUST_VERIFY_DEVICE explicitly'
 
 mkdir -p "${OUTPUT_DIR}" 2>/dev/null || fail_phase preflight "device_path=${DEVICE_PATH} launcher_status=output_dir_unwritable message=failed to create output directory"
 touch "${OUTPUT_DIR}/.write-test" 2>/dev/null || fail_phase preflight "device_path=${DEVICE_PATH} launcher_status=output_dir_unwritable message=failed to write into output directory"
@@ -70,22 +69,22 @@ rm -f "${OUTPUT_DIR}/.write-test"
 
 command -v python3 >/dev/null 2>&1 || fail_phase preflight "device_path=${DEVICE_PATH} launcher_status=missing_python3 message=python3 command not found"
 command -v timeout >/dev/null 2>&1 || fail_phase preflight "device_path=${DEVICE_PATH} launcher_status=missing_timeout message=timeout command not found"
-command -v devenv >/dev/null 2>&1 || fail_phase preflight "device_path=${DEVICE_PATH} launcher_status=missing_devenv message=devenv command not found"
+command -v devenv >/dev/null 2>&1 || complete_with_explicit_failure preflight "device_path=${DEVICE_PATH} launcher_status=missing_devenv message=devenv command not found"
 
 if [[ -n "${IDXD_RUST_VERIFY_BINARY:-}" && "${SKIP_BUILD}" != "1" ]]; then
   fail_phase preflight "device_path=${DEVICE_PATH} launcher_status=contradictory_overrides message=IDXD_RUST_VERIFY_BINARY requires IDXD_RUST_VERIFY_SKIP_BUILD=1 so the verifier does not build one binary and execute another"
 fi
 
 if [[ "${SKIP_BUILD}" != "1" ]]; then
-  log_phase build "device_path=${DEVICE_PATH} workspace=${ACCEL_RPC_DIR} binary=${BINARY_PATH}"
+  log_phase build "device_path=${DEVICE_PATH} workspace=${REPO_ROOT} binary=${BINARY_PATH}"
   (
-    cd "${ACCEL_RPC_DIR}"
+    cd "${REPO_ROOT}"
     cargo build --profile "${BUILD_PROFILE}" -p idxd-rust --bin await_memmove
   )
 fi
 
 [[ -x "${BINARY_PATH}" ]] || fail_phase preflight "device_path=${DEVICE_PATH} launcher_status=missing_binary binary=${BINARY_PATH} message=await_memmove binary is not executable"
-[[ -x "${LAUNCHER_PATH}" ]] || fail_phase preflight "device_path=${DEVICE_PATH} launcher_status=missing_launcher launcher_path=${LAUNCHER_PATH} message=build the launcher with launch in a privileged shell before running this verifier"
+[[ -x "${LAUNCHER_PATH}" ]] || complete_with_explicit_failure preflight "device_path=${DEVICE_PATH} launcher_status=missing_launcher launcher_path=${LAUNCHER_PATH} message=build the launcher with launch in a privileged shell before running this verifier"
 
 if command -v getcap >/dev/null 2>&1; then
   LAUNCHER_CAPS=$(getcap "${LAUNCHER_PATH}" || true)
