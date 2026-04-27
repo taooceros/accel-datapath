@@ -48,7 +48,7 @@ cargo test -p idxd-rust -- --nocapture
 bash idxd-rust/scripts/verify_package_inventory.sh
 ```
 
-The historical `dsa-ffi` wrapper paths are compatibility shims only. New integration and S05 downstream proof work should consume `idxd-rust`, not `dsa-ffi` or `idxd-bindings`.
+Legacy package and wrapper paths have been removed from active code. New integration and downstream proof work should consume `idxd-rust` and `idxd-sys` only.
 
 S05's downstream async proof lives outside the canonical binding crate, in `tonic-profile`:
 
