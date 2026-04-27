@@ -84,8 +84,8 @@ bash idxd-rust/scripts/verify_async_memmove.sh
 From the repo root, equivalent wrapper entrypoints are also available:
 
 ```bash
-bash accel-rpc/idxd-rust/scripts/verify_live_memmove.sh
-bash accel-rpc/idxd-rust/scripts/verify_async_memmove.sh
+bash idxd-rust/scripts/verify_live_memmove.sh
+bash idxd-rust/scripts/verify_async_memmove.sh
 ```
 
 What both verifiers do:
@@ -241,8 +241,8 @@ From the repo root:
 ```bash
 cd accel-rpc && cargo test -p idxd-rust --test validation_cli_contract -- --nocapture
 cd accel-rpc && cargo test -p idxd-rust --test tokio_handle_contract --test async_validation_cli_contract --test async_verifier_contract -- --nocapture
-bash accel-rpc/idxd-rust/scripts/verify_live_memmove.sh
-bash accel-rpc/idxd-rust/scripts/verify_async_memmove.sh
+bash idxd-rust/scripts/verify_live_memmove.sh
+bash idxd-rust/scripts/verify_async_memmove.sh
 ```
 
 The Tokio-handle and CLI contract tests exercise the non-hardware schemas for the public async surface. The shell verifiers are the truthful end-to-end proof commands for prepared hosts and the expected-failure proof commands for unprepared ones.

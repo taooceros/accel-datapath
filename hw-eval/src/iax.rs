@@ -2,7 +2,7 @@
 //! `linux/idxd.h` definitions.
 
 use crate::submit::{poll_status, zero_record};
-use idxd_bindings::idxd;
+use idxd_sys::idxd;
 
 #[repr(C, align(64))]
 #[derive(Clone, Copy)]

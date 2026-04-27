@@ -50,7 +50,7 @@ Backend notes:
 - `iax`: runs `noop` plus `crc64` latency, burst throughput, and sliding-window
   throughput. The IAX path does not use the old `memmove` benchmark anymore.
 - `iax` descriptor/completion layouts are sourced through the sibling
-  `idxd-bindings` crate, which runs bindgen against the local kernel
+  `idxd-sys` crate, which runs bindgen against the local kernel
   `linux/idxd.h` at build time.
 
 ## Timing
@@ -97,8 +97,8 @@ Cargo.toml
 ## Dependencies
 
 Managed via Cargo: libc, clap, serde, serde_json, criterion (dev), and the
-sibling `idxd-bindings` crate for IAX UAPI access.
-Build-time for IAX bindings: `idxd-bindings` uses `bindgen` plus a working
+root-level `idxd-sys` crate for IAX UAPI access.
+Build-time for IAX bindings: `idxd-sys` uses `bindgen` plus a working
 `libclang`, reading `/usr/include/linux/idxd.h` by default (override with
 `IDXD_HEADER`).
 Graphing: matplotlib, numpy (Python 3).

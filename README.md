@@ -28,8 +28,8 @@ tools/                       dsa_launcher capability helper
 docs/specs/                  Local DSA / IAX hardware specification copies
 test/                        Unit and integration tests
 dsa-config/                  accel-config device configurations
-accel-rpc/idxd-sys/          Canonical low-level Rust IDXD/UAPI/MMIO binding crate
-accel-rpc/idxd-rust/         Canonical safe Rust and Tokio-facing IDXD binding crate
+idxd-sys/          Canonical low-level Rust IDXD/UAPI/MMIO binding crate
+idxd-rust/         Canonical safe Rust and Tokio-facing IDXD binding crate
 ```
 
 ## Canonical Rust IDXD binding stack

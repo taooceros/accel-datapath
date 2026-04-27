@@ -2,8 +2,6 @@
 members = [
     "accel-codec",
     "accel-middleware",
-    "idxd-sys",
-    "idxd-rust",
     "iax-ffi",
     "async-bench",
     "tonic-profile",

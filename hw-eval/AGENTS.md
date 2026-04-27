@@ -14,7 +14,7 @@ Raw DSA/IAX benchmark crate. Measures hardware submission/completion costs with 
 | IAX path | `src/iax.rs` | IAX descriptors, completions, CRC64 flow. |
 | Software baselines | `src/sw.rs` | Non-hardware fallback path. |
 | Criterion bench | `benches/dsa_raw.rs` | Software-only bench target. |
-| Bindings dependency | `../dsa-bindings/Cargo.toml` | Path is `dsa-bindings/`; crate name is `idxd-bindings`. |
+| Bindings dependency | `../idxd-sys/Cargo.toml` | Root-level canonical raw IDXD/UAPI/MMIO crate shared with `idxd-rust`. |
 
 ## CONVENTIONS
 - Use `launch` for hardware-facing runs; use `--sw-only` when hardware is not required.

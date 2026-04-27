@@ -1,8 +1,9 @@
 [workspace]
 members = [
-    "accel-rpc/idxd-sys",
-    "accel-rpc/idxd-rust",
+    "idxd-sys",
+    "idxd-rust",
     "accel-rpc/tonic-profile",
+    "hw-eval",
 ]
 exclude = ["accel-rpc/tonic"]
 resolver = "2"
