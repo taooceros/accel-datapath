@@ -20,3 +20,4 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio-stream = "0.1"
 tonic-prost = { path = "../tonic/tonic-prost" }
+dsa-ffi = { path = "../dsa-ffi" }

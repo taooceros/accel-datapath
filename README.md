@@ -36,6 +36,21 @@ dsa-config/                  accel-config device configurations
 - DSA device configured with work queue enabled (via `accel-config`)
 - `CAP_SYS_RAWIO` capability for user-space DSA access
 
+## Git commit hygiene
+
+This repo ships a tracked `commit-msg` hook in `.githooks/commit-msg`.
+
+It blocks:
+- truncated subjects ending in `...` or `…`
+- subjects longer than 72 chars
+- commit bodies that skip the `.gitmessage` sections
+
+Enable it for your local checkout:
+
+```bash
+git config core.hooksPath .githooks
+```
+
 ## Dependencies
 
 All dependencies are managed via the Nix flake (`flake.nix` / `devenv.nix`):

@@ -1,15 +1,18 @@
 //! Rust async framework overhead characterization.
 //!
-//! Measures:
-//! - tokio task spawn + join overhead
-//! - Future::poll round-trip cost
-//! - Channel send/recv latency
-//! - spawn_blocking overhead
-//! - Waker registration and wake cost
+//! The `async_overhead` Criterion suite exposes a stable control-floor set for
+//! comparing executor/control-path overhead against later payload work:
+//! - `tokio_spawn_join`
+//! - `tokio_oneshot_completion`
+//! - `tokio_mpsc_round_trip`
+//! - `tokio_same_thread_wake`
+//! - `tokio_cross_thread_wake`
 //!
-//! These baselines inform how to integrate hardware accelerator completion
-//! polling with the tokio async runtime.
+//! Export summary artifacts with:
+//! `python3 async-bench/scripts/export_control_floor.py --criterion-root target/criterion --out <path>`
 
 fn main() {
-    println!("async-bench: run `cargo bench` for measurements");
+    println!(
+        "async-bench: run `cargo bench -p async-bench --bench async_overhead`; export the stable summary with async-bench/scripts/export_control_floor.py"
+    );
 }

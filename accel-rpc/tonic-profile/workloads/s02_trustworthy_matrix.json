@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "expected_benchmarks": [
+    "tokio_spawn_join",
+    "tokio_oneshot_completion",
+    "tokio_mpsc_round_trip",
+    "tokio_same_thread_wake",
+    "tokio_cross_thread_wake"
+  ],
+  "defaults": {
+    "warmup_ms": 0,
+    "measure_ms": 20,
+    "requests": 1,
+    "concurrency": 1,
+    "runtime": "single",
+    "compression": "off",
+    "buffer_policy": "default"
+  },
+  "workloads": [
+    {
+      "label": "ordinary/unary-bytes/repeated-64",
+      "rpc": "unary-bytes",
+      "payload_size": 64,
+      "payload_kind": "repeated",
+      "endpoint_artifacts": {
+        "off": {
+          "client": "ordinary__unary-bytes__repeated-64.client.off.json",
+          "server": "ordinary__unary-bytes__repeated-64.server.off.json"
+        },
+        "on": {
+          "client": "ordinary__unary-bytes__repeated-64.client.on.json",
+          "server": "ordinary__unary-bytes__repeated-64.server.on.json"
+        }
+      }
+    },
+    {
+      "label": "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
+      "rpc": "unary-proto-shape",
+      "proto_shape": "fleet-small",
+      "response_shape": "fleet-response-heavy",
+      "endpoint_artifacts": {
+        "off": {
+          "client": "ordinary__unary-proto-shape__fleet-small-to-fleet-response-heavy.client.off.json",
+          "server": "ordinary__unary-proto-shape__fleet-small-to-fleet-response-heavy.server.off.json"
+        },
+        "on": {
+          "client": "ordinary__unary-proto-shape__fleet-small-to-fleet-response-heavy.client.on.json",
+          "server": "ordinary__unary-proto-shape__fleet-small-to-fleet-response-heavy.server.on.json"
+        }
+      }
+    }
+  ]
+}

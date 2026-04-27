@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "defaults": {
+    "warmup_ms": 20,
+    "measure_ms": 40,
+    "requests": 2,
+    "concurrency": 1,
+    "runtime": "single",
+    "compression": "off",
+    "buffer_policy": "default"
+  },
+  "workloads": [
+    {
+      "label": "ordinary/unary-bytes/repeated-64",
+      "rpc": "unary-bytes",
+      "payload_size": 64,
+      "payload_kind": "repeated",
+      "artifact_pair": {
+        "off": "ordinary__unary-bytes__repeated-64.off.json",
+        "on": "ordinary__unary-bytes__repeated-64.on.json"
+      }
+    },
+    {
+      "label": "ordinary/unary-proto-shape/fleet-small-to-fleet-small",
+      "rpc": "unary-proto-shape",
+      "proto_shape": "fleet-small",
+      "response_shape": "same",
+      "artifact_pair": {
+        "off": "ordinary__unary-proto-shape__fleet-small-to-fleet-small.off.json",
+        "on": "ordinary__unary-proto-shape__fleet-small-to-fleet-small.on.json"
+      }
+    },
+    {
+      "label": "ordinary/unary-proto-shape/fleet-string-heavy-to-fleet-string-heavy",
+      "rpc": "unary-proto-shape",
+      "proto_shape": "fleet-string-heavy",
+      "response_shape": "same",
+      "artifact_pair": {
+        "off": "ordinary__unary-proto-shape__fleet-string-heavy-to-fleet-string-heavy.off.json",
+        "on": "ordinary__unary-proto-shape__fleet-string-heavy-to-fleet-string-heavy.on.json"
+      }
+    },
+    {
+      "label": "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
+      "rpc": "unary-proto-shape",
+      "proto_shape": "fleet-small",
+      "response_shape": "fleet-response-heavy",
+      "artifact_pair": {
+        "off": "ordinary__unary-proto-shape__fleet-small-to-fleet-response-heavy.off.json",
+        "on": "ordinary__unary-proto-shape__fleet-small-to-fleet-response-heavy.on.json"
+      }
+    }
+  ]
+}
