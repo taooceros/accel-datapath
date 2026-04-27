@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use idxd_rust::{
-    AsyncDsaSession, AsyncMemmoveError, AsyncMemmoveRequest, AsyncMemmoveWorker, MemmoveError,
-    MemmovePhase, MemmoveRequest, MemmoveValidationReport, DEFAULT_DEVICE_PATH,
+    AsyncDsaSession, AsyncMemmoveError, AsyncMemmoveRequest, AsyncMemmoveWorker,
+    DEFAULT_DEVICE_PATH, MemmoveError, MemmovePhase, MemmoveRequest, MemmoveValidationReport,
 };
 
 const TEST_SCENARIO_ENV: &str = "IDXD_RUST_AWAIT_MEMMOVE_TEST_SCENARIO";
@@ -182,7 +182,7 @@ struct RunOutcome {
 
 async fn execute(args: &CliArgs) -> RunOutcome {
     let src = deterministic_src(args.requested_bytes);
-    let request = match AsyncMemmoveRequest::new(src) {
+    let request = match AsyncMemmoveRequest::copy_exact(src) {
         Ok(request) => request,
         Err(err) => return validation_failure_outcome(args, err),
     };

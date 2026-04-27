@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::{
-    atomic::{AtomicU8, Ordering},
     Arc,
+    atomic::{AtomicU8, Ordering},
 };
 use std::thread::{self, JoinHandle};
 
@@ -9,8 +9,8 @@ use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
-    DsaSession, MemmoveError, MemmoveRequest, MemmoveValidationReport, DEFAULT_DEVICE_PATH,
-    DEFAULT_MAX_PAGE_FAULT_RETRIES,
+    DEFAULT_DEVICE_PATH, DEFAULT_MAX_PAGE_FAULT_RETRIES, DsaSession, MemmoveError, MemmoveRequest,
+    MemmoveValidationReport,
 };
 
 const LIFECYCLE_RUNNING: u8 = 0;
@@ -20,40 +20,51 @@ const LIFECYCLE_SHUTDOWN_COMPLETE: u8 = 2;
 /// Owned memmove request that can safely cross the worker-thread boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AsyncMemmoveRequest {
-    src: Vec<u8>,
-    dst_len: usize,
+    source: Vec<u8>,
+    destination: Vec<u8>,
 }
 
 impl AsyncMemmoveRequest {
-    /// Build an owned request whose destination size matches the source length.
-    pub fn new(src: Vec<u8>) -> Result<Self, MemmoveError> {
-        let dst_len = src.len();
-        Self::with_destination_len(src, dst_len)
+    /// Build an owned request with an explicit caller-provided destination buffer.
+    pub fn copy_into(source: Vec<u8>, destination: Vec<u8>) -> Result<Self, MemmoveError> {
+        MemmoveRequest::for_buffers(destination.len(), source.len())?;
+        Ok(Self {
+            source,
+            destination,
+        })
     }
 
-    /// Build an owned request while validating the eventual destination size up front.
-    pub fn with_destination_len(src: Vec<u8>, dst_len: usize) -> Result<Self, MemmoveError> {
-        MemmoveRequest::for_buffers(dst_len, src.len())?;
-        Ok(Self { src, dst_len })
+    /// Build an owned request whose destination size exactly matches the source length.
+    pub fn copy_exact(source: Vec<u8>) -> Result<Self, MemmoveError> {
+        let destination_len = source.len();
+        MemmoveRequest::for_buffers(destination_len, source.len())?;
+        Ok(Self {
+            source,
+            destination: vec![0u8; destination_len],
+        })
     }
 
     pub fn requested_bytes(&self) -> usize {
-        self.src.len()
+        self.source.len()
     }
 
     pub fn destination_len(&self) -> usize {
-        self.dst_len
+        self.destination.len()
     }
 
     pub fn source_bytes(&self) -> &[u8] {
-        &self.src
+        &self.source
+    }
+
+    pub fn destination_bytes(&self) -> &[u8] {
+        &self.destination
     }
 }
 
 /// Owned memmove result returned across the async boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AsyncMemmoveResult {
-    pub bytes: Vec<u8>,
+    pub destination: Vec<u8>,
     pub report: MemmoveValidationReport,
 }
 
@@ -412,8 +423,13 @@ fn run_memmove<W: AsyncMemmoveWorker>(
     worker: &mut W,
     request: AsyncMemmoveRequest,
 ) -> Result<AsyncMemmoveResult, MemmoveError> {
-    let AsyncMemmoveRequest { src, dst_len } = request;
-    let mut dst = vec![0u8; dst_len];
-    let report = worker.memmove(&mut dst, &src)?;
-    Ok(AsyncMemmoveResult { bytes: dst, report })
+    let AsyncMemmoveRequest {
+        source,
+        mut destination,
+    } = request;
+    let report = worker.memmove(&mut destination, &source)?;
+    Ok(AsyncMemmoveResult {
+        destination,
+        report,
+    })
 }
