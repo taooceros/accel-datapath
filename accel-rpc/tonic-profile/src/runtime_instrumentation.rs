@@ -1,7 +1,24 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
 
-use tonic::codec::instrumentation::{InstrumentationSink, StageEvent, StageKind};
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StageKind {
+    Encode,
+    Decode,
+    Compress,
+    Decompress,
+    BufferReserve,
+    BodyAccum,
+    FrameHeader,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StageEvent {
+    pub stage: StageKind,
+    pub count: u64,
+    pub nanos: u64,
+    pub bytes: u64,
+}
 
 #[derive(Clone, Copy, Default)]
 pub struct Counter {
@@ -101,31 +118,25 @@ impl State {
 
 static ENABLED: AtomicBool = AtomicBool::new(true);
 static STATE: OnceLock<State> = OnceLock::new();
-static INSTALLED: OnceLock<()> = OnceLock::new();
 
 fn state() -> &'static State {
     STATE.get_or_init(State::default)
 }
 
-struct Sink;
-
-impl InstrumentationSink for Sink {
-    fn record(&self, event: StageEvent) {
-        if !ENABLED.load(Ordering::Relaxed) {
-            return;
-        }
-        state().counter(event.stage).record(event);
+pub fn record_stage(stage: StageKind, bytes: usize, nanos: u64) {
+    if !ENABLED.load(Ordering::Relaxed) {
+        return;
     }
-}
 
-fn install_sink() {
-    INSTALLED.get_or_init(|| {
-        tonic::codec::instrumentation::set_instrumentation_sink(Some(Arc::new(Sink)));
+    state().counter(stage).record(StageEvent {
+        stage,
+        count: 1,
+        nanos,
+        bytes: bytes as u64,
     });
 }
 
 pub fn set_enabled(enabled: bool) {
-    install_sink();
     ENABLED.store(enabled, Ordering::Relaxed);
 }
 

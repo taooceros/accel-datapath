@@ -249,7 +249,10 @@ pub(crate) fn resolve_accelerated_path_config(
             Ok(AcceleratedPathConfig {
                 selected_path: AcceleratedPath::Idxd,
                 device_path: Some(device_path),
-                lane: Some(args.accelerator_lane.unwrap_or(AcceleratedLane::CodecMemmove)),
+                lane: Some(
+                    args.accelerator_lane
+                        .unwrap_or(AcceleratedLane::CodecMemmove),
+                ),
                 direction: Some(AcceleratedDirection::Bidirectional),
             })
         }

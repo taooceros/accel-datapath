@@ -47,7 +47,7 @@ Use the async proof path when you need to prove that ordinary Tokio callers can 
 bash idxd-rust/scripts/verify_async_memmove.sh
 ```
 
-Use the downstream S05 proof path when you need to prove that a repo-local package outside `idxd-rust` can consume the public async owner/handle API from ordinary Tokio code:
+Use the downstream async-handle proof path when you need to prove that a repo-local package outside `idxd-rust` can consume the public async owner/handle API from ordinary Tokio code:
 
 ```bash
 bash accel-rpc/tonic-profile/scripts/verify_downstream_async_handle.sh
@@ -69,12 +69,35 @@ The async surface is intentionally split in two.
 - `AsyncDsaHandle` is what Tokio tasks clone and await.
 - `AsyncMemmoveRequest` is the canonical async request shape. It owns both the source bytes and the destination buffer before it enters the queue.
 - `AsyncMemmoveResult` returns the explicit owned destination buffer plus the validation report; callers should inspect `report.requested_bytes` to distinguish requested source bytes from any extra destination capacity.
-- `AsyncDsaHandle::memmove_into(&mut dst, src)` is only a scoped borrowed-destination convenience. It validates the borrowed slices, allocates one owned source copy and one owned destination buffer, awaits the worker-owned request, and copies only the successful source-length prefix back into `dst`.
-- Ordinary Tokio composition such as `tokio::join!` or spawned tasks still uses that same cloneable handle surface; cloned handles do not create extra sessions or extra hardware owners. For `tokio::spawn`-friendly work, build an owned `AsyncMemmoveRequest` and call `memmove`; do not rely on `memmove_into` to smuggle borrowed slices across the worker boundary.
+- Destination allocation is explicit at the call site. The v1 public async API does not provide an allocation convenience helper or a borrowed copy-back helper; callers choose the destination capacity, submit the owned request, and receive the same destination ownership back in the result.
+- Destination length advances only after successful completion. The worker writes into spare capacity and the result exposes the initialized prefix only after validation succeeds; failed requests keep the rejected buffers available through the typed error path.
+- Ordinary Tokio composition such as `tokio::join!` or spawned tasks still uses that same cloneable handle surface; cloned handles do not create extra sessions or extra hardware owners. Build an owned `AsyncMemmoveRequest` and call `memmove` when work must cross a task or worker boundary.
 - All submissions funnel through one worker-owned `DsaSession`, so overlapped requests queue FIFO and execute one at a time even when multiple Tokio tasks are awaiting them concurrently.
 - Once a request has crossed that enqueue boundary, aborting or dropping the awaiting Tokio task does not cancel the worker-side memmove. The worker still finishes the request, and later submissions can continue using the shared handle.
 - Shutdown is drain-then-stop: work that was already queued drains before the worker thread exits, and submissions attempted after shutdown are rejected with `owner_shutdown`.
 - The worker thread owns the real `DsaSession`, so all hardware access still crosses one explicit boundary as owned requests and owned replies.
+- Borrowed async zero-copy, software aggregation, batching, and MOVDIR64 submission paths are future work. They are not part of the current v1 owner-plus-handle behavior.
+
+A minimal owned async call looks like this:
+
+```rust
+use bytes::{Bytes, BytesMut};
+use idxd_rust::{AsyncDsaSession, AsyncMemmoveRequest};
+
+# async fn example() -> Result<(), Box<dyn std::error::Error>> {
+let owner = AsyncDsaSession::open("/dev/dsa/wq0.0")?;
+let handle = owner.handle();
+
+let source = Bytes::from_static(b"hello dsa");
+let destination = BytesMut::with_capacity(source.len());
+let request = AsyncMemmoveRequest::new(source, destination)?;
+let result = handle.memmove(request).await?;
+
+assert_eq!(&result.destination[..result.report.requested_bytes], b"hello dsa");
+println!("copied {} bytes", result.report.requested_bytes);
+# Ok(())
+# }
+```
 
 That split matters operationally because it makes failure interpretation honest:
 

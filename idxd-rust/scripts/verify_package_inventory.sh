@@ -6,8 +6,8 @@ REPO_ROOT=$(cd -- "${SCRIPT_DIR}/../.." && pwd)
 cd "${REPO_ROOT}"
 
 STALE_PACKAGE_PATTERN='dsa[-]ffi|iax[-]ffi|idxd[-]bindings|dsa[-]bindings'
-OLD_ASYNC_API_PATTERN='AsyncMemmoveRequest::new|with_destination_len|result\.bytes|AsyncMemmoveResult[[:space:]]*\{[^}]*bytes'
-SOURCE_ONLY_PATTERN='source[- ]only|src:[[:space:]]*Vec<u8>|dst_len:[[:space:]]*usize'
+OLD_ASYNC_API_PATTERN='copy_exact|copy_into|source_bytes\(|destination_bytes\(|with_destination_len|result\.bytes|AsyncMemmoveResult[[:space:]]*\{[^}]*bytes|AsyncMemmoveRequest::new[[:space:]]*\([^,)]*\)|AsyncDsaHandle::memmove_into|\.memmove_into[[:space:]]*\('
+SOURCE_ONLY_PATTERN='source[- ]only|source:[[:space:]]*Vec<u8>|src:[[:space:]]*Vec<u8>'
 DST_LEN_PATTERN='dst_len'
 HANDWRITTEN_DSA_ABI_PATTERN='pub[[:space:]]+struct[[:space:]]+(DsaHwDesc|DsaCompletionRecord)\b|struct[[:space:]]+(DsaHwDesc|DsaCompletionRecord)\b'
 
@@ -54,7 +54,7 @@ is_allowed_dst_len_context() {
 
   # dst_len remains a valid validation/report field; it is stale only when it
   # represents an async request side channel or source-only request shape.
-  [[ "${line}" =~ DestinationTooSmall|for_buffers|dst_len[[:space:]]*\<|src_len|validation|Validation|report|Report|error|Error|too[[:space:]-]small|custom_codec.rs|memmove_contract.rs ]]
+  [[ "${line}" =~ DestinationTooSmall|for_buffers|dst_len[[:space:]]*\<|src_len|validation|Validation|report|Report|error|Error|too[[:space:]-]small|async_session.rs|custom_codec.rs|memmove_contract.rs ]]
 }
 
 is_allowed_package_context() {
@@ -86,7 +86,9 @@ is_allowed_async_context() {
     return 0
   fi
 
-  if [[ "${line}" == .gsd/* ]] && is_historical_or_guard_context "${line}"; then
+  # Exact removed-helper names may appear in guard definitions or contract-test
+  # negative fixtures when the line clearly belongs to stale-reference checking.
+  if [[ "${line}" =~ ^idxd-rust/scripts/|^idxd-rust/tests/|^accel-rpc/tonic-profile/tests/|^accel-rpc/tonic-profile/scripts/ ]] && is_historical_or_guard_context "${line}"; then
     return 0
   fi
 
@@ -157,9 +159,6 @@ api_paths=(
   accel-rpc/tonic-profile/tests
   accel-rpc/tonic-profile/scripts
   accel-rpc/tonic-profile/README.md
-  .gsd/PROJECT.md
-  .gsd/milestones/M004/M004-ROADMAP.md
-  .gsd/milestones/M004/slices/S03/S03-PLAN.md
 )
 
 abi_paths=(

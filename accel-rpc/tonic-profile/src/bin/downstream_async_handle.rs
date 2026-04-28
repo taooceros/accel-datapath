@@ -5,6 +5,8 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use bytes::{buf::UninitSlice, Bytes, BytesMut};
+
 use idxd_rust::{
     AsyncDsaSession, AsyncMemmoveError, AsyncMemmoveRequest, AsyncMemmoveWorker, MemmoveError,
     MemmovePhase, MemmoveRequest, MemmoveValidationReport, DEFAULT_DEVICE_PATH,
@@ -218,18 +220,42 @@ async fn execute(args: &CliArgs) -> RunOutcome {
     }
 }
 
+struct PreparedAsyncMemmove {
+    request: AsyncMemmoveRequest,
+    expected: Vec<u8>,
+}
+
+impl PreparedAsyncMemmove {
+    fn new(requested_bytes: usize, stream: usize) -> Result<Self, MemmoveError> {
+        let expected = deterministic_src(requested_bytes, stream);
+        let request = AsyncMemmoveRequest::new(
+            Bytes::from(expected.clone()),
+            BytesMut::with_capacity(requested_bytes),
+        )
+        .map_err(|err| {
+            let (error, _source, _destination) = err.into_parts();
+            error
+        })?;
+
+        Ok(Self { request, expected })
+    }
+}
+
 fn build_requests(
     requested_bytes: usize,
-) -> Result<[AsyncMemmoveRequest; OPERATION_COUNT], MemmoveError> {
-    let first = AsyncMemmoveRequest::copy_exact(deterministic_src(requested_bytes, 0))?;
-    let second = AsyncMemmoveRequest::copy_exact(deterministic_src(requested_bytes, 1))?;
+) -> Result<[PreparedAsyncMemmove; OPERATION_COUNT], MemmoveError> {
+    let first = PreparedAsyncMemmove::new(requested_bytes, 0)?;
+    let second = PreparedAsyncMemmove::new(requested_bytes, 1)?;
     Ok([first, second])
 }
 
 fn execute_invalid_destination_len(args: &CliArgs) -> RunOutcome {
     let src = deterministic_src(args.requested_bytes, 0);
     let invalid_destination_len = args.requested_bytes.saturating_sub(1);
-    match AsyncMemmoveRequest::copy_into(src, vec![0u8; invalid_destination_len]) {
+    match AsyncMemmoveRequest::new(
+        Bytes::from(src),
+        BytesMut::with_capacity(invalid_destination_len),
+    ) {
         Ok(_) => base_outcome(
             args,
             false,
@@ -238,13 +264,16 @@ fn execute_invalid_destination_len(args: &CliArgs) -> RunOutcome {
             "invalid_destination_len scenario unexpectedly accepted mismatched buffers".to_string(),
         )
         .with_validation("argument_validation", Some("scenario_bug")),
-        Err(err) => validation_failure_outcome(args, err),
+        Err(err) => {
+            let (error, _source, _destination) = err.into_parts();
+            validation_failure_outcome(args, error)
+        }
     }
 }
 
 async fn execute_live(
     args: &CliArgs,
-    requests: [AsyncMemmoveRequest; OPERATION_COUNT],
+    requests: [PreparedAsyncMemmove; OPERATION_COUNT],
 ) -> RunOutcome {
     let session = match AsyncDsaSession::open(&args.device_path) {
         Ok(session) => session,
@@ -256,7 +285,7 @@ async fn execute_live(
 
 async fn execute_test_scenario(
     args: &CliArgs,
-    requests: [AsyncMemmoveRequest; OPERATION_COUNT],
+    requests: [PreparedAsyncMemmove; OPERATION_COUNT],
     scenario: TestScenario,
 ) -> RunOutcome {
     match scenario {
@@ -307,11 +336,13 @@ async fn execute_test_scenario(
 async fn execute_with_session(
     args: &CliArgs,
     session: AsyncDsaSession,
-    requests: [AsyncMemmoveRequest; OPERATION_COUNT],
+    requests: [PreparedAsyncMemmove; OPERATION_COUNT],
 ) -> RunOutcome {
     let [first_request, second_request] = requests;
-    let expected_first = first_request.source_bytes().to_vec();
-    let expected_second = second_request.source_bytes().to_vec();
+    let expected_first = first_request.expected;
+    let expected_second = second_request.expected;
+    let first_request = first_request.request;
+    let second_request = second_request.request;
     let first_handle = session.handle();
     let second_handle = session.handle();
 
@@ -333,9 +364,13 @@ async fn execute_with_session(
 async fn execute_after_owner_shutdown(
     args: &CliArgs,
     session: AsyncDsaSession,
-    requests: [AsyncMemmoveRequest; OPERATION_COUNT],
+    requests: [PreparedAsyncMemmove; OPERATION_COUNT],
 ) -> RunOutcome {
     let [first_request, second_request] = requests;
+    let expected_first = first_request.expected;
+    let expected_second = second_request.expected;
+    let first_request = first_request.request;
+    let second_request = second_request.request;
     let first_handle = session.handle();
     let second_handle = session.handle();
 
@@ -345,7 +380,13 @@ async fn execute_after_owner_shutdown(
                 first_handle.memmove(first_request),
                 second_handle.memmove(second_request)
             );
-            map_joined_outcome(args, first_result, second_result, Ok(()), [&[], &[]])
+            map_joined_outcome(
+                args,
+                first_result,
+                second_result,
+                Ok(()),
+                [&expected_first, &expected_second],
+            )
         }
         Err(err) => async_failure_outcome(args, err),
     }
@@ -405,8 +446,8 @@ fn success_outcome(args: &CliArgs) -> RunOutcome {
 
 fn async_failure_outcome(args: &CliArgs, err: AsyncMemmoveError) -> RunOutcome {
     match err {
-        AsyncMemmoveError::Memmove(err) => validation_failure_outcome(args, err),
-        AsyncMemmoveError::LifecycleFailure { kind } => base_outcome(
+        AsyncMemmoveError::Memmove { source, .. } => validation_failure_outcome(args, source),
+        AsyncMemmoveError::LifecycleFailure { kind, .. } => base_outcome(
             args,
             false,
             "async_lifecycle",
@@ -417,7 +458,7 @@ fn async_failure_outcome(args: &CliArgs, err: AsyncMemmoveError) -> RunOutcome {
             ),
         )
         .with_lifecycle(kind.as_str()),
-        AsyncMemmoveError::WorkerFailure { kind } => base_outcome(
+        AsyncMemmoveError::WorkerFailure { kind, .. } => base_outcome(
             args,
             false,
             "async_worker",
@@ -674,7 +715,7 @@ struct SuccessWorker {
 impl AsyncMemmoveWorker for SuccessWorker {
     fn memmove(
         &mut self,
-        dst: &mut [u8],
+        dst: &mut UninitSlice,
         src: &[u8],
     ) -> Result<MemmoveValidationReport, MemmoveError> {
         dst[..src.len()].copy_from_slice(src);
@@ -689,7 +730,7 @@ struct CompletionTimeoutWorker {
 impl AsyncMemmoveWorker for CompletionTimeoutWorker {
     fn memmove(
         &mut self,
-        _dst: &mut [u8],
+        _dst: &mut UninitSlice,
         _src: &[u8],
     ) -> Result<MemmoveValidationReport, MemmoveError> {
         Err(MemmoveError::CompletionTimeout {
@@ -705,7 +746,7 @@ struct PanicWorker;
 impl AsyncMemmoveWorker for PanicWorker {
     fn memmove(
         &mut self,
-        _dst: &mut [u8],
+        _dst: &mut UninitSlice,
         _src: &[u8],
     ) -> Result<MemmoveValidationReport, MemmoveError> {
         panic!("downstream async-handle test worker panicked before replying");

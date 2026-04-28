@@ -70,7 +70,11 @@ fn run_validate_only(manifest_path: &Path) -> std::process::Output {
         .expect("run s04 validate-only")
 }
 
-fn run_summarizer(manifest_path: &Path, run_root: &Path, verify_only: bool) -> std::process::Output {
+fn run_summarizer(
+    manifest_path: &Path,
+    run_root: &Path,
+    verify_only: bool,
+) -> std::process::Output {
     let mut command = Command::new("python3");
     command
         .arg(summarizer_script())
@@ -170,7 +174,12 @@ fn base_report(
 ) -> Value {
     let (request_shape, response_shape, payload_size, payload_kind) =
         if label.contains("fleet-small-to-fleet-response-heavy") {
-            (json!("fleet-small"), json!("fleet-response-heavy"), Value::Null, Value::Null)
+            (
+                json!("fleet-small"),
+                json!("fleet-response-heavy"),
+                Value::Null,
+                Value::Null,
+            )
         } else {
             (Value::Null, Value::Null, json!(64), json!("repeated"))
         };
@@ -296,19 +305,59 @@ fn write_fixture_run_tree(run_root: &Path) {
     let idxd_attribution = [
         (
             "idxd/idxd__unary-bytes__repeated-64.client.json",
-            base_report(labels[0], "on", "client", "run-idxd-bytes", "idxd", 12.0, 90, 2_000, 4_096),
+            base_report(
+                labels[0],
+                "on",
+                "client",
+                "run-idxd-bytes",
+                "idxd",
+                12.0,
+                90,
+                2_000,
+                4_096,
+            ),
         ),
         (
             "idxd/idxd__unary-bytes__repeated-64.server.json",
-            base_report(labels[0], "on", "server", "run-idxd-bytes", "idxd", 12.5, 98, 2_100, 4_096),
+            base_report(
+                labels[0],
+                "on",
+                "server",
+                "run-idxd-bytes",
+                "idxd",
+                12.5,
+                98,
+                2_100,
+                4_096,
+            ),
         ),
         (
             "idxd/idxd__unary-proto-shape__fleet-small-to-fleet-response-heavy.client.json",
-            base_report(labels[1], "on", "client", "run-idxd-proto", "idxd", 8.2, 145, 4_500, 16_384),
+            base_report(
+                labels[1],
+                "on",
+                "client",
+                "run-idxd-proto",
+                "idxd",
+                8.2,
+                145,
+                4_500,
+                16_384,
+            ),
         ),
         (
             "idxd/idxd__unary-proto-shape__fleet-small-to-fleet-response-heavy.server.json",
-            base_report(labels[1], "on", "server", "run-idxd-proto", "idxd", 8.4, 152, 4_600, 16_384),
+            base_report(
+                labels[1],
+                "on",
+                "server",
+                "run-idxd-proto",
+                "idxd",
+                8.4,
+                152,
+                4_600,
+                16_384,
+            ),
         ),
     ];
 
@@ -466,7 +515,10 @@ fn summarizer_emits_json_csv_and_markdown_for_both_boundary_workloads() {
     let summary_path = run_root.join("summary/comparison_summary.json");
     let csv_path = run_root.join("summary/ordinary_vs_idxd.csv");
     let claim_table_path = run_root.join("summary/claim_table.md");
-    assert!(summary_path.exists(), "comparison_summary.json should exist");
+    assert!(
+        summary_path.exists(),
+        "comparison_summary.json should exist"
+    );
     assert!(csv_path.exists(), "ordinary_vs_idxd.csv should exist");
     assert!(claim_table_path.exists(), "claim_table.md should exist");
 
@@ -475,16 +527,23 @@ fn summarizer_emits_json_csv_and_markdown_for_both_boundary_workloads() {
     )
     .expect("parse comparison_summary.json");
     let rows = summary["rows"].as_array().expect("rows array");
-    assert_eq!(rows.len(), 4, "two workloads across client/server should produce four rows");
+    assert_eq!(
+        rows.len(),
+        4,
+        "two workloads across client/server should produce four rows"
+    );
     assert!(rows.iter().any(|row| {
         row["workload_label"] == "ordinary/unary-bytes/repeated-64"
             && row["endpoint_role"] == "client"
-            && row["comparisons"]["throughput_baseline"]["idxd_vs_software_baseline_throughput_ratio"] == json!(1.2)
+            && row["comparisons"]["throughput_baseline"]
+                ["idxd_vs_software_baseline_throughput_ratio"]
+                == json!(1.2)
     }));
     assert!(rows.iter().any(|row| {
         row["workload_label"] == "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy"
             && row["endpoint_role"] == "server"
-            && row["comparisons"]["attribution"]["idxd_minus_software_attribution_stage_nanos_total"]
+            && row["comparisons"]["attribution"]
+                ["idxd_minus_software_attribution_stage_nanos_total"]
                 .as_f64()
                 .expect("stage delta as f64")
                 < 0.0
@@ -540,10 +599,9 @@ fn summarizer_rejects_client_server_pairing_mismatches() {
     write_json(&control_floor_path, &valid_control_floor_summary());
     write_fixture_run_tree(&run_root);
     let bad_server_path = run_root.join("idxd/idxd__unary-bytes__repeated-64.server.json");
-    let mut bad_server: Value = serde_json::from_str(
-        &fs::read_to_string(&bad_server_path).expect("read bad server path"),
-    )
-    .expect("parse bad server report");
+    let mut bad_server: Value =
+        serde_json::from_str(&fs::read_to_string(&bad_server_path).expect("read bad server path"))
+            .expect("parse bad server report");
     bad_server["metadata"]["run_id"] = json!("run-idxd-bytes-server-mismatch");
     write_json(&bad_server_path, &bad_server);
     let manifest_path = fixture_manifest(&temp_dir, &control_floor_path);
@@ -609,7 +667,13 @@ print(f'phase=summarization-done run_root={run_root}')
 "#,
     );
 
-    let output = run_runner_with_overrides(&manifest_path, &run_root, &s02_script, &s03_script, &summary_script);
+    let output = run_runner_with_overrides(
+        &manifest_path,
+        &run_root,
+        &s02_script,
+        &s03_script,
+        &summary_script,
+    );
     assert!(
         output.status.success(),
         "runner failed unexpectedly\nstdout:\n{}\nstderr:\n{}",
@@ -627,12 +691,30 @@ print(f'phase=summarization-done run_root={run_root}')
     assert!(stdout.contains("endpoint_role=client"));
     assert!(stdout.contains("device_path=/dev/dsa/wq-test"));
 
-    assert!(run_root.join("manifest.json").exists(), "copied manifest should exist");
-    assert!(run_root.join("software/software-marker.json").exists(), "software subtree marker should exist");
-    assert!(run_root.join("idxd/idxd-marker.json").exists(), "idxd subtree marker should exist");
-    assert!(run_root.join("summary/comparison_summary.json").exists(), "summary json should exist");
-    assert!(run_root.join("summary/ordinary_vs_idxd.csv").exists(), "summary csv should exist");
-    assert!(run_root.join("summary/claim_table.md").exists(), "summary markdown should exist");
+    assert!(
+        run_root.join("manifest.json").exists(),
+        "copied manifest should exist"
+    );
+    assert!(
+        run_root.join("software/software-marker.json").exists(),
+        "software subtree marker should exist"
+    );
+    assert!(
+        run_root.join("idxd/idxd-marker.json").exists(),
+        "idxd subtree marker should exist"
+    );
+    assert!(
+        run_root.join("summary/comparison_summary.json").exists(),
+        "summary json should exist"
+    );
+    assert!(
+        run_root.join("summary/ordinary_vs_idxd.csv").exists(),
+        "summary csv should exist"
+    );
+    assert!(
+        run_root.join("summary/claim_table.md").exists(),
+        "summary markdown should exist"
+    );
     assert!(
         run_root
             .join("control-floor/async_control_floor_summary.json")
@@ -680,7 +762,13 @@ print('summary should not run')
 "#,
     );
 
-    let output = run_runner_with_overrides(&manifest_path, &run_root, &s02_script, &s03_script, &summary_script);
+    let output = run_runner_with_overrides(
+        &manifest_path,
+        &run_root,
+        &s02_script,
+        &s03_script,
+        &summary_script,
+    );
     assert!(
         !output.status.success(),
         "runner unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}",
@@ -689,9 +777,18 @@ print('summary should not run')
     );
 
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("phase=idxd outcome=error"), "stderr should identify idxd phase failure\nstderr:\n{stderr}");
-    assert!(stderr.contains("launcher_status=missing_capability"), "stderr should preserve launcher diagnostics\nstderr:\n{stderr}");
-    assert!(stderr.contains("device_path=/dev/dsa/wq-test"), "stderr should include device path\nstderr:\n{stderr}");
+    assert!(
+        stderr.contains("phase=idxd outcome=error"),
+        "stderr should identify idxd phase failure\nstderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("launcher_status=missing_capability"),
+        "stderr should preserve launcher diagnostics\nstderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("device_path=/dev/dsa/wq-test"),
+        "stderr should include device path\nstderr:\n{stderr}"
+    );
     assert!(
         !run_root.join("summary/comparison_summary.json").exists(),
         "summary outputs should not exist after idxd failure"
@@ -744,7 +841,13 @@ print(f'phase=summarization-done run_root={run_root}')
 "#,
     );
 
-    let output = run_runner_with_overrides(&manifest_path, &run_root, &s02_script, &s03_script, &summary_script);
+    let output = run_runner_with_overrides(
+        &manifest_path,
+        &run_root,
+        &s02_script,
+        &s03_script,
+        &summary_script,
+    );
     assert!(
         output.status.success(),
         "runner failed unexpectedly\nstdout:\n{}\nstderr:\n{}",
@@ -757,7 +860,9 @@ print(f'phase=summarization-done run_root={run_root}')
     assert!(stdout.contains("phase=idxd-fallback-done verdict=pass"));
     assert!(stdout.contains("device_path=/dev/dsa/wq0.0"));
     assert!(stdout.contains("phase=done verdict=pass"));
-    assert!(run_root.join("idxd/idxd__unary-bytes__repeated-64.client.json").exists());
+    assert!(run_root
+        .join("idxd/idxd__unary-bytes__repeated-64.client.json")
+        .exists());
     assert!(run_root.join("summary/comparison_summary.json").exists());
 }
 
@@ -803,7 +908,13 @@ print(f'phase=summarization-partial run_root={run_root}')
 "#,
     );
 
-    let output = run_runner_with_overrides(&manifest_path, &run_root, &s02_script, &s03_script, &summary_script);
+    let output = run_runner_with_overrides(
+        &manifest_path,
+        &run_root,
+        &s02_script,
+        &s03_script,
+        &summary_script,
+    );
     assert!(
         !output.status.success(),
         "runner unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}",
@@ -812,6 +923,13 @@ print(f'phase=summarization-partial run_root={run_root}')
     );
 
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("phase=summary outcome=missing-output"), "stderr should identify summary output failure\nstderr:\n{stderr}");
-    assert!(stderr.contains("output_key=ordinary_vs_idxd_csv") || stderr.contains("output_key=claim_table_md"), "stderr should name the missing derived output\nstderr:\n{stderr}");
+    assert!(
+        stderr.contains("phase=summary outcome=missing-output"),
+        "stderr should identify summary output failure\nstderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("output_key=ordinary_vs_idxd_csv")
+            || stderr.contains("output_key=claim_table_md"),
+        "stderr should name the missing derived output\nstderr:\n{stderr}"
+    );
 }
