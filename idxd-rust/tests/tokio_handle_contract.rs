@@ -6,8 +6,8 @@ use std::time::Duration;
 
 use bytes::{Bytes, BytesMut, buf::UninitSlice};
 use idxd_rust::{
-    AsyncDsaSession, AsyncLifecycleFailureKind, AsyncMemmoveError, AsyncMemmoveRequest,
-    AsyncMemmoveWorker, MemmoveError, MemmoveRequest, MemmoveValidationReport,
+    AsyncDsaSession, AsyncLifecycleFailureKind, AsyncMemmoveRequest, AsyncMemmoveWorker,
+    MemmoveError, MemmoveRequest, MemmoveValidationReport,
 };
 use tokio::sync::Notify;
 use tokio::time::timeout;
@@ -255,8 +255,8 @@ async fn cloned_handles_compose_with_tokio_join_and_serialize_through_one_worker
     let first = first.expect("first cloned handle should succeed");
     let second = second.expect("second cloned handle should succeed");
 
-    assert_eq!(first.destination, vec![1, 2, 3]);
-    assert_eq!(second.destination, vec![4, 5, 6, 7]);
+    assert_eq!(first.destination.as_ref(), &[1, 2, 3]);
+    assert_eq!(second.destination.as_ref(), &[4, 5, 6, 7]);
     harness.assert_serialized();
 
     session.shutdown().expect("owner shutdown should succeed");
@@ -300,8 +300,8 @@ async fn cloned_handles_compose_in_spawned_tasks_and_still_share_one_worker() {
     let first = first.expect("first spawned handle should succeed");
     let second = second.expect("second spawned handle should succeed");
 
-    assert_eq!(first.destination, vec![8, 9]);
-    assert_eq!(second.destination, vec![10, 11, 12]);
+    assert_eq!(first.destination.as_ref(), &[8, 9]);
+    assert_eq!(second.destination.as_ref(), &[10, 11, 12]);
     harness.assert_serialized();
 
     session.shutdown().expect("owner shutdown should succeed");
@@ -321,7 +321,7 @@ async fn dropping_one_clone_does_not_shut_down_another_clone() {
         .await
         .expect("remaining clone should keep working");
 
-    assert_eq!(result.destination, vec![8, 9]);
+    assert_eq!(result.destination.as_ref(), &[8, 9]);
 
     session.shutdown().expect("owner shutdown should succeed");
 }

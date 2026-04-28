@@ -7,8 +7,8 @@ use std::time::Duration;
 
 use bytes::{Bytes, BytesMut, buf::UninitSlice};
 use idxd_rust::{
-    AsyncDsaSession, AsyncLifecycleFailureKind, AsyncMemmoveError, AsyncMemmoveRequest,
-    AsyncMemmoveWorker, AsyncWorkerFailureKind, MemmoveError, MemmovePhase, MemmoveRequest,
+    AsyncDsaSession, AsyncLifecycleFailureKind, AsyncMemmoveRequest, AsyncMemmoveWorker,
+    AsyncWorkerFailureKind, MemmoveError, MemmovePhase, MemmoveRequest,
     MemmoveValidationReport,
 };
 use tokio::sync::Notify;
@@ -273,7 +273,7 @@ async fn async_wrapper_returns_owned_destination_on_success() {
         .await
         .expect("fake worker should succeed");
 
-    assert_eq!(result.destination, vec![1, 2, 3, 4]);
+    assert_eq!(result.destination.as_ref(), &[1, 2, 3, 4]);
     assert_eq!(result.report.device_path.to_str(), Some("/dev/dsa/test0.0"));
     assert_eq!(result.report.requested_bytes, 4);
     assert_eq!(result.report.page_fault_retries, 0);
@@ -376,8 +376,8 @@ async fn reuses_one_worker_for_repeated_sequential_requests() {
         .await
         .expect("second request should also succeed");
 
-    assert_eq!(first.destination, vec![1, 2, 3]);
-    assert_eq!(second.destination, vec![4, 5, 6, 7]);
+    assert_eq!(first.destination.as_ref(), &[1, 2, 3]);
+    assert_eq!(second.destination.as_ref(), &[4, 5, 6, 7]);
     assert_eq!(calls.load(Ordering::SeqCst), 2);
 }
 
@@ -481,7 +481,7 @@ async fn aborting_after_enqueue_does_not_cancel_worker_and_follow_up_still_succe
     harness.wait_for_start(2).await;
     harness.wait_for_finish(2).await;
     harness.assert_calls(2);
-    assert_eq!(follow_up.destination, vec![4, 5, 6, 7]);
+    assert_eq!(follow_up.destination.as_ref(), &[4, 5, 6, 7]);
     assert_eq!(
         harness.events.snapshot(),
         vec![
@@ -539,8 +539,8 @@ async fn shutdown_drains_queued_work_before_refusing_new_submissions() {
         .expect("shutdown thread should not panic")
         .expect("shutdown should complete after queued work drains");
 
-    assert_eq!(first.destination, vec![8, 9]);
-    assert_eq!(second.destination, vec![10, 11, 12]);
+    assert_eq!(first.destination.as_ref(), &[8, 9]);
+    assert_eq!(second.destination.as_ref(), &[10, 11, 12]);
     harness.assert_calls(2);
     assert_eq!(
         harness.events.snapshot(),

@@ -13,8 +13,8 @@ rust-version = "1.88"
 
 [workspace.dependencies]
 tokio = { version = "1", features = ["full"] }
-tonic = { path = "accel-rpc/tonic/tonic" }
-tonic-build = { path = "accel-rpc/tonic/tonic-build" }
+tonic = "0.14.5"
+tonic-build = "0.14.5"
 prost = "0.14"
 bytes = "1"
 tower = "0.5"
