@@ -495,7 +495,13 @@ fn s03_tracked_manifest() -> PathBuf {
         .join("s03_idxd_matrix.json")
 }
 
-fn valid_idxd_report(label: &str, endpoint_role: &str, run_id: &str, device_path: &str, encode_bytes: u64) -> Value {
+fn valid_idxd_report(
+    label: &str,
+    endpoint_role: &str,
+    run_id: &str,
+    device_path: &str,
+    encode_bytes: u64,
+) -> Value {
     json!({
         "metadata": {
             "timestamp_unix_s": 0,
@@ -564,8 +570,14 @@ fn tracked_s03_manifest_covers_boundary_workloads_and_accelerated_expectations()
 
     assert_eq!(manifest["expected_metadata"]["ordinary_path"], "software");
     assert_eq!(manifest["expected_metadata"]["selected_path"], "idxd");
-    assert_eq!(manifest["expected_metadata"]["accelerated_lane"], "codec_memmove");
-    assert_eq!(manifest["expected_metadata"]["accelerated_direction"], "bidirectional");
+    assert_eq!(
+        manifest["expected_metadata"]["accelerated_lane"],
+        "codec_memmove"
+    );
+    assert_eq!(
+        manifest["expected_metadata"]["accelerated_direction"],
+        "bidirectional"
+    );
     assert_eq!(manifest["expected_metadata"]["require_device_path"], true);
 
     let workloads = manifest["workloads"]
@@ -656,7 +668,12 @@ fn s03_validate_only_rejects_missing_expected_accelerated_metadata() {
         .output()
         .expect("run s03 workload runner validate-only");
 
-    assert!(!output.status.success(), "validate-only unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    assert!(
+        !output.status.success(),
+        "validate-only unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("expected_metadata")
@@ -723,7 +740,12 @@ fn s03_validate_only_rejects_manifest_entries_missing_server_artifacts() {
         .output()
         .expect("run s03 workload runner validate-only");
 
-    assert!(!output.status.success(), "validate-only unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    assert!(
+        !output.status.success(),
+        "validate-only unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("ordinary/unary-bytes/repeated-64")
@@ -811,7 +833,8 @@ fn s03_verify_only_rejects_software_looking_accelerated_artifacts() {
         ),
     );
     write_json(
-        &output_dir.join("idxd__unary-proto-shape__fleet-small-to-fleet-response-heavy.client.json"),
+        &output_dir
+            .join("idxd__unary-proto-shape__fleet-small-to-fleet-response-heavy.client.json"),
         &valid_idxd_report(
             "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
             "client",
@@ -821,7 +844,8 @@ fn s03_verify_only_rejects_software_looking_accelerated_artifacts() {
         ),
     );
     write_json(
-        &output_dir.join("idxd__unary-proto-shape__fleet-small-to-fleet-response-heavy.server.json"),
+        &output_dir
+            .join("idxd__unary-proto-shape__fleet-small-to-fleet-response-heavy.server.json"),
         &valid_idxd_report(
             "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
             "server",
@@ -843,7 +867,12 @@ fn s03_verify_only_rejects_software_looking_accelerated_artifacts() {
         .output()
         .expect("run s03 workload runner verify-only");
 
-    assert!(!output.status.success(), "verify-only unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    assert!(
+        !output.status.success(),
+        "verify-only unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("ordinary/unary-bytes/repeated-64")
@@ -900,7 +929,10 @@ fn tracked_s04_manifest_covers_required_families_outputs_and_report_references()
     let raw = fs::read_to_string(s04_tracked_manifest()).expect("read tracked s04 manifest");
     let manifest: Value = serde_json::from_str(&raw).expect("parse tracked s04 manifest");
 
-    assert_eq!(manifest["run_root"], "accel-rpc/target/s04-claim-package/latest");
+    assert_eq!(
+        manifest["run_root"],
+        "accel-rpc/target/s04-claim-package/latest"
+    );
     assert_eq!(
         manifest["scope"]["pairing_keys"],
         json!(["workload_label", "endpoint_role", "run_family"])
@@ -932,7 +964,11 @@ fn tracked_s04_manifest_covers_required_families_outputs_and_report_references()
     let families = manifest["artifact_families"]
         .as_array()
         .expect("tracked s04 artifact_families array");
-    assert_eq!(families.len(), 3, "s04 should freeze three comparison families");
+    assert_eq!(
+        families.len(),
+        3,
+        "s04 should freeze three comparison families"
+    );
 
     for (run_family, instrumentation, selected_path, source_manifest, expected_prefix) in [
         (
@@ -968,7 +1004,11 @@ fn tracked_s04_manifest_covers_required_families_outputs_and_report_references()
         let reports = family["endpoint_reports"]
             .as_array()
             .expect("endpoint_reports array");
-        assert_eq!(reports.len(), 4, "{run_family} should enumerate client/server artifacts for both workloads");
+        assert_eq!(
+            reports.len(),
+            4,
+            "{run_family} should enumerate client/server artifacts for both workloads"
+        );
         for label in [
             "ordinary/unary-bytes/repeated-64",
             "ordinary/unary-proto-shape/fleet-small-to-fleet-response-heavy",
@@ -1020,9 +1060,21 @@ fn extracted_helper_modules_exist_and_s04_wrapper_is_only_a_runner_shim() {
     let summarizer = summarizer_script();
     let verify_wrapper = s04_verify_wrapper_script();
 
-    assert!(proof_runner_common.exists(), "missing shared proof runner helper: {:?}", proof_runner_common);
-    assert!(claim_package_contract.exists(), "missing claim package contract helper: {:?}", claim_package_contract);
-    assert!(verify_wrapper.exists(), "missing s04 compatibility wrapper: {:?}", verify_wrapper);
+    assert!(
+        proof_runner_common.exists(),
+        "missing shared proof runner helper: {:?}",
+        proof_runner_common
+    );
+    assert!(
+        claim_package_contract.exists(),
+        "missing claim package contract helper: {:?}",
+        claim_package_contract
+    );
+    assert!(
+        verify_wrapper.exists(),
+        "missing s04 compatibility wrapper: {:?}",
+        verify_wrapper
+    );
 
     let summarizer_text = fs::read_to_string(&summarizer).expect("read s04 summarizer");
     assert!(
