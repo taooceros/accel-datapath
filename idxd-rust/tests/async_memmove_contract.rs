@@ -7,10 +7,12 @@ use std::time::Duration;
 
 use bytes::{Bytes, BytesMut, buf::UninitSlice};
 use idxd_rust::{
-    AsyncDsaSession, AsyncLifecycleFailureKind, AsyncMemmoveRequest, AsyncMemmoveWorker,
-    AsyncWorkerFailureKind, MemmoveError, MemmovePhase, MemmoveRequest,
-    MemmoveValidationReport,
+    AsyncDirectFailureKind, AsyncDsaSession, AsyncLifecycleFailureKind, AsyncMemmoveRequest,
+    AsyncMemmoveWorker, AsyncWorkerFailureKind, CompletionSnapshot, DirectAsyncMemmoveRuntime,
+    MemmoveError, MemmovePhase, MemmoveRequest, MemmoveValidationConfig, MemmoveValidationReport,
+    direct_test_support::ScriptedDirectBackend,
 };
+use idxd_sys::{DSA_COMP_PAGE_FAULT_NOBOF, DSA_COMP_SUCCESS, EnqcmdSubmission};
 use tokio::sync::Notify;
 use tokio::time::timeout;
 
@@ -618,4 +620,214 @@ fn shutdowns_cleanly_after_idle_state() {
         .shutdown()
         .expect("idle worker should shut down cleanly");
     assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+fn direct_config() -> MemmoveValidationConfig {
+    MemmoveValidationConfig::new("/dev/dsa/test0.0").expect("direct test config")
+}
+
+fn owned_mut_request(source: &'static [u8]) -> AsyncMemmoveRequest {
+    AsyncMemmoveRequest::new(
+        Bytes::from_static(source),
+        BytesMut::with_capacity(source.len()),
+    )
+    .expect("request should validate")
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn completion_record_drives_direct_async_completion() {
+    let backend = ScriptedDirectBackend::new();
+    let runtime = DirectAsyncMemmoveRuntime::new(direct_config(), backend.clone());
+
+    let pending = tokio::spawn({
+        let runtime = runtime.clone();
+        async move { runtime.memmove(owned_mut_request(b"complete")).await }
+    });
+
+    tokio::task::yield_now().await;
+    assert_eq!(backend.submissions(), 1);
+    assert!(
+        timeout(Duration::from_millis(50), async {
+            while !pending.is_finished() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .is_err(),
+        "direct future must wait for a completion snapshot, not submit success"
+    );
+
+    backend.complete(1, CompletionSnapshot::new(DSA_COMP_SUCCESS, 0, 0, 0));
+
+    let result = timeout(Duration::from_secs(1), pending)
+        .await
+        .expect("completion snapshot should wake the direct future")
+        .expect("direct task should not panic")
+        .expect("successful completion should produce a result");
+
+    assert_eq!(result.destination.as_ref(), b"complete");
+    assert_eq!(result.report.requested_bytes, 8);
+    assert_eq!(result.report.final_status, DSA_COMP_SUCCESS);
+    assert_eq!(backend.completions(), 1);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn backpressure_exhaustion_reports_retry_budget_without_payload_bytes() {
+    let backend = ScriptedDirectBackend::with_submissions([
+        EnqcmdSubmission::Rejected,
+        EnqcmdSubmission::Rejected,
+        EnqcmdSubmission::Rejected,
+    ]);
+    let runtime =
+        DirectAsyncMemmoveRuntime::with_submission_retry_budget(direct_config(), backend, 2);
+
+    let err = runtime
+        .memmove(owned_mut_request(b"secret-payload"))
+        .await
+        .expect_err("bounded rejection should fail instead of spinning forever");
+
+    assert_eq!(err.kind(), "backpressure_exceeded");
+    assert_eq!(
+        err.direct_failure_kind(),
+        Some(AsyncDirectFailureKind::BackpressureExceeded)
+    );
+    let failure = err
+        .direct_failure()
+        .expect("direct metadata should be present");
+    assert_eq!(failure.requested_bytes(), 14);
+    assert_eq!(failure.retry_budget(), 2);
+    assert_eq!(failure.retry_count(), 3);
+    let message = failure.to_string();
+    assert!(err.into_request().is_some());
+    assert!(!message.contains("secret-payload"));
+    assert!(!message.contains("115, 101, 99"));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn monitor_close_resolves_accepted_direct_operation() {
+    let backend = ScriptedDirectBackend::new();
+    let runtime = DirectAsyncMemmoveRuntime::new(direct_config(), backend);
+
+    let pending = tokio::spawn({
+        let runtime = runtime.clone();
+        async move { runtime.memmove(owned_mut_request(b"monitor")).await }
+    });
+
+    tokio::task::yield_now().await;
+    runtime.close();
+
+    let err = timeout(Duration::from_secs(1), pending)
+        .await
+        .expect("monitor closure should resolve accepted pending work")
+        .expect("direct task should not panic")
+        .expect_err("closed monitor should fail the request");
+
+    assert_eq!(err.kind(), "monitor_closed");
+    assert_eq!(
+        err.direct_failure_kind(),
+        Some(AsyncDirectFailureKind::MonitorClosed)
+    );
+    assert_eq!(
+        err.direct_failure()
+            .expect("direct failure metadata")
+            .requested_bytes(),
+        7
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn dropped_direct_receiver_does_not_remove_accepted_operation_before_completion() {
+    let backend = ScriptedDirectBackend::new();
+    let runtime = DirectAsyncMemmoveRuntime::new(direct_config(), backend.clone());
+
+    let pending = tokio::spawn({
+        let runtime = runtime.clone();
+        async move { runtime.memmove(owned_mut_request(b"drop-me")).await }
+    });
+
+    tokio::task::yield_now().await;
+    assert_eq!(backend.submissions(), 1);
+    pending.abort();
+    let join_err = pending
+        .await
+        .expect_err("aborted direct awaiter should report task cancellation");
+    assert!(join_err.is_cancelled());
+
+    backend.complete(1, CompletionSnapshot::new(DSA_COMP_SUCCESS, 0, 0, 0));
+    timeout(Duration::from_secs(1), async {
+        while backend.completions() == 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("monitor should keep operation-owned buffers alive after receiver drop");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn malformed_direct_completion_surfaces_memmove_snapshot_metadata() {
+    let backend = ScriptedDirectBackend::new();
+    let runtime = DirectAsyncMemmoveRuntime::new(direct_config(), backend.clone());
+
+    let pending = tokio::spawn({
+        let runtime = runtime.clone();
+        async move { runtime.memmove(owned_mut_request(b"bad")).await }
+    });
+
+    tokio::task::yield_now().await;
+    backend.complete(
+        1,
+        CompletionSnapshot::new(DSA_COMP_PAGE_FAULT_NOBOF, 0, 64, 0x1000),
+    );
+
+    let err = timeout(Duration::from_secs(1), pending)
+        .await
+        .expect("malformed completion should resolve")
+        .expect("direct task should not panic")
+        .expect_err("malformed completion should fail");
+
+    assert_eq!(err.kind(), "malformed_completion");
+    assert!(matches!(
+        err.memmove_error(),
+        Some(MemmoveError::MalformedCompletion {
+            phase: MemmovePhase::PageFaultRetry,
+            bytes_completed: 64,
+            fault_addr: 0x1000,
+            ..
+        })
+    ));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn concurrent_direct_requests_complete_out_of_order() {
+    let backend = ScriptedDirectBackend::new();
+    let runtime = DirectAsyncMemmoveRuntime::new(direct_config(), backend.clone());
+
+    let first = tokio::spawn({
+        let runtime = runtime.clone();
+        async move { runtime.memmove(owned_mut_request(b"first")).await }
+    });
+    let second = tokio::spawn({
+        let runtime = runtime.clone();
+        async move { runtime.memmove(owned_mut_request(b"second")).await }
+    });
+
+    tokio::task::yield_now().await;
+    assert_eq!(backend.submissions(), 2);
+    backend.complete(2, CompletionSnapshot::new(DSA_COMP_SUCCESS, 0, 0, 0));
+
+    let second_result = timeout(Duration::from_secs(1), second)
+        .await
+        .expect("second request should complete first")
+        .expect("second task should not panic")
+        .expect("second request should succeed");
+    assert_eq!(second_result.destination.as_ref(), b"second");
+    assert!(!first.is_finished());
+
+    backend.complete(1, CompletionSnapshot::new(DSA_COMP_SUCCESS, 0, 0, 0));
+    let first_result = timeout(Duration::from_secs(1), first)
+        .await
+        .expect("first request should complete after its own snapshot")
+        .expect("first task should not panic")
+        .expect("first request should succeed");
+    assert_eq!(first_result.destination.as_ref(), b"first");
 }

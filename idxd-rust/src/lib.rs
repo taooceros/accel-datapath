@@ -16,10 +16,17 @@
 //! and no borrowed copy-back helper; destination allocation and ownership stay
 //! explicit at the call site.
 
+mod async_direct;
 mod async_session;
 mod direct_memmove;
 mod validation;
 
+#[doc(hidden)]
+pub use async_direct::test_support as direct_test_support;
+pub use async_direct::{
+    AsyncDirectFailure, AsyncDirectFailureKind, DirectAsyncMemmoveRuntime, DirectMemmoveBackend,
+    DirectPortalBackend,
+};
 pub use async_session::{
     AsyncDsaHandle, AsyncDsaSession, AsyncLifecycleFailureKind, AsyncMemmoveError,
     AsyncMemmoveRequest, AsyncMemmoveRequestError, AsyncMemmoveResult, AsyncMemmoveWorker,

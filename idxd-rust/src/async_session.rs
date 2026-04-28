@@ -10,7 +10,8 @@ use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
-    DEFAULT_DEVICE_PATH, DEFAULT_MAX_PAGE_FAULT_RETRIES, DsaSession, MemmoveError, MemmoveRequest,
+    AsyncDirectFailure, AsyncDirectFailureKind, DEFAULT_DEVICE_PATH,
+    DEFAULT_MAX_PAGE_FAULT_RETRIES, DsaSession, MemmoveError, MemmoveRequest,
     MemmoveValidationReport,
 };
 
@@ -194,6 +195,13 @@ pub enum AsyncMemmoveError {
         kind: AsyncWorkerFailureKind,
         request: Option<AsyncMemmoveRequest>,
     },
+
+    #[error("async direct memmove failure: {failure}")]
+    DirectFailure {
+        #[source]
+        failure: AsyncDirectFailure,
+        request: Option<AsyncMemmoveRequest>,
+    },
 }
 
 impl AsyncMemmoveError {
@@ -202,27 +210,50 @@ impl AsyncMemmoveError {
             Self::Memmove { source, .. } => source.kind(),
             Self::LifecycleFailure { kind, .. } => kind.as_str(),
             Self::WorkerFailure { kind, .. } => kind.as_str(),
+            Self::DirectFailure { failure, .. } => failure.kind().as_str(),
         }
     }
 
     pub fn lifecycle_failure_kind(&self) -> Option<AsyncLifecycleFailureKind> {
         match self {
             Self::LifecycleFailure { kind, .. } => Some(*kind),
-            Self::Memmove { .. } | Self::WorkerFailure { .. } => None,
+            Self::Memmove { .. } | Self::WorkerFailure { .. } | Self::DirectFailure { .. } => None,
         }
     }
 
     pub fn worker_failure_kind(&self) -> Option<AsyncWorkerFailureKind> {
         match self {
             Self::WorkerFailure { kind, .. } => Some(*kind),
-            Self::Memmove { .. } | Self::LifecycleFailure { .. } => None,
+            Self::Memmove { .. } | Self::LifecycleFailure { .. } | Self::DirectFailure { .. } => {
+                None
+            }
+        }
+    }
+
+    pub fn direct_failure_kind(&self) -> Option<AsyncDirectFailureKind> {
+        match self {
+            Self::DirectFailure { failure, .. } => Some(failure.kind()),
+            Self::Memmove { .. } | Self::LifecycleFailure { .. } | Self::WorkerFailure { .. } => {
+                None
+            }
+        }
+    }
+
+    pub fn direct_failure(&self) -> Option<&AsyncDirectFailure> {
+        match self {
+            Self::DirectFailure { failure, .. } => Some(failure),
+            Self::Memmove { .. } | Self::LifecycleFailure { .. } | Self::WorkerFailure { .. } => {
+                None
+            }
         }
     }
 
     pub fn memmove_error(&self) -> Option<&MemmoveError> {
         match self {
             Self::Memmove { source, .. } => Some(source),
-            Self::LifecycleFailure { .. } | Self::WorkerFailure { .. } => None,
+            Self::LifecycleFailure { .. }
+            | Self::WorkerFailure { .. }
+            | Self::DirectFailure { .. } => None,
         }
     }
 
@@ -230,7 +261,8 @@ impl AsyncMemmoveError {
         match self {
             Self::Memmove { request, .. }
             | Self::LifecycleFailure { request, .. }
-            | Self::WorkerFailure { request, .. } => request,
+            | Self::WorkerFailure { request, .. }
+            | Self::DirectFailure { request, .. } => request,
         }
     }
 }

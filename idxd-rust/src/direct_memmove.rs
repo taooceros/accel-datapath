@@ -16,7 +16,8 @@ use crate::{
 /// owned by the eventual async operation; this helper stores only the current
 /// raw continuation pointers and remaining byte count so retry descriptors can
 /// be rebuilt without duplicating completion classification logic.
-pub(crate) struct DirectMemmoveState {
+#[doc(hidden)]
+pub struct DirectMemmoveState {
     desc: DsaHwDesc,
     comp: DsaCompletionRecord,
     src: *const u8,
@@ -25,6 +26,13 @@ pub(crate) struct DirectMemmoveState {
     remaining: u32,
     retries: u32,
 }
+
+// SAFETY: `DirectMemmoveState` owns the descriptor and completion record while
+// storing raw continuation pointers into buffers owned by the surrounding
+// operation. Moving the state between Tokio worker threads does not invalidate
+// those allocation-backed pointers; callers must still keep the operation-owned
+// buffers alive until every accepted descriptor has completed.
+unsafe impl Send for DirectMemmoveState {}
 
 impl DirectMemmoveState {
     /// Create reusable descriptor/completion state for one validated request.

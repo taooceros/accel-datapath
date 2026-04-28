@@ -88,7 +88,10 @@ fn verifier_fails_preflight_when_launcher_capability_is_missing() {
         .arg(verifier_script())
         .env("PATH", path_override)
         .env("IDXD_RUST_VERIFY_SKIP_BUILD", "1")
-        .env("IDXD_RUST_VERIFY_BINARY", env!("CARGO_BIN_EXE_live_memmove"))
+        .env(
+            "IDXD_RUST_VERIFY_BINARY",
+            env!("CARGO_BIN_EXE_live_memmove"),
+        )
         .env("IDXD_RUST_VERIFY_DEVICE", "/dev/dsa/does-not-exist")
         .env("IDXD_RUST_VERIFY_LAUNCHER_PATH", &launcher_path)
         .env("IDXD_RUST_VERIFY_OUTPUT_DIR", &output_dir)
@@ -114,7 +117,10 @@ fn verifier_preserves_queue_open_failure_and_artifact_paths() {
         .arg(verifier_script())
         .env("PATH", path_override)
         .env("IDXD_RUST_VERIFY_SKIP_BUILD", "1")
-        .env("IDXD_RUST_VERIFY_BINARY", env!("CARGO_BIN_EXE_live_memmove"))
+        .env(
+            "IDXD_RUST_VERIFY_BINARY",
+            env!("CARGO_BIN_EXE_live_memmove"),
+        )
         .env("IDXD_RUST_VERIFY_DEVICE", "/dev/dsa/does-not-exist")
         .env("IDXD_RUST_VERIFY_LAUNCHER_PATH", &launcher_path)
         .env("IDXD_RUST_VERIFY_OUTPUT_DIR", &output_dir)

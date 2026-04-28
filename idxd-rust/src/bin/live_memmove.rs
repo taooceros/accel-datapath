@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use idxd_rust::{
-    DsaSession, MemmoveError, MemmoveRequest, MemmoveValidationReport, DEFAULT_DEVICE_PATH,
+    DEFAULT_DEVICE_PATH, DsaSession, MemmoveError, MemmoveRequest, MemmoveValidationReport,
 };
 
 fn main() -> ExitCode {

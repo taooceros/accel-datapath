@@ -371,6 +371,22 @@ fn async_failure_outcome(args: &CliArgs, err: AsyncMemmoveError) -> RunOutcome {
             validation_error_kind: None,
             message: format!("async memmove worker failure: {}", kind.as_str()),
         },
+        AsyncMemmoveError::DirectFailure { failure, .. } => RunOutcome {
+            ok: false,
+            device_path: args.device_path.display().to_string(),
+            requested_bytes: failure.requested_bytes(),
+            page_fault_retries: None,
+            final_status: failure
+                .completion_snapshot()
+                .map(|snapshot| snapshot.status),
+            phase: "async_direct".to_string(),
+            error_kind: Some(failure.kind().as_str()),
+            lifecycle_failure_kind: None,
+            worker_failure_kind: None,
+            validation_phase: None,
+            validation_error_kind: None,
+            message: format!("async direct memmove failure: {failure}"),
+        },
     }
 }
 

@@ -32,8 +32,10 @@ fn rejects_invalid_byte_string_before_touching_hardware() {
 
     assert_eq!(output.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&output.stdout).is_empty());
-    assert!(String::from_utf8_lossy(&output.stderr)
-        .contains("invalid value `abc` for `--bytes`; expected a positive integer"));
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("invalid value `abc` for `--bytes`; expected a positive integer")
+    );
 }
 
 #[test]
