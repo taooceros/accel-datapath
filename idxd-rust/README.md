@@ -20,7 +20,8 @@ After reading, you should be able to:
 - `AsyncDsaHandle` is the only cloneable Tokio-facing surface. Cloning it shares one direct async runtime with one mapped work-queue portal and completion monitor; it never duplicates hardware ownership.
 - `live_memmove` is the crate-local synchronous validation binary.
 - `await_memmove` is the crate-local async validation binary that exercises the public owner-plus-handle contract.
-- `verify_live_memmove.sh` and `verify_async_memmove.sh` are the operational verifiers that wrap the binaries in the repo's `launch` capability flow and check the machine-readable artifacts they emit.
+- `tokio_memmove_bench` is the standalone Tokio-only direct async benchmark/proof binary. It emits JSON-first evidence for single latency, concurrent submissions, and fixed-duration throughput.
+- `verify_live_memmove.sh`, `verify_async_memmove.sh`, and `verify_tokio_memmove_bench.sh` are the operational verifiers that wrap hardware proof binaries in the repo's `launch` capability flow and check the machine-readable artifacts they emit.
 
 ## Prerequisites
 
@@ -46,6 +47,31 @@ Use the async proof path when you need to prove that ordinary Tokio callers can 
 ```bash
 bash idxd-rust/scripts/verify_async_memmove.sh
 ```
+
+Use the benchmark proof path when you need JSON-first evidence for direct Tokio memmove latency, concurrent submissions, and bounded throughput. The verifier defaults are intentionally short for operator checks:
+
+```bash
+bash idxd-rust/scripts/verify_tokio_memmove_bench.sh
+```
+
+For release-profile S04 hardware evidence, keep the same verifier but raise the profile and workload knobs explicitly:
+
+```bash
+IDXD_RUST_VERIFY_PROFILE=release \
+IDXD_RUST_VERIFY_BYTES=4096 \
+IDXD_RUST_VERIFY_ITERATIONS=1000 \
+IDXD_RUST_VERIFY_CONCURRENCY=16 \
+IDXD_RUST_VERIFY_DURATION_MS=5000 \
+bash idxd-rust/scripts/verify_tokio_memmove_bench.sh
+```
+
+Use the software diagnostic benchmark when you need a host-free schema and Tokio runtime sanity check:
+
+```bash
+IDXD_RUST_VERIFY_BACKEND=software bash idxd-rust/scripts/verify_tokio_memmove_bench.sh
+```
+
+Software diagnostic artifacts are deliberately marked `claim_eligible=false`. They prove the benchmark contract and async control flow, not hardware acceleration. S04 hardware evidence must come from `backend=hardware`, `claim_eligible=true`, direct async rows, and the paired `direct_sync` comparison row.
 
 Use the downstream async-handle proof path when you need to prove that a repo-local package outside `idxd-rust` can consume the public async owner/handle API from ordinary Tokio code:
 
@@ -110,11 +136,12 @@ This is why the async verifier is the main operator entrypoint for the shared To
 
 ## One-command truthful proof
 
-From the `accel-rpc` workspace root, run either verifier:
+From the `accel-rpc` workspace root, run the hardware verifiers:
 
 ```bash
 bash idxd-rust/scripts/verify_live_memmove.sh
 bash idxd-rust/scripts/verify_async_memmove.sh
+bash idxd-rust/scripts/verify_tokio_memmove_bench.sh
 ```
 
 From the repo root, equivalent wrapper entrypoints are also available:
@@ -122,9 +149,10 @@ From the repo root, equivalent wrapper entrypoints are also available:
 ```bash
 bash idxd-rust/scripts/verify_live_memmove.sh
 bash idxd-rust/scripts/verify_async_memmove.sh
+bash idxd-rust/scripts/verify_tokio_memmove_bench.sh
 ```
 
-What both verifiers do:
+What the hardware verifiers do:
 
 1. find a work queue or use `IDXD_RUST_VERIFY_DEVICE`,
 2. check launcher prerequisites before attempting hardware work,
@@ -132,6 +160,8 @@ What both verifiers do:
 4. run the binary via `devenv shell -- launch ...`,
 5. write a JSON artifact plus captured stdout/stderr into a temp output directory, and
 6. reject malformed, incomplete, or contradictory artifacts.
+
+`verify_tokio_memmove_bench.sh` also supports `IDXD_RUST_VERIFY_BACKEND=software`, which skips launcher preflight and validates the same benchmark schema as a non-claim-eligible diagnostic.
 
 A successful verifier execution always ends with a `phase=done` line. When hardware execution succeeds it includes `verdict=pass`; when the host or queue is not ready but the failure was classified truthfully it includes `verdict=expected_failure` plus the preserved failure metadata.
 
@@ -146,20 +176,29 @@ The synchronous verifier final line includes:
 - `stdout`
 - `stderr`
 
-The async verifier final line includes those same fields plus:
+The benchmark verifier final line includes:
 
+- `backend`
+- `suite`
+- `claim_eligible`
+- `failure_class`
 - `error_kind`
-- `async_lifecycle_failure_kind`
-- `async_worker_failure_kind`
-- `async_direct_failure_kind`
+- `direct_failure_kind`
 - `validation_phase`
 - `validation_error_kind`
+- `completed_operations`
+- `failed_operations`
+- `targets`
+- `stdout`
+- `stderr`
 
 Examples:
 
 ```text
 [verify_live_memmove] phase=done ... device_path=/dev/dsa/wq0.0 requested_bytes=64 page_fault_retries=0 final_status=0x01 validation_phase=completed verdict=pass
 [verify_async_memmove] phase=done ... device_path=/dev/dsa/wq0.0 requested_bytes=64 page_fault_retries=0 final_status=0x01 error_kind=null async_lifecycle_failure_kind=null async_worker_failure_kind=null async_direct_failure_kind=null validation_phase=completed validation_error_kind=null verdict=pass
+[verify_tokio_memmove_bench] phase=done ... backend=hardware suite=canonical claim_eligible=true targets=direct_async,direct_async,direct_async,direct_sync verdict=pass
+[verify_tokio_memmove_bench] phase=done ... backend=software suite=canonical claim_eligible=false targets=software_direct_async_diagnostic,software_direct_async_diagnostic,software_direct_async_diagnostic verdict=pass
 [verify_async_memmove] phase=done ... device_path=/dev/dsa/wq0.0 requested_bytes=64 error_kind=lifecycle_failure async_lifecycle_failure_kind=owner_shutdown async_worker_failure_kind=null async_direct_failure_kind=null validation_phase=null validation_error_kind=null verdict=expected_failure
 ```
 
@@ -270,6 +309,10 @@ The verifiers are intentionally configurable so they can be used both on real ho
 - `IDXD_RUST_VERIFY_SKIP_BUILD=1` — reuse an already-built proof binary.
 - `IDXD_RUST_VERIFY_BINARY` — override the proof binary path. Pair this with `IDXD_RUST_VERIFY_SKIP_BUILD=1`.
 - `IDXD_RUST_VERIFY_LAUNCHER_PATH` — override the launcher path.
+- `IDXD_RUST_VERIFY_BACKEND` — for `tokio_memmove_bench`, choose `hardware` or the host-free `software` diagnostic backend.
+- `IDXD_RUST_VERIFY_SUITE` — for `tokio_memmove_bench`, choose `canonical`, `latency`, `concurrency`, or `throughput`.
+- `IDXD_RUST_VERIFY_ITERATIONS`, `IDXD_RUST_VERIFY_CONCURRENCY`, and `IDXD_RUST_VERIFY_DURATION_MS` — tune benchmark workload size while preserving bounded defaults.
+- `IDXD_RUST_VERIFY_PROFILE` — choose the Cargo build profile. Use `release` for claim-oriented S04 benchmark evidence.
 
 These are inputs to the verifiers themselves; the verifiers will fail if they depend on missing or contradictory knobs outside this list.
 
@@ -279,9 +322,10 @@ From the repo root:
 
 ```bash
 cd accel-rpc && cargo test -p idxd-rust --test validation_cli_contract -- --nocapture
-cd accel-rpc && cargo test -p idxd-rust --test tokio_handle_contract --test async_validation_cli_contract --test async_verifier_contract -- --nocapture
+cd accel-rpc && cargo test -p idxd-rust --test tokio_handle_contract --test async_validation_cli_contract --test async_verifier_contract --test async_benchmark_cli_contract --test async_benchmark_verifier_contract -- --nocapture
 bash idxd-rust/scripts/verify_live_memmove.sh
 bash idxd-rust/scripts/verify_async_memmove.sh
+bash idxd-rust/scripts/verify_tokio_memmove_bench.sh
 ```
 
-The Tokio-handle and CLI contract tests exercise the non-hardware schemas for the public async surface. The shell verifiers are the truthful end-to-end proof commands for prepared hosts and the expected-failure proof commands for unprepared ones.
+The Tokio-handle, CLI, and verifier contract tests exercise the non-hardware schemas for the public async surface and the benchmark surface. The shell verifiers are the truthful end-to-end proof commands for prepared hosts and the expected-failure proof commands for unprepared ones.
