@@ -54,7 +54,15 @@ Use the benchmark proof path when you need JSON-first evidence for direct Tokio 
 bash idxd-rust/scripts/verify_tokio_memmove_bench.sh
 ```
 
-For release-profile S04 hardware evidence, keep the same verifier but raise the profile and workload knobs explicitly:
+Use the S04 collection workflow when you need a reviewer-ready evidence directory with focused command logs, verifier output directories, and a manifest:
+
+```bash
+bash idxd-rust/scripts/collect_tokio_memmove_evidence.sh
+```
+
+By default it writes a timestamped directory under `target/m007-s04-evidence/`. Set `M007_S04_EVIDENCE_OUTPUT_DIR` when you need a stable rerun path, and use the existing `IDXD_RUST_VERIFY_*` knobs to pass release-profile workload settings through to the underlying verifier.
+
+For release-profile S04 hardware evidence, keep the same verifier or collection workflow but raise the profile and workload knobs explicitly:
 
 ```bash
 IDXD_RUST_VERIFY_PROFILE=release \

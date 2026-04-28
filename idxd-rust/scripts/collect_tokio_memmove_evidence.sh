@@ -58,7 +58,7 @@ run_logged() {
 
   printf '[collect_tokio_memmove_evidence] command=%s log=%s\n' "${name}" "${log_file}"
   local exit_code=0
-  if "$@" >"${log_file}" 2>&1; then
+  if (cd "${REPO_ROOT}" && "$@") >"${log_file}" 2>&1; then
     exit_code=0
   else
     exit_code=$?
