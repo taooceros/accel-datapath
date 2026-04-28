@@ -359,7 +359,7 @@ fn verifier_preserves_async_worker_failure_kind() {
     let fake_binary = temp_root.join("fake_await_memmove");
     write_fake_binary(
         &fake_binary,
-        r#"json=$(printf '{"ok":false,"device_path":"%s","requested_bytes":%s,"page_fault_retries":null,"final_status":null,"phase":"async_worker","error_kind":"worker_failure","lifecycle_failure_kind":null,"worker_failure_kind":"response_channel_closed","validation_phase":null,"validation_error_kind":null,"message":"async memmove worker failure: response_channel_closed"}' "$device" "$bytes")
+        r#"json=$(printf '{"ok":false,"device_path":"%s","requested_bytes":%s,"page_fault_retries":null,"final_status":null,"phase":"async_worker","error_kind":"worker_failure","lifecycle_failure_kind":null,"worker_failure_kind":"response_channel_closed","direct_failure_kind":null,"retry_budget":null,"retry_count":null,"completion_result":null,"completion_bytes_completed":null,"completion_fault_addr":null,"validation_phase":null,"validation_error_kind":null,"message":"async memmove worker failure: response_channel_closed"}' "$device" "$bytes")
 printf '%s\n' "$json" | tee "$artifact"
 exit 1"#,
     );
@@ -388,6 +388,46 @@ exit 1"#,
 }
 
 #[test]
+fn verifier_preserves_async_direct_failure_metadata() {
+    let (temp_root, launcher_path, path_override) = fake_launcher_env(true);
+    let output_dir = unique_temp_path("direct-failure-output");
+    fs::create_dir_all(&output_dir).expect("output dir should be creatable");
+
+    let fake_binary = temp_root.join("fake_await_memmove");
+    write_fake_binary(
+        &fake_binary,
+        r#"json=$(printf '{"ok":false,"device_path":"%s","requested_bytes":%s,"page_fault_retries":1,"final_status":"0x0d","phase":"async_direct","error_kind":"direct_failure","lifecycle_failure_kind":null,"worker_failure_kind":null,"direct_failure_kind":"backpressure_exceeded","retry_budget":1,"retry_count":1,"completion_result":0,"completion_bytes_completed":5,"completion_fault_addr":"0xfeed","validation_phase":null,"validation_error_kind":null,"message":"async direct memmove failure: backpressure_exceeded requested_bytes=%s retry_count=1 retry_budget=1 completion_status=0x0d completion_result=0 bytes_completed=5 fault_addr=0xfeed"}' "$device" "$bytes" "$bytes")
+printf '%s\n' "$json" | tee "$artifact"
+exit 1"#,
+    );
+
+    let output = Command::new("bash")
+        .arg(async_verifier_script())
+        .env("PATH", path_override)
+        .env("IDXD_RUST_VERIFY_SKIP_BUILD", "1")
+        .env("IDXD_RUST_VERIFY_BINARY", &fake_binary)
+        .env("IDXD_RUST_VERIFY_DEVICE", "/dev/dsa/test0.0")
+        .env("IDXD_RUST_VERIFY_LAUNCHER_PATH", &launcher_path)
+        .env("IDXD_RUST_VERIFY_OUTPUT_DIR", &output_dir)
+        .output()
+        .expect("verifier should launch");
+
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("phase=done"));
+    assert!(stdout.contains("verdict=expected_failure"));
+    assert!(stdout.contains("failure_phase=runtime"));
+    assert!(stdout.contains("error_kind=direct_failure"));
+    assert!(stdout.contains("async_direct_failure_kind=backpressure_exceeded"));
+    assert!(stdout.contains("retry_budget=1"));
+    assert!(stdout.contains("retry_count=1"));
+    assert!(stdout.contains("completion_result=0"));
+    assert!(stdout.contains("completion_bytes_completed=5"));
+    assert!(stdout.contains("completion_fault_addr=0xfeed"));
+    assert!(!stdout.contains("secret-payload"));
+}
+
+#[test]
 fn verifier_rejects_contradictory_artifact_fields() {
     let (temp_root, launcher_path, path_override) = fake_launcher_env(true);
     let output_dir = unique_temp_path("malformed-output");
@@ -396,7 +436,7 @@ fn verifier_rejects_contradictory_artifact_fields() {
     let fake_binary = temp_root.join("fake_await_memmove");
     write_fake_binary(
         &fake_binary,
-        r#"json=$(printf '{"ok":true,"device_path":"%s","requested_bytes":%s,"page_fault_retries":0,"final_status":"0x01","phase":"completed","error_kind":null,"lifecycle_failure_kind":"owner_shutdown","worker_failure_kind":null,"validation_phase":"completed","validation_error_kind":null,"message":"verified %s copied bytes via async wrapper on %s"}' "$device" "$bytes" "$bytes" "$device")
+        r#"json=$(printf '{"ok":true,"device_path":"%s","requested_bytes":%s,"page_fault_retries":0,"final_status":"0x01","phase":"completed","error_kind":null,"lifecycle_failure_kind":"owner_shutdown","worker_failure_kind":null,"direct_failure_kind":null,"retry_budget":0,"retry_count":0,"completion_result":null,"completion_bytes_completed":null,"completion_fault_addr":null,"validation_phase":"completed","validation_error_kind":null,"message":"verified %s copied bytes via direct async memmove on %s"}' "$device" "$bytes" "$bytes" "$device")
 printf '%s\n' "$json" | tee "$artifact"
 exit 0"#,
     );
@@ -431,7 +471,7 @@ fn verifier_rejects_missing_lifecycle_classification() {
     let fake_binary = temp_root.join("fake_await_memmove");
     write_fake_binary(
         &fake_binary,
-        r#"json=$(printf '{"ok":false,"device_path":"%s","requested_bytes":%s,"page_fault_retries":null,"final_status":null,"phase":"async_lifecycle","error_kind":"lifecycle_failure","lifecycle_failure_kind":null,"worker_failure_kind":null,"validation_phase":null,"validation_error_kind":null,"message":"async memmove lifecycle failure: owner_shutdown"}' "$device" "$bytes")
+        r#"json=$(printf '{"ok":false,"device_path":"%s","requested_bytes":%s,"page_fault_retries":null,"final_status":null,"phase":"async_lifecycle","error_kind":"lifecycle_failure","lifecycle_failure_kind":null,"worker_failure_kind":null,"direct_failure_kind":null,"retry_budget":null,"retry_count":null,"completion_result":null,"completion_bytes_completed":null,"completion_fault_addr":null,"validation_phase":null,"validation_error_kind":null,"message":"async memmove lifecycle failure: owner_shutdown"}' "$device" "$bytes")
 printf '%s\n' "$json" | tee "$artifact"
 exit 1"#,
     );
@@ -466,8 +506,8 @@ fn verifier_rejects_stdout_artifact_divergence() {
     let fake_binary = temp_root.join("fake_await_memmove");
     write_fake_binary(
         &fake_binary,
-        r#"artifact_json=$(printf '{"ok":false,"device_path":"%s","requested_bytes":%s,"page_fault_retries":null,"final_status":null,"phase":"async_worker","error_kind":"worker_failure","lifecycle_failure_kind":null,"worker_failure_kind":"response_channel_closed","validation_phase":null,"validation_error_kind":null,"message":"async memmove worker failure: response_channel_closed"}' "$device" "$bytes")
-stdout_json=$(printf '{"ok":false,"device_path":"%s","requested_bytes":%s,"page_fault_retries":null,"final_status":null,"phase":"async_worker","error_kind":"worker_failure","lifecycle_failure_kind":null,"worker_failure_kind":"worker_panicked","validation_phase":null,"validation_error_kind":null,"message":"async memmove worker failure: worker_panicked"}' "$device" "$bytes")
+        r#"artifact_json=$(printf '{"ok":false,"device_path":"%s","requested_bytes":%s,"page_fault_retries":null,"final_status":null,"phase":"async_worker","error_kind":"worker_failure","lifecycle_failure_kind":null,"worker_failure_kind":"response_channel_closed","direct_failure_kind":null,"retry_budget":null,"retry_count":null,"completion_result":null,"completion_bytes_completed":null,"completion_fault_addr":null,"validation_phase":null,"validation_error_kind":null,"message":"async memmove worker failure: response_channel_closed"}' "$device" "$bytes")
+stdout_json=$(printf '{"ok":false,"device_path":"%s","requested_bytes":%s,"page_fault_retries":null,"final_status":null,"phase":"async_worker","error_kind":"worker_failure","lifecycle_failure_kind":null,"worker_failure_kind":"worker_panicked","direct_failure_kind":null,"retry_budget":null,"retry_count":null,"completion_result":null,"completion_bytes_completed":null,"completion_fault_addr":null,"validation_phase":null,"validation_error_kind":null,"message":"async memmove worker failure: worker_panicked"}' "$device" "$bytes")
 printf '%s\n' "$artifact_json" > "$artifact"
 printf '%s\n' "$stdout_json"
 exit 1"#,

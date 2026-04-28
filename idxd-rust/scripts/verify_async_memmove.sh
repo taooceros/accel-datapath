@@ -169,6 +169,12 @@ required = {
     'error_kind',
     'lifecycle_failure_kind',
     'worker_failure_kind',
+    'direct_failure_kind',
+    'retry_budget',
+    'retry_count',
+    'completion_result',
+    'completion_bytes_completed',
+    'completion_fault_addr',
     'validation_phase',
     'validation_error_kind',
     'message',
@@ -197,6 +203,12 @@ phase = report['phase']
 error_kind = report['error_kind']
 lifecycle_failure_kind = report['lifecycle_failure_kind']
 worker_failure_kind = report['worker_failure_kind']
+direct_failure_kind = report['direct_failure_kind']
+retry_budget = report['retry_budget']
+retry_count = report['retry_count']
+completion_result = report['completion_result']
+completion_bytes_completed = report['completion_bytes_completed']
+completion_fault_addr = report['completion_fault_addr']
 validation_phase = report['validation_phase']
 validation_error_kind = report['validation_error_kind']
 page_fault_retries = report['page_fault_retries']
@@ -211,6 +223,18 @@ if ok:
         raise SystemExit('successful artifact lifecycle_failure_kind must be null')
     if worker_failure_kind is not None:
         raise SystemExit('successful artifact worker_failure_kind must be null')
+    if direct_failure_kind is not None:
+        raise SystemExit('successful artifact direct_failure_kind must be null')
+    if not isinstance(retry_budget, int) or retry_budget < 0:
+        raise SystemExit('successful artifact retry_budget must be a non-negative integer')
+    if not isinstance(retry_count, int) or retry_count < 0:
+        raise SystemExit('successful artifact retry_count must be a non-negative integer')
+    if completion_result is not None:
+        raise SystemExit('successful artifact completion_result must be null')
+    if completion_bytes_completed is not None:
+        raise SystemExit('successful artifact completion_bytes_completed must be null')
+    if completion_fault_addr is not None:
+        raise SystemExit('successful artifact completion_fault_addr must be null')
     if validation_phase != 'completed':
         raise SystemExit('successful artifact validation_phase must be completed')
     if validation_error_kind is not None:
@@ -219,15 +243,25 @@ if ok:
         raise SystemExit('successful artifact page_fault_retries must be a non-negative integer')
     if not isinstance(final_status, str) or not re.fullmatch(r'0x[0-9a-f]{2}', final_status):
         raise SystemExit('successful artifact final_status must be a 0xNN string')
-    if f"verified {expected_bytes} copied bytes via async wrapper" not in report['message']:
-        raise SystemExit('successful artifact message is missing async copied-bytes proof')
+    if f"verified {expected_bytes} copied bytes via direct async memmove" not in report['message']:
+        raise SystemExit('successful artifact message is missing direct async copied-bytes proof')
 else:
-    if error_kind not in {'lifecycle_failure', 'worker_failure', 'validation_failure'}:
-        raise SystemExit('failed artifact error_kind must be lifecycle_failure, worker_failure, or validation_failure')
+    if error_kind not in {'lifecycle_failure', 'worker_failure', 'direct_failure', 'validation_failure'}:
+        raise SystemExit('failed artifact error_kind must be lifecycle_failure, worker_failure, direct_failure, or validation_failure')
     if page_fault_retries is not None and (not isinstance(page_fault_retries, int) or page_fault_retries < 0):
         raise SystemExit('failed artifact page_fault_retries must be null or a non-negative integer')
     if final_status is not None and (not isinstance(final_status, str) or not re.fullmatch(r'0x[0-9a-f]{2}', final_status)):
         raise SystemExit('failed artifact final_status must be null or a 0xNN string')
+    if retry_budget is not None and (not isinstance(retry_budget, int) or retry_budget < 0):
+        raise SystemExit('failed artifact retry_budget must be null or a non-negative integer')
+    if retry_count is not None and (not isinstance(retry_count, int) or retry_count < 0):
+        raise SystemExit('failed artifact retry_count must be null or a non-negative integer')
+    if completion_result is not None and (not isinstance(completion_result, int) or completion_result < 0):
+        raise SystemExit('failed artifact completion_result must be null or a non-negative integer')
+    if completion_bytes_completed is not None and (not isinstance(completion_bytes_completed, int) or completion_bytes_completed < 0):
+        raise SystemExit('failed artifact completion_bytes_completed must be null or a non-negative integer')
+    if completion_fault_addr is not None and (not isinstance(completion_fault_addr, str) or not re.fullmatch(r'0x[0-9a-f]+', completion_fault_addr)):
+        raise SystemExit('failed artifact completion_fault_addr must be null or a hex string')
 
     if error_kind == 'lifecycle_failure':
         if phase != 'async_lifecycle':
@@ -236,6 +270,8 @@ else:
             raise SystemExit('lifecycle-failure artifact lifecycle_failure_kind must be a non-empty string')
         if worker_failure_kind is not None:
             raise SystemExit('lifecycle-failure artifact worker_failure_kind must be null')
+        if direct_failure_kind is not None:
+            raise SystemExit('lifecycle-failure artifact direct_failure_kind must be null')
         if validation_phase is not None:
             raise SystemExit('lifecycle-failure artifact validation_phase must be null')
         if validation_error_kind is not None:
@@ -247,10 +283,29 @@ else:
             raise SystemExit('worker-failure artifact lifecycle_failure_kind must be null')
         if not isinstance(worker_failure_kind, str) or not worker_failure_kind:
             raise SystemExit('worker-failure artifact worker_failure_kind must be a non-empty string')
+        if direct_failure_kind is not None:
+            raise SystemExit('worker-failure artifact direct_failure_kind must be null')
         if validation_phase is not None:
             raise SystemExit('worker-failure artifact validation_phase must be null')
         if validation_error_kind is not None:
             raise SystemExit('worker-failure artifact validation_error_kind must be null')
+    elif error_kind == 'direct_failure':
+        if phase != 'async_direct':
+            raise SystemExit("direct-failure artifact phase must be 'async_direct'")
+        if lifecycle_failure_kind is not None:
+            raise SystemExit('direct-failure artifact lifecycle_failure_kind must be null')
+        if worker_failure_kind is not None:
+            raise SystemExit('direct-failure artifact worker_failure_kind must be null')
+        if not isinstance(direct_failure_kind, str) or not direct_failure_kind:
+            raise SystemExit('direct-failure artifact direct_failure_kind must be a non-empty string')
+        if not isinstance(retry_budget, int) or retry_budget < 0:
+            raise SystemExit('direct-failure artifact retry_budget must be a non-negative integer')
+        if not isinstance(retry_count, int) or retry_count < 0:
+            raise SystemExit('direct-failure artifact retry_count must be a non-negative integer')
+        if validation_phase is not None:
+            raise SystemExit('direct-failure artifact validation_phase must be null')
+        if validation_error_kind is not None:
+            raise SystemExit('direct-failure artifact validation_error_kind must be null')
     else:
         if lifecycle_failure_kind is not None:
             raise SystemExit('validation-failure artifact lifecycle_failure_kind must be null')
@@ -262,12 +317,20 @@ else:
             raise SystemExit('validation-failure artifact validation_error_kind must be a non-empty string')
         if worker_failure_kind is not None:
             raise SystemExit('validation-failure artifact worker_failure_kind must be null')
+        if direct_failure_kind is not None:
+            raise SystemExit('validation-failure artifact direct_failure_kind must be null')
 
 print(f"ok={str(ok).lower()}")
 print(f"phase={phase}")
 print(f"error_kind={error_kind if error_kind is not None else 'null'}")
 print(f"lifecycle_failure_kind={lifecycle_failure_kind if lifecycle_failure_kind is not None else 'null'}")
 print(f"worker_failure_kind={worker_failure_kind if worker_failure_kind is not None else 'null'}")
+print(f"direct_failure_kind={direct_failure_kind if direct_failure_kind is not None else 'null'}")
+print(f"retry_budget={retry_budget if retry_budget is not None else 'null'}")
+print(f"retry_count={retry_count if retry_count is not None else 'null'}")
+print(f"completion_result={completion_result if completion_result is not None else 'null'}")
+print(f"completion_bytes_completed={completion_bytes_completed if completion_bytes_completed is not None else 'null'}")
+print(f"completion_fault_addr={completion_fault_addr if completion_fault_addr is not None else 'null'}")
 print(f"validation_phase={validation_phase if validation_phase is not None else 'null'}")
 print(f"validation_error_kind={validation_error_kind if validation_error_kind is not None else 'null'}")
 print(f"requested_bytes={report['requested_bytes']}")
@@ -281,6 +344,12 @@ ARTIFACT_PHASE=
 ARTIFACT_ERROR_KIND=
 ARTIFACT_LIFECYCLE_FAILURE_KIND=
 ARTIFACT_WORKER_FAILURE_KIND=
+ARTIFACT_DIRECT_FAILURE_KIND=
+ARTIFACT_RETRY_BUDGET=
+ARTIFACT_RETRY_COUNT=
+ARTIFACT_COMPLETION_RESULT=
+ARTIFACT_COMPLETION_BYTES_COMPLETED=
+ARTIFACT_COMPLETION_FAULT_ADDR=
 ARTIFACT_VALIDATION_PHASE=
 ARTIFACT_VALIDATION_ERROR_KIND=
 ARTIFACT_REQUESTED_BYTES=
@@ -293,6 +362,12 @@ while IFS='=' read -r key value; do
     error_kind) ARTIFACT_ERROR_KIND=${value} ;;
     lifecycle_failure_kind) ARTIFACT_LIFECYCLE_FAILURE_KIND=${value} ;;
     worker_failure_kind) ARTIFACT_WORKER_FAILURE_KIND=${value} ;;
+    direct_failure_kind) ARTIFACT_DIRECT_FAILURE_KIND=${value} ;;
+    retry_budget) ARTIFACT_RETRY_BUDGET=${value} ;;
+    retry_count) ARTIFACT_RETRY_COUNT=${value} ;;
+    completion_result) ARTIFACT_COMPLETION_RESULT=${value} ;;
+    completion_bytes_completed) ARTIFACT_COMPLETION_BYTES_COMPLETED=${value} ;;
+    completion_fault_addr) ARTIFACT_COMPLETION_FAULT_ADDR=${value} ;;
     validation_phase) ARTIFACT_VALIDATION_PHASE=${value} ;;
     validation_error_kind) ARTIFACT_VALIDATION_ERROR_KIND=${value} ;;
     requested_bytes) ARTIFACT_REQUESTED_BYTES=${value} ;;
@@ -301,14 +376,14 @@ while IFS='=' read -r key value; do
   esac
 done <<< "${ARTIFACT_FIELDS}"
 
-log_phase artifact_validation "device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} phase=${ARTIFACT_PHASE} error_kind=${ARTIFACT_ERROR_KIND} async_lifecycle_failure_kind=${ARTIFACT_LIFECYCLE_FAILURE_KIND} async_worker_failure_kind=${ARTIFACT_WORKER_FAILURE_KIND} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} requested_bytes=${ARTIFACT_REQUESTED_BYTES}"
+log_phase artifact_validation "device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} phase=${ARTIFACT_PHASE} error_kind=${ARTIFACT_ERROR_KIND} async_lifecycle_failure_kind=${ARTIFACT_LIFECYCLE_FAILURE_KIND} async_worker_failure_kind=${ARTIFACT_WORKER_FAILURE_KIND} async_direct_failure_kind=${ARTIFACT_DIRECT_FAILURE_KIND} retry_budget=${ARTIFACT_RETRY_BUDGET} retry_count=${ARTIFACT_RETRY_COUNT} completion_result=${ARTIFACT_COMPLETION_RESULT} completion_bytes_completed=${ARTIFACT_COMPLETION_BYTES_COMPLETED} completion_fault_addr=${ARTIFACT_COMPLETION_FAULT_ADDR} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} requested_bytes=${ARTIFACT_REQUESTED_BYTES}"
 
 if [[ "${ARTIFACT_OK}" != "true" ]]; then
-  complete_with_explicit_failure runtime "device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} phase=${ARTIFACT_PHASE} error_kind=${ARTIFACT_ERROR_KIND} async_lifecycle_failure_kind=${ARTIFACT_LIFECYCLE_FAILURE_KIND} async_worker_failure_kind=${ARTIFACT_WORKER_FAILURE_KIND} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} requested_bytes=${ARTIFACT_REQUESTED_BYTES} page_fault_retries=${ARTIFACT_PAGE_FAULT_RETRIES} final_status=${ARTIFACT_FINAL_STATUS} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} message=async validation reported failure"
+  complete_with_explicit_failure runtime "device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} phase=${ARTIFACT_PHASE} error_kind=${ARTIFACT_ERROR_KIND} async_lifecycle_failure_kind=${ARTIFACT_LIFECYCLE_FAILURE_KIND} async_worker_failure_kind=${ARTIFACT_WORKER_FAILURE_KIND} async_direct_failure_kind=${ARTIFACT_DIRECT_FAILURE_KIND} retry_budget=${ARTIFACT_RETRY_BUDGET} retry_count=${ARTIFACT_RETRY_COUNT} completion_result=${ARTIFACT_COMPLETION_RESULT} completion_bytes_completed=${ARTIFACT_COMPLETION_BYTES_COMPLETED} completion_fault_addr=${ARTIFACT_COMPLETION_FAULT_ADDR} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} requested_bytes=${ARTIFACT_REQUESTED_BYTES} page_fault_retries=${ARTIFACT_PAGE_FAULT_RETRIES} final_status=${ARTIFACT_FINAL_STATUS} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} message=async validation reported failure"
 fi
 
 if [[ "${RUN_EXIT}" -ne 0 ]]; then
-  fail_phase runtime "device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} phase=${ARTIFACT_PHASE} error_kind=${ARTIFACT_ERROR_KIND} async_lifecycle_failure_kind=${ARTIFACT_LIFECYCLE_FAILURE_KIND} async_worker_failure_kind=${ARTIFACT_WORKER_FAILURE_KIND} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} requested_bytes=${ARTIFACT_REQUESTED_BYTES} page_fault_retries=${ARTIFACT_PAGE_FAULT_RETRIES} final_status=${ARTIFACT_FINAL_STATUS} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} message=async validation exited non-zero despite a success artifact"
+  fail_phase runtime "device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} phase=${ARTIFACT_PHASE} error_kind=${ARTIFACT_ERROR_KIND} async_lifecycle_failure_kind=${ARTIFACT_LIFECYCLE_FAILURE_KIND} async_worker_failure_kind=${ARTIFACT_WORKER_FAILURE_KIND} async_direct_failure_kind=${ARTIFACT_DIRECT_FAILURE_KIND} retry_budget=${ARTIFACT_RETRY_BUDGET} retry_count=${ARTIFACT_RETRY_COUNT} completion_result=${ARTIFACT_COMPLETION_RESULT} completion_bytes_completed=${ARTIFACT_COMPLETION_BYTES_COMPLETED} completion_fault_addr=${ARTIFACT_COMPLETION_FAULT_ADDR} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} requested_bytes=${ARTIFACT_REQUESTED_BYTES} page_fault_retries=${ARTIFACT_PAGE_FAULT_RETRIES} final_status=${ARTIFACT_FINAL_STATUS} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} message=async validation exited non-zero despite a success artifact"
 fi
 
-log_phase done "device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} requested_bytes=${ARTIFACT_REQUESTED_BYTES} page_fault_retries=${ARTIFACT_PAGE_FAULT_RETRIES} final_status=${ARTIFACT_FINAL_STATUS} phase=${ARTIFACT_PHASE} error_kind=${ARTIFACT_ERROR_KIND} async_lifecycle_failure_kind=${ARTIFACT_LIFECYCLE_FAILURE_KIND} async_worker_failure_kind=${ARTIFACT_WORKER_FAILURE_KIND} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} verdict=pass"
+log_phase done "device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} requested_bytes=${ARTIFACT_REQUESTED_BYTES} page_fault_retries=${ARTIFACT_PAGE_FAULT_RETRIES} final_status=${ARTIFACT_FINAL_STATUS} phase=${ARTIFACT_PHASE} error_kind=${ARTIFACT_ERROR_KIND} async_lifecycle_failure_kind=${ARTIFACT_LIFECYCLE_FAILURE_KIND} async_worker_failure_kind=${ARTIFACT_WORKER_FAILURE_KIND} async_direct_failure_kind=${ARTIFACT_DIRECT_FAILURE_KIND} retry_budget=${ARTIFACT_RETRY_BUDGET} retry_count=${ARTIFACT_RETRY_COUNT} completion_result=${ARTIFACT_COMPLETION_RESULT} completion_bytes_completed=${ARTIFACT_COMPLETION_BYTES_COMPLETED} completion_fault_addr=${ARTIFACT_COMPLETION_FAULT_ADDR} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} verdict=pass"

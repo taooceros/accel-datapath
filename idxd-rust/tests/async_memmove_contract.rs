@@ -831,3 +831,122 @@ async fn concurrent_direct_requests_complete_out_of_order() {
         .expect("first request should succeed");
     assert_eq!(first_result.destination.as_ref(), b"first");
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn retry_completion_resubmits_and_preserves_final_retry_metadata() {
+    let backend = ScriptedDirectBackend::new();
+    let runtime = DirectAsyncMemmoveRuntime::new(direct_config(), backend.clone());
+
+    let mut destination = BytesMut::from(&b"prefix:"[..]);
+    destination.reserve(6);
+    let request = AsyncMemmoveRequest::new(Bytes::from_static(b"retry"), destination)
+        .expect("request should validate");
+    let pending = tokio::spawn({
+        let runtime = runtime.clone();
+        async move { runtime.memmove(request).await }
+    });
+
+    tokio::task::yield_now().await;
+    assert_eq!(backend.submissions(), 1);
+    backend.complete(1, CompletionSnapshot::new(DSA_COMP_PAGE_FAULT_NOBOF, 0, 2, 0x1000));
+
+    timeout(Duration::from_secs(1), async {
+        while backend.submissions() < 2 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("retry should submit a continuation descriptor");
+
+    backend.complete(1, CompletionSnapshot::new(DSA_COMP_SUCCESS, 0, 0, 0));
+    let result = timeout(Duration::from_secs(1), pending)
+        .await
+        .expect("retry success should resolve")
+        .expect("direct task should not panic")
+        .expect("retry success should produce a result");
+
+    assert_eq!(result.destination.as_ref(), b"prefix:retry");
+    assert_eq!(result.report.requested_bytes, 5);
+    assert_eq!(result.report.page_fault_retries, 1);
+    assert_eq!(result.report.final_status, DSA_COMP_SUCCESS);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn retry_continuation_backpressure_reports_snapshot_and_recovers_buffers() {
+    let backend = ScriptedDirectBackend::with_submissions([
+        EnqcmdSubmission::Accepted,
+        EnqcmdSubmission::Rejected,
+        EnqcmdSubmission::Rejected,
+    ]);
+    let runtime =
+        DirectAsyncMemmoveRuntime::with_submission_retry_budget(direct_config(), backend.clone(), 1);
+
+    let pending = tokio::spawn({
+        let runtime = runtime.clone();
+        async move { runtime.memmove(owned_mut_request(b"retry-secret")).await }
+    });
+
+    tokio::task::yield_now().await;
+    backend.complete(1, CompletionSnapshot::new(DSA_COMP_PAGE_FAULT_NOBOF, 0, 5, 0xfeed));
+
+    let err = timeout(Duration::from_secs(1), pending)
+        .await
+        .expect("continuation backpressure should resolve")
+        .expect("direct task should not panic")
+        .expect_err("retry submit budget should fail");
+
+    assert_eq!(err.kind(), "backpressure_exceeded");
+    let failure = err.direct_failure().expect("direct failure metadata");
+    assert_eq!(failure.retry_budget(), 1);
+    assert_eq!(failure.retry_count(), 1);
+    assert_eq!(failure.requested_bytes(), 12);
+    let snapshot = failure
+        .completion_snapshot()
+        .expect("retry failure should retain the page-fault snapshot");
+    assert_eq!(snapshot.status, DSA_COMP_PAGE_FAULT_NOBOF);
+    assert_eq!(snapshot.bytes_completed, 5);
+    assert_eq!(snapshot.fault_addr, 0xfeed);
+    let recovered = err.into_request().expect("safe retry failure should recover buffers");
+    let (source, destination) = recovered.into_parts();
+    assert_eq!(source.as_ref(), b"retry-secret");
+    assert_eq!(destination.len(), 0);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn post_copy_mismatch_preserves_destination_length_safety() {
+    let backend = ScriptedDirectBackend::zero_success_copy();
+    let runtime = DirectAsyncMemmoveRuntime::new(direct_config(), backend.clone());
+
+    let mut destination = BytesMut::from(&b"prefix:"[..]);
+    destination.reserve(4);
+    let request = AsyncMemmoveRequest::new(Bytes::from_static(b"data"), destination)
+        .expect("request should validate");
+    let pending = tokio::spawn({
+        let runtime = runtime.clone();
+        async move { runtime.memmove(request).await }
+    });
+
+    tokio::task::yield_now().await;
+    backend.complete(1, CompletionSnapshot::new(DSA_COMP_SUCCESS, 0, 0, 0));
+
+    let err = timeout(Duration::from_secs(1), pending)
+        .await
+        .expect("post-copy mismatch should resolve")
+        .expect("direct task should not panic")
+        .expect_err("zero-filled destination should fail verification");
+
+    assert_eq!(err.kind(), "byte_mismatch");
+    assert!(matches!(
+        err.memmove_error(),
+        Some(MemmoveError::ByteMismatch {
+            phase: MemmovePhase::PostCopyVerify,
+            requested_bytes: 4,
+            final_status: DSA_COMP_SUCCESS,
+            ..
+        })
+    ));
+    assert!(
+        err.into_request().is_none(),
+        "accepted terminal hardware failures must not pretend buffers are reusable"
+    );
+}

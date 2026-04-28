@@ -420,7 +420,7 @@ where
 
         for operation in operations {
             if let Some(snapshot) = operation.completion_snapshot(&inner.backend) {
-                let terminal = operation.handle_snapshot(&inner, snapshot);
+                let terminal = operation.handle_snapshot(&inner, snapshot).await;
                 if terminal {
                     inner
                         .pending
@@ -443,6 +443,7 @@ struct PendingOperation {
     source: Mutex<Option<Bytes>>,
     destination: Mutex<Option<BytesMut>>,
     state: Mutex<DirectMemmoveState>,
+    last_snapshot: Mutex<Option<CompletionSnapshot>>,
     reply_tx: Mutex<Option<oneshot::Sender<Result<AsyncMemmoveResult, AsyncMemmoveError>>>>,
 }
 
@@ -494,6 +495,7 @@ impl PendingOperation {
             source: Mutex::new(Some(source)),
             destination: Mutex::new(Some(destination)),
             state: Mutex::new(state),
+            last_snapshot: Mutex::new(None),
             reply_tx: Mutex::new(Some(reply_tx)),
         })
     }
@@ -518,10 +520,16 @@ impl PendingOperation {
         backend.completion_snapshot(self.id, &state)
     }
 
-    fn handle_snapshot<B>(&self, inner: &RuntimeInner<B>, snapshot: CompletionSnapshot) -> bool
+    async fn handle_snapshot<B>(
+        &self,
+        inner: &RuntimeInner<B>,
+        snapshot: CompletionSnapshot,
+    ) -> bool
     where
         B: DirectMemmoveBackend,
     {
+        *self.last_snapshot.lock().expect("snapshot lock poisoned") = Some(snapshot);
+
         let action = {
             let state = self.state.lock().expect("direct memmove state poisoned");
             state.classify_snapshot(&self.config, snapshot)
@@ -537,8 +545,16 @@ impl PendingOperation {
                     let mut state = self.state.lock().expect("direct memmove state poisoned");
                     touch_fault_page(state.completion());
                     state.apply_retry(retry);
+                    state.reset_and_fill_descriptor();
                 }
-                false
+
+                match self.submit_continuation(inner).await {
+                    Ok(()) => false,
+                    Err(error) => {
+                        self.finish(Err(error));
+                        true
+                    }
+                }
             }
             Err(error) => {
                 self.finish(Err(AsyncMemmoveError::Memmove {
@@ -546,6 +562,53 @@ impl PendingOperation {
                     request: self.recover_request(),
                 }));
                 true
+            }
+        }
+    }
+
+    async fn submit_continuation<B>(&self, inner: &RuntimeInner<B>) -> Result<(), AsyncMemmoveError>
+    where
+        B: DirectMemmoveBackend,
+    {
+        let mut rejected = 0;
+        loop {
+            if inner.closed.load(Ordering::Acquire) {
+                return Err(AsyncMemmoveError::DirectFailure {
+                    failure: AsyncDirectFailure::new(
+                        AsyncDirectFailureKind::MonitorClosed,
+                        self.requested_bytes,
+                        inner.submission_retry_budget,
+                        self.retry_count(),
+                        self.snapshot_for_error(),
+                    ),
+                    request: self.recover_request(),
+                });
+            }
+
+            let submission =
+                self.with_descriptor(|descriptor| inner.backend.submit(self.id, descriptor));
+            match submission {
+                EnqcmdSubmission::Accepted => return Ok(()),
+                EnqcmdSubmission::Rejected => {
+                    rejected += 1;
+                    if rejected > inner.submission_retry_budget {
+                        return Err(AsyncMemmoveError::DirectFailure {
+                            failure: AsyncDirectFailure::new(
+                                AsyncDirectFailureKind::BackpressureExceeded,
+                                self.requested_bytes,
+                                inner.submission_retry_budget,
+                                self.retry_count(),
+                                self.snapshot_for_error(),
+                            ),
+                            request: self.recover_request(),
+                        });
+                    }
+                    if rejected % 4 == 0 {
+                        tokio::time::sleep(SUBMISSION_BACKOFF).await;
+                    } else {
+                        tokio::task::yield_now().await;
+                    }
+                }
             }
         }
     }
@@ -576,14 +639,6 @@ impl PendingOperation {
                 .initialize_success_destination(self.id, dst, &source);
         }
 
-        // SAFETY: Terminal success means hardware or the test backend has
-        // initialized exactly `requested_bytes` bytes in the destination spare
-        // capacity. Request construction and registration validated that this
-        // spare range is in bounds.
-        unsafe {
-            destination.set_len(original_len + self.requested_bytes);
-        }
-
         let report = {
             let state = self.state.lock().expect("direct memmove state poisoned");
             state.success_report(inner.config.device_path(), final_status)
@@ -591,13 +646,31 @@ impl PendingOperation {
 
         let result = report
             .and_then(|report| {
+                // SAFETY: Terminal success means hardware or the test backend has
+                // initialized exactly `requested_bytes` bytes in the destination
+                // spare capacity. The slice is used only for validation, and the
+                // destination length is advanced only after validation succeeds.
+                let initialized_dst = unsafe {
+                    std::slice::from_raw_parts(
+                        destination.as_ptr().add(original_len),
+                        self.requested_bytes,
+                    )
+                };
                 verify_initialized_destination(
                     &inner.config,
                     MemmoveRequest::new(self.requested_bytes)?,
                     &report,
-                    &destination[original_len..],
+                    initialized_dst,
                     &source,
                 )?;
+
+                // SAFETY: Post-copy verification above read exactly the
+                // initialized bytes written by the terminally successful
+                // operation, so exposing the appended range is now safe.
+                unsafe {
+                    destination.set_len(original_len + self.requested_bytes);
+                }
+
                 Ok(AsyncMemmoveResult {
                     destination,
                     report,
@@ -609,6 +682,17 @@ impl PendingOperation {
             });
 
         self.finish(result);
+    }
+
+    fn retry_count(&self) -> u32 {
+        self.state
+            .lock()
+            .expect("direct memmove state poisoned")
+            .retries()
+    }
+
+    fn snapshot_for_error(&self) -> Option<CompletionSnapshot> {
+        *self.last_snapshot.lock().expect("snapshot lock poisoned")
     }
 
     fn finish(&self, result: Result<AsyncMemmoveResult, AsyncMemmoveError>) {
@@ -697,6 +781,15 @@ pub mod test_support {
                 .expect("snapshot lock poisoned")
                 .remove(&op_id);
         }
+
+        pub fn zero_success_copy() -> Self {
+            Self {
+                inner: Arc::new(ScriptedInner {
+                    copy_on_success: false,
+                    ..ScriptedInner::default()
+                }),
+            }
+        }
     }
 
     impl Default for ScriptedDirectBackend {
@@ -725,14 +818,16 @@ pub mod test_support {
                 .snapshots
                 .lock()
                 .expect("snapshot lock poisoned")
-                .get(&op_id)
-                .copied()
+                .remove(&op_id)
         }
 
         fn initialize_success_destination(&self, _op_id: u64, dst: &mut UninitSlice, src: &[u8]) {
             self.inner.completions.fetch_add(1, Ordering::SeqCst);
             if self.inner.copy_on_success {
                 dst.copy_from_slice(src);
+            } else {
+                let zeros = vec![0; src.len()];
+                dst.copy_from_slice(&zeros);
             }
         }
     }

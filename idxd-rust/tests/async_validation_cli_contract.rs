@@ -105,6 +105,12 @@ fn reports_queue_open_failure_as_stable_async_json_schema() {
     assert!(stdout.contains("\"error_kind\":\"validation_failure\""));
     assert!(stdout.contains("\"lifecycle_failure_kind\":null"));
     assert!(stdout.contains("\"worker_failure_kind\":null"));
+    assert!(stdout.contains("\"direct_failure_kind\":null"));
+    assert!(stdout.contains("\"retry_budget\":null"));
+    assert!(stdout.contains("\"retry_count\":null"));
+    assert!(stdout.contains("\"completion_result\":null"));
+    assert!(stdout.contains("\"completion_bytes_completed\":null"));
+    assert!(stdout.contains("\"completion_fault_addr\":null"));
     assert!(stdout.contains("\"validation_phase\":\"queue_open\""));
     assert!(stdout.contains("\"validation_error_kind\":\"queue_open\""));
     assert!(
@@ -135,6 +141,12 @@ fn reports_owner_shutdown_as_distinct_lifecycle_failure_in_json() {
     assert!(stdout.contains("\"error_kind\":\"lifecycle_failure\""));
     assert!(stdout.contains("\"lifecycle_failure_kind\":\"owner_shutdown\""));
     assert!(stdout.contains("\"worker_failure_kind\":null"));
+    assert!(stdout.contains("\"direct_failure_kind\":null"));
+    assert!(stdout.contains("\"retry_budget\":null"));
+    assert!(stdout.contains("\"retry_count\":null"));
+    assert!(stdout.contains("\"completion_result\":null"));
+    assert!(stdout.contains("\"completion_bytes_completed\":null"));
+    assert!(stdout.contains("\"completion_fault_addr\":null"));
     assert!(stdout.contains("\"validation_phase\":null"));
     assert!(stdout.contains("\"validation_error_kind\":null"));
     assert!(stdout.contains("async memmove lifecycle failure: owner_shutdown"));
@@ -163,6 +175,12 @@ fn reports_worker_failure_without_lifecycle_fields_in_json() {
     assert!(stdout.contains("\"error_kind\":\"worker_failure\""));
     assert!(stdout.contains("\"lifecycle_failure_kind\":null"));
     assert!(stdout.contains("\"worker_failure_kind\":\"response_channel_closed\""));
+    assert!(stdout.contains("\"direct_failure_kind\":null"));
+    assert!(stdout.contains("\"retry_budget\":null"));
+    assert!(stdout.contains("\"retry_count\":null"));
+    assert!(stdout.contains("\"completion_result\":null"));
+    assert!(stdout.contains("\"completion_bytes_completed\":null"));
+    assert!(stdout.contains("\"completion_fault_addr\":null"));
     assert!(stdout.contains("\"validation_phase\":null"));
     assert!(stdout.contains("\"validation_error_kind\":null"));
     assert!(stdout.contains("async memmove worker failure: response_channel_closed"));
@@ -191,8 +209,15 @@ fn preserves_wrapped_validation_failure_metadata_in_json() {
     assert!(stdout.contains("\"error_kind\":\"validation_failure\""));
     assert!(stdout.contains("\"lifecycle_failure_kind\":null"));
     assert!(stdout.contains("\"worker_failure_kind\":null"));
+    assert!(stdout.contains("\"direct_failure_kind\":null"));
+    assert!(stdout.contains("\"retry_budget\":null"));
+    assert!(stdout.contains("\"completion_result\":null"));
+    assert!(stdout.contains("\"completion_bytes_completed\":null"));
+    assert!(stdout.contains("\"completion_fault_addr\":null"));
     assert!(stdout.contains("\"validation_phase\":\"completion_poll\""));
     assert!(stdout.contains("\"validation_error_kind\":\"completion_timeout\""));
+    assert!(stdout.contains("\"retry_budget\":null"));
+    assert!(stdout.contains("\"retry_count\":2"));
     assert!(stdout.contains("\"page_fault_retries\":2"));
     assert!(stdout.contains("\"final_status\":null"));
 }
@@ -228,10 +253,18 @@ fn supports_minimal_valid_request_and_writes_matching_artifact() {
     assert!(artifact.contains("\"error_kind\":null"));
     assert!(artifact.contains("\"lifecycle_failure_kind\":null"));
     assert!(artifact.contains("\"worker_failure_kind\":null"));
+    assert!(artifact.contains("\"direct_failure_kind\":null"));
+    assert!(artifact.contains("\"retry_budget\":0"));
+    assert!(artifact.contains("\"retry_count\":0"));
+    assert!(artifact.contains("\"completion_result\":null"));
+    assert!(artifact.contains("\"completion_bytes_completed\":null"));
+    assert!(artifact.contains("\"completion_fault_addr\":null"));
     assert!(artifact.contains("\"validation_phase\":\"completed\""));
     assert!(artifact.contains("\"validation_error_kind\":null"));
     assert!(artifact.contains("\"final_status\":\"0x01\""));
-    assert!(artifact.contains("verified 1 copied bytes via async wrapper on /dev/dsa/test0.0"));
+    assert!(
+        artifact.contains("verified 1 copied bytes via direct async memmove on /dev/dsa/test0.0")
+    );
 
     fs::remove_file(&artifact_path).expect("artifact cleanup should succeed");
 }
