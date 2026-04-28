@@ -81,6 +81,8 @@ IDXD_RUST_VERIFY_BACKEND=software bash idxd-rust/scripts/verify_tokio_memmove_be
 
 Software diagnostic artifacts are deliberately marked `claim_eligible=false`. They prove the benchmark contract and async control flow, not hardware acceleration. S04 hardware evidence must come from `backend=hardware`, `claim_eligible=true`, direct async rows, and the paired `direct_sync` comparison row.
 
+Future worker-runtime planners should read the S05 worker-readiness handoff at `docs/report/architecture/010.worker_runtime_readiness_handoff.md` before treating M007 as execution or claim evidence. M007 is planning-ready for worker batching, MOVDIR64/MOVDIR64B, registry/pool, and Tonic/RPC work; execution readiness and claim readiness still require prepared-host verifier evidence.
+
 Use the downstream async-handle proof path when you need to prove that a repo-local package outside `idxd-rust` can consume the public async owner/handle API from ordinary Tokio code:
 
 ```bash
