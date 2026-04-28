@@ -17,6 +17,7 @@
 //! explicit at the call site.
 
 mod async_session;
+mod direct_memmove;
 mod validation;
 
 pub use async_session::{
@@ -33,9 +34,8 @@ pub use validation::{
 use std::path::Path;
 
 use bytes::buf::UninitSlice;
-use idxd_sys::{
-    DsaCompletionRecord, DsaHwDesc, WqPortal, poll_completion, reset_completion, touch_fault_page,
-};
+use direct_memmove::{DirectMemmoveState, verify_initialized_destination};
+use idxd_sys::{WqPortal, poll_completion, touch_fault_page};
 
 /// Thin reusable session over one mapped DSA work queue.
 pub struct DsaSession {
@@ -88,21 +88,7 @@ impl DsaSession {
     ) -> Result<MemmoveValidationReport, MemmoveError> {
         let request = MemmoveRequest::for_buffers(dst.len(), src.len())?;
         let report = self.memmove_inner(dst.as_mut_ptr(), src.as_ptr(), request)?;
-
-        if let Some(mismatch_offset) = dst
-            .iter()
-            .zip(src.iter())
-            .position(|(actual, expected)| actual != expected)
-        {
-            return Err(MemmoveError::ByteMismatch {
-                device_path: self.device_path().to_path_buf(),
-                phase: MemmovePhase::PostCopyVerify,
-                requested_bytes: request.len(),
-                mismatch_offset,
-                final_status: report.final_status,
-                page_fault_retries: report.page_fault_retries,
-            });
-        }
+        verify_initialized_destination(self.validation_config(), request, &report, dst, src)?;
 
         Ok(report)
     }
@@ -122,20 +108,13 @@ impl DsaSession {
         // success so the bytes are initialized for post-copy verification.
         let initialized_dst =
             unsafe { std::slice::from_raw_parts(dst.as_mut_ptr(), request.len()) };
-        if let Some(mismatch_offset) = initialized_dst
-            .iter()
-            .zip(src.iter())
-            .position(|(actual, expected)| actual != expected)
-        {
-            return Err(MemmoveError::ByteMismatch {
-                device_path: self.device_path().to_path_buf(),
-                phase: MemmovePhase::PostCopyVerify,
-                requested_bytes: request.len(),
-                mismatch_offset,
-                final_status: report.final_status,
-                page_fault_retries: report.page_fault_retries,
-            });
-        }
+        verify_initialized_destination(
+            self.validation_config(),
+            request,
+            &report,
+            initialized_dst,
+            src,
+        )?;
 
         Ok(report)
     }
@@ -146,73 +125,31 @@ impl DsaSession {
         src: *const u8,
         request: MemmoveRequest,
     ) -> Result<MemmoveValidationReport, MemmoveError> {
-        let mut state = PendingMemmove::new(src, dst, request);
-        let mut retries = 0;
+        // SAFETY: `DsaSession::memmove` and `memmove_uninit` validated that the
+        // source and destination ranges cover `request.len()` bytes. Both calls
+        // keep those buffers borrowed for this entire synchronous operation, so
+        // the descriptor and completion record inside `state` cannot outlive the
+        // memory referenced by hardware.
+        let mut state = unsafe { DirectMemmoveState::new(src, dst, request) };
 
         loop {
-            let mut desc = DsaHwDesc::default();
-            let mut comp = DsaCompletionRecord::default();
-            reset_completion(&mut comp);
-            state.fill_descriptor(&mut desc, &mut comp);
+            state.reset_and_fill_descriptor();
 
             unsafe {
-                self.portal.submit(&desc);
+                self.portal.submit(state.descriptor());
             }
 
-            let polled_status = poll_completion(&comp);
-            let snapshot = CompletionSnapshot::from_record(&comp, polled_status);
-            match classify_memmove_completion(
-                self.validation_config(),
-                state.remaining(),
-                snapshot,
-                retries,
-            )? {
+            let polled_status = poll_completion(state.completion());
+            let snapshot = CompletionSnapshot::from_record(state.completion(), polled_status);
+            match state.classify_snapshot(self.validation_config(), snapshot)? {
                 CompletionAction::Success => {
-                    return MemmoveValidationReport::new(
-                        self.device_path(),
-                        request,
-                        retries,
-                        snapshot.status,
-                    );
+                    return state.success_report(self.device_path(), snapshot.status);
                 }
                 CompletionAction::Retry(retry) => {
-                    touch_fault_page(&comp);
+                    touch_fault_page(state.completion());
                     state.apply_retry(retry);
-                    retries += 1;
                 }
             }
         }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct PendingMemmove {
-    src: *const u8,
-    dst: *mut u8,
-    remaining: u32,
-}
-
-impl PendingMemmove {
-    fn new(src: *const u8, dst: *mut u8, request: MemmoveRequest) -> Self {
-        Self {
-            src,
-            dst,
-            remaining: request.len() as u32,
-        }
-    }
-
-    fn remaining(&self) -> usize {
-        self.remaining as usize
-    }
-
-    fn fill_descriptor(&self, desc: &mut DsaHwDesc, comp: &mut DsaCompletionRecord) {
-        desc.fill_memmove(self.src, self.dst, self.remaining);
-        desc.set_completion(comp);
-    }
-
-    fn apply_retry(&mut self, retry: MemmoveRetry) {
-        self.src = self.src.wrapping_add(retry.next_src_offset);
-        self.dst = self.dst.wrapping_add(retry.next_dst_offset);
-        self.remaining = retry.remaining_bytes as u32;
     }
 }
