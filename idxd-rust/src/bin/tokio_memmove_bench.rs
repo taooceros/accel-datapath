@@ -13,7 +13,8 @@ use std::time::{Duration, Instant};
 use bytes::{Bytes, BytesMut, buf::UninitSlice};
 use idxd_rust::{
     AsyncDsaHandle, AsyncDsaSession, AsyncMemmoveError, AsyncMemmoveRequest, DEFAULT_DEVICE_PATH,
-    DirectMemmoveBackend, MemmoveRequest, MemmoveValidationConfig,
+    DEFAULT_MAX_PAGE_FAULT_RETRIES, DirectMemmoveBackend, DsaSession, MemmoveError, MemmovePhase,
+    MemmoveRequest, MemmoveValidationConfig,
 };
 use idxd_sys::{DSA_COMP_SUCCESS, DsaHwDesc, EnqcmdSubmission};
 use serde::Serialize;
@@ -25,6 +26,8 @@ const MAX_ITERATIONS: u64 = 1_000_000;
 const MAX_CONCURRENCY: u32 = 4096;
 const MAX_DURATION_MS: u64 = 60_000;
 const SOFTWARE_TARGET: &str = "software_direct_async_diagnostic";
+const HARDWARE_ASYNC_TARGET: &str = "direct_async";
+const HARDWARE_SYNC_TARGET: &str = "direct_sync";
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
@@ -283,6 +286,12 @@ struct BenchmarkArtifact {
     direct_failure_kind: Option<&'static str>,
     validation_phase: Option<&'static str>,
     validation_error_kind: Option<&'static str>,
+    direct_retry_budget: Option<u32>,
+    direct_retry_count: Option<u32>,
+    completion_status: Option<String>,
+    completion_result: Option<u8>,
+    completion_bytes_completed: Option<u32>,
+    completion_fault_addr: Option<String>,
     results: Vec<BenchmarkResult>,
 }
 
@@ -309,6 +318,12 @@ struct BenchmarkResult {
     direct_failure_kind: Option<&'static str>,
     validation_phase: Option<&'static str>,
     validation_error_kind: Option<&'static str>,
+    direct_retry_budget: Option<u32>,
+    direct_retry_count: Option<u32>,
+    completion_status: Option<String>,
+    completion_result: Option<u8>,
+    completion_bytes_completed: Option<u32>,
+    completion_fault_addr: Option<String>,
     claim_eligible: bool,
 }
 
@@ -360,13 +375,19 @@ impl DirectMemmoveBackend for SoftwareDirectBackend {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct RowFailure {
     failure_class: &'static str,
     error_kind: &'static str,
     direct_failure_kind: Option<&'static str>,
     validation_phase: Option<&'static str>,
     validation_error_kind: Option<&'static str>,
+    direct_retry_budget: Option<u32>,
+    direct_retry_count: Option<u32>,
+    completion_status: Option<String>,
+    completion_result: Option<u8>,
+    completion_bytes_completed: Option<u32>,
+    completion_fault_addr: Option<String>,
 }
 
 impl RowFailure {
@@ -377,17 +398,30 @@ impl RowFailure {
             direct_failure_kind: None,
             validation_phase: Some("request_construction"),
             validation_error_kind: Some(error_kind),
+            direct_retry_budget: None,
+            direct_retry_count: None,
+            completion_status: None,
+            completion_result: None,
+            completion_bytes_completed: None,
+            completion_fault_addr: None,
         }
     }
 
     fn async_error(error: &AsyncMemmoveError) -> Self {
         let direct_failure_kind = error.direct_failure_kind().map(|kind| kind.as_str());
+        let direct_failure = error.direct_failure();
+        let completion_snapshot = direct_failure.and_then(|failure| failure.completion_snapshot());
         let failure_class = if direct_failure_kind.is_some() {
             "async_direct"
         } else if error.lifecycle_failure_kind().is_some() {
             "async_lifecycle"
         } else if error.worker_failure_kind().is_some() {
             "async_worker"
+        } else if error
+            .memmove_error()
+            .is_some_and(|err| err.kind() == "queue_open")
+        {
+            "queue_open"
         } else {
             "memmove"
         };
@@ -395,8 +429,34 @@ impl RowFailure {
             failure_class,
             error_kind: error.kind(),
             direct_failure_kind,
-            validation_phase: None,
-            validation_error_kind: None,
+            validation_phase: error
+                .memmove_error()
+                .and_then(|err| err.phase())
+                .map(phase_name),
+            validation_error_kind: error.memmove_error().map(|err| err.kind()),
+            direct_retry_budget: direct_failure.map(|failure| failure.retry_budget()),
+            direct_retry_count: direct_failure.map(|failure| failure.retry_count()),
+            completion_status: completion_snapshot.map(|snapshot| hex_status(snapshot.status)),
+            completion_result: completion_snapshot.map(|snapshot| snapshot.result),
+            completion_bytes_completed: completion_snapshot
+                .map(|snapshot| snapshot.bytes_completed),
+            completion_fault_addr: completion_snapshot.map(|snapshot| hex_u64(snapshot.fault_addr)),
+        }
+    }
+
+    fn sync_error(error: &MemmoveError, failure_class: &'static str) -> Self {
+        Self {
+            failure_class,
+            error_kind: error.kind(),
+            direct_failure_kind: None,
+            validation_phase: error.phase().map(phase_name),
+            validation_error_kind: Some(error.kind()),
+            direct_retry_budget: None,
+            direct_retry_count: error.page_fault_retries(),
+            completion_status: error.final_status().map(hex_status),
+            completion_result: None,
+            completion_bytes_completed: None,
+            completion_fault_addr: None,
         }
     }
 
@@ -407,6 +467,12 @@ impl RowFailure {
             direct_failure_kind: None,
             validation_phase: None,
             validation_error_kind: None,
+            direct_retry_budget: None,
+            direct_retry_count: None,
+            completion_status: None,
+            completion_result: None,
+            completion_bytes_completed: None,
+            completion_fault_addr: None,
         }
     }
 }
@@ -436,7 +502,7 @@ impl ModeStats {
 async fn execute(args: &CliArgs) -> BenchmarkArtifact {
     match args.backend {
         Backend::Software => software_artifact(args).await,
-        Backend::Hardware => hardware_preflight_artifact(args),
+        Backend::Hardware => hardware_artifact(args).await,
     }
 }
 
@@ -472,7 +538,8 @@ async fn software_artifact(args: &CliArgs) -> BenchmarkArtifact {
 
     let mut results = Vec::with_capacity(args.suite.modes().len());
     for mode in args.suite.modes() {
-        results.push(run_software_mode(args, handle.clone(), *mode).await);
+        results
+            .push(run_async_mode(args, handle.clone(), *mode, SOFTWARE_TARGET, None, false).await);
     }
 
     drop(session);
@@ -501,6 +568,14 @@ async fn software_artifact(args: &CliArgs) -> BenchmarkArtifact {
         direct_failure_kind: first_failure.and_then(|result| result.direct_failure_kind),
         validation_phase: first_failure.and_then(|result| result.validation_phase),
         validation_error_kind: first_failure.and_then(|result| result.validation_error_kind),
+        direct_retry_budget: first_failure.and_then(|result| result.direct_retry_budget),
+        direct_retry_count: first_failure.and_then(|result| result.direct_retry_count),
+        completion_status: first_failure.and_then(|result| result.completion_status.clone()),
+        completion_result: first_failure.and_then(|result| result.completion_result),
+        completion_bytes_completed: first_failure
+            .and_then(|result| result.completion_bytes_completed),
+        completion_fault_addr: first_failure
+            .and_then(|result| result.completion_fault_addr.clone()),
         results,
     }
 }
@@ -532,14 +607,23 @@ fn top_level_failure_artifact(
         direct_failure_kind: None,
         validation_phase,
         validation_error_kind,
+        direct_retry_budget: None,
+        direct_retry_count: None,
+        completion_status: None,
+        completion_result: None,
+        completion_bytes_completed: None,
+        completion_fault_addr: None,
         results: Vec::new(),
     }
 }
 
-async fn run_software_mode(
+async fn run_async_mode(
     args: &CliArgs,
     handle: AsyncDsaHandle,
     mode: BenchmarkMode,
+    target: &'static str,
+    comparison_target: Option<&'static str>,
+    claim_eligible: bool,
 ) -> BenchmarkResult {
     let start = Instant::now();
     let stats = match mode {
@@ -552,7 +636,14 @@ async fn run_software_mode(
         }
     };
     let elapsed_ns = start.elapsed().as_nanos().max(1);
-    stats.into_result(args, mode, elapsed_ns)
+    stats.into_result(
+        args,
+        mode,
+        target,
+        comparison_target,
+        claim_eligible,
+        elapsed_ns,
+    )
 }
 
 async fn single_latency(handle: AsyncDsaHandle, bytes: usize, iterations: u64) -> ModeStats {
@@ -651,7 +742,15 @@ fn deterministic_source(bytes: usize, seed: u64) -> Vec<u8> {
 }
 
 impl ModeStats {
-    fn into_result(self, args: &CliArgs, mode: BenchmarkMode, elapsed_ns: u128) -> BenchmarkResult {
+    fn into_result(
+        self,
+        args: &CliArgs,
+        mode: BenchmarkMode,
+        target: &'static str,
+        comparison_target: Option<&'static str>,
+        claim_eligible: bool,
+        elapsed_ns: u128,
+    ) -> BenchmarkResult {
         let simulated_bytes = self.completed.saturating_mul(args.bytes as u64);
         let ops_per_sec = rate_per_second(self.completed, elapsed_ns);
         let bytes_per_sec = rate_per_second(simulated_bytes, elapsed_ns);
@@ -662,12 +761,12 @@ impl ModeStats {
         } else {
             Some(self.latencies_ns.iter().copied().sum::<u128>() / self.latencies_ns.len() as u128)
         };
-        let first_failure = self.first_failure;
+        let first_failure = self.first_failure.as_ref();
 
         BenchmarkResult {
             mode: mode.as_str(),
-            target: SOFTWARE_TARGET,
-            comparison_target: None,
+            target,
+            comparison_target,
             requested_bytes: args.bytes,
             iterations: args.iterations,
             concurrency: args.concurrency,
@@ -690,7 +789,15 @@ impl ModeStats {
             direct_failure_kind: first_failure.and_then(|failure| failure.direct_failure_kind),
             validation_phase: first_failure.and_then(|failure| failure.validation_phase),
             validation_error_kind: first_failure.and_then(|failure| failure.validation_error_kind),
-            claim_eligible: false,
+            direct_retry_budget: first_failure.and_then(|failure| failure.direct_retry_budget),
+            direct_retry_count: first_failure.and_then(|failure| failure.direct_retry_count),
+            completion_status: first_failure.and_then(|failure| failure.completion_status.clone()),
+            completion_result: first_failure.and_then(|failure| failure.completion_result),
+            completion_bytes_completed: first_failure
+                .and_then(|failure| failure.completion_bytes_completed),
+            completion_fault_addr: first_failure
+                .and_then(|failure| failure.completion_fault_addr.clone()),
+            claim_eligible: claim_eligible && self.failed == 0 && self.completed > 0,
         }
     }
 }
@@ -703,13 +810,93 @@ fn rate_per_second(value: u64, elapsed_ns: u128) -> Option<f64> {
     }
 }
 
-fn hardware_preflight_artifact(args: &CliArgs) -> BenchmarkArtifact {
+async fn hardware_artifact(args: &CliArgs) -> BenchmarkArtifact {
+    let session =
+        match AsyncDsaSession::open_with_retries(&args.device_path, DEFAULT_MAX_PAGE_FAULT_RETRIES)
+        {
+            Ok(session) => session,
+            Err(error) => {
+                let failure = RowFailure::async_error(&error);
+                return failure_artifact_from_row(args, Backend::Hardware, &failure);
+            }
+        };
+    let handle = session.handle();
+
+    let mut results = Vec::with_capacity(args.suite.modes().len() + 1);
+    for mode in args.suite.modes() {
+        results.push(
+            run_async_mode(
+                args,
+                handle.clone(),
+                *mode,
+                HARDWARE_ASYNC_TARGET,
+                sync_comparison_target_for(*mode),
+                true,
+            )
+            .await,
+        );
+    }
+
+    drop(session);
+
+    if matches!(args.suite, Suite::Canonical | Suite::Latency) {
+        results.push(run_sync_comparison(args));
+    }
+
+    let first_failure = results.iter().find(|result| result.verdict != "pass");
+    BenchmarkArtifact {
+        schema_version: SCHEMA_VERSION,
+        ok: first_failure.is_none(),
+        verdict: if first_failure.is_none() {
+            "pass"
+        } else {
+            "fail"
+        },
+        device_path: args.device_path.display().to_string(),
+        backend: Backend::Hardware.as_str(),
+        claim_eligible: first_failure.is_none(),
+        suite: args.suite.as_str(),
+        runtime_flavor: "current_thread",
+        worker_threads: 1,
+        requested_bytes: args.bytes,
+        iterations: args.iterations,
+        concurrency: args.concurrency,
+        duration_ms: args.duration_ms,
+        failure_class: first_failure.and_then(|result| result.failure_class),
+        error_kind: first_failure.and_then(|result| result.error_kind),
+        direct_failure_kind: first_failure.and_then(|result| result.direct_failure_kind),
+        validation_phase: first_failure.and_then(|result| result.validation_phase),
+        validation_error_kind: first_failure.and_then(|result| result.validation_error_kind),
+        direct_retry_budget: first_failure.and_then(|result| result.direct_retry_budget),
+        direct_retry_count: first_failure.and_then(|result| result.direct_retry_count),
+        completion_status: first_failure.and_then(|result| result.completion_status.clone()),
+        completion_result: first_failure.and_then(|result| result.completion_result),
+        completion_bytes_completed: first_failure
+            .and_then(|result| result.completion_bytes_completed),
+        completion_fault_addr: first_failure
+            .and_then(|result| result.completion_fault_addr.clone()),
+        results,
+    }
+}
+
+fn sync_comparison_target_for(mode: BenchmarkMode) -> Option<&'static str> {
+    match mode {
+        BenchmarkMode::SingleLatency => Some(HARDWARE_SYNC_TARGET),
+        BenchmarkMode::ConcurrentSubmissions | BenchmarkMode::FixedDurationThroughput => None,
+    }
+}
+
+fn failure_artifact_from_row(
+    args: &CliArgs,
+    backend: Backend,
+    failure: &RowFailure,
+) -> BenchmarkArtifact {
     BenchmarkArtifact {
         schema_version: SCHEMA_VERSION,
         ok: false,
         verdict: "expected_failure",
         device_path: args.device_path.display().to_string(),
-        backend: Backend::Hardware.as_str(),
+        backend: backend.as_str(),
         claim_eligible: false,
         suite: args.suite.as_str(),
         runtime_flavor: "current_thread",
@@ -718,13 +905,75 @@ fn hardware_preflight_artifact(args: &CliArgs) -> BenchmarkArtifact {
         iterations: args.iterations,
         concurrency: args.concurrency,
         duration_ms: args.duration_ms,
-        failure_class: Some("preflight"),
-        error_kind: Some("hardware_backend_not_wired"),
-        direct_failure_kind: None,
-        validation_phase: Some("preflight"),
-        validation_error_kind: Some("hardware_backend_not_wired"),
+        failure_class: Some(failure.failure_class),
+        error_kind: Some(failure.error_kind),
+        direct_failure_kind: failure.direct_failure_kind,
+        validation_phase: failure.validation_phase,
+        validation_error_kind: failure.validation_error_kind,
+        direct_retry_budget: failure.direct_retry_budget,
+        direct_retry_count: failure.direct_retry_count,
+        completion_status: failure.completion_status.clone(),
+        completion_result: failure.completion_result,
+        completion_bytes_completed: failure.completion_bytes_completed,
+        completion_fault_addr: failure.completion_fault_addr.clone(),
         results: Vec::new(),
     }
+}
+
+fn run_sync_comparison(args: &CliArgs) -> BenchmarkResult {
+    let start = Instant::now();
+    let mut stats = ModeStats::default();
+
+    match DsaSession::open_with_retries(&args.device_path, DEFAULT_MAX_PAGE_FAULT_RETRIES) {
+        Ok(session) => {
+            for seed in 0..args.iterations {
+                let source = deterministic_source(args.bytes, seed);
+                let mut destination = vec![0u8; args.bytes];
+                let op_start = Instant::now();
+                match session.memmove(&mut destination, &source) {
+                    Ok(report) => record_sync_success(&mut stats, op_start, report),
+                    Err(error) => {
+                        stats.record_failure(RowFailure::sync_error(&error, "sync_memmove"))
+                    }
+                }
+            }
+        }
+        Err(error) => stats.record_failure(RowFailure::sync_error(&error, "sync_queue_open")),
+    }
+
+    stats.into_result(
+        args,
+        BenchmarkMode::SingleLatency,
+        HARDWARE_SYNC_TARGET,
+        Some(HARDWARE_ASYNC_TARGET),
+        true,
+        start.elapsed().as_nanos().max(1),
+    )
+}
+
+fn record_sync_success(
+    stats: &mut ModeStats,
+    op_start: Instant,
+    _report: idxd_rust::MemmoveValidationReport,
+) {
+    stats.record_success(op_start.elapsed().as_nanos().max(1));
+}
+
+fn phase_name(phase: MemmovePhase) -> &'static str {
+    match phase {
+        MemmovePhase::QueueOpen => "queue_open",
+        MemmovePhase::CompletionPoll => "completion_poll",
+        MemmovePhase::PageFaultRetry => "page_fault_retry",
+        MemmovePhase::PostCopyVerify => "post_copy_verify",
+    }
+}
+
+fn hex_status(status: u8) -> String {
+    format!("0x{status:02x}")
+}
+
+fn hex_u64(value: u64) -> String {
+    format!("0x{value:x}")
 }
 
 fn emit_artifact(args: &CliArgs, artifact: &BenchmarkArtifact) -> Result<(), String> {

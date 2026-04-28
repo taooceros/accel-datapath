@@ -226,6 +226,62 @@ fn individual_software_suites_emit_only_the_requested_mode_at_minimum_bounds() {
 }
 
 #[test]
+fn hardware_nonexistent_device_emits_typed_queue_open_failure_json() {
+    let missing_device = unique_temp_path("missing-wq");
+    let output = run(&[
+        "--backend",
+        "hardware",
+        "--device",
+        missing_device
+            .to_str()
+            .expect("missing device path should be valid utf-8"),
+        "--suite",
+        "latency",
+        "--bytes",
+        "1",
+        "--iterations",
+        "1",
+        "--concurrency",
+        "1",
+        "--duration-ms",
+        "1",
+        "--format",
+        "json",
+    ]);
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&output.stderr).is_empty());
+
+    let artifact = stdout_json(&output);
+    assert_eq!(artifact["schema_version"], 1);
+    assert_eq!(artifact["ok"], false);
+    assert_eq!(artifact["verdict"], "expected_failure");
+    assert_eq!(artifact["backend"], "hardware");
+    assert_eq!(artifact["claim_eligible"], false);
+    assert_eq!(artifact["suite"], "latency");
+    assert_eq!(artifact["failure_class"], "queue_open");
+    assert_eq!(artifact["error_kind"], "queue_open");
+    assert!(artifact["direct_failure_kind"].is_null());
+    assert_eq!(artifact["validation_phase"], "queue_open");
+    assert_eq!(artifact["validation_error_kind"], "queue_open");
+    assert!(artifact["direct_retry_budget"].is_null());
+    assert!(artifact["direct_retry_count"].is_null());
+    assert!(artifact["completion_status"].is_null());
+    assert!(artifact["completion_fault_addr"].is_null());
+    assert!(
+        artifact["results"]
+            .as_array()
+            .expect("results array")
+            .is_empty()
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!stdout.contains("payload"));
+    assert!(!stdout.contains("destination"));
+    assert!(!stdout.contains("source"));
+}
+
+#[test]
 fn writes_artifact_matching_stdout_exactly() {
     let artifact_path = unique_temp_path("artifact.json");
 
