@@ -8,20 +8,21 @@
 //! Synchronous callers pass explicit source and destination slices to
 //! `DsaSession::memmove`; request validation always treats the source length as
 //! the requested transfer size and only requires destination capacity to be at
-//! least that large. Async callers should prefer `AsyncMemmoveRequest` when work
-//! must cross Tokio tasks or the worker thread: requests own both source and
-//! destination buffers, and `AsyncMemmoveResult` returns the owned destination
-//! plus validation report. `AsyncDsaHandle::memmove_into` is a scoped borrowed
-//! convenience that copies into an owned worker request, awaits it, and copies
-//! the successful prefix back into the caller's destination; it does not make
-//! borrowed buffers `tokio::spawn`-friendly.
+//! least that large. Async callers should use `AsyncMemmoveRequest::new` when
+//! work must cross Tokio tasks or the worker thread: requests own a `bytes::Bytes`
+//! source and a caller-provided `bytes::BytesMut` destination, and
+//! `AsyncMemmoveResult` returns the owned destination plus validation report.
+//! The async API intentionally has no public allocation convenience constructor
+//! and no borrowed copy-back helper; destination allocation and ownership stay
+//! explicit at the call site.
 
 mod async_session;
 mod validation;
 
 pub use async_session::{
     AsyncDsaHandle, AsyncDsaSession, AsyncLifecycleFailureKind, AsyncMemmoveError,
-    AsyncMemmoveRequest, AsyncMemmoveResult, AsyncMemmoveWorker, AsyncWorkerFailureKind,
+    AsyncMemmoveRequest, AsyncMemmoveRequestError, AsyncMemmoveResult, AsyncMemmoveWorker,
+    AsyncWorkerFailureKind,
 };
 pub use validation::{
     COMPLETION_TIMEOUT_STATUS, CompletionAction, CompletionSnapshot, DEFAULT_DEVICE_PATH,

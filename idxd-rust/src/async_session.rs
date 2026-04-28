@@ -5,6 +5,7 @@ use std::sync::{
 };
 use std::thread::{self, JoinHandle};
 
+use bytes::{Bytes, BytesMut};
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 
@@ -20,32 +21,35 @@ const LIFECYCLE_SHUTDOWN_COMPLETE: u8 = 2;
 /// Owned memmove request that can safely cross the worker-thread boundary.
 ///
 /// The source length is the requested transfer size. The destination is caller
-/// supplied and may be larger than the request; on success the owned async
-/// result returns that destination with only the requested prefix guaranteed to
-/// have been overwritten by the memmove operation.
+/// supplied as an owned [`BytesMut`] whose current spare capacity is the async
+/// write target; on success the owned async result returns that destination plus
+/// validation metadata. Callers allocate and retain destination ownership
+/// explicitly by constructing [`Bytes`] and [`BytesMut`] before enqueue.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AsyncMemmoveRequest {
-    source: Vec<u8>,
-    destination: Vec<u8>,
+    source: Bytes,
+    destination: BytesMut,
 }
 
 impl AsyncMemmoveRequest {
-    /// Build an owned request with an explicit caller-provided destination buffer.
-    pub fn copy_into(source: Vec<u8>, destination: Vec<u8>) -> Result<Self, MemmoveError> {
-        MemmoveRequest::for_buffers(destination.len(), source.len())?;
+    /// Build an owned request from explicit source and destination buffers.
+    ///
+    /// Validation is synchronous and happens before enqueue. If the source is
+    /// empty or the destination lacks enough spare writable capacity, the
+    /// rejected buffers are returned in [`AsyncMemmoveRequestError`].
+    pub fn new(source: Bytes, destination: BytesMut) -> Result<Self, AsyncMemmoveRequestError> {
+        let writable_capacity = destination.capacity().saturating_sub(destination.len());
+        if let Err(error) = MemmoveRequest::for_buffers(writable_capacity, source.len()) {
+            return Err(AsyncMemmoveRequestError {
+                error,
+                source_buffer: source,
+                destination,
+            });
+        }
+
         Ok(Self {
             source,
             destination,
-        })
-    }
-
-    /// Build an owned request whose destination size exactly matches the source length.
-    pub fn copy_exact(source: Vec<u8>) -> Result<Self, MemmoveError> {
-        let destination_len = source.len();
-        MemmoveRequest::for_buffers(destination_len, source.len())?;
-        Ok(Self {
-            source,
-            destination: vec![0u8; destination_len],
         })
     }
 
@@ -57,19 +61,65 @@ impl AsyncMemmoveRequest {
         self.destination.len()
     }
 
-    pub fn source_bytes(&self) -> &[u8] {
-        &self.source
+    pub fn destination_capacity(&self) -> usize {
+        self.destination.capacity()
     }
 
-    pub fn destination_bytes(&self) -> &[u8] {
-        &self.destination
+    pub fn destination_writable_capacity(&self) -> usize {
+        self.destination
+            .capacity()
+            .saturating_sub(self.destination.len())
+    }
+}
+
+/// Recoverable constructor failure for an owned async memmove request.
+///
+/// This error preserves typed [`MemmoveError`] diagnostics and owns the rejected
+/// buffers so callers can inspect lengths or retry without payload logging.
+#[derive(Debug, Error)]
+#[error("invalid async memmove request: {error}")]
+pub struct AsyncMemmoveRequestError {
+    error: MemmoveError,
+    source_buffer: Bytes,
+    destination: BytesMut,
+}
+
+impl AsyncMemmoveRequestError {
+    pub fn kind(&self) -> &'static str {
+        self.error.kind()
+    }
+
+    pub fn memmove_error(&self) -> &MemmoveError {
+        &self.error
+    }
+
+    pub fn requested_bytes(&self) -> usize {
+        self.source_buffer.len()
+    }
+
+    pub fn destination_len(&self) -> usize {
+        self.destination.len()
+    }
+
+    pub fn destination_capacity(&self) -> usize {
+        self.destination.capacity()
+    }
+
+    pub fn destination_writable_capacity(&self) -> usize {
+        self.destination
+            .capacity()
+            .saturating_sub(self.destination.len())
+    }
+
+    pub fn into_parts(self) -> (MemmoveError, Bytes, BytesMut) {
+        (self.error, self.source_buffer, self.destination)
     }
 }
 
 /// Owned memmove result returned across the async boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AsyncMemmoveResult {
-    pub destination: Vec<u8>,
+    pub destination: BytesMut,
     pub report: MemmoveValidationReport,
 }
 
@@ -224,9 +274,8 @@ impl SharedWorkerState {
 /// one session. Requests cross the boundary as owned data, queue FIFO, and
 /// execute one at a time; cloning the handle never duplicates hardware
 /// ownership or implies parallel execution. Use `memmove` with an
-/// `AsyncMemmoveRequest` for spawn-friendly owned work; `memmove_into` is a
-/// scoped borrowed-destination convenience that allocates owned worker buffers
-/// and copies the successful prefix back before returning.
+/// [`AsyncMemmoveRequest`] for spawn-friendly owned work; callers provide the
+/// owned [`Bytes`] source and [`BytesMut`] destination explicitly.
 #[derive(Debug, Clone)]
 pub struct AsyncDsaHandle {
     shared: Arc<SharedWorkerState>,
@@ -260,33 +309,6 @@ impl AsyncDsaHandle {
             .await
             .map_err(|_| self.classify_reply_failure())?
             .map_err(AsyncMemmoveError::from)
-    }
-
-    /// Scoped borrowed-destination convenience over the owned async request API.
-    ///
-    /// This method validates the borrowed buffers before enqueue, copies `src`
-    /// and a zeroed destination into an owned `AsyncMemmoveRequest`, awaits the
-    /// worker-owned result, and then copies only the requested source-length
-    /// prefix back into `dst`. The borrowed slices are never stored in
-    /// `WorkerCommand`; they remain scoped to this future, so callers that need
-    /// `tokio::spawn`-friendly or high-composition requests should use
-    /// `AsyncMemmoveRequest::copy_into` with `memmove` instead.
-    pub async fn memmove_into(
-        &self,
-        dst: &mut [u8],
-        src: &[u8],
-    ) -> Result<MemmoveValidationReport, AsyncMemmoveError> {
-        let request = MemmoveRequest::for_buffers(dst.len(), src.len())?;
-        let requested_bytes = request.len();
-        let owned_request = AsyncMemmoveRequest {
-            source: src.to_vec(),
-            destination: vec![0u8; dst.len()],
-        };
-
-        let result = self.memmove(owned_request).await?;
-        dst[..requested_bytes].copy_from_slice(&result.destination[..requested_bytes]);
-
-        Ok(result.report)
     }
 
     fn classify_send_failure(&self) -> AsyncMemmoveError {
@@ -467,4 +489,56 @@ fn run_memmove<W: AsyncMemmoveWorker>(
         destination,
         report,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn request_constructor_accepts_owned_bytes_and_spare_destination_capacity() {
+        let source = Bytes::from_static(b"abcd");
+        let destination = BytesMut::with_capacity(source.len());
+
+        let request = AsyncMemmoveRequest::new(source, destination).expect("request validates");
+
+        assert_eq!(request.requested_bytes(), 4);
+        assert_eq!(request.destination_len(), 0);
+        assert_eq!(request.destination_writable_capacity(), 4);
+    }
+
+    #[test]
+    fn request_constructor_recovers_empty_source_buffers() {
+        let source = Bytes::new();
+        let destination = BytesMut::with_capacity(4);
+
+        let error = AsyncMemmoveRequest::new(source, destination).expect_err("empty source fails");
+
+        assert_eq!(error.kind(), "invalid_length");
+        let (memmove_error, recovered_source, recovered_destination) = error.into_parts();
+        assert!(matches!(memmove_error, MemmoveError::InvalidLength { .. }));
+        assert!(recovered_source.is_empty());
+        assert_eq!(recovered_destination.capacity(), 4);
+    }
+
+    #[test]
+    fn request_constructor_recovers_under_capacity_destination() {
+        let source = Bytes::from_static(b"abcd");
+        let destination = BytesMut::with_capacity(source.len() - 1);
+
+        let error =
+            AsyncMemmoveRequest::new(source, destination).expect_err("short destination fails");
+
+        assert_eq!(error.kind(), "destination_too_small");
+        let (memmove_error, recovered_source, recovered_destination) = error.into_parts();
+        assert!(matches!(
+            memmove_error,
+            MemmoveError::DestinationTooSmall {
+                src_len: 4,
+                dst_len: 3
+            }
+        ));
+        assert_eq!(recovered_source.as_ref(), b"abcd");
+        assert_eq!(recovered_destination.capacity(), 3);
+    }
 }
