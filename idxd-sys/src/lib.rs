@@ -359,8 +359,24 @@ pub struct WqPortal {
     dedicated: bool,
 }
 
-// Safety: WqPortal is used from a single thread in benchmarks.
+/// Non-spinning ENQCMD submission result for shared work queues.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EnqcmdSubmission {
+    Accepted,
+    Rejected,
+}
+
+// SAFETY: The portal mapping is an MMIO doorbell page. Shared-WQ ENQCMD
+// submission is architected for concurrent callers and reports backpressure as
+// rejection; dedicated-WQ MOVDIR64B submission remains the caller's
+// responsibility to serialize through `submit`/`submit_movdir64b` if a future
+// path shares a dedicated portal. The direct async path must use the explicit
+// ENQCMD helper below so executor threads do not spin inside `submit`.
 unsafe impl Send for WqPortal {}
+// SAFETY: See the `Send` invariant above. `Sync` only permits sharing the
+// mapping handle; every unsafe submission method still requires the caller to
+// keep descriptor and completion memory valid for the accepted operation and to
+// choose a submission primitive compatible with the WQ mode.
 unsafe impl Sync for WqPortal {}
 
 impl WqPortal {
@@ -442,6 +458,29 @@ impl WqPortal {
             );
         }
         retry != 0
+    }
+
+    /// Submit a descriptor via ENQCMD once and expose hardware backpressure.
+    ///
+    /// This helper never falls back to MOVDIR64B and never retries or spins;
+    /// direct async callers should pair `Rejected` with bounded yielding or
+    /// backoff in async context.
+    ///
+    /// # Safety
+    /// Descriptor must be valid and 64-byte aligned. The descriptor and its
+    /// completion record must remain valid until hardware completion if this
+    /// method returns [`EnqcmdSubmission::Accepted`]. The caller must only use
+    /// this helper with a shared work queue that accepts ENQCMD submission.
+    #[inline(always)]
+    pub unsafe fn submit_enqcmd_once(&self, desc: &DsaHwDesc) -> EnqcmdSubmission {
+        // SAFETY: Forwarding this unsafe API's descriptor/completion lifetime
+        // requirements to the raw ENQCMD primitive. This wrapper adds only the
+        // typed accepted/rejected result and does not call `submit`.
+        if unsafe { self.submit_enqcmd(desc) } {
+            EnqcmdSubmission::Accepted
+        } else {
+            EnqcmdSubmission::Rejected
+        }
     }
 
     /// Submit a descriptor using the appropriate method for this WQ type.

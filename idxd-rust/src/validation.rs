@@ -2,7 +2,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use idxd_sys::{
-    DsaCompletionRecord, DSA_COMP_PAGE_FAULT_NOBOF, DSA_COMP_STATUS_MASK, DSA_COMP_SUCCESS,
+    DSA_COMP_PAGE_FAULT_NOBOF, DSA_COMP_STATUS_MASK, DSA_COMP_SUCCESS, DsaCompletionRecord,
 };
 use thiserror::Error;
 

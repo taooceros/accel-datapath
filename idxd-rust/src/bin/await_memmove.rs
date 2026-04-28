@@ -176,6 +176,12 @@ struct RunOutcome {
     error_kind: Option<&'static str>,
     lifecycle_failure_kind: Option<&'static str>,
     worker_failure_kind: Option<&'static str>,
+    direct_failure_kind: Option<&'static str>,
+    retry_budget: Option<u32>,
+    retry_count: Option<u32>,
+    completion_result: Option<u8>,
+    completion_bytes_completed: Option<u32>,
+    completion_fault_addr: Option<u64>,
     validation_phase: Option<String>,
     validation_error_kind: Option<&'static str>,
     message: String,
@@ -207,6 +213,12 @@ async fn execute(args: &CliArgs) -> RunOutcome {
             error_kind: Some("validation_failure"),
             lifecycle_failure_kind: None,
             worker_failure_kind: None,
+            direct_failure_kind: None,
+            retry_budget: None,
+            retry_count: None,
+            completion_result: None,
+            completion_bytes_completed: None,
+            completion_fault_addr: None,
             validation_phase: Some("argument_validation".to_string()),
             validation_error_kind: Some("invalid_test_scenario"),
             message: err,
@@ -330,10 +342,16 @@ fn success_outcome(report: MemmoveValidationReport) -> RunOutcome {
         error_kind: None,
         lifecycle_failure_kind: None,
         worker_failure_kind: None,
+        direct_failure_kind: None,
+        retry_budget: Some(report.page_fault_retries),
+        retry_count: Some(report.page_fault_retries),
+        completion_result: None,
+        completion_bytes_completed: None,
+        completion_fault_addr: None,
         validation_phase: Some("completed".to_string()),
         validation_error_kind: None,
         message: format!(
-            "verified {} copied bytes via async wrapper on {}",
+            "verified {} copied bytes via direct async memmove on {}",
             report.requested_bytes,
             report.device_path.display()
         ),
@@ -353,6 +371,12 @@ fn async_failure_outcome(args: &CliArgs, err: AsyncMemmoveError) -> RunOutcome {
             error_kind: Some("lifecycle_failure"),
             lifecycle_failure_kind: Some(kind.as_str()),
             worker_failure_kind: None,
+            direct_failure_kind: None,
+            retry_budget: None,
+            retry_count: None,
+            completion_result: None,
+            completion_bytes_completed: None,
+            completion_fault_addr: None,
             validation_phase: None,
             validation_error_kind: None,
             message: format!("async memmove lifecycle failure: {}", kind.as_str()),
@@ -367,9 +391,43 @@ fn async_failure_outcome(args: &CliArgs, err: AsyncMemmoveError) -> RunOutcome {
             error_kind: Some("worker_failure"),
             lifecycle_failure_kind: None,
             worker_failure_kind: Some(kind.as_str()),
+            direct_failure_kind: None,
+            retry_budget: None,
+            retry_count: None,
+            completion_result: None,
+            completion_bytes_completed: None,
+            completion_fault_addr: None,
             validation_phase: None,
             validation_error_kind: None,
             message: format!("async memmove worker failure: {}", kind.as_str()),
+        },
+        AsyncMemmoveError::DirectFailure { failure, .. } => RunOutcome {
+            ok: false,
+            device_path: args.device_path.display().to_string(),
+            requested_bytes: failure.requested_bytes(),
+            page_fault_retries: Some(failure.retry_count()),
+            final_status: failure
+                .completion_snapshot()
+                .map(|snapshot| snapshot.status),
+            phase: "async_direct".to_string(),
+            error_kind: Some("direct_failure"),
+            lifecycle_failure_kind: None,
+            worker_failure_kind: None,
+            direct_failure_kind: Some(failure.kind().as_str()),
+            retry_budget: Some(failure.retry_budget()),
+            retry_count: Some(failure.retry_count()),
+            completion_result: failure
+                .completion_snapshot()
+                .map(|snapshot| snapshot.result),
+            completion_bytes_completed: failure
+                .completion_snapshot()
+                .map(|snapshot| snapshot.bytes_completed),
+            completion_fault_addr: failure
+                .completion_snapshot()
+                .map(|snapshot| snapshot.fault_addr),
+            validation_phase: None,
+            validation_error_kind: None,
+            message: format!("async direct memmove failure: {failure}"),
         },
     }
 }
@@ -394,6 +452,12 @@ fn validation_failure_outcome(args: &CliArgs, err: MemmoveError) -> RunOutcome {
         error_kind: Some("validation_failure"),
         lifecycle_failure_kind: None,
         worker_failure_kind: None,
+        direct_failure_kind: None,
+        retry_budget: None,
+        retry_count: err.page_fault_retries(),
+        completion_result: None,
+        completion_bytes_completed: None,
+        completion_fault_addr: None,
         validation_phase: Some(validation_phase),
         validation_error_kind: Some(err.kind()),
         message: err.to_string(),
@@ -449,6 +513,51 @@ fn render_text(outcome: &RunOutcome) -> String {
     );
     let _ = writeln!(
         text,
+        "direct_failure_kind={}",
+        outcome.direct_failure_kind.unwrap_or("null")
+    );
+    let _ = writeln!(
+        text,
+        "retry_budget={}",
+        outcome
+            .retry_budget
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "null".to_string())
+    );
+    let _ = writeln!(
+        text,
+        "retry_count={}",
+        outcome
+            .retry_count
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "null".to_string())
+    );
+    let _ = writeln!(
+        text,
+        "completion_result={}",
+        outcome
+            .completion_result
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "null".to_string())
+    );
+    let _ = writeln!(
+        text,
+        "completion_bytes_completed={}",
+        outcome
+            .completion_bytes_completed
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "null".to_string())
+    );
+    let _ = writeln!(
+        text,
+        "completion_fault_addr={}",
+        outcome
+            .completion_fault_addr
+            .map(hex_addr)
+            .unwrap_or_else(|| "null".to_string())
+    );
+    let _ = writeln!(
+        text,
         "validation_phase={}",
         outcome.validation_phase.as_deref().unwrap_or("null")
     );
@@ -474,6 +583,12 @@ fn render_json(outcome: &RunOutcome) -> String {
             "\"error_kind\":{},",
             "\"lifecycle_failure_kind\":{},",
             "\"worker_failure_kind\":{},",
+            "\"direct_failure_kind\":{},",
+            "\"retry_budget\":{},",
+            "\"retry_count\":{},",
+            "\"completion_result\":{},",
+            "\"completion_bytes_completed\":{},",
+            "\"completion_fault_addr\":{},",
             "\"validation_phase\":{},",
             "\"validation_error_kind\":{},",
             "\"message\":\"{}\"",
@@ -502,6 +617,30 @@ fn render_json(outcome: &RunOutcome) -> String {
         outcome
             .worker_failure_kind
             .map(|value| format!("\"{}\"", escape_json(value)))
+            .unwrap_or_else(|| "null".to_string()),
+        outcome
+            .direct_failure_kind
+            .map(|value| format!("\"{}\"", escape_json(value)))
+            .unwrap_or_else(|| "null".to_string()),
+        outcome
+            .retry_budget
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "null".to_string()),
+        outcome
+            .retry_count
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "null".to_string()),
+        outcome
+            .completion_result
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "null".to_string()),
+        outcome
+            .completion_bytes_completed
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "null".to_string()),
+        outcome
+            .completion_fault_addr
+            .map(|value| format!("\"{}\"", hex_addr(value)))
             .unwrap_or_else(|| "null".to_string()),
         outcome
             .validation_phase
@@ -556,6 +695,10 @@ fn hex_status(status: u8) -> String {
     format!("0x{status:02x}")
 }
 
+fn hex_addr(addr: u64) -> String {
+    format!("0x{addr:x}")
+}
+
 fn escape_json(value: &str) -> String {
     value
         .chars()
@@ -574,7 +717,7 @@ fn print_help() {
     println!(
         "Usage: await_memmove [--device PATH] [--bytes N] [--format text|json] [--artifact PATH]"
     );
-    println!("Runs one real DSA memmove through the async wrapper and prints a stable report.");
+    println!("Runs one real DSA memmove through the direct async path and prints a stable report.");
 }
 
 struct SuccessWorker {
