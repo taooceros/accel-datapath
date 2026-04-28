@@ -9,12 +9,12 @@
 //! `DsaSession::memmove`; request validation always treats the source length as
 //! the requested transfer size and only requires destination capacity to be at
 //! least that large. Async callers should use `AsyncMemmoveRequest::new` when
-//! work must cross Tokio tasks or the worker thread: requests own a `bytes::Bytes`
-//! source and a caller-provided `bytes::BytesMut` destination, and
-//! `AsyncMemmoveResult` returns the owned destination plus validation report.
-//! The async API intentionally has no public allocation convenience constructor
-//! and no borrowed copy-back helper; destination allocation and ownership stay
-//! explicit at the call site.
+//! work must cross Tokio tasks: requests own a `bytes::Bytes` source and a
+//! caller-provided `bytes::BytesMut` destination, and `AsyncMemmoveResult`
+//! returns the owned destination plus validation report after direct completion
+//! record observation. The async API intentionally has no public allocation
+//! convenience constructor and no borrowed copy-back helper; destination
+//! allocation and ownership stay explicit at the call site.
 
 mod async_direct;
 mod async_session;

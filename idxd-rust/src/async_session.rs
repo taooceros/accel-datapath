@@ -177,7 +177,8 @@ impl std::fmt::Display for AsyncWorkerFailureKind {
     }
 }
 
-/// Async wrapper error that preserves the underlying synchronous `MemmoveError`.
+/// Async memmove error that preserves typed lifecycle, direct-runtime,
+/// legacy-worker-fixture, and underlying `MemmoveError` failures.
 #[derive(Debug, Error)]
 pub enum AsyncMemmoveError {
     #[error("async memmove execution failure: {source}")]

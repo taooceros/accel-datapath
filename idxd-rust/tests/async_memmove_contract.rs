@@ -258,7 +258,7 @@ fn owned_request(source: &'static [u8]) -> AsyncMemmoveRequest {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn async_wrapper_returns_owned_destination_on_success() {
+async fn async_memmove_returns_owned_destination_on_success() {
     let calls = Arc::new(AtomicUsize::new(0));
     let session = AsyncDsaSession::spawn_with_factory({
         let calls = Arc::clone(&calls);
@@ -315,7 +315,7 @@ async fn appends_to_destination_spare_capacity_after_existing_prefix() {
 }
 
 #[test]
-fn rejects_zero_length_owned_requests_before_worker_dispatch() {
+fn rejects_zero_length_owned_requests_before_runtime_dispatch() {
     let err = AsyncMemmoveRequest::new(Bytes::new(), BytesMut::with_capacity(4))
         .expect_err("zero-length requests should fail");
 
@@ -332,9 +332,9 @@ fn rejects_zero_length_owned_requests_before_worker_dispatch() {
 }
 
 #[test]
-fn rejects_destination_size_mismatch_before_worker_dispatch() {
+fn rejects_destination_size_mismatch_before_runtime_dispatch() {
     let err = AsyncMemmoveRequest::new(Bytes::from_static(b"data"), BytesMut::with_capacity(3))
-        .expect_err("destination sizing mismatches should fail before worker startup");
+        .expect_err("destination sizing mismatches should fail before runtime dispatch");
 
     assert!(matches!(
         err.memmove_error(),
@@ -848,7 +848,10 @@ async fn retry_completion_resubmits_and_preserves_final_retry_metadata() {
 
     tokio::task::yield_now().await;
     assert_eq!(backend.submissions(), 1);
-    backend.complete(1, CompletionSnapshot::new(DSA_COMP_PAGE_FAULT_NOBOF, 0, 2, 0x1000));
+    backend.complete(
+        1,
+        CompletionSnapshot::new(DSA_COMP_PAGE_FAULT_NOBOF, 0, 2, 0x1000),
+    );
 
     timeout(Duration::from_secs(1), async {
         while backend.submissions() < 2 {
@@ -878,8 +881,11 @@ async fn retry_continuation_backpressure_reports_snapshot_and_recovers_buffers()
         EnqcmdSubmission::Rejected,
         EnqcmdSubmission::Rejected,
     ]);
-    let runtime =
-        DirectAsyncMemmoveRuntime::with_submission_retry_budget(direct_config(), backend.clone(), 1);
+    let runtime = DirectAsyncMemmoveRuntime::with_submission_retry_budget(
+        direct_config(),
+        backend.clone(),
+        1,
+    );
 
     let pending = tokio::spawn({
         let runtime = runtime.clone();
@@ -887,7 +893,10 @@ async fn retry_continuation_backpressure_reports_snapshot_and_recovers_buffers()
     });
 
     tokio::task::yield_now().await;
-    backend.complete(1, CompletionSnapshot::new(DSA_COMP_PAGE_FAULT_NOBOF, 0, 5, 0xfeed));
+    backend.complete(
+        1,
+        CompletionSnapshot::new(DSA_COMP_PAGE_FAULT_NOBOF, 0, 5, 0xfeed),
+    );
 
     let err = timeout(Duration::from_secs(1), pending)
         .await
@@ -906,7 +915,9 @@ async fn retry_continuation_backpressure_reports_snapshot_and_recovers_buffers()
     assert_eq!(snapshot.status, DSA_COMP_PAGE_FAULT_NOBOF);
     assert_eq!(snapshot.bytes_completed, 5);
     assert_eq!(snapshot.fault_addr, 0xfeed);
-    let recovered = err.into_request().expect("safe retry failure should recover buffers");
+    let recovered = err
+        .into_request()
+        .expect("safe retry failure should recover buffers");
     let (source, destination) = recovered.into_parts();
     assert_eq!(source.as_ref(), b"retry-secret");
     assert_eq!(destination.len(), 0);

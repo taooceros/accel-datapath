@@ -11,13 +11,13 @@ After reading, you should be able to:
 
 1. run the hardware-backed verifier on a prepared host,
 2. run the proof binaries directly when you need a narrower repro, and
-3. interpret the shared-handle lifecycle, worker, and validation failure classes without cross-referencing milestone notes.
+3. interpret the shared-handle lifecycle, direct-runtime, legacy worker-fixture, and validation failure classes without cross-referencing milestone notes.
 
 ## What lives here
 
 - `DsaSession` is the only live submission path.
 - `AsyncDsaSession` is the explicit lifecycle owner for the async path.
-- `AsyncDsaHandle` is the only cloneable Tokio-facing surface. Cloning it shares one worker-owned `DsaSession`; it never duplicates hardware ownership.
+- `AsyncDsaHandle` is the only cloneable Tokio-facing surface. Cloning it shares one direct async runtime with one mapped work-queue portal and completion monitor; it never duplicates hardware ownership.
 - `live_memmove` is the crate-local synchronous validation binary.
 - `await_memmove` is the crate-local async validation binary that exercises the public owner-plus-handle contract.
 - `verify_live_memmove.sh` and `verify_async_memmove.sh` are the operational verifiers that wrap the binaries in the repo's `launch` capability flow and check the machine-readable artifacts they emit.
@@ -41,7 +41,7 @@ Use the synchronous proof path when you are isolating the raw crate-owned DSA me
 bash idxd-rust/scripts/verify_live_memmove.sh
 ```
 
-Use the async proof path when you need to prove that ordinary Tokio callers can clone a handle, await real work, and still distinguish owner shutdown, worker failure, and wrapped validation errors:
+Use the async proof path when you need to prove that ordinary Tokio callers can clone a handle, await real direct ENQCMD-submitted work, and still distinguish owner shutdown, direct runtime failures, legacy worker-fixture failures, and wrapped validation errors:
 
 ```bash
 bash idxd-rust/scripts/verify_async_memmove.sh
@@ -58,25 +58,25 @@ The downstream proof runs `tonic-profile`'s `downstream_async_handle` binary and
 In short:
 
 - **`live_memmove`** answers "did the direct `DsaSession` path behave truthfully?"
-- **`await_memmove`** answers "did the public async owner-plus-handle surface preserve truthful lifecycle-vs-worker-vs-validation failures?"
+- **`await_memmove`** answers "did the public async owner-plus-handle surface preserve truthful lifecycle-vs-direct-runtime-vs-validation failures?"
 - **`tonic-profile` `downstream_async_handle`** answers "can a downstream Tokio consumer outside the binding crate use cloned public handles for real awaited operations without changing the synchronous codec seam?"
 
 ## Async ownership model
 
 The async surface is intentionally split in two.
 
-- `AsyncDsaSession` owns the worker thread and therefore owns shutdown.
+- `AsyncDsaSession` owns the direct async runtime and therefore owns shutdown.
 - `AsyncDsaHandle` is what Tokio tasks clone and await.
 - `AsyncMemmoveRequest` is the canonical async request shape. It owns both the source bytes and the destination buffer before it enters the queue.
 - `AsyncMemmoveResult` returns the explicit owned destination buffer plus the validation report; callers should inspect `report.requested_bytes` to distinguish requested source bytes from any extra destination capacity.
 - Destination allocation is explicit at the call site. The v1 public async API does not provide an allocation convenience helper or a borrowed copy-back helper; callers choose the destination capacity, submit the owned request, and receive the same destination ownership back in the result.
-- Destination length advances only after successful completion. The worker writes into spare capacity and the result exposes the initialized prefix only after validation succeeds; failed requests keep the rejected buffers available through the typed error path.
-- Ordinary Tokio composition such as `tokio::join!` or spawned tasks still uses that same cloneable handle surface; cloned handles do not create extra sessions or extra hardware owners. Build an owned `AsyncMemmoveRequest` and call `memmove` when work must cross a task or worker boundary.
-- All submissions funnel through one worker-owned `DsaSession`, so overlapped requests queue FIFO and execute one at a time even when multiple Tokio tasks are awaiting them concurrently.
-- Once a request has crossed that enqueue boundary, aborting or dropping the awaiting Tokio task does not cancel the worker-side memmove. The worker still finishes the request, and later submissions can continue using the shared handle.
-- Shutdown is drain-then-stop: work that was already queued drains before the worker thread exits, and submissions attempted after shutdown are rejected with `owner_shutdown`.
-- The worker thread owns the real `DsaSession`, so all hardware access still crosses one explicit boundary as owned requests and owned replies.
-- Borrowed async zero-copy, software aggregation, batching, and MOVDIR64 submission paths are future work. They are not part of the current v1 owner-plus-handle behavior.
+- Destination length advances only after successful completion. The direct runtime writes into spare capacity and the result exposes the initialized prefix only after validation succeeds; failed requests keep the rejected buffers available through the typed error path.
+- Ordinary Tokio composition such as `tokio::join!` or spawned tasks still uses that same cloneable handle surface; cloned handles do not create extra sessions or extra hardware owners. Build an owned `AsyncMemmoveRequest` and call `memmove` when work must cross a task boundary.
+- Direct async submissions use ENQCMD accept/reject semantics and operation-owned descriptor/completion/buffer state. A long-lived Tokio monitor observes per-request completion records and resolves futures only after terminal completion classification.
+- Once a request has been accepted for hardware submission, aborting or dropping the awaiting Tokio task does not cancel the in-flight memmove. The monitor still observes terminal completion, keeps descriptor/completion/buffer state alive, and discards the result only if no receiver remains.
+- Shutdown rejects new submissions with `owner_shutdown`. Direct operations that were already accepted remain owned by the runtime until their completion records are observed.
+- The legacy blocking worker seam remains only as a hidden host-independent fixture path; `open`, `open_with_retries`, and `open_default` do not silently fall back to synchronous `DsaSession::memmove_uninit`.
+- Borrowed async zero-copy, software aggregation, batching, preallocated completion-record registries, and MOVDIR64 submission paths are future work. They are not part of the current v1 owner-plus-handle behavior.
 
 A minimal owned async call looks like this:
 
@@ -102,8 +102,9 @@ println!("copied {} bytes", result.report.requested_bytes);
 That split matters operationally because it makes failure interpretation honest:
 
 - if the owner shuts down before a reply exists, the async proof surface reports `error_kind=lifecycle_failure` with `lifecycle_failure_kind=owner_shutdown`,
-- if the worker path breaks before a reply exists, it reports `error_kind=worker_failure` with a `worker_failure_kind`, and
-- if the worker successfully propagates a real memmove problem, it reports `error_kind=validation_failure` plus the underlying validation phase and error kind.
+- if the direct runtime rejects or loses a request before a trustworthy validation result exists, it reports `error_kind=direct_failure` with a `direct_failure_kind`,
+- if a hidden legacy worker fixture breaks before a reply exists, it reports `error_kind=worker_failure` with a `worker_failure_kind`, and
+- if the direct runtime successfully propagates a real memmove problem, it reports `error_kind=validation_failure` plus the underlying validation phase and error kind.
 
 This is why the async verifier is the main operator entrypoint for the shared Tokio handle proof path rather than just another wrapper around the synchronous binary.
 
@@ -150,6 +151,7 @@ The async verifier final line includes those same fields plus:
 - `error_kind`
 - `async_lifecycle_failure_kind`
 - `async_worker_failure_kind`
+- `async_direct_failure_kind`
 - `validation_phase`
 - `validation_error_kind`
 
@@ -157,8 +159,8 @@ Examples:
 
 ```text
 [verify_live_memmove] phase=done ... device_path=/dev/dsa/wq0.0 requested_bytes=64 page_fault_retries=0 final_status=0x01 validation_phase=completed verdict=pass
-[verify_async_memmove] phase=done ... device_path=/dev/dsa/wq0.0 requested_bytes=64 page_fault_retries=0 final_status=0x01 error_kind=null async_lifecycle_failure_kind=null async_worker_failure_kind=null validation_phase=completed validation_error_kind=null verdict=pass
-[verify_async_memmove] phase=done ... device_path=/dev/dsa/wq0.0 requested_bytes=64 error_kind=lifecycle_failure async_lifecycle_failure_kind=owner_shutdown async_worker_failure_kind=null validation_phase=null validation_error_kind=null verdict=expected_failure
+[verify_async_memmove] phase=done ... device_path=/dev/dsa/wq0.0 requested_bytes=64 page_fault_retries=0 final_status=0x01 error_kind=null async_lifecycle_failure_kind=null async_worker_failure_kind=null async_direct_failure_kind=null validation_phase=completed validation_error_kind=null verdict=pass
+[verify_async_memmove] phase=done ... device_path=/dev/dsa/wq0.0 requested_bytes=64 error_kind=lifecycle_failure async_lifecycle_failure_kind=owner_shutdown async_worker_failure_kind=null async_direct_failure_kind=null validation_phase=null validation_error_kind=null verdict=expected_failure
 ```
 
 On an unprepared host, the verifier still exits successfully when it can classify the failure honestly. For example, a launcher without `cap_sys_rawio+eip` ends with:
@@ -213,11 +215,12 @@ The async binary always reports these fields:
 - `error_kind`
 - `lifecycle_failure_kind`
 - `worker_failure_kind`
+- `direct_failure_kind`
 - `validation_phase`
 - `validation_error_kind`
 - `message`
 
-On success, `message` includes copied-bytes proof in the form `verified N copied bytes via async wrapper on ...`.
+On success, `message` includes copied-bytes proof in the form `verified N copied bytes via direct async memmove on ...`.
 
 ## Failure classes
 
@@ -247,11 +250,12 @@ These come from the Rust binaries and are preserved by the verifiers as validati
 - `completion_status` — the completion status byte reported a real failure.
 - `byte_mismatch` — completion reported success, but the copied bytes did not match.
 
-In async verifier output, wrapper-only failures stay separate:
+In async verifier output, async-shell failures stay separate from validation failures:
 
 - `error_kind=lifecycle_failure` with `async_lifecycle_failure_kind=owner_shutdown` means the explicit owner closed the shared handle before a trustworthy validation result existed.
-- `error_kind=worker_failure` with `async_worker_failure_kind=worker_init_closed|request_channel_closed|response_channel_closed|worker_panicked` means the async shell failed before a trustworthy validation result existed.
-- `error_kind=validation_failure` means the wrapper successfully propagated the underlying `MemmoveError`, which is preserved as `validation_phase` and `validation_error_kind`.
+- `error_kind=direct_failure` with `async_direct_failure_kind=registration_closed|monitor_closed|submission_rejected|backpressure_exceeded|receiver_dropped|runtime_unavailable` means the direct runtime failed or classified an async lifecycle edge before a trustworthy validation result existed.
+- `error_kind=worker_failure` with `async_worker_failure_kind=worker_init_closed|request_channel_closed|response_channel_closed|worker_panicked` is reserved for hidden legacy worker fixtures and should not appear on the public default path.
+- `error_kind=validation_failure` means the async surface successfully propagated the underlying `MemmoveError`, which is preserved as `validation_phase` and `validation_error_kind`.
 
 If you need the exact machine-readable payload, inspect the JSON artifact next to the captured stdout/stderr files. The verifier treats any disagreement between stdout and the artifact as a hard `phase=artifact_validation` failure.
 
