@@ -1,4 +1,6 @@
+use std::future::Future;
 use std::path::Path;
+use std::pin::Pin;
 use std::sync::{
     Arc,
     atomic::{AtomicU8, Ordering},
@@ -11,7 +13,8 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::{
     AsyncDirectFailure, AsyncDirectFailureKind, DEFAULT_DEVICE_PATH,
-    DEFAULT_MAX_PAGE_FAULT_RETRIES, DsaSession, MemmoveError, MemmoveRequest,
+    DEFAULT_MAX_PAGE_FAULT_RETRIES, DirectAsyncMemmoveRuntime, DirectMemmoveBackend,
+    DirectPortalBackend, DsaSession, MemmoveError, MemmoveRequest, MemmoveValidationConfig,
     MemmoveValidationReport,
 };
 
@@ -19,7 +22,7 @@ const LIFECYCLE_RUNNING: u8 = 0;
 const LIFECYCLE_SHUTDOWN_REQUESTED: u8 = 1;
 const LIFECYCLE_SHUTDOWN_COMPLETE: u8 = 2;
 
-/// Owned memmove request that can safely cross the worker-thread boundary.
+/// Owned memmove request that can safely cross the async boundary.
 ///
 /// The source length is the requested transfer size. The destination is caller
 /// supplied as an owned [`BytesMut`] whose current spare capacity is the async
@@ -276,8 +279,9 @@ impl From<MemmoveError> for AsyncMemmoveError {
     }
 }
 
-/// Abstraction used by the async worker thread. `DsaSession` remains the only
-/// real low-level submission path; tests can swap in a host-independent fake.
+/// Abstraction used by the legacy async worker thread. The public default path
+/// no longer uses this trait; it remains as a hidden compatibility seam for
+/// host-independent fixtures that model the old synchronous wrapper.
 pub trait AsyncMemmoveWorker: Send + 'static {
     fn memmove(
         &mut self,
@@ -296,6 +300,41 @@ impl AsyncMemmoveWorker for DsaSession {
     }
 }
 
+type DriverFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<AsyncMemmoveResult, AsyncMemmoveError>> + Send + 'a>>;
+
+trait AsyncMemmoveDriver: Send + Sync + 'static {
+    fn memmove<'a>(&'a self, request: AsyncMemmoveRequest) -> DriverFuture<'a>;
+    fn close(&self);
+}
+
+#[derive(Debug)]
+struct DirectRuntimeDriver<B> {
+    runtime: DirectAsyncMemmoveRuntime<B>,
+}
+
+impl<B> DirectRuntimeDriver<B> {
+    fn new(runtime: DirectAsyncMemmoveRuntime<B>) -> Self {
+        Self { runtime }
+    }
+}
+
+impl<B> AsyncMemmoveDriver for DirectRuntimeDriver<B>
+where
+    B: DirectMemmoveBackend,
+{
+    fn memmove<'a>(&'a self, request: AsyncMemmoveRequest) -> DriverFuture<'a> {
+        Box::pin(async move { self.runtime.memmove(request).await })
+    }
+
+    fn close(&self) {
+        // Owner shutdown only prevents new public submissions. Accepted direct
+        // operations remain owned by the runtime and are resolved by completion
+        // observation; the runtime is closed by Drop when the last handle goes
+        // away.
+    }
+}
+
 enum WorkerCommand {
     Memmove {
         request: AsyncMemmoveRequest,
@@ -305,12 +344,66 @@ enum WorkerCommand {
 }
 
 #[derive(Debug)]
-struct SharedWorkerState {
+struct WorkerRuntimeDriver {
     request_tx: mpsc::UnboundedSender<WorkerCommand>,
+}
+
+impl WorkerRuntimeDriver {
+    fn classify_send_failure(request: Option<AsyncMemmoveRequest>) -> AsyncMemmoveError {
+        AsyncMemmoveError::WorkerFailure {
+            kind: AsyncWorkerFailureKind::RequestChannelClosed,
+            request,
+        }
+    }
+
+    fn classify_reply_failure() -> AsyncMemmoveError {
+        AsyncMemmoveError::WorkerFailure {
+            kind: AsyncWorkerFailureKind::ResponseChannelClosed,
+            request: None,
+        }
+    }
+}
+
+impl AsyncMemmoveDriver for WorkerRuntimeDriver {
+    fn memmove<'a>(&'a self, request: AsyncMemmoveRequest) -> DriverFuture<'a> {
+        Box::pin(async move {
+            let (reply_tx, reply_rx) = oneshot::channel();
+
+            let send_error = match self
+                .request_tx
+                .send(WorkerCommand::Memmove { request, reply_tx })
+            {
+                Ok(()) => None,
+                Err(err) => Some(err.0),
+            };
+
+            if let Some(WorkerCommand::Memmove { request, .. }) = send_error {
+                return Err(Self::classify_send_failure(Some(request)));
+            }
+
+            reply_rx.await.map_err(|_| Self::classify_reply_failure())?
+        })
+    }
+
+    fn close(&self) {
+        let _ = self.request_tx.send(WorkerCommand::Shutdown);
+    }
+}
+
+struct SharedAsyncState {
+    driver: Arc<dyn AsyncMemmoveDriver>,
     lifecycle: AtomicU8,
 }
 
-impl SharedWorkerState {
+impl std::fmt::Debug for SharedAsyncState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SharedAsyncState")
+            .field("lifecycle", &self.lifecycle_state())
+            .finish_non_exhaustive()
+    }
+}
+
+impl SharedAsyncState {
     fn lifecycle_state(&self) -> u8 {
         self.lifecycle.load(Ordering::Acquire)
     }
@@ -319,9 +412,15 @@ impl SharedWorkerState {
         self.lifecycle_state() >= LIFECYCLE_SHUTDOWN_REQUESTED
     }
 
-    fn mark_shutdown_requested(&self) {
+    fn mark_shutdown_requested(&self) -> bool {
         self.lifecycle
-            .store(LIFECYCLE_SHUTDOWN_REQUESTED, Ordering::Release);
+            .compare_exchange(
+                LIFECYCLE_RUNNING,
+                LIFECYCLE_SHUTDOWN_REQUESTED,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            )
+            .is_ok()
     }
 
     fn mark_shutdown_complete(&self) {
@@ -330,27 +429,27 @@ impl SharedWorkerState {
     }
 }
 
-/// Cloneable Tokio-facing handle over one worker-owned `DsaSession`.
+/// Cloneable Tokio-facing handle over one async DSA runtime.
 ///
 /// Cloned handles compose naturally in ordinary Tokio code such as
-/// `tokio::join!` or spawned tasks, but they still share one worker thread and
-/// one session. Requests cross the boundary as owned data, queue FIFO, and
-/// execute one at a time; cloning the handle never duplicates hardware
-/// ownership or implies parallel execution. Use `memmove` with an
-/// [`AsyncMemmoveRequest`] for spawn-friendly owned work; callers provide the
-/// owned [`Bytes`] source and [`BytesMut`] destination explicitly.
+/// `tokio::join!` or spawned tasks. Publicly opened sessions submit through the
+/// direct async runtime, share one WQ portal/monitor, and resolve futures from
+/// per-operation completion record observation instead of a blocking worker
+/// thread. Use `memmove` with an [`AsyncMemmoveRequest`] for spawn-friendly
+/// owned work; callers provide the owned [`Bytes`] source and [`BytesMut`]
+/// destination explicitly.
 #[derive(Debug, Clone)]
 pub struct AsyncDsaHandle {
-    shared: Arc<SharedWorkerState>,
+    shared: Arc<SharedAsyncState>,
 }
 
 impl AsyncDsaHandle {
-    /// Submit one owned request through the shared worker-owned session.
+    /// Submit one owned request through the shared direct async runtime.
     ///
-    /// Once the request has been enqueued successfully, dropping or aborting
-    /// the awaiting Tokio task does not cancel the worker-side memmove. The
-    /// worker still finishes the request and later submissions can continue to
-    /// use the shared handle.
+    /// Once a request is accepted by the direct runtime, dropping or aborting
+    /// the awaiting Tokio task does not cancel the operation-owned descriptor,
+    /// completion record, or buffers. The monitor keeps the operation alive
+    /// until terminal completion or runtime cleanup.
     pub async fn memmove(
         &self,
         request: AsyncMemmoveRequest,
@@ -362,54 +461,11 @@ impl AsyncDsaHandle {
             });
         }
 
-        let (reply_tx, reply_rx) = oneshot::channel();
-
-        let send_error = match self
-            .shared
-            .request_tx
-            .send(WorkerCommand::Memmove { request, reply_tx })
-        {
-            Ok(()) => None,
-            Err(err) => Some(err.0),
-        };
-
-        if let Some(WorkerCommand::Memmove { request, .. }) = send_error {
-            return Err(self.classify_send_failure(Some(request)));
-        }
-
-        reply_rx.await.map_err(|_| self.classify_reply_failure())?
-    }
-
-    fn classify_send_failure(&self, request: Option<AsyncMemmoveRequest>) -> AsyncMemmoveError {
-        if self.shared.is_shutdown_requested() {
-            AsyncMemmoveError::LifecycleFailure {
-                kind: AsyncLifecycleFailureKind::OwnerShutdown,
-                request,
-            }
-        } else {
-            AsyncMemmoveError::WorkerFailure {
-                kind: AsyncWorkerFailureKind::RequestChannelClosed,
-                request,
-            }
-        }
-    }
-
-    fn classify_reply_failure(&self) -> AsyncMemmoveError {
-        if self.shared.is_shutdown_requested() {
-            AsyncMemmoveError::LifecycleFailure {
-                kind: AsyncLifecycleFailureKind::OwnerShutdown,
-                request: None,
-            }
-        } else {
-            AsyncMemmoveError::WorkerFailure {
-                kind: AsyncWorkerFailureKind::ResponseChannelClosed,
-                request: None,
-            }
-        }
+        self.shared.driver.memmove(request).await
     }
 }
 
-/// Explicit owner/shutdown control for one shared async DSA worker.
+/// Explicit owner/shutdown control for one shared async DSA runtime.
 #[derive(Debug)]
 pub struct AsyncDsaSession {
     handle: AsyncDsaHandle,
@@ -429,14 +485,26 @@ impl AsyncDsaSession {
         device_path: P,
         max_page_fault_retries: u32,
     ) -> Result<Self, AsyncMemmoveError> {
-        let device_path = device_path.as_ref().to_path_buf();
-        Self::spawn_with_factory(move || {
-            DsaSession::open_with_retries(&device_path, max_page_fault_retries)
-        })
+        let config = MemmoveValidationConfig::with_retries(device_path, max_page_fault_retries)?;
+        let backend = DirectPortalBackend::open(config.device_path())?;
+        let runtime = DirectAsyncMemmoveRuntime::try_new(config, backend).map_err(|failure| {
+            AsyncMemmoveError::DirectFailure {
+                failure,
+                request: None,
+            }
+        })?;
+        Ok(Self::from_driver(
+            Arc::new(DirectRuntimeDriver::new(runtime)),
+            None,
+        ))
     }
 
-    /// Spawn a worker from a custom factory. This is public so integration tests
-    /// can prove contract behavior without requiring DSA hardware.
+    /// Spawn a legacy blocking-worker fixture from a custom factory.
+    ///
+    /// This hidden seam is retained for older host-independent tests. It is not
+    /// used by `open`, `open_with_retries`, or `open_default`, so the public
+    /// default path cannot silently fall back to synchronous
+    /// `DsaSession::memmove_uninit` execution.
     #[doc(hidden)]
     pub fn spawn_with_factory<F, W>(factory: F) -> Result<Self, AsyncMemmoveError>
     where
@@ -470,18 +538,10 @@ impl AsyncDsaSession {
         });
 
         match ready_rx.recv() {
-            Ok(Ok(())) => {
-                let handle = AsyncDsaHandle {
-                    shared: Arc::new(SharedWorkerState {
-                        request_tx,
-                        lifecycle: AtomicU8::new(LIFECYCLE_RUNNING),
-                    }),
-                };
-                Ok(Self {
-                    handle,
-                    worker_thread: Some(worker_thread),
-                })
-            }
+            Ok(Ok(())) => Ok(Self::from_driver(
+                Arc::new(WorkerRuntimeDriver { request_tx }),
+                Some(worker_thread),
+            )),
             Ok(Err(err)) => {
                 let _ = worker_thread.join();
                 Err(err.into())
@@ -496,11 +556,43 @@ impl AsyncDsaSession {
         }
     }
 
+    #[doc(hidden)]
+    pub fn spawn_with_direct_backend<B>(
+        config: MemmoveValidationConfig,
+        backend: B,
+    ) -> Result<Self, AsyncMemmoveError>
+    where
+        B: DirectMemmoveBackend,
+    {
+        let runtime = DirectAsyncMemmoveRuntime::try_new(config, backend).map_err(|failure| {
+            AsyncMemmoveError::DirectFailure {
+                failure,
+                request: None,
+            }
+        })?;
+        Ok(Self::from_driver(
+            Arc::new(DirectRuntimeDriver::new(runtime)),
+            None,
+        ))
+    }
+
+    fn from_driver(
+        driver: Arc<dyn AsyncMemmoveDriver>,
+        worker_thread: Option<JoinHandle<()>>,
+    ) -> Self {
+        let handle = AsyncDsaHandle {
+            shared: Arc::new(SharedAsyncState {
+                driver,
+                lifecycle: AtomicU8::new(LIFECYCLE_RUNNING),
+            }),
+        };
+        Self {
+            handle,
+            worker_thread,
+        }
+    }
+
     /// Borrow the cloneable Tokio-facing handle.
-    ///
-    /// Every clone still feeds the same worker-owned `DsaSession`, so Tokio
-    /// callers can share the handle freely without widening the ownership
-    /// boundary or changing the one-worker serialization contract.
     pub fn handle(&self) -> AsyncDsaHandle {
         self.handle.clone()
     }
@@ -513,23 +605,23 @@ impl AsyncDsaSession {
         self.handle.memmove(request).await
     }
 
-    /// Close the shared worker explicitly and wait for the worker thread to exit.
+    /// Close the owner and reject future submissions through cloned handles.
     ///
-    /// Shutdown is drain-then-stop: already-queued requests are allowed to run
-    /// to completion before the worker exits, and later submissions through any
-    /// cloned handle fail with `owner_shutdown`.
+    /// Direct-runtime submissions that were already accepted remain owned by
+    /// the direct runtime and complete from their completion records. The hidden
+    /// legacy worker fixture still receives a shutdown command so old tests can
+    /// join its worker thread deterministically.
     pub fn shutdown(mut self) -> Result<(), AsyncMemmoveError> {
         self.shutdown_inner()
     }
 
     fn shutdown_inner(&mut self) -> Result<(), AsyncMemmoveError> {
-        if self.worker_thread.is_none() {
+        if !self.handle.shared.mark_shutdown_requested() {
             self.handle.shared.mark_shutdown_complete();
             return Ok(());
         }
 
-        self.handle.shared.mark_shutdown_requested();
-        let _ = self.handle.shared.request_tx.send(WorkerCommand::Shutdown);
+        self.handle.shared.driver.close();
 
         if let Some(worker_thread) = self.worker_thread.take() {
             worker_thread

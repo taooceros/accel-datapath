@@ -27,6 +27,7 @@ pub enum AsyncDirectFailureKind {
     SubmissionRejected,
     BackpressureExceeded,
     ReceiverDropped,
+    RuntimeUnavailable,
 }
 
 impl AsyncDirectFailureKind {
@@ -37,6 +38,7 @@ impl AsyncDirectFailureKind {
             Self::SubmissionRejected => "submission_rejected",
             Self::BackpressureExceeded => "backpressure_exceeded",
             Self::ReceiverDropped => "receiver_dropped",
+            Self::RuntimeUnavailable => "runtime_unavailable",
         }
     }
 }
@@ -184,11 +186,27 @@ where
         Self::with_submission_retry_budget(config, backend, DEFAULT_SUBMISSION_RETRY_BUDGET)
     }
 
+    pub fn try_new(
+        config: MemmoveValidationConfig,
+        backend: B,
+    ) -> Result<Self, AsyncDirectFailure> {
+        Self::try_with_submission_retry_budget(config, backend, DEFAULT_SUBMISSION_RETRY_BUDGET)
+    }
+
     pub fn with_submission_retry_budget(
         config: MemmoveValidationConfig,
         backend: B,
         submission_retry_budget: u32,
     ) -> Self {
+        Self::try_with_submission_retry_budget(config, backend, submission_retry_budget)
+            .expect("direct async runtime requires an active Tokio runtime")
+    }
+
+    pub fn try_with_submission_retry_budget(
+        config: MemmoveValidationConfig,
+        backend: B,
+        submission_retry_budget: u32,
+    ) -> Result<Self, AsyncDirectFailure> {
         let inner = Arc::new(RuntimeInner {
             config,
             backend,
@@ -198,9 +216,18 @@ where
             submission_retry_budget,
         });
 
-        tokio::spawn(monitor_completion_records(Arc::downgrade(&inner)));
+        let handle = tokio::runtime::Handle::try_current().map_err(|_| {
+            AsyncDirectFailure::new(
+                AsyncDirectFailureKind::RuntimeUnavailable,
+                0,
+                submission_retry_budget,
+                0,
+                None,
+            )
+        })?;
+        handle.spawn(monitor_completion_records(Arc::downgrade(&inner)));
 
-        Self { inner }
+        Ok(Self { inner })
     }
 
     pub async fn memmove(
