@@ -32,6 +32,7 @@ pub use validation::{
 
 use std::path::Path;
 
+use bytes::buf::UninitSlice;
 use idxd_sys::{
     DsaCompletionRecord, DsaHwDesc, WqPortal, poll_completion, reset_completion, touch_fault_page,
 };
@@ -89,6 +90,39 @@ impl DsaSession {
         let report = self.memmove_inner(dst.as_mut_ptr(), src.as_ptr(), request)?;
 
         if let Some(mismatch_offset) = dst
+            .iter()
+            .zip(src.iter())
+            .position(|(actual, expected)| actual != expected)
+        {
+            return Err(MemmoveError::ByteMismatch {
+                device_path: self.device_path().to_path_buf(),
+                phase: MemmovePhase::PostCopyVerify,
+                requested_bytes: request.len(),
+                mismatch_offset,
+                final_status: report.final_status,
+                page_fault_retries: report.page_fault_retries,
+            });
+        }
+
+        Ok(report)
+    }
+
+    /// Submit one memmove into caller-owned uninitialized writable capacity.
+    pub(crate) fn memmove_uninit(
+        &self,
+        dst: &mut UninitSlice,
+        src: &[u8],
+    ) -> Result<MemmoveValidationReport, MemmoveError> {
+        let request = MemmoveRequest::for_buffers(dst.len(), src.len())?;
+        let report = self.memmove_inner(dst.as_mut_ptr(), src.as_ptr(), request)?;
+
+        // SAFETY: A successful DSA memmove initializes exactly `request.len()`
+        // bytes starting at `dst.as_mut_ptr()`. The validation above guarantees
+        // that the exposed prefix is in bounds, and this read happens only after
+        // success so the bytes are initialized for post-copy verification.
+        let initialized_dst =
+            unsafe { std::slice::from_raw_parts(dst.as_mut_ptr(), request.len()) };
+        if let Some(mismatch_offset) = initialized_dst
             .iter()
             .zip(src.iter())
             .position(|(actual, expected)| actual != expected)

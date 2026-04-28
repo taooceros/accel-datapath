@@ -4,6 +4,7 @@ use std::sync::{
 };
 use std::time::Duration;
 
+use bytes::{Bytes, BytesMut, buf::UninitSlice};
 use idxd_rust::{
     AsyncDsaSession, AsyncLifecycleFailureKind, AsyncMemmoveError, AsyncMemmoveRequest,
     AsyncMemmoveWorker, MemmoveError, MemmoveRequest, MemmoveValidationReport,
@@ -103,7 +104,7 @@ struct BlockingWorker {
 impl AsyncMemmoveWorker for BlockingWorker {
     fn memmove(
         &mut self,
-        dst: &mut [u8],
+        dst: &mut UninitSlice,
         src: &[u8],
     ) -> Result<MemmoveValidationReport, MemmoveError> {
         let call_id = self.calls.fetch_add(1, Ordering::SeqCst) + 1;
@@ -115,7 +116,7 @@ impl AsyncMemmoveWorker for BlockingWorker {
             self.first_release.wait();
         }
 
-        dst[..src.len()].copy_from_slice(src);
+        dst.copy_from_slice(src);
         self.events.push(WorkerEvent::Finished(call_id));
         self.active_calls.fetch_sub(1, Ordering::SeqCst);
 
@@ -215,6 +216,14 @@ impl BlockingWorkerHarness {
     }
 }
 
+fn owned_request(source: &'static [u8]) -> AsyncMemmoveRequest {
+    AsyncMemmoveRequest::new(
+        Bytes::from_static(source),
+        BytesMut::with_capacity(source.len()),
+    )
+    .expect("request should validate")
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn cloned_handles_compose_with_tokio_join_and_serialize_through_one_worker() {
     let (session, harness) = BlockingWorkerHarness::spawn_session();
@@ -223,8 +232,8 @@ async fn cloned_handles_compose_with_tokio_join_and_serialize_through_one_worker
 
     let joined = tokio::spawn(async move {
         tokio::join!(
-            first_handle.memmove(AsyncMemmoveRequest::copy_exact(vec![1, 2, 3]).unwrap()),
-            second_handle.memmove(AsyncMemmoveRequest::copy_exact(vec![4, 5, 6, 7]).unwrap())
+            first_handle.memmove(owned_request(b"\x01\x02\x03")),
+            second_handle.memmove(owned_request(b"\x04\x05\x06\x07"))
         )
     });
 
@@ -259,16 +268,10 @@ async fn cloned_handles_compose_in_spawned_tasks_and_still_share_one_worker() {
     let first_handle = session.handle();
     let second_handle = first_handle.clone();
 
-    let first_task = tokio::spawn(async move {
-        first_handle
-            .memmove(AsyncMemmoveRequest::copy_exact(vec![8, 9]).unwrap())
-            .await
-    });
-    let second_task = tokio::spawn(async move {
-        second_handle
-            .memmove(AsyncMemmoveRequest::copy_exact(vec![10, 11, 12]).unwrap())
-            .await
-    });
+    let first_task =
+        tokio::spawn(async move { first_handle.memmove(owned_request(b"\x08\x09")).await });
+    let second_task =
+        tokio::spawn(async move { second_handle.memmove(owned_request(b"\x0a\x0b\x0c")).await });
 
     harness.wait_for_first_start().await;
     harness
@@ -314,7 +317,7 @@ async fn dropping_one_clone_does_not_shut_down_another_clone() {
     harness.release_first_request();
 
     let result = retained_handle
-        .memmove(AsyncMemmoveRequest::copy_exact(vec![8, 9]).unwrap())
+        .memmove(owned_request(b"\x08\x09"))
         .await
         .expect("remaining clone should keep working");
 
@@ -331,7 +334,7 @@ async fn explicit_owner_shutdown_is_distinct_from_worker_failure() {
     session.shutdown().expect("owner shutdown should succeed");
 
     let err = handle
-        .memmove(AsyncMemmoveRequest::copy_exact(vec![1, 2, 3]).unwrap())
+        .memmove(owned_request(b"\x01\x02\x03"))
         .await
         .expect_err("use after owner shutdown must fail structurally");
 
@@ -340,12 +343,7 @@ async fn explicit_owner_shutdown_is_distinct_from_worker_failure() {
         err.lifecycle_failure_kind(),
         Some(AsyncLifecycleFailureKind::OwnerShutdown)
     );
-    assert!(matches!(
-        err,
-        AsyncMemmoveError::LifecycleFailure {
-            kind: AsyncLifecycleFailureKind::OwnerShutdown,
-        }
-    ));
     assert!(err.worker_failure_kind().is_none());
     assert!(err.memmove_error().is_none());
+    assert!(err.into_request().is_some());
 }

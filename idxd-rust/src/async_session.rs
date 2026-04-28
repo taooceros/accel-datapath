@@ -5,7 +5,7 @@ use std::sync::{
 };
 use std::thread::{self, JoinHandle};
 
-use bytes::{Bytes, BytesMut};
+use bytes::{Bytes, BytesMut, buf::UninitSlice};
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 
@@ -37,8 +37,8 @@ impl AsyncMemmoveRequest {
     /// Validation is synchronous and happens before enqueue. If the source is
     /// empty or the destination lacks enough spare writable capacity, the
     /// rejected buffers are returned in [`AsyncMemmoveRequestError`].
-    pub fn new(source: Bytes, destination: BytesMut) -> Result<Self, AsyncMemmoveRequestError> {
-        let writable_capacity = destination.capacity().saturating_sub(destination.len());
+    pub fn new(source: Bytes, mut destination: BytesMut) -> Result<Self, AsyncMemmoveRequestError> {
+        let writable_capacity = destination.spare_capacity_mut().len();
         if let Err(error) = MemmoveRequest::for_buffers(writable_capacity, source.len()) {
             return Err(AsyncMemmoveRequestError {
                 error,
@@ -69,6 +69,10 @@ impl AsyncMemmoveRequest {
         self.destination
             .capacity()
             .saturating_sub(self.destination.len())
+    }
+
+    pub fn into_parts(self) -> (Bytes, BytesMut) {
+        (self.source, self.destination)
     }
 }
 
@@ -172,43 +176,70 @@ impl std::fmt::Display for AsyncWorkerFailureKind {
 /// Async wrapper error that preserves the underlying synchronous `MemmoveError`.
 #[derive(Debug, Error)]
 pub enum AsyncMemmoveError {
-    #[error(transparent)]
-    Memmove(#[from] MemmoveError),
+    #[error("async memmove execution failure: {source}")]
+    Memmove {
+        #[source]
+        source: MemmoveError,
+        request: Option<AsyncMemmoveRequest>,
+    },
 
     #[error("async memmove lifecycle failure: {kind}")]
-    LifecycleFailure { kind: AsyncLifecycleFailureKind },
+    LifecycleFailure {
+        kind: AsyncLifecycleFailureKind,
+        request: Option<AsyncMemmoveRequest>,
+    },
 
     #[error("async memmove worker failure: {kind}")]
-    WorkerFailure { kind: AsyncWorkerFailureKind },
+    WorkerFailure {
+        kind: AsyncWorkerFailureKind,
+        request: Option<AsyncMemmoveRequest>,
+    },
 }
 
 impl AsyncMemmoveError {
     pub fn kind(&self) -> &'static str {
         match self {
-            Self::Memmove(err) => err.kind(),
-            Self::LifecycleFailure { kind } => kind.as_str(),
-            Self::WorkerFailure { kind } => kind.as_str(),
+            Self::Memmove { source, .. } => source.kind(),
+            Self::LifecycleFailure { kind, .. } => kind.as_str(),
+            Self::WorkerFailure { kind, .. } => kind.as_str(),
         }
     }
 
     pub fn lifecycle_failure_kind(&self) -> Option<AsyncLifecycleFailureKind> {
         match self {
-            Self::LifecycleFailure { kind } => Some(*kind),
-            Self::Memmove(_) | Self::WorkerFailure { .. } => None,
+            Self::LifecycleFailure { kind, .. } => Some(*kind),
+            Self::Memmove { .. } | Self::WorkerFailure { .. } => None,
         }
     }
 
     pub fn worker_failure_kind(&self) -> Option<AsyncWorkerFailureKind> {
         match self {
-            Self::WorkerFailure { kind } => Some(*kind),
-            Self::Memmove(_) | Self::LifecycleFailure { .. } => None,
+            Self::WorkerFailure { kind, .. } => Some(*kind),
+            Self::Memmove { .. } | Self::LifecycleFailure { .. } => None,
         }
     }
 
     pub fn memmove_error(&self) -> Option<&MemmoveError> {
         match self {
-            Self::Memmove(err) => Some(err),
+            Self::Memmove { source, .. } => Some(source),
             Self::LifecycleFailure { .. } | Self::WorkerFailure { .. } => None,
+        }
+    }
+
+    pub fn into_request(self) -> Option<AsyncMemmoveRequest> {
+        match self {
+            Self::Memmove { request, .. }
+            | Self::LifecycleFailure { request, .. }
+            | Self::WorkerFailure { request, .. } => request,
+        }
+    }
+}
+
+impl From<MemmoveError> for AsyncMemmoveError {
+    fn from(source: MemmoveError) -> Self {
+        Self::Memmove {
+            source,
+            request: None,
         }
     }
 }
@@ -218,7 +249,7 @@ impl AsyncMemmoveError {
 pub trait AsyncMemmoveWorker: Send + 'static {
     fn memmove(
         &mut self,
-        dst: &mut [u8],
+        dst: &mut UninitSlice,
         src: &[u8],
     ) -> Result<MemmoveValidationReport, MemmoveError>;
 }
@@ -226,17 +257,17 @@ pub trait AsyncMemmoveWorker: Send + 'static {
 impl AsyncMemmoveWorker for DsaSession {
     fn memmove(
         &mut self,
-        dst: &mut [u8],
+        dst: &mut UninitSlice,
         src: &[u8],
     ) -> Result<MemmoveValidationReport, MemmoveError> {
-        DsaSession::memmove(self, dst, src)
+        DsaSession::memmove_uninit(self, dst, src)
     }
 }
 
 enum WorkerCommand {
     Memmove {
         request: AsyncMemmoveRequest,
-        reply_tx: oneshot::Sender<Result<AsyncMemmoveResult, MemmoveError>>,
+        reply_tx: oneshot::Sender<Result<AsyncMemmoveResult, AsyncMemmoveError>>,
     },
     Shutdown,
 }
@@ -295,30 +326,38 @@ impl AsyncDsaHandle {
         if self.shared.is_shutdown_requested() {
             return Err(AsyncMemmoveError::LifecycleFailure {
                 kind: AsyncLifecycleFailureKind::OwnerShutdown,
+                request: Some(request),
             });
         }
 
         let (reply_tx, reply_rx) = oneshot::channel();
 
-        self.shared
+        let send_error = match self
+            .shared
             .request_tx
             .send(WorkerCommand::Memmove { request, reply_tx })
-            .map_err(|_| self.classify_send_failure())?;
+        {
+            Ok(()) => None,
+            Err(err) => Some(err.0),
+        };
 
-        reply_rx
-            .await
-            .map_err(|_| self.classify_reply_failure())?
-            .map_err(AsyncMemmoveError::from)
+        if let Some(WorkerCommand::Memmove { request, .. }) = send_error {
+            return Err(self.classify_send_failure(Some(request)));
+        }
+
+        reply_rx.await.map_err(|_| self.classify_reply_failure())?
     }
 
-    fn classify_send_failure(&self) -> AsyncMemmoveError {
+    fn classify_send_failure(&self, request: Option<AsyncMemmoveRequest>) -> AsyncMemmoveError {
         if self.shared.is_shutdown_requested() {
             AsyncMemmoveError::LifecycleFailure {
                 kind: AsyncLifecycleFailureKind::OwnerShutdown,
+                request,
             }
         } else {
             AsyncMemmoveError::WorkerFailure {
                 kind: AsyncWorkerFailureKind::RequestChannelClosed,
+                request,
             }
         }
     }
@@ -327,10 +366,12 @@ impl AsyncDsaHandle {
         if self.shared.is_shutdown_requested() {
             AsyncMemmoveError::LifecycleFailure {
                 kind: AsyncLifecycleFailureKind::OwnerShutdown,
+                request: None,
             }
         } else {
             AsyncMemmoveError::WorkerFailure {
                 kind: AsyncWorkerFailureKind::ResponseChannelClosed,
+                request: None,
             }
         }
     }
@@ -417,6 +458,7 @@ impl AsyncDsaSession {
                 let _ = worker_thread.join();
                 Err(AsyncMemmoveError::WorkerFailure {
                     kind: AsyncWorkerFailureKind::WorkerInitClosed,
+                    request: None,
                 })
             }
         }
@@ -462,6 +504,7 @@ impl AsyncDsaSession {
                 .join()
                 .map_err(|_| AsyncMemmoveError::WorkerFailure {
                     kind: AsyncWorkerFailureKind::WorkerPanicked,
+                    request: None,
                 })?;
         }
 
@@ -479,12 +522,56 @@ impl Drop for AsyncDsaSession {
 fn run_memmove<W: AsyncMemmoveWorker>(
     worker: &mut W,
     request: AsyncMemmoveRequest,
-) -> Result<AsyncMemmoveResult, MemmoveError> {
+) -> Result<AsyncMemmoveResult, AsyncMemmoveError> {
     let AsyncMemmoveRequest {
         source,
         mut destination,
     } = request;
-    let report = worker.memmove(&mut destination, &source)?;
+    let requested_bytes = source.len();
+    let original_len = destination.len();
+
+    if destination.spare_capacity_mut().len() < requested_bytes {
+        let dst_len = destination.capacity().saturating_sub(destination.len());
+        return Err(AsyncMemmoveError::Memmove {
+            source: MemmoveError::DestinationTooSmall {
+                src_len: requested_bytes,
+                dst_len,
+            },
+            request: Some(AsyncMemmoveRequest {
+                source,
+                destination,
+            }),
+        });
+    }
+
+    let worker_result = {
+        let spare = destination.spare_capacity_mut();
+        let dst: &mut UninitSlice = (&mut spare[..requested_bytes]).into();
+        worker.memmove(dst, &source)
+    };
+
+    let report = match worker_result {
+        Ok(report) => report,
+        Err(error) => {
+            return Err(AsyncMemmoveError::Memmove {
+                source: error,
+                request: Some(AsyncMemmoveRequest {
+                    source,
+                    destination,
+                }),
+            });
+        }
+    };
+
+    // SAFETY: The worker returned success after writing exactly `requested_bytes`
+    // bytes into the current spare capacity slice above. The constructor and
+    // worker-side guard verified that spare capacity is at least this large, so
+    // advancing from the original initialized length exposes only initialized
+    // bytes appended by this memmove.
+    unsafe {
+        destination.set_len(original_len + requested_bytes);
+    }
+
     Ok(AsyncMemmoveResult {
         destination,
         report,
