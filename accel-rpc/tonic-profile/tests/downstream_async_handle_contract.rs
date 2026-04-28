@@ -538,6 +538,58 @@ exit 1"#,
     assert!(stderr.contains("artifact is not valid JSON"));
 }
 
+fn assert_active_async_surface_has_no_removed_helpers() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let repo_root = manifest_dir
+        .parent()
+        .and_then(Path::parent)
+        .expect("tonic-profile should live two levels below repo root");
+    let active_paths = [
+        manifest_dir.join("src/bin/downstream_async_handle.rs"),
+        manifest_dir.join("scripts/verify_downstream_async_handle.sh"),
+        manifest_dir.join("README.md"),
+        repo_root.join("idxd-rust/README.md"),
+    ];
+    let forbidden = [
+        concat!("copy", "_exact"),
+        concat!("copy", "_into"),
+        concat!("source", "_bytes()"),
+        concat!("destination", "_bytes()"),
+        concat!("result", ".", "bytes"),
+        concat!("with", "_destination", "_len"),
+        concat!("memmove", "_into"),
+    ];
+
+    for path in active_paths {
+        let source = fs::read_to_string(&path).unwrap_or_else(|err| {
+            panic!(
+                "active async surface should be readable at {}: {err}",
+                path.display()
+            )
+        });
+        for stale in forbidden {
+            assert!(
+                !source.contains(stale),
+                "active async surface {} must not mention removed helper `{stale}`",
+                path.display()
+            );
+        }
+        assert!(
+            !source.contains(&format!(
+                "{}(source)",
+                concat!("Async", "Memmove", "Request::new")
+            )),
+            "active async surface {} must not use the old one-argument request constructor",
+            path.display()
+        );
+    }
+}
+
+#[test]
+fn downstream_active_docs_and_scripts_reject_removed_async_helpers() {
+    assert_active_async_surface_has_no_removed_helpers();
+}
+
 #[test]
 fn custom_codec_preserves_synchronous_seam() {
     let codec_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/custom_codec.rs");

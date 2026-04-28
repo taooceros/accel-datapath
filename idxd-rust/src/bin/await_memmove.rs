@@ -5,6 +5,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use bytes::{Bytes, BytesMut, buf::UninitSlice};
 use idxd_rust::{
     AsyncDsaSession, AsyncMemmoveError, AsyncMemmoveRequest, AsyncMemmoveWorker,
     DEFAULT_DEVICE_PATH, MemmoveError, MemmovePhase, MemmoveRequest, MemmoveValidationReport,
@@ -182,9 +183,15 @@ struct RunOutcome {
 
 async fn execute(args: &CliArgs) -> RunOutcome {
     let src = deterministic_src(args.requested_bytes);
-    let request = match AsyncMemmoveRequest::copy_exact(src) {
+    let request = match AsyncMemmoveRequest::new(
+        Bytes::from(src),
+        BytesMut::with_capacity(args.requested_bytes),
+    ) {
         Ok(request) => request,
-        Err(err) => return validation_failure_outcome(args, err),
+        Err(err) => {
+            let (err, _source, _destination) = err.into_parts();
+            return validation_failure_outcome(args, err);
+        }
     };
 
     match TestScenario::from_env() {
@@ -335,8 +342,8 @@ fn success_outcome(report: MemmoveValidationReport) -> RunOutcome {
 
 fn async_failure_outcome(args: &CliArgs, err: AsyncMemmoveError) -> RunOutcome {
     match err {
-        AsyncMemmoveError::Memmove(err) => validation_failure_outcome(args, err),
-        AsyncMemmoveError::LifecycleFailure { kind } => RunOutcome {
+        AsyncMemmoveError::Memmove { source, .. } => validation_failure_outcome(args, source),
+        AsyncMemmoveError::LifecycleFailure { kind, .. } => RunOutcome {
             ok: false,
             device_path: args.device_path.display().to_string(),
             requested_bytes: args.requested_bytes,
@@ -350,7 +357,7 @@ fn async_failure_outcome(args: &CliArgs, err: AsyncMemmoveError) -> RunOutcome {
             validation_error_kind: None,
             message: format!("async memmove lifecycle failure: {}", kind.as_str()),
         },
-        AsyncMemmoveError::WorkerFailure { kind } => RunOutcome {
+        AsyncMemmoveError::WorkerFailure { kind, .. } => RunOutcome {
             ok: false,
             device_path: args.device_path.display().to_string(),
             requested_bytes: args.requested_bytes,
@@ -577,10 +584,10 @@ struct SuccessWorker {
 impl AsyncMemmoveWorker for SuccessWorker {
     fn memmove(
         &mut self,
-        dst: &mut [u8],
+        dst: &mut UninitSlice,
         src: &[u8],
     ) -> Result<MemmoveValidationReport, MemmoveError> {
-        dst[..src.len()].copy_from_slice(src);
+        dst.copy_from_slice(src);
         MemmoveValidationReport::new(&self.device_path, MemmoveRequest::new(src.len())?, 0, 1)
     }
 }
@@ -592,7 +599,7 @@ struct ErrorWorker {
 impl AsyncMemmoveWorker for ErrorWorker {
     fn memmove(
         &mut self,
-        _dst: &mut [u8],
+        _dst: &mut UninitSlice,
         _src: &[u8],
     ) -> Result<MemmoveValidationReport, MemmoveError> {
         Err(self
@@ -607,7 +614,7 @@ struct PanicWorker;
 impl AsyncMemmoveWorker for PanicWorker {
     fn memmove(
         &mut self,
-        _dst: &mut [u8],
+        _dst: &mut UninitSlice,
         _src: &[u8],
     ) -> Result<MemmoveValidationReport, MemmoveError> {
         panic!("worker dropped before replying");

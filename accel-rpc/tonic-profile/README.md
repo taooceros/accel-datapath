@@ -1,10 +1,10 @@
 # tonic-profile
 
-`tonic-profile` is the repo-local Tonic profiling harness. It owns the gRPC codec/selftest evidence paths and, for M003/S05, also owns the downstream Tokio consumer proof for the public `idxd-rust` async owner/handle API.
+`tonic-profile` is the repo-local Tonic profiling harness. It owns the gRPC codec/selftest evidence paths and also owns the downstream Tokio consumer proof for the public `idxd-rust` async owner/handle API.
 
 ## Downstream async-handle proof seam
 
-The S05 proof seam is the standalone binary:
+The downstream proof seam is the standalone binary:
 
 ```bash
 cargo run -p tonic-profile --bin downstream_async_handle -- \
@@ -36,11 +36,11 @@ The artifact contract includes these downstream-specific fields:
 - `validation_phase`
 - `validation_error_kind`
 
-This command is intentionally not a wrapper around `idxd-rust`'s crate-local `await_memmove` proof binary. It proves that a package outside the canonical binding crate can clone public async handles, compose them with ordinary Tokio code, await real memmove operations, and preserve typed lifecycle/worker/validation diagnostics.
+This command is intentionally not a wrapper around `idxd-rust`'s crate-local `await_memmove` proof binary. It proves that a package outside the canonical binding crate can create `AsyncMemmoveRequest::new(Bytes, BytesMut)` requests, clone public async handles, compose them with ordinary Tokio code, await real memmove operations, inspect `AsyncMemmoveResult.destination` plus `AsyncMemmoveResult.report`, and preserve typed lifecycle/worker/validation diagnostics.
 
 ## Codec boundary warning
 
-`src/custom_codec.rs` remains a synchronous codec seam. Do not force `AsyncDsaHandle`, `block_on`, or spawned async behavior into the codec to satisfy S05. Async integration is proven by the downstream binary above; codec-lane DSA behavior is covered separately by the existing S03 verifier:
+`src/custom_codec.rs` remains a synchronous codec seam. Do not force `AsyncDsaHandle`, `block_on`, or spawned async behavior into the codec to satisfy the downstream proof. Async integration is proven by the downstream binary above; codec-lane DSA behavior is covered separately by the existing S03 verifier:
 
 ```bash
 bash accel-rpc/tonic-profile/scripts/verify_s03_idxd_path.sh

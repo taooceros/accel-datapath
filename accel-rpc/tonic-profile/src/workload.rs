@@ -8,8 +8,8 @@ use crate::cli::{Args, PayloadKind, ProtoShape, ResponseShape, RpcMode};
 use crate::profile::echo_reply::Body as EchoReplyBody;
 use crate::profile::echo_request::Body as EchoRequestBody;
 use crate::profile::{
-    self, CompactProfileShape, EchoReply, EchoRequest, FleetResponseEntry,
-    FleetResponseHeavyShape, FleetSmallShape, FleetStringHeavyShape, FleetStringLeaf, ShapeKind,
+    self, CompactProfileShape, EchoReply, EchoRequest, FleetResponseEntry, FleetResponseHeavyShape,
+    FleetSmallShape, FleetStringHeavyShape, FleetStringLeaf, ShapeKind,
 };
 use crate::BoxError;
 
@@ -468,7 +468,8 @@ mod tests {
             .into_iter()
             .next()
             .expect("prepared request");
-        let err = validate_response(&prepared, &EchoReply { body: None }).expect_err("missing body should fail");
+        let err = validate_response(&prepared, &EchoReply { body: None })
+            .expect_err("missing body should fail");
         assert!(
             err.to_string().contains("response body was missing"),
             "unexpected error: {err}"
@@ -487,7 +488,8 @@ mod tests {
                 42,
             ))),
         };
-        let err = validate_response(&prepared, &mismatched).expect_err("shape mismatch should fail");
+        let err =
+            validate_response(&prepared, &mismatched).expect_err("shape mismatch should fail");
         assert!(
             err.to_string().contains("response shape mismatch"),
             "unexpected error: {err}"

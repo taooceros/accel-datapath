@@ -296,7 +296,10 @@ fn split_client_and_server_preserve_idxd_selection_metadata_or_fail_before_artif
 
     wait_for_exit(&mut server, Duration::from_secs(5));
     let server_status = server.wait().expect("wait for server status");
-    assert!(server_status.success(), "server exited with {server_status}");
+    assert!(
+        server_status.success(),
+        "server exited with {server_status}"
+    );
 
     let client_report = parse_report(&client_json);
     let server_report = parse_report(&server_json);

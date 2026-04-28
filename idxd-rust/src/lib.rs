@@ -8,20 +8,21 @@
 //! Synchronous callers pass explicit source and destination slices to
 //! `DsaSession::memmove`; request validation always treats the source length as
 //! the requested transfer size and only requires destination capacity to be at
-//! least that large. Async callers should prefer `AsyncMemmoveRequest` when work
-//! must cross Tokio tasks or the worker thread: requests own both source and
-//! destination buffers, and `AsyncMemmoveResult` returns the owned destination
-//! plus validation report. `AsyncDsaHandle::memmove_into` is a scoped borrowed
-//! convenience that copies into an owned worker request, awaits it, and copies
-//! the successful prefix back into the caller's destination; it does not make
-//! borrowed buffers `tokio::spawn`-friendly.
+//! least that large. Async callers should use `AsyncMemmoveRequest::new` when
+//! work must cross Tokio tasks or the worker thread: requests own a `bytes::Bytes`
+//! source and a caller-provided `bytes::BytesMut` destination, and
+//! `AsyncMemmoveResult` returns the owned destination plus validation report.
+//! The async API intentionally has no public allocation convenience constructor
+//! and no borrowed copy-back helper; destination allocation and ownership stay
+//! explicit at the call site.
 
 mod async_session;
 mod validation;
 
 pub use async_session::{
     AsyncDsaHandle, AsyncDsaSession, AsyncLifecycleFailureKind, AsyncMemmoveError,
-    AsyncMemmoveRequest, AsyncMemmoveResult, AsyncMemmoveWorker, AsyncWorkerFailureKind,
+    AsyncMemmoveRequest, AsyncMemmoveRequestError, AsyncMemmoveResult, AsyncMemmoveWorker,
+    AsyncWorkerFailureKind,
 };
 pub use validation::{
     COMPLETION_TIMEOUT_STATUS, CompletionAction, CompletionSnapshot, DEFAULT_DEVICE_PATH,
@@ -31,6 +32,7 @@ pub use validation::{
 
 use std::path::Path;
 
+use bytes::buf::UninitSlice;
 use idxd_sys::{
     DsaCompletionRecord, DsaHwDesc, WqPortal, poll_completion, reset_completion, touch_fault_page,
 };
@@ -88,6 +90,39 @@ impl DsaSession {
         let report = self.memmove_inner(dst.as_mut_ptr(), src.as_ptr(), request)?;
 
         if let Some(mismatch_offset) = dst
+            .iter()
+            .zip(src.iter())
+            .position(|(actual, expected)| actual != expected)
+        {
+            return Err(MemmoveError::ByteMismatch {
+                device_path: self.device_path().to_path_buf(),
+                phase: MemmovePhase::PostCopyVerify,
+                requested_bytes: request.len(),
+                mismatch_offset,
+                final_status: report.final_status,
+                page_fault_retries: report.page_fault_retries,
+            });
+        }
+
+        Ok(report)
+    }
+
+    /// Submit one memmove into caller-owned uninitialized writable capacity.
+    pub(crate) fn memmove_uninit(
+        &self,
+        dst: &mut UninitSlice,
+        src: &[u8],
+    ) -> Result<MemmoveValidationReport, MemmoveError> {
+        let request = MemmoveRequest::for_buffers(dst.len(), src.len())?;
+        let report = self.memmove_inner(dst.as_mut_ptr(), src.as_ptr(), request)?;
+
+        // SAFETY: A successful DSA memmove initializes exactly `request.len()`
+        // bytes starting at `dst.as_mut_ptr()`. The validation above guarantees
+        // that the exposed prefix is in bounds, and this read happens only after
+        // success so the bytes are initialized for post-copy verification.
+        let initialized_dst =
+            unsafe { std::slice::from_raw_parts(dst.as_mut_ptr(), request.len()) };
+        if let Some(mismatch_offset) = initialized_dst
             .iter()
             .zip(src.iter())
             .position(|(actual, expected)| actual != expected)

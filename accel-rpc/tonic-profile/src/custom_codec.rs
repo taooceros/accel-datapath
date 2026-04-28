@@ -4,10 +4,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{OnceLock, RwLock};
 use std::time::Instant;
 
+use crate::runtime_instrumentation::{record_stage, StageKind};
 use bytes::{BufMut, BytesMut};
 use idxd_rust::{DsaSession, MemmoveError, MemmovePhase};
 use prost::Message;
-use tonic::codec::instrumentation::{record_stage, StageKind};
 use tonic::codec::{BufferSettings, Codec, DecodeBuf, Decoder, EncodeBuf, Encoder};
 use tonic::Status;
 use tonic_prost::ProstDecoder;
@@ -239,10 +239,7 @@ pub struct ProfileEncoder<T> {
 }
 
 impl<T> ProfileEncoder<T> {
-    fn new(
-        settings: EffectiveBufferSettings,
-        acceleration: EffectiveAccelerationSettings,
-    ) -> Self {
+    fn new(settings: EffectiveBufferSettings, acceleration: EffectiveAccelerationSettings) -> Self {
         let buffer_settings = settings.as_tonic();
         Self {
             _pd: PhantomData,
@@ -256,13 +253,12 @@ impl<T> ProfileEncoder<T> {
 
     fn ensure_session(&mut self) -> Result<(), Status> {
         if self.session.is_none() {
-            let device_path = self
-                .acceleration
-                .device_path
-                .clone()
-                .ok_or_else(|| Status::internal("idxd codec acceleration missing device path"))?;
-            let session = DsaSession::open(&device_path)
-                .map_err(|err| idxd_status(&device_path, &err))?;
+            let device_path =
+                self.acceleration.device_path.clone().ok_or_else(|| {
+                    Status::internal("idxd codec acceleration missing device path")
+                })?;
+            let session =
+                DsaSession::open(&device_path).map_err(|err| idxd_status(&device_path, &err))?;
             self.session = Some(session);
         }
         Ok(())
@@ -406,7 +402,9 @@ mod tests {
         );
 
         assert_eq!(status.code(), tonic::Code::Internal);
-        assert!(status.message().contains("during post_copy_verify (byte_mismatch)"));
+        assert!(status
+            .message()
+            .contains("during post_copy_verify (byte_mismatch)"));
         assert!(status.message().contains("mismatch_offset=17"));
     }
 
@@ -420,7 +418,9 @@ mod tests {
         );
 
         assert_eq!(status.code(), tonic::Code::Internal);
-        assert!(status.message().contains("during invalid_device_path (invalid_device_path)"));
+        assert!(status
+            .message()
+            .contains("during invalid_device_path (invalid_device_path)"));
     }
 
     #[test]
@@ -544,9 +544,7 @@ mod tests {
                 status.message()
             );
         }
-        assert!(invalid_length
-            .message()
-            .contains("(invalid_length)"));
+        assert!(invalid_length.message().contains("(invalid_length)"));
         assert!(destination_too_small
             .message()
             .contains("(destination_too_small)"));
