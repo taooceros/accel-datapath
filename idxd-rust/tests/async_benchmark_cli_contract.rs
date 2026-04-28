@@ -159,7 +159,7 @@ fn emits_software_canonical_json_with_required_schema_fields() {
         assert_eq!(row["target"], "software_direct_async_diagnostic");
         assert!(row["comparison_target"].is_null());
         assert_eq!(row["requested_bytes"], 64);
-        assert_eq!(row["completed_operations"].as_u64().unwrap() > 0, true);
+        assert!(row["completed_operations"].as_u64().unwrap() > 0);
         assert_eq!(row["failed_operations"], 0);
         assert_eq!(row["verdict"], "pass");
         assert_eq!(row["claim_eligible"], false);
@@ -169,12 +169,60 @@ fn emits_software_canonical_json_with_required_schema_fields() {
         assert!(row["validation_phase"].is_null());
         assert!(row["validation_error_kind"].is_null());
         assert!(row["elapsed_ns"].as_u64().unwrap() > 0);
+        assert!(row["min_latency_ns"].as_u64().unwrap() > 0);
+        assert!(row["mean_latency_ns"].as_u64().unwrap() > 0);
+        assert!(row["max_latency_ns"].as_u64().unwrap() > 0);
+        assert!(row["ops_per_sec"].as_f64().unwrap() > 0.0);
+        assert!(row["bytes_per_sec"].as_f64().unwrap() > 0.0);
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(!stdout.contains("payload"));
     assert!(!stdout.contains("destination"));
     assert!(!stdout.contains("source"));
+}
+
+#[test]
+fn individual_software_suites_emit_only_the_requested_mode_at_minimum_bounds() {
+    for (suite, expected_mode) in [
+        ("latency", "single_latency"),
+        ("concurrency", "concurrent_submissions"),
+        ("throughput", "fixed_duration_throughput"),
+    ] {
+        let output = run(&[
+            "--backend",
+            "software",
+            "--suite",
+            suite,
+            "--bytes",
+            "1",
+            "--iterations",
+            "1",
+            "--concurrency",
+            "1",
+            "--duration-ms",
+            "1",
+            "--format",
+            "json",
+        ]);
+
+        assert_eq!(output.status.code(), Some(0), "suite={suite}");
+        assert!(String::from_utf8_lossy(&output.stderr).is_empty());
+        let artifact = stdout_json(&output);
+        assert_eq!(artifact["suite"], suite);
+        assert_eq!(artifact["claim_eligible"], false);
+        let results = artifact["results"]
+            .as_array()
+            .expect("results should be array");
+        assert_eq!(results.len(), 1, "suite={suite}");
+        let row = &results[0];
+        assert_eq!(row["mode"], expected_mode);
+        assert_eq!(row["target"], "software_direct_async_diagnostic");
+        assert!(row["completed_operations"].as_u64().unwrap() > 0);
+        assert_eq!(row["failed_operations"], 0);
+        assert_eq!(row["claim_eligible"], false);
+        assert_eq!(row["verdict"], "pass");
+    }
 }
 
 #[test]
