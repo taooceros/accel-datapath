@@ -723,6 +723,8 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "idxd-sys",
+ "serde",
+ "serde_json",
  "thiserror",
  "tokio",
 ]
