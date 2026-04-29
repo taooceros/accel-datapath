@@ -8,7 +8,8 @@ use std::process::ExitCode;
 use bytes::{Bytes, BytesMut, buf::UninitSlice};
 use idxd_rust::{
     AsyncDsaSession, AsyncMemmoveError, AsyncMemmoveRequest, AsyncMemmoveWorker,
-    DEFAULT_DEVICE_PATH, MemmoveError, MemmovePhase, MemmoveRequest, MemmoveValidationReport,
+    DEFAULT_DEVICE_PATH, MemmoveError, MemmovePhase, MemmoveRequest, MemmoveValidationConfig,
+    MemmoveValidationReport,
 };
 
 const TEST_SCENARIO_ENV: &str = "IDXD_RUST_AWAIT_MEMMOVE_TEST_SCENARIO";
@@ -227,7 +228,14 @@ async fn execute(args: &CliArgs) -> RunOutcome {
 }
 
 async fn execute_live(args: &CliArgs, request: AsyncMemmoveRequest) -> RunOutcome {
-    let session = match AsyncDsaSession::open(&args.device_path) {
+    let config = match MemmoveValidationConfig::builder()
+        .device_path(args.device_path.clone())
+        .build()
+    {
+        Ok(config) => config,
+        Err(err) => return validation_failure_outcome(args, err),
+    };
+    let session = match AsyncDsaSession::open_config(config) {
         Ok(session) => session,
         Err(err) => return async_failure_outcome(args, err),
     };

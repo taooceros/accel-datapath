@@ -196,6 +196,7 @@ fn assert_success_schema(json: &Value) {
     assert!(json["error_kind"].is_null());
     assert!(json["lifecycle_failure_kind"].is_null());
     assert!(json["worker_failure_kind"].is_null());
+    assert!(json["direct_failure_kind"].is_null());
     assert_eq!(json["validation_phase"], "completed");
     assert!(json["validation_error_kind"].is_null());
     assert!(json["message"]
@@ -268,6 +269,7 @@ fn owner_shutdown_scenario_preserves_lifecycle_classification() {
     assert_eq!(json["error_kind"], "lifecycle_failure");
     assert_eq!(json["lifecycle_failure_kind"], "owner_shutdown");
     assert!(json["worker_failure_kind"].is_null());
+    assert!(json["direct_failure_kind"].is_null());
     assert!(json["validation_phase"].is_null());
     assert!(json["validation_error_kind"].is_null());
 }
@@ -287,8 +289,30 @@ fn worker_failure_scenario_preserves_worker_classification() {
     assert_eq!(json["error_kind"], "worker_failure");
     assert!(json["lifecycle_failure_kind"].is_null());
     assert_eq!(json["worker_failure_kind"], "worker_panicked");
+    assert!(json["direct_failure_kind"].is_null());
     assert!(json["validation_phase"].is_null());
     assert!(json["validation_error_kind"].is_null());
+}
+
+#[test]
+fn direct_failure_scenario_preserves_direct_classification_without_payload_bytes() {
+    let output = run_with_scenario(
+        &["--device", DEVICE_PATH, "--bytes", "16", "--format", "json"],
+        Some("direct_failure"),
+    );
+
+    assert_status(&output, 1);
+    let json = parse_stdout_json(&output);
+    assert_common_metadata(&json);
+    assert_eq!(json["ok"], false);
+    assert_eq!(json["phase"], "async_direct");
+    assert_eq!(json["error_kind"], "direct_failure");
+    assert!(json["lifecycle_failure_kind"].is_null());
+    assert!(json["worker_failure_kind"].is_null());
+    assert_eq!(json["direct_failure_kind"], "backpressure_exceeded");
+    assert!(json["validation_phase"].is_null());
+    assert!(json["validation_error_kind"].is_null());
+    assert_no_payload_bytes(&String::from_utf8_lossy(&output.stdout));
 }
 
 #[test]
@@ -306,6 +330,7 @@ fn completion_timeout_scenario_preserves_validation_classification() {
     assert_eq!(json["error_kind"], "validation_failure");
     assert!(json["lifecycle_failure_kind"].is_null());
     assert!(json["worker_failure_kind"].is_null());
+    assert!(json["direct_failure_kind"].is_null());
     assert_eq!(json["validation_phase"], "completion_poll");
     assert_eq!(json["validation_error_kind"], "completion_timeout");
 }
@@ -323,6 +348,9 @@ fn invalid_destination_scenario_preserves_validation_classification() {
     assert_eq!(json["ok"], false);
     assert_eq!(json["phase"], "argument_validation");
     assert_eq!(json["error_kind"], "validation_failure");
+    assert!(json["lifecycle_failure_kind"].is_null());
+    assert!(json["worker_failure_kind"].is_null());
+    assert!(json["direct_failure_kind"].is_null());
     assert_eq!(json["validation_phase"], "argument_validation");
     assert_eq!(json["validation_error_kind"], "destination_too_small");
 }
@@ -353,6 +381,9 @@ fn invalid_cli_args_and_bad_scenario_fail_cleanly() {
     assert_common_metadata(&json);
     assert_eq!(json["ok"], false);
     assert_eq!(json["error_kind"], "validation_failure");
+    assert!(json["lifecycle_failure_kind"].is_null());
+    assert!(json["worker_failure_kind"].is_null());
+    assert!(json["direct_failure_kind"].is_null());
     assert_eq!(json["validation_phase"], "argument_validation");
     assert_eq!(json["validation_error_kind"], "invalid_test_scenario");
 }
@@ -477,7 +508,7 @@ fn verifier_rejects_wrong_downstream_proof_metadata() {
     let fake_binary = temp_root.join("fake_downstream_async_handle");
     write_fake_downstream_binary(
         &fake_binary,
-        r#"json=$(printf '{"ok":true,"proof_seam":"await_memmove","consumer_package":"idxd-rust","binding_package":"idxd-rust","composition":"tokio_join","operation_count":2,"device_path":"%s","requested_bytes":%s,"phase":"completed","error_kind":null,"lifecycle_failure_kind":null,"worker_failure_kind":null,"validation_phase":"completed","validation_error_kind":null,"message":"verified 2 joined cloned-handle async memmoves"}' "$device" "$bytes")
+        r#"json=$(printf '{"ok":true,"proof_seam":"await_memmove","consumer_package":"idxd-rust","binding_package":"idxd-rust","composition":"tokio_join","operation_count":2,"device_path":"%s","requested_bytes":%s,"phase":"completed","error_kind":null,"lifecycle_failure_kind":null,"worker_failure_kind":null,"direct_failure_kind":null,"validation_phase":"completed","validation_error_kind":null,"message":"verified 2 joined cloned-handle async memmoves"}' "$device" "$bytes")
 printf '%s\n' "$json" | tee "$artifact"
 exit 0"#,
     );

@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use bytes::{Bytes, BytesMut, buf::UninitSlice};
 use idxd_sys::{DsaHwDesc, EnqcmdSubmission, WqPortal, touch_fault_page};
+use snafu::Snafu;
 use tokio::sync::oneshot;
 
 use crate::async_session::{AsyncMemmoveError, AsyncMemmoveRequest, AsyncMemmoveResult};
@@ -49,13 +50,25 @@ impl std::fmt::Display for AsyncDirectFailureKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Snafu)]
+#[snafu(display("{kind} requested_bytes={requested_bytes} retry_count={retry_count} retry_budget={retry_budget}{completion_metadata}", completion_metadata = display_completion_snapshot(*completion_snapshot)))]
 pub struct AsyncDirectFailure {
     kind: AsyncDirectFailureKind,
     requested_bytes: usize,
     retry_budget: u32,
     retry_count: u32,
     completion_snapshot: Option<CompletionSnapshot>,
+}
+
+fn display_completion_snapshot(snapshot: Option<CompletionSnapshot>) -> String {
+    snapshot
+        .map(|snapshot| {
+            format!(
+                " completion_status=0x{:02x} completion_result={} bytes_completed={} fault_addr=0x{:x}",
+                snapshot.status, snapshot.result, snapshot.bytes_completed, snapshot.fault_addr
+            )
+        })
+        .unwrap_or_default()
 }
 
 impl AsyncDirectFailure {
@@ -95,26 +108,6 @@ impl AsyncDirectFailure {
         self.completion_snapshot
     }
 }
-
-impl std::fmt::Display for AsyncDirectFailure {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{} requested_bytes={} retry_count={} retry_budget={}",
-            self.kind, self.requested_bytes, self.retry_count, self.retry_budget
-        )?;
-        if let Some(snapshot) = self.completion_snapshot {
-            write!(
-                f,
-                " completion_status=0x{:02x} completion_result={} bytes_completed={} fault_addr=0x{:x}",
-                snapshot.status, snapshot.result, snapshot.bytes_completed, snapshot.fault_addr
-            )?;
-        }
-        Ok(())
-    }
-}
-
-impl std::error::Error for AsyncDirectFailure {}
 
 pub trait DirectMemmoveBackend: Send + Sync + 'static {
     fn submit(&self, op_id: u64, descriptor: &DsaHwDesc) -> EnqcmdSubmission;

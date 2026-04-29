@@ -176,6 +176,7 @@ required = {
     'error_kind',
     'lifecycle_failure_kind',
     'worker_failure_kind',
+    'direct_failure_kind',
     'validation_phase',
     'validation_error_kind',
     'message',
@@ -209,6 +210,7 @@ phase = report['phase']
 error_kind = report['error_kind']
 lifecycle_failure_kind = report['lifecycle_failure_kind']
 worker_failure_kind = report['worker_failure_kind']
+direct_failure_kind = report['direct_failure_kind']
 validation_phase = report['validation_phase']
 validation_error_kind = report['validation_error_kind']
 
@@ -221,6 +223,8 @@ if ok:
         raise SystemExit('successful artifact lifecycle_failure_kind must be null')
     if worker_failure_kind is not None:
         raise SystemExit('successful artifact worker_failure_kind must be null')
+    if direct_failure_kind is not None:
+        raise SystemExit('successful artifact direct_failure_kind must be null')
     if validation_phase != 'completed':
         raise SystemExit('successful artifact validation_phase must be completed')
     if validation_error_kind is not None:
@@ -228,8 +232,8 @@ if ok:
     if 'verified 2 joined cloned-handle async memmoves' not in report['message']:
         raise SystemExit('successful artifact message is missing downstream joined-handle proof')
 else:
-    if error_kind not in {'lifecycle_failure', 'worker_failure', 'validation_failure'}:
-        raise SystemExit('failed artifact error_kind must be lifecycle_failure, worker_failure, or validation_failure')
+    if error_kind not in {'lifecycle_failure', 'worker_failure', 'direct_failure', 'validation_failure'}:
+        raise SystemExit('failed artifact error_kind must be lifecycle_failure, worker_failure, direct_failure, or validation_failure')
 
     if error_kind == 'lifecycle_failure':
         if phase != 'async_lifecycle':
@@ -238,6 +242,8 @@ else:
             raise SystemExit('lifecycle-failure artifact lifecycle_failure_kind must be a non-empty string')
         if worker_failure_kind is not None:
             raise SystemExit('lifecycle-failure artifact worker_failure_kind must be null')
+        if direct_failure_kind is not None:
+            raise SystemExit('lifecycle-failure artifact direct_failure_kind must be null')
         if validation_phase is not None:
             raise SystemExit('lifecycle-failure artifact validation_phase must be null')
         if validation_error_kind is not None:
@@ -249,15 +255,32 @@ else:
             raise SystemExit('worker-failure artifact lifecycle_failure_kind must be null')
         if not isinstance(worker_failure_kind, str) or not worker_failure_kind:
             raise SystemExit('worker-failure artifact worker_failure_kind must be a non-empty string')
+        if direct_failure_kind is not None:
+            raise SystemExit('worker-failure artifact direct_failure_kind must be null')
         if validation_phase is not None:
             raise SystemExit('worker-failure artifact validation_phase must be null')
         if validation_error_kind is not None:
             raise SystemExit('worker-failure artifact validation_error_kind must be null')
+    elif error_kind == 'direct_failure':
+        if phase != 'async_direct':
+            raise SystemExit("direct-failure artifact phase must be 'async_direct'")
+        if lifecycle_failure_kind is not None:
+            raise SystemExit('direct-failure artifact lifecycle_failure_kind must be null')
+        if worker_failure_kind is not None:
+            raise SystemExit('direct-failure artifact worker_failure_kind must be null')
+        if not isinstance(direct_failure_kind, str) or not direct_failure_kind:
+            raise SystemExit('direct-failure artifact direct_failure_kind must be a non-empty string')
+        if validation_phase is not None:
+            raise SystemExit('direct-failure artifact validation_phase must be null')
+        if validation_error_kind is not None:
+            raise SystemExit('direct-failure artifact validation_error_kind must be null')
     else:
         if lifecycle_failure_kind is not None:
             raise SystemExit('validation-failure artifact lifecycle_failure_kind must be null')
         if worker_failure_kind is not None:
             raise SystemExit('validation-failure artifact worker_failure_kind must be null')
+        if direct_failure_kind is not None:
+            raise SystemExit('validation-failure artifact direct_failure_kind must be null')
         if not isinstance(validation_phase, str) or not validation_phase:
             raise SystemExit('validation-failure artifact validation_phase must be a non-empty string')
         if phase != validation_phase:
@@ -275,6 +298,7 @@ print(f"phase={phase}")
 print(f"error_kind={error_kind if error_kind is not None else 'null'}")
 print(f"lifecycle_failure_kind={lifecycle_failure_kind if lifecycle_failure_kind is not None else 'null'}")
 print(f"worker_failure_kind={worker_failure_kind if worker_failure_kind is not None else 'null'}")
+print(f"direct_failure_kind={direct_failure_kind if direct_failure_kind is not None else 'null'}")
 print(f"validation_phase={validation_phase if validation_phase is not None else 'null'}")
 print(f"validation_error_kind={validation_error_kind if validation_error_kind is not None else 'null'}")
 print(f"requested_bytes={report['requested_bytes']}")
@@ -291,6 +315,7 @@ ARTIFACT_PHASE=
 ARTIFACT_ERROR_KIND=
 ARTIFACT_LIFECYCLE_FAILURE_KIND=
 ARTIFACT_WORKER_FAILURE_KIND=
+ARTIFACT_DIRECT_FAILURE_KIND=
 ARTIFACT_VALIDATION_PHASE=
 ARTIFACT_VALIDATION_ERROR_KIND=
 ARTIFACT_REQUESTED_BYTES=
@@ -306,20 +331,21 @@ while IFS='=' read -r key value; do
     error_kind) ARTIFACT_ERROR_KIND=${value} ;;
     lifecycle_failure_kind) ARTIFACT_LIFECYCLE_FAILURE_KIND=${value} ;;
     worker_failure_kind) ARTIFACT_WORKER_FAILURE_KIND=${value} ;;
+    direct_failure_kind) ARTIFACT_DIRECT_FAILURE_KIND=${value} ;;
     validation_phase) ARTIFACT_VALIDATION_PHASE=${value} ;;
     validation_error_kind) ARTIFACT_VALIDATION_ERROR_KIND=${value} ;;
     requested_bytes) ARTIFACT_REQUESTED_BYTES=${value} ;;
   esac
 done <<< "${ARTIFACT_FIELDS}"
 
-log_phase artifact_validation "device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} proof_seam=${ARTIFACT_PROOF_SEAM} consumer_package=${ARTIFACT_CONSUMER_PACKAGE} binding_package=${ARTIFACT_BINDING_PACKAGE} composition=${ARTIFACT_COMPOSITION} operation_count=${ARTIFACT_OPERATION_COUNT} phase=${ARTIFACT_PHASE} error_kind=${ARTIFACT_ERROR_KIND} lifecycle_failure_kind=${ARTIFACT_LIFECYCLE_FAILURE_KIND} worker_failure_kind=${ARTIFACT_WORKER_FAILURE_KIND} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} requested_bytes=${ARTIFACT_REQUESTED_BYTES}"
+log_phase artifact_validation "device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} proof_seam=${ARTIFACT_PROOF_SEAM} consumer_package=${ARTIFACT_CONSUMER_PACKAGE} binding_package=${ARTIFACT_BINDING_PACKAGE} composition=${ARTIFACT_COMPOSITION} operation_count=${ARTIFACT_OPERATION_COUNT} phase=${ARTIFACT_PHASE} error_kind=${ARTIFACT_ERROR_KIND} lifecycle_failure_kind=${ARTIFACT_LIFECYCLE_FAILURE_KIND} worker_failure_kind=${ARTIFACT_WORKER_FAILURE_KIND} direct_failure_kind=${ARTIFACT_DIRECT_FAILURE_KIND} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} requested_bytes=${ARTIFACT_REQUESTED_BYTES}"
 
 if [[ "${ARTIFACT_OK}" != "true" ]]; then
-  complete_with_explicit_failure runtime "device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} proof_seam=${ARTIFACT_PROOF_SEAM} consumer_package=${ARTIFACT_CONSUMER_PACKAGE} binding_package=${ARTIFACT_BINDING_PACKAGE} composition=${ARTIFACT_COMPOSITION} operation_count=${ARTIFACT_OPERATION_COUNT} phase=${ARTIFACT_PHASE} error_kind=${ARTIFACT_ERROR_KIND} lifecycle_failure_kind=${ARTIFACT_LIFECYCLE_FAILURE_KIND} worker_failure_kind=${ARTIFACT_WORKER_FAILURE_KIND} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} requested_bytes=${ARTIFACT_REQUESTED_BYTES} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} message=downstream async proof reported a typed failure"
+  complete_with_explicit_failure runtime "device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} proof_seam=${ARTIFACT_PROOF_SEAM} consumer_package=${ARTIFACT_CONSUMER_PACKAGE} binding_package=${ARTIFACT_BINDING_PACKAGE} composition=${ARTIFACT_COMPOSITION} operation_count=${ARTIFACT_OPERATION_COUNT} phase=${ARTIFACT_PHASE} error_kind=${ARTIFACT_ERROR_KIND} lifecycle_failure_kind=${ARTIFACT_LIFECYCLE_FAILURE_KIND} worker_failure_kind=${ARTIFACT_WORKER_FAILURE_KIND} direct_failure_kind=${ARTIFACT_DIRECT_FAILURE_KIND} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} requested_bytes=${ARTIFACT_REQUESTED_BYTES} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} message=downstream async proof reported a typed failure"
 fi
 
 if [[ "${RUN_EXIT}" -ne 0 ]]; then
-  fail_phase runtime "device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} phase=${ARTIFACT_PHASE} error_kind=${ARTIFACT_ERROR_KIND} lifecycle_failure_kind=${ARTIFACT_LIFECYCLE_FAILURE_KIND} worker_failure_kind=${ARTIFACT_WORKER_FAILURE_KIND} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} requested_bytes=${ARTIFACT_REQUESTED_BYTES} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} message=downstream async proof exited non-zero despite a success artifact"
+  fail_phase runtime "device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} phase=${ARTIFACT_PHASE} error_kind=${ARTIFACT_ERROR_KIND} lifecycle_failure_kind=${ARTIFACT_LIFECYCLE_FAILURE_KIND} worker_failure_kind=${ARTIFACT_WORKER_FAILURE_KIND} direct_failure_kind=${ARTIFACT_DIRECT_FAILURE_KIND} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} requested_bytes=${ARTIFACT_REQUESTED_BYTES} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} message=downstream async proof exited non-zero despite a success artifact"
 fi
 
-log_phase done "device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} proof_seam=${ARTIFACT_PROOF_SEAM} consumer_package=${ARTIFACT_CONSUMER_PACKAGE} binding_package=${ARTIFACT_BINDING_PACKAGE} composition=${ARTIFACT_COMPOSITION} operation_count=${ARTIFACT_OPERATION_COUNT} requested_bytes=${ARTIFACT_REQUESTED_BYTES} phase=${ARTIFACT_PHASE} error_kind=${ARTIFACT_ERROR_KIND} lifecycle_failure_kind=${ARTIFACT_LIFECYCLE_FAILURE_KIND} worker_failure_kind=${ARTIFACT_WORKER_FAILURE_KIND} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} verdict=pass"
+log_phase done "device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} proof_seam=${ARTIFACT_PROOF_SEAM} consumer_package=${ARTIFACT_CONSUMER_PACKAGE} binding_package=${ARTIFACT_BINDING_PACKAGE} composition=${ARTIFACT_COMPOSITION} operation_count=${ARTIFACT_OPERATION_COUNT} requested_bytes=${ARTIFACT_REQUESTED_BYTES} phase=${ARTIFACT_PHASE} error_kind=${ARTIFACT_ERROR_KIND} lifecycle_failure_kind=${ARTIFACT_LIFECYCLE_FAILURE_KIND} worker_failure_kind=${ARTIFACT_WORKER_FAILURE_KIND} direct_failure_kind=${ARTIFACT_DIRECT_FAILURE_KIND} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} verdict=pass"
