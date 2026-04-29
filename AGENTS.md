@@ -2,11 +2,8 @@
 
 Research monorepo for Intel DSA/IAX data-path work.
 
-## DEFAULT MODE: SPEED FIRST
-- Prefer response time over exhaustive verification unless the user asks for high confidence.
-- Answer from local context first; escalate only when uncertainty or risk is meaningful.
-- If external lookup may help but is not blocking, answer first and enrich later.
-- For code discovery, use codemogger first; use other search tools only as fallback.
+- If some code looks heavyweight, perhaps with lots of conditionals, then think harder for a more elegant way of achieving it.
+- It is important to not have duplicate code; abstract if possible, but if not, then at least keep the duplicate code clean and well-maintained.
 
 ## SOURCE ORDER
 1. Current conversation
