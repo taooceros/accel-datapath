@@ -124,11 +124,27 @@ fn malformed_size_boundaries_fail_without_json_or_panic() {
 
 #[test]
 fn software_only_json_preserves_top_level_report_contract() {
-    let output = hw_eval(&["--sw-only", "--json", "--sizes", "64", "--iterations", "1"]);
+    let missing_device = std::env::temp_dir().join(format!(
+        "hw-eval-sw-only-missing-wq-contract-{}",
+        std::process::id()
+    ));
+    let missing_device = missing_device
+        .to_str()
+        .expect("temp path should be valid UTF-8 for CLI test");
+    let output = hw_eval(&[
+        "--sw-only",
+        "--json",
+        "--device",
+        missing_device,
+        "--sizes",
+        "64",
+        "--iterations",
+        "1",
+    ]);
 
     assert!(
         output.status.success(),
-        "software-only JSON run should succeed; stdout:\n{}\nstderr:\n{}",
+        "software-only JSON run should not access the missing WQ; stdout:\n{}\nstderr:\n{}",
         stdout(&output),
         stderr(&output)
     );
@@ -163,7 +179,7 @@ fn software_only_json_preserves_top_level_report_contract() {
     assert_eq!(metadata["iterations"], Value::from(1));
     assert_eq!(metadata["cold_cache"], Value::Bool(false));
     assert_eq!(metadata["accelerator"], Value::from("dsa"));
-    assert_eq!(metadata["device"], Value::from("/dev/dsa/wq0.0"));
+    assert_eq!(metadata["device"], Value::from(missing_device));
     assert!(
         metadata["tsc_freq_hz"].is_number(),
         "missing numeric TSC frequency: {metadata:?}"
