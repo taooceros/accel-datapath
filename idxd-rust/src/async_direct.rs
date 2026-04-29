@@ -227,6 +227,19 @@ where
         &self,
         request: AsyncMemmoveRequest,
     ) -> Result<AsyncMemmoveResult, AsyncMemmoveError> {
+        let request = self.reject_closed_before_registration(request)?;
+        let (operation, reply_rx) = self.build_pending_operation(request)?;
+
+        self.insert_pending_with_closed_check(&operation)?;
+        self.submit_initial_descriptor_until_accepted(&operation)
+            .await?;
+        self.await_monitor_reply(&operation, reply_rx).await
+    }
+
+    fn reject_closed_before_registration(
+        &self,
+        request: AsyncMemmoveRequest,
+    ) -> Result<AsyncMemmoveRequest, AsyncMemmoveError> {
         if self.inner.closed.load(Ordering::Acquire) {
             return Err(self.direct_error(
                 AsyncDirectFailureKind::RegistrationClosed,
@@ -236,7 +249,19 @@ where
                 Some(request),
             ));
         }
+        Ok(request)
+    }
 
+    fn build_pending_operation(
+        &self,
+        request: AsyncMemmoveRequest,
+    ) -> Result<
+        (
+            Arc<PendingOperation>,
+            oneshot::Receiver<Result<AsyncMemmoveResult, AsyncMemmoveError>>,
+        ),
+        AsyncMemmoveError,
+    > {
         let op_id = self.inner.next_id.fetch_add(1, Ordering::AcqRel);
         let (reply_tx, reply_rx) = oneshot::channel();
         let operation = Arc::new(PendingOperation::new(
@@ -246,37 +271,48 @@ where
             reply_tx,
         )?);
 
-        {
-            let mut pending = self
-                .inner
-                .pending
-                .lock()
-                .expect("pending registry poisoned");
-            if self.inner.closed.load(Ordering::Acquire) {
-                let request = operation.recover_request();
-                return Err(self.direct_error(
-                    AsyncDirectFailureKind::RegistrationClosed,
-                    operation.requested_bytes,
-                    0,
-                    None,
-                    request,
-                ));
-            }
-            pending.insert(op_id, Arc::clone(&operation));
-        }
+        Ok((operation, reply_rx))
+    }
 
+    fn insert_pending_with_closed_check(
+        &self,
+        operation: &Arc<PendingOperation>,
+    ) -> Result<(), AsyncMemmoveError> {
+        let mut pending = self
+            .inner
+            .pending
+            .lock()
+            .expect("pending registry poisoned");
+        if self.inner.closed.load(Ordering::Acquire) {
+            let request = operation.recover_request();
+            return Err(self.direct_error(
+                AsyncDirectFailureKind::RegistrationClosed,
+                operation.requested_bytes,
+                0,
+                None,
+                request,
+            ));
+        }
+        pending.insert(operation.id, Arc::clone(operation));
+        Ok(())
+    }
+
+    async fn submit_initial_descriptor_until_accepted(
+        &self,
+        operation: &PendingOperation,
+    ) -> Result<(), AsyncMemmoveError> {
         let mut rejected = 0;
         loop {
             operation.reset_and_fill_descriptor();
             let submission = operation
-                .with_descriptor(|descriptor| self.inner.backend.submit(op_id, descriptor));
+                .with_descriptor(|descriptor| self.inner.backend.submit(operation.id, descriptor));
 
             match submission {
-                EnqcmdSubmission::Accepted => break,
+                EnqcmdSubmission::Accepted => return Ok(()),
                 EnqcmdSubmission::Rejected => {
                     rejected += 1;
                     if rejected > self.inner.submission_retry_budget {
-                        self.remove_pending(op_id);
+                        self.remove_pending(operation.id);
                         let request = operation.recover_request();
                         return Err(self.direct_error(
                             AsyncDirectFailureKind::BackpressureExceeded,
@@ -294,7 +330,13 @@ where
                 }
             }
         }
+    }
 
+    async fn await_monitor_reply(
+        &self,
+        operation: &PendingOperation,
+        reply_rx: oneshot::Receiver<Result<AsyncMemmoveResult, AsyncMemmoveError>>,
+    ) -> Result<AsyncMemmoveResult, AsyncMemmoveError> {
         match reply_rx.await {
             Ok(result) => result,
             Err(_) => Err(self.direct_error(
