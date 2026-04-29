@@ -206,6 +206,14 @@ fn detect_wq_mode(dev_path: &Path) -> bool {
 }
 
 pub fn pin_to_core(core: usize) -> std::io::Result<usize> {
+    let max_core = std::mem::size_of::<libc::cpu_set_t>() * 8;
+    if core >= max_core {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("requested CPU core {core} exceeds affinity set capacity {max_core}"),
+        ));
+    }
+
     unsafe {
         let mut cpuset: libc::cpu_set_t = std::mem::zeroed();
         libc::CPU_ZERO(&mut cpuset);
