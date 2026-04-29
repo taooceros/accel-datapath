@@ -28,10 +28,22 @@ fn parse_stdout_json(output: &Output) -> Value {
 }
 
 fn assert_no_payload_bytes(text: &str) {
-    assert!(
-        !text.contains("0xAB") && !text.contains("171"),
-        "diagnostics must not expose benchmark payload bytes: {text}"
-    );
+    let lower = text.to_ascii_lowercase();
+    for forbidden in [
+        "0xab",
+        "source_bytes",
+        "destination_bytes",
+        "payload_bytes",
+        "src_bytes",
+        "dst_bytes",
+        "[171",
+        "171, 171",
+    ] {
+        assert!(
+            !lower.contains(forbidden),
+            "diagnostics must not expose benchmark payload bytes: {text}"
+        );
+    }
 }
 
 fn assert_malformed_sizes_fail_without_panic(raw_sizes: &str, expected_fragment: &str) {
