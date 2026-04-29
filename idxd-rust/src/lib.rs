@@ -34,8 +34,8 @@ pub use async_session::{
 };
 pub use validation::{
     COMPLETION_TIMEOUT_STATUS, CompletionAction, CompletionSnapshot, DEFAULT_DEVICE_PATH,
-    DEFAULT_MAX_PAGE_FAULT_RETRIES, MAX_MEMMOVE_BYTES, MemmoveError, MemmovePhase, MemmoveRequest,
-    MemmoveRetry, MemmoveValidationConfig, MemmoveValidationReport, classify_memmove_completion,
+    DEFAULT_MAX_PAGE_FAULT_RETRIES, DsaConfig, MAX_MEMMOVE_BYTES, MemmoveError, MemmovePhase,
+    MemmoveRequest, MemmoveRetry, MemmoveValidationReport, classify_memmove_completion,
 };
 
 use std::path::Path;
@@ -46,7 +46,7 @@ use idxd_sys::{WqPortal, poll_completion, touch_fault_page};
 
 /// Thin reusable session over one mapped DSA work queue.
 pub struct DsaSession {
-    config: MemmoveValidationConfig,
+    config: DsaConfig,
     portal: WqPortal,
 }
 
@@ -61,29 +61,26 @@ impl DsaSession {
         device_path: P,
         max_page_fault_retries: u32,
     ) -> Result<Self, MemmoveError> {
-        let config = MemmoveValidationConfig::with_retries(device_path, max_page_fault_retries)?;
+        let config = DsaConfig::with_retries(device_path, max_page_fault_retries)?;
         Self::open_config(config)
     }
 
-    /// Open a DSA work queue from an already-normalized validation config.
+    /// Open a DSA work queue from an already-normalized DSA config.
     ///
     /// The generated `DsaSession::builder().open()` path is kept as a named
     /// way to supply a prebuilt config while preserving the same queue-open
     /// device path and phase diagnostics as the direct constructor helpers.
     #[builder(start_fn = builder, finish_fn = open)]
-    pub fn open_config(
-        #[builder(default)] validation_config: MemmoveValidationConfig,
-    ) -> Result<Self, MemmoveError> {
-        let portal = WqPortal::open(validation_config.device_path()).map_err(|source| {
-            MemmoveError::QueueOpen {
-                device_path: validation_config.device_path().to_path_buf(),
+    pub fn open_config(#[builder(default)] dsa_config: DsaConfig) -> Result<Self, MemmoveError> {
+        let portal =
+            WqPortal::open(dsa_config.device_path()).map_err(|source| MemmoveError::QueueOpen {
+                device_path: dsa_config.device_path().to_path_buf(),
                 phase: MemmovePhase::QueueOpen,
                 source,
-            }
-        })?;
+            })?;
 
         Ok(Self {
-            config: validation_config,
+            config: dsa_config,
             portal,
         })
     }
@@ -96,7 +93,7 @@ impl DsaSession {
         self.config.max_page_fault_retries()
     }
 
-    pub fn validation_config(&self) -> &MemmoveValidationConfig {
+    pub fn dsa_config(&self) -> &DsaConfig {
         &self.config
     }
 
@@ -108,7 +105,7 @@ impl DsaSession {
     ) -> Result<MemmoveValidationReport, MemmoveError> {
         let request = MemmoveRequest::for_buffers(dst.len(), src.len())?;
         let report = self.memmove_inner(dst.as_mut_ptr(), src.as_ptr(), request)?;
-        verify_initialized_destination(self.validation_config(), request, &report, dst, src)?;
+        verify_initialized_destination(self.dsa_config(), request, &report, dst, src)?;
 
         Ok(report)
     }
@@ -128,13 +125,7 @@ impl DsaSession {
         // success so the bytes are initialized for post-copy verification.
         let initialized_dst =
             unsafe { std::slice::from_raw_parts(dst.as_mut_ptr(), request.len()) };
-        verify_initialized_destination(
-            self.validation_config(),
-            request,
-            &report,
-            initialized_dst,
-            src,
-        )?;
+        verify_initialized_destination(self.dsa_config(), request, &report, initialized_dst, src)?;
 
         Ok(report)
     }
@@ -161,7 +152,7 @@ impl DsaSession {
 
             let polled_status = poll_completion(state.completion());
             let snapshot = CompletionSnapshot::from_record(state.completion(), polled_status);
-            match state.classify_snapshot(self.validation_config(), snapshot)? {
+            match state.classify_snapshot(self.dsa_config(), snapshot)? {
                 CompletionAction::Success => {
                     return state.success_report(self.device_path(), snapshot.status);
                 }

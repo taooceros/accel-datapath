@@ -2,14 +2,14 @@ use std::time::Duration;
 
 use bytes::{Bytes, BytesMut};
 use idxd_rust::{
-    AsyncDsaSession, AsyncLifecycleFailureKind, AsyncMemmoveRequest, CompletionSnapshot,
-    MemmoveValidationConfig, direct_test_support::ScriptedDirectBackend,
+    AsyncDsaSession, AsyncLifecycleFailureKind, AsyncMemmoveRequest, CompletionSnapshot, DsaConfig,
+    direct_test_support::ScriptedDirectBackend,
 };
 use idxd_sys::DSA_COMP_SUCCESS;
 use tokio::time::timeout;
 
-fn direct_config() -> MemmoveValidationConfig {
-    MemmoveValidationConfig::builder()
+fn direct_config() -> DsaConfig {
+    DsaConfig::builder()
         .device_path("/dev/dsa/test0.0")
         .build()
         .expect("direct test config")

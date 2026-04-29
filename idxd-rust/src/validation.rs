@@ -2,7 +2,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use idxd_sys::{
-    DsaCompletionRecord, DSA_COMP_PAGE_FAULT_NOBOF, DSA_COMP_STATUS_MASK, DSA_COMP_SUCCESS,
+    DSA_COMP_PAGE_FAULT_NOBOF, DSA_COMP_STATUS_MASK, DSA_COMP_SUCCESS, DsaCompletionRecord,
 };
 use snafu::Snafu;
 
@@ -17,12 +17,12 @@ pub const MAX_MEMMOVE_BYTES: usize = u32::MAX as usize;
 
 /// Stable configuration for one reusable DSA memmove session.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MemmoveValidationConfig {
+pub struct DsaConfig {
     device_path: PathBuf,
     max_page_fault_retries: u32,
 }
 
-impl Default for MemmoveValidationConfig {
+impl Default for DsaConfig {
     fn default() -> Self {
         Self {
             device_path: PathBuf::from(DEFAULT_DEVICE_PATH),
@@ -32,7 +32,7 @@ impl Default for MemmoveValidationConfig {
 }
 
 #[bon::bon]
-impl MemmoveValidationConfig {
+impl DsaConfig {
     #[builder(finish_fn = build)]
     pub fn builder(
         #[builder(default = PathBuf::from(DEFAULT_DEVICE_PATH), into)] device_path: PathBuf,
@@ -426,7 +426,7 @@ impl MemmoveError {
 /// Interpret a memmove completion record in a hardware-free test or after live
 /// polling.
 pub fn classify_memmove_completion(
-    config: &MemmoveValidationConfig,
+    config: &DsaConfig,
     remaining_len: usize,
     snapshot: CompletionSnapshot,
     page_fault_retries: u32,

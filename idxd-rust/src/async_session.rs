@@ -13,8 +13,8 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::{
     AsyncDirectFailure, AsyncDirectFailureKind, DEFAULT_MAX_PAGE_FAULT_RETRIES,
-    DirectAsyncMemmoveRuntime, DirectMemmoveBackend, DirectPortalBackend, DsaSession, MemmoveError,
-    MemmoveRequest, MemmoveValidationConfig, MemmoveValidationReport,
+    DirectAsyncMemmoveRuntime, DirectMemmoveBackend, DirectPortalBackend, DsaConfig, DsaSession,
+    MemmoveError, MemmoveRequest, MemmoveValidationReport,
 };
 
 const LIFECYCLE_RUNNING: u8 = 0;
@@ -482,7 +482,7 @@ impl AsyncDsaSession {
         device_path: P,
         max_page_fault_retries: u32,
     ) -> Result<Self, AsyncMemmoveError> {
-        let config = MemmoveValidationConfig::with_retries(device_path, max_page_fault_retries)?;
+        let config = DsaConfig::with_retries(device_path, max_page_fault_retries)?;
         Self::open_config(config)
     }
 
@@ -496,11 +496,11 @@ impl AsyncDsaSession {
     /// without going through a live work queue.
     #[builder(start_fn = builder, finish_fn = open)]
     pub fn open_config(
-        #[builder(default)] validation_config: MemmoveValidationConfig,
+        #[builder(default)] dsa_config: DsaConfig,
     ) -> Result<Self, AsyncMemmoveError> {
-        let backend = DirectPortalBackend::open(validation_config.device_path())?;
+        let backend = DirectPortalBackend::open(dsa_config.device_path())?;
         let runtime =
-            DirectAsyncMemmoveRuntime::try_new(validation_config, backend).map_err(|failure| {
+            DirectAsyncMemmoveRuntime::try_new(dsa_config, backend).map_err(|failure| {
                 AsyncMemmoveError::DirectFailure {
                     failure,
                     request: None,
@@ -570,7 +570,7 @@ impl AsyncDsaSession {
 
     #[doc(hidden)]
     pub fn spawn_with_direct_backend<B>(
-        config: MemmoveValidationConfig,
+        config: DsaConfig,
         backend: B,
     ) -> Result<Self, AsyncMemmoveError>
     where

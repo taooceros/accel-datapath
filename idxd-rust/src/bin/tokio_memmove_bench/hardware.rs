@@ -1,8 +1,6 @@
 use std::time::Instant;
 
-use idxd_rust::{
-    AsyncDsaSession, DEFAULT_MAX_PAGE_FAULT_RETRIES, DsaSession, MemmoveValidationConfig,
-};
+use idxd_rust::{AsyncDsaSession, DEFAULT_MAX_PAGE_FAULT_RETRIES, DsaConfig, DsaSession};
 
 use crate::artifact::{
     BenchmarkArtifact, BenchmarkResult, HARDWARE_ASYNC_TARGET, HARDWARE_SYNC_TARGET, SCHEMA_VERSION,
@@ -12,7 +10,7 @@ use crate::failure::RowFailure;
 use crate::modes::{ModeStats, deterministic_source, run_async_mode};
 
 pub(crate) async fn hardware_artifact(args: &CliArgs) -> BenchmarkArtifact {
-    let config = match MemmoveValidationConfig::builder()
+    let config = match DsaConfig::builder()
         .device_path(args.device_path.clone())
         .max_page_fault_retries(DEFAULT_MAX_PAGE_FAULT_RETRIES)
         .build()
@@ -130,7 +128,7 @@ fn run_sync_comparison(args: &CliArgs) -> BenchmarkResult {
     let start = Instant::now();
     let mut stats = ModeStats::default();
 
-    let config = match MemmoveValidationConfig::builder()
+    let config = match DsaConfig::builder()
         .device_path(args.device_path.clone())
         .max_page_fault_retries(DEFAULT_MAX_PAGE_FAULT_RETRIES)
         .build()

@@ -119,7 +119,7 @@ require_report_literal 'Direct enum construction' direct_enum_construction_rule
 
 # Source-level markers: these catch drift where the report remains but the
 # module-scoped evidence no longer matches the code shape.
-require_literal_in_file "${CRATE_DIR}/src/validation.rs" 'pub struct MemmoveValidationConfig' validation_config_struct
+require_literal_in_file "${CRATE_DIR}/src/validation.rs" 'pub struct DsaConfig' dsa_config_struct
 require_literal_in_file "${CRATE_DIR}/src/validation.rs" '#[bon::bon]' validation_method_bon_block
 require_literal_in_file "${CRATE_DIR}/src/validation.rs" '#[builder(finish_fn = build)]' validation_method_builder_boundary
 require_literal_in_file "${CRATE_DIR}/src/validation.rs" 'Self::with_retries(device_path, max_page_fault_retries)' validation_builder_normalization_path

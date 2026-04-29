@@ -10,8 +10,8 @@ use bytes::{Bytes, BytesMut, buf::UninitSlice};
 use idxd_rust::{
     AsyncDirectFailure, AsyncDirectFailureKind, AsyncDsaSession, AsyncLifecycleFailureKind,
     AsyncMemmoveError, AsyncMemmoveRequest, AsyncMemmoveWorker, AsyncWorkerFailureKind,
-    CompletionSnapshot, DirectAsyncMemmoveRuntime, MemmoveError, MemmovePhase, MemmoveRequest,
-    MemmoveValidationConfig, MemmoveValidationReport, direct_test_support::ScriptedDirectBackend,
+    CompletionSnapshot, DirectAsyncMemmoveRuntime, DsaConfig, MemmoveError, MemmovePhase,
+    MemmoveRequest, MemmoveValidationReport, direct_test_support::ScriptedDirectBackend,
 };
 use idxd_sys::{DSA_COMP_PAGE_FAULT_NOBOF, DSA_COMP_SUCCESS, EnqcmdSubmission};
 use tokio::sync::Notify;
@@ -383,7 +383,7 @@ fn preserves_invalid_device_path_during_async_open() {
 
 #[test]
 fn async_session_builder_rejects_empty_device_path_before_queue_open() {
-    let err = MemmoveValidationConfig::builder()
+    let err = DsaConfig::builder()
         .device_path(std::path::PathBuf::from(""))
         .build()
         .map_err(AsyncMemmoveError::from)
@@ -399,7 +399,7 @@ fn async_session_builder_rejects_empty_device_path_before_queue_open() {
 
 #[test]
 fn async_session_builder_preserves_queue_open_device_metadata() {
-    let config = MemmoveValidationConfig::builder()
+    let config = DsaConfig::builder()
         .device_path(std::path::PathBuf::from(
             "/dev/dsa/nonexistent-async-builder-test",
         ))
@@ -408,7 +408,7 @@ fn async_session_builder_preserves_queue_open_device_metadata() {
         .expect("non-empty paths should validate before queue open");
 
     let err = AsyncDsaSession::builder()
-        .validation_config(config)
+        .dsa_config(config)
         .open()
         .expect_err("missing async work queue should surface queue-open diagnostics");
 
@@ -698,8 +698,8 @@ fn shutdowns_cleanly_after_idle_state() {
     assert_eq!(calls.load(Ordering::SeqCst), 0);
 }
 
-fn direct_config() -> MemmoveValidationConfig {
-    MemmoveValidationConfig::builder()
+fn direct_config() -> DsaConfig {
+    DsaConfig::builder()
         .device_path(std::path::PathBuf::from("/dev/dsa/test0.0"))
         .build()
         .expect("direct test config")
@@ -715,7 +715,7 @@ fn owned_mut_request(source: &'static [u8]) -> AsyncMemmoveRequest {
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_direct_session_config_preserves_explicit_retry_budget() {
-    let config = MemmoveValidationConfig::builder()
+    let config = DsaConfig::builder()
         .device_path(std::path::PathBuf::from("/dev/dsa/test0.0"))
         .max_page_fault_retries(0)
         .build()

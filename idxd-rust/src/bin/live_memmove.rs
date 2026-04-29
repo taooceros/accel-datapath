@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use idxd_rust::{
-    DEFAULT_DEVICE_PATH, DsaSession, MemmoveError, MemmoveRequest, MemmoveValidationConfig,
+    DEFAULT_DEVICE_PATH, DsaConfig, DsaSession, MemmoveError, MemmoveRequest,
     MemmoveValidationReport,
 };
 
@@ -145,7 +145,7 @@ fn execute(args: &CliArgs) -> RunOutcome {
     let src = deterministic_src(args.requested_bytes);
     let mut dst = vec![0u8; args.requested_bytes];
 
-    let config = match MemmoveValidationConfig::builder()
+    let config = match DsaConfig::builder()
         .device_path(args.device_path.clone())
         .build()
     {

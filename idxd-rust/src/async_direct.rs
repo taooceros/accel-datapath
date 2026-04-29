@@ -22,7 +22,7 @@ use operation::PendingOperation;
 
 use crate::async_session::{AsyncMemmoveError, AsyncMemmoveRequest, AsyncMemmoveResult};
 use crate::direct_memmove::DirectMemmoveState;
-use crate::{CompletionSnapshot, MemmoveError, MemmoveValidationConfig};
+use crate::{CompletionSnapshot, DsaConfig, MemmoveError};
 
 const DEFAULT_SUBMISSION_RETRY_BUDGET: u32 = 64;
 const MONITOR_IDLE_BACKOFF: Duration = Duration::from_millis(1);
@@ -170,7 +170,7 @@ impl<B> Clone for DirectAsyncMemmoveRuntime<B> {
 
 #[derive(Debug)]
 struct RuntimeInner<B> {
-    config: MemmoveValidationConfig,
+    config: DsaConfig,
     backend: B,
     pending: Mutex<HashMap<u64, Arc<PendingOperation>>>,
     next_id: AtomicU64,
@@ -182,19 +182,16 @@ impl<B> DirectAsyncMemmoveRuntime<B>
 where
     B: DirectMemmoveBackend,
 {
-    pub fn new(config: MemmoveValidationConfig, backend: B) -> Self {
+    pub fn new(config: DsaConfig, backend: B) -> Self {
         Self::with_submission_retry_budget(config, backend, DEFAULT_SUBMISSION_RETRY_BUDGET)
     }
 
-    pub fn try_new(
-        config: MemmoveValidationConfig,
-        backend: B,
-    ) -> Result<Self, AsyncDirectFailure> {
+    pub fn try_new(config: DsaConfig, backend: B) -> Result<Self, AsyncDirectFailure> {
         Self::try_with_submission_retry_budget(config, backend, DEFAULT_SUBMISSION_RETRY_BUDGET)
     }
 
     pub fn with_submission_retry_budget(
-        config: MemmoveValidationConfig,
+        config: DsaConfig,
         backend: B,
         submission_retry_budget: u32,
     ) -> Self {
@@ -203,7 +200,7 @@ where
     }
 
     pub fn try_with_submission_retry_budget(
-        config: MemmoveValidationConfig,
+        config: DsaConfig,
         backend: B,
         submission_retry_budget: u32,
     ) -> Result<Self, AsyncDirectFailure> {
@@ -311,8 +308,9 @@ where
         let mut rejected = 0;
         loop {
             operation.reset_and_fill_descriptor();
-            let submission = operation
-                .with_descriptor(|descriptor| self.inner.backend.submit(operation.id(), descriptor));
+            let submission = operation.with_descriptor(|descriptor| {
+                self.inner.backend.submit(operation.id(), descriptor)
+            });
 
             match submission {
                 EnqcmdSubmission::Accepted => return Ok(()),

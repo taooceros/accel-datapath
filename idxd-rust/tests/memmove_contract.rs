@@ -1,14 +1,14 @@
 use idxd_rust::{
     CompletionAction, CompletionSnapshot, DEFAULT_DEVICE_PATH, DEFAULT_MAX_PAGE_FAULT_RETRIES,
-    DsaSession, MemmoveError, MemmovePhase, MemmoveRequest, MemmoveRetry, MemmoveValidationConfig,
+    DsaConfig, DsaSession, MemmoveError, MemmovePhase, MemmoveRequest, MemmoveRetry,
     MemmoveValidationReport, classify_memmove_completion,
 };
 use idxd_sys::{DsaCompletionRecord, DsaHwDesc};
 use std::error::Error as StdError;
 use std::mem::{align_of, size_of};
 
-fn test_config() -> MemmoveValidationConfig {
-    MemmoveValidationConfig::builder()
+fn test_config() -> DsaConfig {
+    DsaConfig::builder()
         .device_path(std::path::PathBuf::from("/dev/dsa/wq0.0"))
         .max_page_fault_retries(1)
         .build()
@@ -51,8 +51,8 @@ fn descriptor_helpers_are_aligned_over_generated_uapi_records() {
 }
 
 #[test]
-fn exposes_stable_validation_config_fields() {
-    let config = MemmoveValidationConfig::with_retries("/dev/dsa/wq1.2", 3)
+fn exposes_stable_dsa_config_fields() {
+    let config = DsaConfig::with_retries("/dev/dsa/wq1.2", 3)
         .expect("non-empty device paths should be accepted");
 
     assert_eq!(config.device_path().to_str(), Some("/dev/dsa/wq1.2"));
@@ -61,7 +61,7 @@ fn exposes_stable_validation_config_fields() {
 
 #[test]
 fn builder_uses_default_device_path_and_retry_budget() {
-    let config = MemmoveValidationConfig::builder()
+    let config = DsaConfig::builder()
         .build()
         .expect("default builder config should validate");
 
@@ -74,7 +74,7 @@ fn builder_uses_default_device_path_and_retry_budget() {
 
 #[test]
 fn builder_accepts_explicit_device_path_and_retry_budget() {
-    let config = MemmoveValidationConfig::builder()
+    let config = DsaConfig::builder()
         .device_path(std::path::PathBuf::from("/dev/dsa/wq1.2"))
         .max_page_fault_retries(3)
         .build()
@@ -86,7 +86,7 @@ fn builder_accepts_explicit_device_path_and_retry_budget() {
 
 #[test]
 fn builder_preserves_zero_retry_budget() {
-    let config = MemmoveValidationConfig::builder()
+    let config = DsaConfig::builder()
         .device_path(std::path::PathBuf::from("/dev/dsa/wq1.2"))
         .max_page_fault_retries(0)
         .build()
@@ -96,10 +96,10 @@ fn builder_preserves_zero_retry_budget() {
 }
 
 #[test]
-fn legacy_validation_config_constructors_still_match_builder_behavior() {
-    let default_retry = MemmoveValidationConfig::new("/dev/dsa/wq2.0")
+fn legacy_dsa_config_constructors_still_match_builder_behavior() {
+    let default_retry = DsaConfig::new("/dev/dsa/wq2.0")
         .expect("legacy constructor should keep default retry behavior");
-    let explicit_retry = MemmoveValidationConfig::with_retries("/dev/dsa/wq2.0", 7)
+    let explicit_retry = DsaConfig::with_retries("/dev/dsa/wq2.0", 7)
         .expect("legacy retry constructor should remain compatible");
 
     assert_eq!(default_retry.device_path().to_str(), Some("/dev/dsa/wq2.0"));
@@ -116,7 +116,7 @@ fn legacy_validation_config_constructors_still_match_builder_behavior() {
 
 #[test]
 fn builder_rejects_empty_device_path_before_queue_open() {
-    let err = MemmoveValidationConfig::builder()
+    let err = DsaConfig::builder()
         .device_path(std::path::PathBuf::from(""))
         .build()
         .expect_err("empty builder device paths should fail validation");
@@ -197,7 +197,7 @@ fn rejects_empty_device_path_before_queue_open() {
 
 #[test]
 fn session_builder_rejects_empty_device_path_before_queue_open() {
-    let err = MemmoveValidationConfig::builder()
+    let err = DsaConfig::builder()
         .device_path(std::path::PathBuf::from(""))
         .build()
         .and_then(DsaSession::open_config)
@@ -209,7 +209,7 @@ fn session_builder_rejects_empty_device_path_before_queue_open() {
 
 #[test]
 fn session_builder_preserves_explicit_config_on_queue_open_failure() {
-    let config = MemmoveValidationConfig::builder()
+    let config = DsaConfig::builder()
         .device_path(std::path::PathBuf::from(
             "/dev/dsa/nonexistent-builder-test",
         ))
@@ -218,7 +218,7 @@ fn session_builder_preserves_explicit_config_on_queue_open_failure() {
         .expect("non-empty paths should validate before queue open");
 
     let err = DsaSession::builder()
-        .validation_config(config)
+        .dsa_config(config)
         .open()
         .err()
         .expect("missing work queue should surface queue-open diagnostics");

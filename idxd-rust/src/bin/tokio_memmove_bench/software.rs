@@ -4,7 +4,7 @@ use std::sync::{
 };
 
 use bytes::buf::UninitSlice;
-use idxd_rust::{AsyncDsaSession, DirectMemmoveBackend, MemmoveValidationConfig};
+use idxd_rust::{AsyncDsaSession, DirectMemmoveBackend, DsaConfig};
 use idxd_sys::{DSA_COMP_SUCCESS, DsaHwDesc, EnqcmdSubmission};
 
 use crate::artifact::{BenchmarkArtifact, SCHEMA_VERSION, SOFTWARE_TARGET};
@@ -60,7 +60,7 @@ impl DirectMemmoveBackend for SoftwareDirectBackend {
 }
 
 pub(crate) async fn software_artifact(args: &CliArgs) -> BenchmarkArtifact {
-    let config = match MemmoveValidationConfig::builder()
+    let config = match DsaConfig::builder()
         .device_path(args.device_path.clone())
         .build()
     {

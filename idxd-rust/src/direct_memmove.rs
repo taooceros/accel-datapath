@@ -5,8 +5,8 @@ use idxd_sys::{
 };
 
 use crate::{
-    CompletionAction, CompletionSnapshot, MemmoveError, MemmovePhase, MemmoveRequest, MemmoveRetry,
-    MemmoveValidationConfig, MemmoveValidationReport, classify_memmove_completion,
+    CompletionAction, CompletionSnapshot, DsaConfig, MemmoveError, MemmovePhase, MemmoveRequest,
+    MemmoveRetry, MemmoveValidationReport, classify_memmove_completion,
 };
 
 /// Operation-local memmove state that can be submitted now and completed later.
@@ -98,7 +98,7 @@ impl DirectMemmoveState {
     /// completion interpreter.
     pub(crate) fn classify_snapshot(
         &self,
-        config: &MemmoveValidationConfig,
+        config: &DsaConfig,
         snapshot: CompletionSnapshot,
     ) -> Result<CompletionAction, MemmoveError> {
         classify_memmove_completion(config, self.remaining(), snapshot, self.retries)
@@ -124,7 +124,7 @@ impl DirectMemmoveState {
 /// Verify initialized destination bytes after a terminal success without
 /// exposing buffer contents in the typed error.
 pub(crate) fn verify_initialized_destination(
-    config: &MemmoveValidationConfig,
+    config: &DsaConfig,
     request: MemmoveRequest,
     report: &MemmoveValidationReport,
     initialized_dst: &[u8],
@@ -155,8 +155,8 @@ mod tests {
 
     use super::*;
 
-    fn test_config() -> MemmoveValidationConfig {
-        MemmoveValidationConfig::builder()
+    fn test_config() -> DsaConfig {
+        DsaConfig::builder()
             .device_path("/dev/dsa/wq0.0")
             .max_page_fault_retries(1)
             .build()

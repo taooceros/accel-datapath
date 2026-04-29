@@ -1,7 +1,4 @@
-use std::sync::{
-    Mutex,
-    atomic::Ordering,
-};
+use std::sync::{Mutex, atomic::Ordering};
 
 use bytes::{Bytes, BytesMut, buf::UninitSlice};
 use idxd_sys::{DsaHwDesc, EnqcmdSubmission, touch_fault_page};
@@ -9,18 +6,17 @@ use tokio::sync::oneshot;
 
 use crate::async_session::{AsyncMemmoveError, AsyncMemmoveRequest, AsyncMemmoveResult};
 use crate::direct_memmove::{DirectMemmoveState, verify_initialized_destination};
-use crate::{
-    CompletionAction, CompletionSnapshot, MemmoveRequest, MemmoveValidationConfig,
-};
+use crate::{CompletionAction, CompletionSnapshot, DsaConfig, MemmoveRequest};
 
 use super::{
-    AsyncDirectFailure, AsyncDirectFailureKind, DirectMemmoveBackend, RuntimeInner, SUBMISSION_BACKOFF,
+    AsyncDirectFailure, AsyncDirectFailureKind, DirectMemmoveBackend, RuntimeInner,
+    SUBMISSION_BACKOFF,
 };
 
 pub(super) struct PendingOperation {
     id: u64,
     requested_bytes: usize,
-    config: MemmoveValidationConfig,
+    config: DsaConfig,
     source: Mutex<Option<Bytes>>,
     destination: Mutex<Option<BytesMut>>,
     state: Mutex<DirectMemmoveState>,
@@ -49,7 +45,7 @@ impl PendingOperation {
     pub(super) fn new(
         id: u64,
         request: AsyncMemmoveRequest,
-        config: MemmoveValidationConfig,
+        config: DsaConfig,
         reply_tx: oneshot::Sender<Result<AsyncMemmoveResult, AsyncMemmoveError>>,
     ) -> Result<Self, AsyncMemmoveError> {
         let (source, mut destination) = request.into_parts();
