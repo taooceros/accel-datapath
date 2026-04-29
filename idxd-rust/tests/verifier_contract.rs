@@ -202,3 +202,63 @@ exit 1
         output_dir.join("live_memmove.json").display()
     )));
 }
+
+#[test]
+fn verifier_rejects_payload_dump_fields_in_artifact() {
+    let (temp_root, launcher_path, path_override) = fake_launcher_env(true);
+    let output_dir = unique_temp_path("payload-dump-output");
+    fs::create_dir_all(&output_dir).expect("output dir should be creatable");
+
+    let fake_binary = temp_root.join("fake_live_memmove");
+    write_executable(
+        &fake_binary,
+        "#!/usr/bin/env bash
+set -euo pipefail
+if [[ ${1:-} == --bytes && ${2:-} == abc ]]; then
+  echo 'live_memmove: invalid value `abc` for `--bytes`; expected a positive integer' >&2
+  exit 2
+fi
+artifact=
+device=/dev/dsa/wq0.0
+bytes=64
+while [[ $# -gt 0 ]]; do
+  case \"$1\" in
+    --artifact)
+      artifact=$2
+      shift 2
+      ;;
+    --device)
+      device=$2
+      shift 2
+      ;;
+    --bytes)
+      bytes=$2
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+json=$(printf '{\"ok\":true,\"device_path\":\"%s\",\"requested_bytes\":%s,\"page_fault_retries\":0,\"final_status\":\"0x00\",\"phase\":\"completed\",\"error_kind\":null,\"message\":\"verified %s copied bytes\",\"source_payload\":[1,2,3]}' \"$device\" \"$bytes\" \"$bytes\")
+printf '%s\n' \"$json\" | tee \"$artifact\"
+exit 0
+",
+    );
+
+    let output = Command::new("bash")
+        .arg(verifier_script())
+        .env("PATH", path_override)
+        .env("IDXD_RUST_VERIFY_SKIP_BUILD", "1")
+        .env("IDXD_RUST_VERIFY_BINARY", &fake_binary)
+        .env("IDXD_RUST_VERIFY_DEVICE", "/dev/dsa/test0.0")
+        .env("IDXD_RUST_VERIFY_LAUNCHER_PATH", &launcher_path)
+        .env("IDXD_RUST_VERIFY_OUTPUT_DIR", &output_dir)
+        .output()
+        .expect("verifier should launch");
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("phase=artifact_validation"));
+    assert!(stderr.contains("forbidden payload dump field report.source_payload"));
+}

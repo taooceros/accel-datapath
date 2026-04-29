@@ -539,3 +539,34 @@ exit 1"#,
         output_dir.join("await_memmove.stdout").display()
     )));
 }
+
+#[test]
+fn verifier_rejects_nested_payload_dump_fields() {
+    let (temp_root, launcher_path, path_override) = fake_launcher_env(true);
+    let output_dir = unique_temp_path("nested-payload-dump-output");
+    fs::create_dir_all(&output_dir).expect("output dir should be creatable");
+
+    let fake_binary = temp_root.join("fake_await_memmove");
+    write_fake_binary(
+        &fake_binary,
+        r#"json=$(printf '{"ok":true,"device_path":"%s","requested_bytes":%s,"page_fault_retries":0,"final_status":"0x00","phase":"completed","error_kind":null,"lifecycle_failure_kind":null,"worker_failure_kind":null,"direct_failure_kind":null,"retry_budget":0,"retry_count":0,"completion_result":null,"completion_bytes_completed":null,"completion_fault_addr":null,"validation_phase":"completed","validation_error_kind":null,"message":"verified %s copied bytes via direct async memmove on %s","debug":{"destination_payload":[1,2,3]}}' "$device" "$bytes" "$bytes" "$device")
+printf '%s\n' "$json" | tee "$artifact"
+exit 0"#,
+    );
+
+    let output = Command::new("bash")
+        .arg(async_verifier_script())
+        .env("PATH", path_override)
+        .env("IDXD_RUST_VERIFY_SKIP_BUILD", "1")
+        .env("IDXD_RUST_VERIFY_BINARY", &fake_binary)
+        .env("IDXD_RUST_VERIFY_DEVICE", "/dev/dsa/test0.0")
+        .env("IDXD_RUST_VERIFY_LAUNCHER_PATH", &launcher_path)
+        .env("IDXD_RUST_VERIFY_OUTPUT_DIR", &output_dir)
+        .output()
+        .expect("verifier should launch");
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("phase=artifact_validation"));
+    assert!(stderr.contains("forbidden payload dump field report.debug.destination_payload"));
+}
