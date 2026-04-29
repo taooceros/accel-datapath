@@ -122,9 +122,11 @@ pub(crate) struct BenchmarkConfig {
 impl BenchmarkConfig {
     /// Build normalized benchmark runtime state from already-parsed CLI values.
     ///
-    /// Clap remains the external parser. This internal builder only resolves
-    /// defaults that depend on other fields and validates the comma-separated
-    /// size list before any benchmark loop or hardware queue-open path runs.
+    /// Clap remains the external parser. The method builder is kept for sparse,
+    /// named construction in tests and diagnostics, while production CLI flow
+    /// enters through `from_args`. This constructor resolves defaults that
+    /// depend on other fields and validates the comma-separated size list before
+    /// any benchmark loop or hardware queue-open path runs.
     #[builder(start_fn = builder, finish_fn = build)]
     pub(crate) fn from_parts(
         #[builder(default = AccelKind::Dsa)] accel: AccelKind,
@@ -154,17 +156,29 @@ impl BenchmarkConfig {
     }
 
     pub(crate) fn from_args(args: Args) -> Result<Self, BenchmarkConfigError> {
-        Self::builder()
-            .accel(args.accel)
-            .maybe_device(args.device)
-            .sizes(args.sizes)
-            .iterations(args.iterations)
-            .max_concurrency(args.max_concurrency)
-            .sw_only(args.sw_only)
-            .maybe_pin_core(args.pin_core)
-            .cold(args.cold)
-            .json(args.json)
-            .build()
+        let Args {
+            accel,
+            device,
+            sizes,
+            iterations,
+            max_concurrency,
+            sw_only,
+            pin_core,
+            cold,
+            json,
+        } = args;
+
+        Self::from_parts(
+            accel,
+            device,
+            sizes,
+            iterations,
+            max_concurrency,
+            sw_only,
+            pin_core,
+            cold,
+            json,
+        )
     }
 }
 
@@ -221,19 +235,19 @@ mod tests {
     }
 
     #[test]
-    fn benchmark_config_preserves_explicit_device_and_runtime_knobs() {
-        let config = BenchmarkConfig::from_parts(
-            AccelKind::Iax,
-            Some(PathBuf::from("/tmp/custom-wq")),
-            "64, 128,256".to_string(),
-            7,
-            4,
-            true,
-            Some(3),
-            true,
-            true,
-        )
-        .unwrap();
+    fn benchmark_config_builder_preserves_explicit_device_and_runtime_knobs() {
+        let config = BenchmarkConfig::builder()
+            .accel(AccelKind::Iax)
+            .device(PathBuf::from("/tmp/custom-wq"))
+            .sizes("64, 128,256".to_string())
+            .iterations(7)
+            .max_concurrency(4)
+            .sw_only(true)
+            .pin_core(3)
+            .cold(true)
+            .json(true)
+            .build()
+            .unwrap();
 
         assert_eq!(config.device, PathBuf::from("/tmp/custom-wq"));
         assert_eq!(config.sizes, vec![64, 128, 256]);
