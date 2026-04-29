@@ -1,3 +1,4 @@
+use std::error::Error as StdError;
 use std::path::PathBuf;
 use std::sync::{
     Arc, Condvar, Mutex,
@@ -257,6 +258,22 @@ fn owned_request(source: &'static [u8]) -> AsyncMemmoveRequest {
     .expect("request should validate")
 }
 
+fn assert_display_excludes_async_payload_markers(message: &str) {
+    for forbidden in [
+        "secret-payload",
+        "retry-secret",
+        "115, 101, 99",
+        "114, 101, 116",
+        "source_buffer",
+        "destination_bytes",
+    ] {
+        assert!(
+            !message.contains(forbidden),
+            "display leaked forbidden async payload marker {forbidden:?}: {message}"
+        );
+    }
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn async_memmove_returns_owned_destination_on_success() {
     let calls = Arc::new(AtomicUsize::new(0));
@@ -326,6 +343,10 @@ fn rejects_zero_length_owned_requests_before_runtime_dispatch() {
             ..
         }
     ));
+    let source_error = StdError::source(&err)
+        .expect("async request validation should expose the underlying memmove source");
+    assert!(source_error.is::<MemmoveError>());
+    assert_display_excludes_async_payload_markers(&err.to_string());
     let (_error, source, destination) = err.into_parts();
     assert!(source.is_empty());
     assert_eq!(destination.capacity(), 4);
@@ -340,6 +361,10 @@ fn rejects_destination_size_mismatch_before_runtime_dispatch() {
         err.memmove_error(),
         MemmoveError::DestinationTooSmall { .. }
     ));
+    let source_error = StdError::source(&err)
+        .expect("async request validation should expose the underlying memmove source");
+    assert!(source_error.is::<MemmoveError>());
+    assert_display_excludes_async_payload_markers(&err.to_string());
     let (_error, source, destination) = err.into_parts();
     assert_eq!(&source[..], b"data");
     assert_eq!(destination.capacity(), 3);
@@ -375,7 +400,9 @@ fn async_session_builder_rejects_empty_device_path_before_queue_open() {
 #[test]
 fn async_session_builder_preserves_queue_open_device_metadata() {
     let config = MemmoveValidationConfig::builder()
-        .device_path(std::path::PathBuf::from("/dev/dsa/nonexistent-async-builder-test"))
+        .device_path(std::path::PathBuf::from(
+            "/dev/dsa/nonexistent-async-builder-test",
+        ))
         .max_page_fault_retries(7)
         .build()
         .expect("non-empty paths should validate before queue open");
@@ -488,6 +515,10 @@ async fn preserves_underlying_completion_timeout_error() {
             ..
         })
     ));
+    let source_error = StdError::source(&err)
+        .expect("async execution failures should expose the underlying memmove source");
+    assert!(source_error.is::<MemmoveError>());
+    assert_display_excludes_async_payload_markers(&err.to_string());
     let recovered = err
         .into_request()
         .expect("execution errors should recover owned buffers");
@@ -782,10 +813,11 @@ async fn backpressure_exhaustion_reports_retry_budget_without_payload_bytes() {
     assert_eq!(failure.requested_bytes(), 14);
     assert_eq!(failure.retry_budget(), 2);
     assert_eq!(failure.retry_count(), 3);
-    let message = failure.to_string();
+    let failure_message = failure.to_string();
+    let err_message = err.to_string();
+    assert_display_excludes_async_payload_markers(&failure_message);
+    assert_display_excludes_async_payload_markers(&err_message);
     assert!(err.into_request().is_some());
-    assert!(!message.contains("secret-payload"));
-    assert!(!message.contains("115, 101, 99"));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -1000,6 +1032,8 @@ async fn retry_continuation_backpressure_reports_snapshot_and_recovers_buffers()
     assert_eq!(snapshot.status, DSA_COMP_PAGE_FAULT_NOBOF);
     assert_eq!(snapshot.bytes_completed, 5);
     assert_eq!(snapshot.fault_addr, 0xfeed);
+    assert_display_excludes_async_payload_markers(&failure.to_string());
+    assert_display_excludes_async_payload_markers(&err.to_string());
     let recovered = err
         .into_request()
         .expect("safe retry failure should recover buffers");

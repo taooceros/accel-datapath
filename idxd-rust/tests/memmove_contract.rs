@@ -234,7 +234,8 @@ fn session_builder_preserves_explicit_config_on_queue_open_failure() {
 #[test]
 fn queue_open_failure_preserves_io_source_chain() {
     let err = DsaSession::open("/dev/dsa/nonexistent-source-chain-test")
-        .expect_err("missing work queue should surface queue-open diagnostics");
+        .err()
+        .expect("missing work queue should surface queue-open diagnostics");
 
     let source = StdError::source(&err).expect("queue-open errors should expose io source");
     assert!(source.is::<std::io::Error>());

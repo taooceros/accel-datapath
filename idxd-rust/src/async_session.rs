@@ -8,7 +8,7 @@ use std::sync::{
 use std::thread::{self, JoinHandle};
 
 use bytes::{Bytes, BytesMut, buf::UninitSlice};
-use thiserror::Error;
+use snafu::Snafu;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
@@ -83,9 +83,10 @@ impl AsyncMemmoveRequest {
 ///
 /// This error preserves typed [`MemmoveError`] diagnostics and owns the rejected
 /// buffers so callers can inspect lengths or retry without payload logging.
-#[derive(Debug, Error)]
-#[error("invalid async memmove request: {error}")]
+#[derive(Debug, Snafu)]
+#[snafu(display("invalid async memmove request: {error}"))]
 pub struct AsyncMemmoveRequestError {
+    #[snafu(source)]
     error: MemmoveError,
     source_buffer: Bytes,
     destination: BytesMut,
@@ -178,30 +179,29 @@ impl std::fmt::Display for AsyncWorkerFailureKind {
 
 /// Async memmove error that preserves typed lifecycle, direct-runtime,
 /// legacy-worker-fixture, and underlying `MemmoveError` failures.
-#[derive(Debug, Error)]
+#[derive(Debug, Snafu)]
 pub enum AsyncMemmoveError {
-    #[error("async memmove execution failure: {source}")]
+    #[snafu(display("async memmove execution failure: {source}"))]
     Memmove {
-        #[source]
         source: MemmoveError,
         request: Option<AsyncMemmoveRequest>,
     },
 
-    #[error("async memmove lifecycle failure: {kind}")]
+    #[snafu(display("async memmove lifecycle failure: {kind}"))]
     LifecycleFailure {
         kind: AsyncLifecycleFailureKind,
         request: Option<AsyncMemmoveRequest>,
     },
 
-    #[error("async memmove worker failure: {kind}")]
+    #[snafu(display("async memmove worker failure: {kind}"))]
     WorkerFailure {
         kind: AsyncWorkerFailureKind,
         request: Option<AsyncMemmoveRequest>,
     },
 
-    #[error("async direct memmove failure: {failure}")]
+    #[snafu(display("async direct memmove failure: {failure}"))]
     DirectFailure {
-        #[source]
+        #[snafu(source)]
         failure: AsyncDirectFailure,
         request: Option<AsyncMemmoveRequest>,
     },
