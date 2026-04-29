@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::process::{Command, Output};
 
 use serde_json::Value;
@@ -44,6 +45,32 @@ fn assert_no_payload_bytes(text: &str) {
             "diagnostics must not expose benchmark payload bytes: {text}"
         );
     }
+}
+
+fn assert_exact_object_keys(object_name: &str, value: &Value, expected: &[&str]) {
+    let object = value
+        .as_object()
+        .unwrap_or_else(|| panic!("{object_name} is not a JSON object: {value}"));
+    let actual_keys = object.keys().map(String::as_str).collect::<BTreeSet<_>>();
+    let expected_keys = expected.iter().copied().collect::<BTreeSet<_>>();
+
+    assert_eq!(
+        actual_keys, expected_keys,
+        "{object_name} JSON keys drifted: {object:?}"
+    );
+}
+
+fn latency_benchmark_names(report: &Value) -> BTreeSet<&str> {
+    report["latency"]
+        .as_array()
+        .expect("latency is a JSON array")
+        .iter()
+        .map(|row| {
+            row["benchmark"]
+                .as_str()
+                .unwrap_or_else(|| panic!("latency row missing string benchmark: {row}"))
+        })
+        .collect()
 }
 
 fn assert_malformed_sizes_fail_without_panic(raw_sizes: &str, expected_fragment: &str) {
@@ -107,36 +134,62 @@ fn software_only_json_preserves_top_level_report_contract() {
     );
 
     let report = parse_stdout_json(&output);
-    let object = report
-        .as_object()
-        .expect("top-level report is a JSON object");
 
-    assert!(
-        object.contains_key("metadata"),
-        "missing metadata: {report}"
+    assert_exact_object_keys(
+        "top-level report",
+        &report,
+        &["latency", "metadata", "throughput"],
     );
-    assert!(object.contains_key("latency"), "missing latency: {report}");
-    assert!(
-        object.contains_key("throughput"),
-        "missing throughput: {report}"
+    assert_exact_object_keys(
+        "metadata",
+        &report["metadata"],
+        &[
+            "accelerator",
+            "cold_cache",
+            "cpu_numa_node",
+            "device",
+            "device_numa_node",
+            "iterations",
+            "pinned_core",
+            "tsc_freq_hz",
+            "wq_dedicated",
+        ],
     );
 
     let metadata = report["metadata"]
         .as_object()
         .expect("metadata is a JSON object");
-    for key in ["accelerator", "device", "iterations", "cold_cache"] {
-        assert!(
-            metadata.contains_key(key),
-            "metadata missing {key}: {metadata:?}"
-        );
-    }
 
     assert_eq!(metadata["iterations"], Value::from(1));
     assert_eq!(metadata["cold_cache"], Value::Bool(false));
+    assert_eq!(metadata["accelerator"], Value::from("dsa"));
+    assert_eq!(metadata["device"], Value::from("/dev/dsa/wq0.0"));
+    assert!(
+        metadata["tsc_freq_hz"].is_number(),
+        "missing numeric TSC frequency: {metadata:?}"
+    );
+    assert!(
+        metadata["pinned_core"].is_number(),
+        "missing numeric pinned core: {metadata:?}"
+    );
+    assert!(metadata["cpu_numa_node"].is_number() || metadata["cpu_numa_node"].is_null());
+    assert!(metadata["device_numa_node"].is_null());
+    assert!(metadata["wq_dedicated"].is_null());
+
     assert!(report["latency"].is_array(), "latency should be an array");
     assert!(
         report["throughput"].is_array(),
         "throughput should be an array"
+    );
+
+    let latency_names = latency_benchmark_names(&report);
+    assert!(
+        latency_names.contains("sw_memcpy"),
+        "missing sw_memcpy latency row: {latency_names:?}"
+    );
+    assert!(
+        latency_names.contains("sw_crc32c"),
+        "missing sw_crc32c latency row: {latency_names:?}"
     );
 
     assert_no_payload_bytes(&stdout(&output));
