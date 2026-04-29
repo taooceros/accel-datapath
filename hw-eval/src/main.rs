@@ -57,6 +57,40 @@ fn pin_benchmark_thread(core: usize) -> Result<usize, PinWarning> {
     })
 }
 
+fn open_work_queue(config: &BenchmarkConfig) -> Result<WqPortal, HwEvalError> {
+    WqPortal::open(&config.device).context(OpenWqSnafu {
+        accelerator: config.accel.as_str(),
+        device: config.device.display().to_string(),
+        operation: "open_wq",
+        hint: "need CAP_SYS_RAWIO or run via dsa_launcher",
+    })
+}
+
+fn build_report(
+    config: &BenchmarkConfig,
+    tsc_freq: u64,
+    core: usize,
+    wq: Option<&WqPortal>,
+    latency_results: Vec<LatencyResult>,
+    throughput_results: Vec<ThroughputResult>,
+) -> FullReport {
+    FullReport {
+        metadata: Metadata {
+            accelerator: config.accel.as_str().to_string(),
+            tsc_freq_hz: tsc_freq,
+            pinned_core: core,
+            cpu_numa_node: cpu_numa_node(core),
+            device_numa_node: wq.and_then(|_| device_numa_node(&config.device)),
+            device: config.device.display().to_string(),
+            wq_dedicated: wq.map(WqPortal::is_dedicated),
+            iterations: config.iterations,
+            cold_cache: config.cold,
+        },
+        latency: latency_results,
+        throughput: throughput_results,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -139,33 +173,21 @@ fn run() -> Result<(), HwEvalError> {
 
     if config.sw_only {
         if config.json {
-            let report = FullReport {
-                metadata: Metadata {
-                    accelerator: config.accel.as_str().to_string(),
-                    tsc_freq_hz: tsc_freq,
-                    pinned_core: core,
-                    cpu_numa_node: cpu_numa_node(core),
-                    device_numa_node: None,
-                    device: config.device.display().to_string(),
-                    wq_dedicated: None,
-                    iterations: config.iterations,
-                    cold_cache: config.cold,
-                },
-                latency: latency_results,
-                throughput: throughput_results,
-            };
+            let report = build_report(
+                &config,
+                tsc_freq,
+                core,
+                None,
+                latency_results,
+                throughput_results,
+            );
             print_json_report(&report)?;
         }
         return Ok(());
     }
 
     // Open WQ
-    let wq = WqPortal::open(&config.device).context(OpenWqSnafu {
-        accelerator: config.accel.as_str(),
-        device: config.device.display().to_string(),
-        operation: "open_wq",
-        hint: "need CAP_SYS_RAWIO or run via dsa_launcher",
-    })?;
+    let wq = open_work_queue(&config)?;
 
     if !config.json {
         println!(
@@ -216,21 +238,14 @@ fn run() -> Result<(), HwEvalError> {
     }
 
     if config.json {
-        let report = FullReport {
-            metadata: Metadata {
-                accelerator: config.accel.as_str().to_string(),
-                tsc_freq_hz: tsc_freq,
-                pinned_core: core,
-                cpu_numa_node: cpu_numa_node(core),
-                device_numa_node: device_numa_node(&config.device),
-                device: config.device.display().to_string(),
-                wq_dedicated: Some(wq.is_dedicated()),
-                iterations: config.iterations,
-                cold_cache: config.cold,
-            },
-            latency: latency_results,
-            throughput: throughput_results,
-        };
+        let report = build_report(
+            &config,
+            tsc_freq,
+            core,
+            Some(&wq),
+            latency_results,
+            throughput_results,
+        );
         print_json_report(&report)?;
     } else {
         println!("\nDone.");
