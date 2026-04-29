@@ -623,7 +623,10 @@ fn shutdowns_cleanly_after_idle_state() {
 }
 
 fn direct_config() -> MemmoveValidationConfig {
-    MemmoveValidationConfig::new("/dev/dsa/test0.0").expect("direct test config")
+    MemmoveValidationConfig::builder()
+        .device_path("/dev/dsa/test0.0")
+        .build()
+        .expect("direct test config")
 }
 
 fn owned_mut_request(source: &'static [u8]) -> AsyncMemmoveRequest {

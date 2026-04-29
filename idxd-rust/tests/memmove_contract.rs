@@ -1,12 +1,17 @@
 use idxd_rust::{
-    CompletionAction, CompletionSnapshot, DsaSession, MemmoveError, MemmovePhase, MemmoveRequest,
-    MemmoveRetry, MemmoveValidationConfig, MemmoveValidationReport, classify_memmove_completion,
+    CompletionAction, CompletionSnapshot, DEFAULT_DEVICE_PATH, DEFAULT_MAX_PAGE_FAULT_RETRIES,
+    DsaSession, MemmoveError, MemmovePhase, MemmoveRequest, MemmoveRetry,
+    MemmoveValidationConfig, MemmoveValidationReport, classify_memmove_completion,
 };
 use idxd_sys::{DsaCompletionRecord, DsaHwDesc};
 use std::mem::{align_of, size_of};
 
 fn test_config() -> MemmoveValidationConfig {
-    MemmoveValidationConfig::with_retries("/dev/dsa/wq0.0", 1).expect("test config")
+    MemmoveValidationConfig::builder()
+        .device_path("/dev/dsa/wq0.0")
+        .max_page_fault_retries(1)
+        .build()
+        .expect("test config")
 }
 
 #[test]
@@ -37,6 +42,68 @@ fn exposes_stable_validation_config_fields() {
 
     assert_eq!(config.device_path().to_str(), Some("/dev/dsa/wq1.2"));
     assert_eq!(config.max_page_fault_retries(), 3);
+}
+
+#[test]
+fn builder_uses_default_device_path_and_retry_budget() {
+    let config = MemmoveValidationConfig::builder()
+        .build()
+        .expect("default builder config should validate");
+
+    assert_eq!(config.device_path().to_str(), Some(DEFAULT_DEVICE_PATH));
+    assert_eq!(
+        config.max_page_fault_retries(),
+        DEFAULT_MAX_PAGE_FAULT_RETRIES
+    );
+}
+
+#[test]
+fn builder_accepts_explicit_device_path_and_retry_budget() {
+    let config = MemmoveValidationConfig::builder()
+        .device_path("/dev/dsa/wq1.2")
+        .max_page_fault_retries(3)
+        .build()
+        .expect("explicit builder config should validate");
+
+    assert_eq!(config.device_path().to_str(), Some("/dev/dsa/wq1.2"));
+    assert_eq!(config.max_page_fault_retries(), 3);
+}
+
+#[test]
+fn builder_preserves_zero_retry_budget() {
+    let config = MemmoveValidationConfig::builder()
+        .device_path("/dev/dsa/wq1.2")
+        .max_page_fault_retries(0)
+        .build()
+        .expect("zero retries is a valid explicit budget");
+
+    assert_eq!(config.max_page_fault_retries(), 0);
+}
+
+#[test]
+fn legacy_validation_config_constructors_still_match_builder_behavior() {
+    let default_retry = MemmoveValidationConfig::new("/dev/dsa/wq2.0")
+        .expect("legacy constructor should keep default retry behavior");
+    let explicit_retry = MemmoveValidationConfig::with_retries("/dev/dsa/wq2.0", 7)
+        .expect("legacy retry constructor should remain compatible");
+
+    assert_eq!(default_retry.device_path().to_str(), Some("/dev/dsa/wq2.0"));
+    assert_eq!(
+        default_retry.max_page_fault_retries(),
+        DEFAULT_MAX_PAGE_FAULT_RETRIES
+    );
+    assert_eq!(explicit_retry.device_path().to_str(), Some("/dev/dsa/wq2.0"));
+    assert_eq!(explicit_retry.max_page_fault_retries(), 7);
+}
+
+#[test]
+fn builder_rejects_empty_device_path_before_queue_open() {
+    let err = MemmoveValidationConfig::builder()
+        .device_path("")
+        .build()
+        .expect_err("empty builder device paths should fail validation");
+
+    assert!(matches!(err, MemmoveError::InvalidDevicePath { .. }));
 }
 
 #[test]

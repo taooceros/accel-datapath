@@ -466,6 +466,13 @@ fn async_failure_outcome(args: &CliArgs, err: AsyncMemmoveError) -> RunOutcome {
             format!("downstream async-handle worker failure: {}", kind.as_str()),
         )
         .with_worker(kind.as_str()),
+        AsyncMemmoveError::DirectFailure { failure, .. } => base_outcome(
+            args,
+            false,
+            "async_direct",
+            Some("direct_failure"),
+            format!("downstream async-handle direct failure: {failure}"),
+        ),
     }
 }
 

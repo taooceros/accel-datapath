@@ -9,7 +9,10 @@ use idxd_sys::DSA_COMP_SUCCESS;
 use tokio::time::timeout;
 
 fn direct_config() -> MemmoveValidationConfig {
-    MemmoveValidationConfig::new("/dev/dsa/test0.0").expect("direct test config")
+    MemmoveValidationConfig::builder()
+        .device_path("/dev/dsa/test0.0")
+        .build()
+        .expect("direct test config")
 }
 
 fn direct_session(backend: ScriptedDirectBackend) -> AsyncDsaSession {
