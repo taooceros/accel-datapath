@@ -50,6 +50,7 @@ pub struct DsaSession {
     portal: WqPortal,
 }
 
+#[bon::bon]
 impl DsaSession {
     /// Open a DSA work queue and keep it mapped for repeated memmoves.
     pub fn open<P: AsRef<Path>>(device_path: P) -> Result<Self, MemmoveError> {
@@ -57,7 +58,7 @@ impl DsaSession {
     }
 
     pub fn open_default() -> Result<Self, MemmoveError> {
-        Self::open(DEFAULT_DEVICE_PATH)
+        Self::open_config(MemmoveValidationConfig::default())
     }
 
     pub fn open_with_retries<P: AsRef<Path>>(
@@ -65,14 +66,30 @@ impl DsaSession {
         max_page_fault_retries: u32,
     ) -> Result<Self, MemmoveError> {
         let config = MemmoveValidationConfig::with_retries(device_path, max_page_fault_retries)?;
-        let portal =
-            WqPortal::open(config.device_path()).map_err(|source| MemmoveError::QueueOpen {
-                device_path: config.device_path().to_path_buf(),
+        Self::open_config(config)
+    }
+
+    /// Open a DSA work queue from an already-normalized validation config.
+    ///
+    /// This is the named config entrypoint used by builder-oriented callers.
+    /// Queue-open failures still preserve the normalized device path and phase
+    /// metadata from the supplied [`MemmoveValidationConfig`].
+    #[builder(start_fn = builder, finish_fn = open)]
+    pub fn open_config(
+        #[builder(default)] validation_config: MemmoveValidationConfig,
+    ) -> Result<Self, MemmoveError> {
+        let portal = WqPortal::open(validation_config.device_path()).map_err(|source| {
+            MemmoveError::QueueOpen {
+                device_path: validation_config.device_path().to_path_buf(),
                 phase: MemmovePhase::QueueOpen,
                 source,
-            })?;
+            }
+        })?;
 
-        Ok(Self { config, portal })
+        Ok(Self {
+            config: validation_config,
+            portal,
+        })
     }
 
     pub fn device_path(&self) -> &Path {

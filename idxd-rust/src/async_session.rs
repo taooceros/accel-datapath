@@ -12,10 +12,9 @@ use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
-    AsyncDirectFailure, AsyncDirectFailureKind, DEFAULT_DEVICE_PATH,
-    DEFAULT_MAX_PAGE_FAULT_RETRIES, DirectAsyncMemmoveRuntime, DirectMemmoveBackend,
-    DirectPortalBackend, DsaSession, MemmoveError, MemmoveRequest, MemmoveValidationConfig,
-    MemmoveValidationReport,
+    AsyncDirectFailure, AsyncDirectFailureKind, DEFAULT_MAX_PAGE_FAULT_RETRIES,
+    DirectAsyncMemmoveRuntime, DirectMemmoveBackend, DirectPortalBackend, DsaSession, MemmoveError,
+    MemmoveRequest, MemmoveValidationConfig, MemmoveValidationReport,
 };
 
 const LIFECYCLE_RUNNING: u8 = 0;
@@ -473,13 +472,14 @@ pub struct AsyncDsaSession {
     worker_thread: Option<JoinHandle<()>>,
 }
 
+#[bon::bon]
 impl AsyncDsaSession {
     pub fn open<P: AsRef<Path>>(device_path: P) -> Result<Self, AsyncMemmoveError> {
         Self::open_with_retries(device_path, DEFAULT_MAX_PAGE_FAULT_RETRIES)
     }
 
     pub fn open_default() -> Result<Self, AsyncMemmoveError> {
-        Self::open(DEFAULT_DEVICE_PATH)
+        Self::open_config(MemmoveValidationConfig::default())
     }
 
     pub fn open_with_retries<P: AsRef<Path>>(
@@ -487,13 +487,28 @@ impl AsyncDsaSession {
         max_page_fault_retries: u32,
     ) -> Result<Self, AsyncMemmoveError> {
         let config = MemmoveValidationConfig::with_retries(device_path, max_page_fault_retries)?;
-        let backend = DirectPortalBackend::open(config.device_path())?;
-        let runtime = DirectAsyncMemmoveRuntime::try_new(config, backend).map_err(|failure| {
-            AsyncMemmoveError::DirectFailure {
-                failure,
-                request: None,
-            }
-        })?;
+        Self::open_config(config)
+    }
+
+    /// Open the public direct async runtime from an already-normalized config.
+    ///
+    /// Builder-oriented callers can construct a [`MemmoveValidationConfig`]
+    /// once, then pass it here without losing invalid-path or queue-open
+    /// diagnostics. The hidden direct-backend fixture seam remains separate in
+    /// `spawn_with_direct_backend` so tests can keep injecting deterministic
+    /// backends without going through a live work queue.
+    #[builder(start_fn = builder, finish_fn = open)]
+    pub fn open_config(
+        #[builder(default)] validation_config: MemmoveValidationConfig,
+    ) -> Result<Self, AsyncMemmoveError> {
+        let backend = DirectPortalBackend::open(validation_config.device_path())?;
+        let runtime =
+            DirectAsyncMemmoveRuntime::try_new(validation_config, backend).map_err(|failure| {
+                AsyncMemmoveError::DirectFailure {
+                    failure,
+                    request: None,
+                }
+            })?;
         Ok(Self::from_driver(
             Arc::new(DirectRuntimeDriver::new(runtime)),
             None,

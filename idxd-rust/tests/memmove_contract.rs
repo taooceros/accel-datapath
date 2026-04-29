@@ -1,14 +1,14 @@
 use idxd_rust::{
     CompletionAction, CompletionSnapshot, DEFAULT_DEVICE_PATH, DEFAULT_MAX_PAGE_FAULT_RETRIES,
-    DsaSession, MemmoveError, MemmovePhase, MemmoveRequest, MemmoveRetry,
-    MemmoveValidationConfig, MemmoveValidationReport, classify_memmove_completion,
+    DsaSession, MemmoveError, MemmovePhase, MemmoveRequest, MemmoveRetry, MemmoveValidationConfig,
+    MemmoveValidationReport, classify_memmove_completion,
 };
 use idxd_sys::{DsaCompletionRecord, DsaHwDesc};
 use std::mem::{align_of, size_of};
 
 fn test_config() -> MemmoveValidationConfig {
     MemmoveValidationConfig::builder()
-        .device_path("/dev/dsa/wq0.0")
+        .device_path(std::path::PathBuf::from("/dev/dsa/wq0.0"))
         .max_page_fault_retries(1)
         .build()
         .expect("test config")
@@ -60,7 +60,7 @@ fn builder_uses_default_device_path_and_retry_budget() {
 #[test]
 fn builder_accepts_explicit_device_path_and_retry_budget() {
     let config = MemmoveValidationConfig::builder()
-        .device_path("/dev/dsa/wq1.2")
+        .device_path(std::path::PathBuf::from("/dev/dsa/wq1.2"))
         .max_page_fault_retries(3)
         .build()
         .expect("explicit builder config should validate");
@@ -72,7 +72,7 @@ fn builder_accepts_explicit_device_path_and_retry_budget() {
 #[test]
 fn builder_preserves_zero_retry_budget() {
     let config = MemmoveValidationConfig::builder()
-        .device_path("/dev/dsa/wq1.2")
+        .device_path(std::path::PathBuf::from("/dev/dsa/wq1.2"))
         .max_page_fault_retries(0)
         .build()
         .expect("zero retries is a valid explicit budget");
@@ -92,14 +92,17 @@ fn legacy_validation_config_constructors_still_match_builder_behavior() {
         default_retry.max_page_fault_retries(),
         DEFAULT_MAX_PAGE_FAULT_RETRIES
     );
-    assert_eq!(explicit_retry.device_path().to_str(), Some("/dev/dsa/wq2.0"));
+    assert_eq!(
+        explicit_retry.device_path().to_str(),
+        Some("/dev/dsa/wq2.0")
+    );
     assert_eq!(explicit_retry.max_page_fault_retries(), 7);
 }
 
 #[test]
 fn builder_rejects_empty_device_path_before_queue_open() {
     let err = MemmoveValidationConfig::builder()
-        .device_path("")
+        .device_path(std::path::PathBuf::from(""))
         .build()
         .expect_err("empty builder device paths should fail validation");
 
@@ -175,6 +178,40 @@ fn rejects_empty_device_path_before_queue_open() {
         .err()
         .expect("empty device paths should fail validation");
     assert!(matches!(err, MemmoveError::InvalidDevicePath { .. }));
+}
+
+#[test]
+fn session_builder_rejects_empty_device_path_before_queue_open() {
+    let err = MemmoveValidationConfig::builder()
+        .device_path(std::path::PathBuf::from(""))
+        .build()
+        .and_then(DsaSession::open_config)
+        .err()
+        .expect("empty builder/config device paths should fail validation");
+
+    assert!(matches!(err, MemmoveError::InvalidDevicePath { .. }));
+}
+
+#[test]
+fn session_builder_preserves_explicit_config_on_queue_open_failure() {
+    let config = MemmoveValidationConfig::builder()
+        .device_path(std::path::PathBuf::from("/dev/dsa/nonexistent-builder-test"))
+        .max_page_fault_retries(7)
+        .build()
+        .expect("non-empty paths should validate before queue open");
+
+    let err = DsaSession::builder()
+        .validation_config(config)
+        .open()
+        .err()
+        .expect("missing work queue should surface queue-open diagnostics");
+
+    assert_eq!(err.kind(), "queue_open");
+    assert_eq!(
+        err.device_path().and_then(|path| path.to_str()),
+        Some("/dev/dsa/nonexistent-builder-test")
+    );
+    assert_eq!(err.phase(), Some(MemmovePhase::QueueOpen));
 }
 
 #[test]

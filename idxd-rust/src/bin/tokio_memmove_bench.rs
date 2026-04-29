@@ -507,7 +507,10 @@ async fn execute(args: &CliArgs) -> BenchmarkArtifact {
 }
 
 async fn software_artifact(args: &CliArgs) -> BenchmarkArtifact {
-    let config = match MemmoveValidationConfig::new(&args.device_path) {
+    let config = match MemmoveValidationConfig::builder()
+        .device_path(args.device_path.clone())
+        .build()
+    {
         Ok(config) => config,
         Err(error) => {
             return top_level_failure_artifact(
@@ -811,15 +814,24 @@ fn rate_per_second(value: u64, elapsed_ns: u128) -> Option<f64> {
 }
 
 async fn hardware_artifact(args: &CliArgs) -> BenchmarkArtifact {
-    let session =
-        match AsyncDsaSession::open_with_retries(&args.device_path, DEFAULT_MAX_PAGE_FAULT_RETRIES)
-        {
-            Ok(session) => session,
-            Err(error) => {
-                let failure = RowFailure::async_error(&error);
-                return failure_artifact_from_row(args, Backend::Hardware, &failure);
-            }
-        };
+    let config = match MemmoveValidationConfig::builder()
+        .device_path(args.device_path.clone())
+        .max_page_fault_retries(DEFAULT_MAX_PAGE_FAULT_RETRIES)
+        .build()
+    {
+        Ok(config) => config,
+        Err(error) => {
+            let failure = RowFailure::sync_error(&error, "validation");
+            return failure_artifact_from_row(args, Backend::Hardware, &failure);
+        }
+    };
+    let session = match AsyncDsaSession::open_config(config) {
+        Ok(session) => session,
+        Err(error) => {
+            let failure = RowFailure::async_error(&error);
+            return failure_artifact_from_row(args, Backend::Hardware, &failure);
+        }
+    };
     let handle = session.handle();
 
     let mut results = Vec::with_capacity(args.suite.modes().len() + 1);
@@ -924,7 +936,26 @@ fn run_sync_comparison(args: &CliArgs) -> BenchmarkResult {
     let start = Instant::now();
     let mut stats = ModeStats::default();
 
-    match DsaSession::open_with_retries(&args.device_path, DEFAULT_MAX_PAGE_FAULT_RETRIES) {
+    let config = match MemmoveValidationConfig::builder()
+        .device_path(args.device_path.clone())
+        .max_page_fault_retries(DEFAULT_MAX_PAGE_FAULT_RETRIES)
+        .build()
+    {
+        Ok(config) => config,
+        Err(error) => {
+            stats.record_failure(RowFailure::sync_error(&error, "validation"));
+            return stats.into_result(
+                args,
+                BenchmarkMode::SingleLatency,
+                HARDWARE_SYNC_TARGET,
+                Some(HARDWARE_ASYNC_TARGET),
+                true,
+                start.elapsed().as_nanos().max(1),
+            );
+        }
+    };
+
+    match DsaSession::open_config(config) {
         Ok(session) => {
             for seed in 0..args.iterations {
                 let source = deterministic_source(args.bytes, seed);

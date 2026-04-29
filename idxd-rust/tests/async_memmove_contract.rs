@@ -7,10 +7,10 @@ use std::time::Duration;
 
 use bytes::{Bytes, BytesMut, buf::UninitSlice};
 use idxd_rust::{
-    AsyncDirectFailureKind, AsyncDsaSession, AsyncLifecycleFailureKind, AsyncMemmoveRequest,
-    AsyncMemmoveWorker, AsyncWorkerFailureKind, CompletionSnapshot, DirectAsyncMemmoveRuntime,
-    MemmoveError, MemmovePhase, MemmoveRequest, MemmoveValidationConfig, MemmoveValidationReport,
-    direct_test_support::ScriptedDirectBackend,
+    AsyncDirectFailureKind, AsyncDsaSession, AsyncLifecycleFailureKind, AsyncMemmoveError,
+    AsyncMemmoveRequest, AsyncMemmoveWorker, AsyncWorkerFailureKind, CompletionSnapshot,
+    DirectAsyncMemmoveRuntime, MemmoveError, MemmovePhase, MemmoveRequest, MemmoveValidationConfig,
+    MemmoveValidationReport, direct_test_support::ScriptedDirectBackend,
 };
 use idxd_sys::{DSA_COMP_PAGE_FAULT_NOBOF, DSA_COMP_SUCCESS, EnqcmdSubmission};
 use tokio::sync::Notify;
@@ -356,6 +356,51 @@ fn preserves_invalid_device_path_during_async_open() {
     ));
 }
 
+#[test]
+fn async_session_builder_rejects_empty_device_path_before_queue_open() {
+    let err = MemmoveValidationConfig::builder()
+        .device_path(std::path::PathBuf::from(""))
+        .build()
+        .map_err(AsyncMemmoveError::from)
+        .and_then(AsyncDsaSession::open_config)
+        .expect_err("empty builder/config device paths should stay typed");
+
+    assert_eq!(err.kind(), "invalid_device_path");
+    assert!(matches!(
+        err.memmove_error(),
+        Some(MemmoveError::InvalidDevicePath { .. })
+    ));
+}
+
+#[test]
+fn async_session_builder_preserves_queue_open_device_metadata() {
+    let config = MemmoveValidationConfig::builder()
+        .device_path(std::path::PathBuf::from("/dev/dsa/nonexistent-async-builder-test"))
+        .max_page_fault_retries(7)
+        .build()
+        .expect("non-empty paths should validate before queue open");
+
+    let err = AsyncDsaSession::builder()
+        .validation_config(config)
+        .open()
+        .expect_err("missing async work queue should surface queue-open diagnostics");
+
+    assert_eq!(err.kind(), "queue_open");
+    assert!(matches!(
+        err.memmove_error(),
+        Some(MemmoveError::QueueOpen {
+            phase: MemmovePhase::QueueOpen,
+            ..
+        })
+    ));
+    assert_eq!(
+        err.memmove_error()
+            .and_then(|error| error.device_path())
+            .and_then(|path| path.to_str()),
+        Some("/dev/dsa/nonexistent-async-builder-test")
+    );
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn reuses_one_worker_for_repeated_sequential_requests() {
     let calls = Arc::new(AtomicUsize::new(0));
@@ -624,7 +669,7 @@ fn shutdowns_cleanly_after_idle_state() {
 
 fn direct_config() -> MemmoveValidationConfig {
     MemmoveValidationConfig::builder()
-        .device_path("/dev/dsa/test0.0")
+        .device_path(std::path::PathBuf::from("/dev/dsa/test0.0"))
         .build()
         .expect("direct test config")
 }
@@ -635,6 +680,43 @@ fn owned_mut_request(source: &'static [u8]) -> AsyncMemmoveRequest {
         BytesMut::with_capacity(source.len()),
     )
     .expect("request should validate")
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn async_direct_session_config_preserves_explicit_retry_budget() {
+    let config = MemmoveValidationConfig::builder()
+        .device_path(std::path::PathBuf::from("/dev/dsa/test0.0"))
+        .max_page_fault_retries(0)
+        .build()
+        .expect("direct test config");
+    let backend = ScriptedDirectBackend::new();
+    let session = AsyncDsaSession::spawn_with_direct_backend(config, backend.clone())
+        .expect("direct test runtime should start");
+
+    let pending = tokio::spawn({
+        let handle = session.handle();
+        async move { handle.memmove(owned_mut_request(b"retry-budget")).await }
+    });
+
+    tokio::task::yield_now().await;
+    backend.complete(
+        1,
+        CompletionSnapshot::new(DSA_COMP_PAGE_FAULT_NOBOF, 0, 1, 0x1000),
+    );
+
+    let err = timeout(Duration::from_secs(1), pending)
+        .await
+        .expect("retry exhaustion should resolve")
+        .expect("direct task should not panic")
+        .expect_err("zero page-fault retry budget should be preserved");
+
+    assert_eq!(err.kind(), "page_fault_retry_exhausted");
+    assert!(matches!(
+        err.memmove_error(),
+        Some(MemmoveError::PageFaultRetryExhausted { retries: 0, .. })
+    ));
+
+    session.shutdown().expect("owner shutdown should succeed");
 }
 
 #[tokio::test(flavor = "current_thread")]

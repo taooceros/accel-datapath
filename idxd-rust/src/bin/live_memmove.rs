@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use idxd_rust::{
-    DEFAULT_DEVICE_PATH, DsaSession, MemmoveError, MemmoveRequest, MemmoveValidationReport,
+    DEFAULT_DEVICE_PATH, DsaSession, MemmoveError, MemmoveRequest, MemmoveValidationConfig,
+    MemmoveValidationReport,
 };
 
 fn main() -> ExitCode {
@@ -144,7 +145,15 @@ fn execute(args: &CliArgs) -> RunOutcome {
     let src = deterministic_src(args.requested_bytes);
     let mut dst = vec![0u8; args.requested_bytes];
 
-    match DsaSession::open(&args.device_path) {
+    let config = match MemmoveValidationConfig::builder()
+        .device_path(args.device_path.clone())
+        .build()
+    {
+        Ok(config) => config,
+        Err(err) => return failure_outcome(args, err),
+    };
+
+    match DsaSession::open_config(config) {
         Ok(session) => match session.memmove(&mut dst, &src) {
             Ok(report) => success_outcome(report),
             Err(err) => failure_outcome(args, err),
