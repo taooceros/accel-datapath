@@ -57,12 +57,14 @@ required_headings=(
   '## Responsibility map'
   '## Direct async S02 inventory'
   '## Tokio benchmark S03 inventory'
+  '## hw-eval S06 inventory'
   '## idxd-sys S05 inventory'
   '## Downstream slice contract baselines'
   '## Non-change boundaries'
   '## Verification matrix'
   '## R018 coverage'
   '## Ordinary-host and prepared-host limits'
+  '## Fresh S01 verification evidence'
 )
 
 for heading in "${required_headings[@]}"; do
@@ -72,6 +74,23 @@ done
 for slice in S02 S03 S04 S05 S06; do
   require_literal "${slice}" "downstream_${slice}_baseline"
 done
+
+require_literal '| S02 | `idxd-rust/src/async_session.rs`' 'downstream_S02_row_sources'
+require_literal 'owner/session wiring, request validation/recovery, direct registration/submission' 'downstream_S02_readability_seams'
+require_literal 'cargo test --manifest-path ./Cargo.toml -p idxd-rust --test direct_async_contract_guard -- --nocapture' 'downstream_S02_verification_command'
+require_literal '| S03 | `idxd-rust/src/bin/tokio_memmove_bench.rs`' 'downstream_S03_row_sources'
+require_literal 'benchmark CLI/config, backend/suite/mode dispatch' 'downstream_S03_readability_seams'
+require_literal 'cargo test --manifest-path ./Cargo.toml -p idxd-rust --test async_benchmark_cli_contract --test async_benchmark_verifier_contract -- --nocapture' 'downstream_S03_verification_command'
+require_literal '| S04 | `idxd-rust` proof-binary and verifier surfaces' 'downstream_S04_row_sources'
+require_literal 'proof/verifier readability for `idxd-rust` artifacts' 'downstream_S04_readability_seams'
+require_literal 'cargo test --manifest-path ./Cargo.toml -p idxd-rust --test async_benchmark_verifier_contract -- --nocapture' 'downstream_S04_verification_command'
+require_literal '| S05 | `idxd-sys/src/lib.rs`' 'downstream_S05_row_sources'
+require_literal 'raw `std::io::Result` boundaries without hiding hardware semantics' 'downstream_S05_readability_seams'
+require_literal 'cargo test --manifest-path ./Cargo.toml -p idxd-sys --test raw_boundary_contract --test dsa_descriptor_layout -- --nocapture' 'downstream_S05_verification_command'
+require_literal '| S06 | `hw-eval/src/main.rs`' 'downstream_S06_row_sources'
+require_literal 'WQ submission/timing/topology helpers, and benchmark ordering' 'downstream_S06_readability_seams'
+require_literal 'cargo test --manifest-path ./Cargo.toml -p hw-eval --test cli_contract --bin hw-eval -- --nocapture' 'downstream_S06_verification_command'
+require_literal 'Fresh ordinary-host evidence was recorded by T06' 'fresh_s01_evidence_section'
 
 require_literal 'R018' 'requirement_R018'
 require_literal 'idxd-rust' 'idxd_rust_responsibility'
