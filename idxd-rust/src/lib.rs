@@ -57,10 +57,6 @@ impl DsaSession {
         Self::open_with_retries(device_path, DEFAULT_MAX_PAGE_FAULT_RETRIES)
     }
 
-    pub fn open_default() -> Result<Self, MemmoveError> {
-        Self::open_config(MemmoveValidationConfig::default())
-    }
-
     pub fn open_with_retries<P: AsRef<Path>>(
         device_path: P,
         max_page_fault_retries: u32,

@@ -478,10 +478,6 @@ impl AsyncDsaSession {
         Self::open_with_retries(device_path, DEFAULT_MAX_PAGE_FAULT_RETRIES)
     }
 
-    pub fn open_default() -> Result<Self, AsyncMemmoveError> {
-        Self::open_config(MemmoveValidationConfig::default())
-    }
-
     pub fn open_with_retries<P: AsRef<Path>>(
         device_path: P,
         max_page_fault_retries: u32,
@@ -519,9 +515,8 @@ impl AsyncDsaSession {
     /// Spawn a legacy blocking-worker fixture from a custom factory.
     ///
     /// This hidden seam is retained for older host-independent tests. It is not
-    /// used by `open`, `open_with_retries`, or `open_default`, so the public
-    /// default path cannot silently fall back to synchronous
-    /// `DsaSession::memmove_uninit` execution.
+    /// used by `open` or `open_with_retries`, so the public path cannot
+    /// silently fall back to synchronous `DsaSession::memmove_uninit` execution.
     #[doc(hidden)]
     pub fn spawn_with_factory<F, W>(factory: F) -> Result<Self, AsyncMemmoveError>
     where

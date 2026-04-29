@@ -111,7 +111,7 @@ The async surface is intentionally split in two.
 - Direct async submissions use ENQCMD accept/reject semantics and operation-owned descriptor/completion/buffer state. A long-lived Tokio monitor observes per-request completion records and resolves futures only after terminal completion classification.
 - Once a request has been accepted for hardware submission, aborting or dropping the awaiting Tokio task does not cancel the in-flight memmove. The monitor still observes terminal completion, keeps descriptor/completion/buffer state alive, and discards the result only if no receiver remains.
 - Shutdown rejects new submissions with `owner_shutdown`. Direct operations that were already accepted remain owned by the runtime until their completion records are observed.
-- The legacy blocking worker seam remains only as a hidden host-independent fixture path; `open`, `open_with_retries`, and `open_default` do not silently fall back to synchronous `DsaSession::memmove_uninit`.
+- The legacy blocking worker seam remains only as a hidden host-independent fixture path; `open` and `open_with_retries` do not silently fall back to synchronous `DsaSession::memmove_uninit`.
 - Borrowed async zero-copy, software aggregation, batching, preallocated completion-record registries, and MOVDIR64 submission paths are future work. They are not part of the current v1 owner-plus-handle behavior.
 
 A minimal owned async call looks like this:
