@@ -34,9 +34,8 @@ fn assert_no_payload_bytes(text: &str) {
     );
 }
 
-#[test]
-fn malformed_size_reports_token_and_raw_list_without_json_or_panic() {
-    let output = hw_eval(&["--sw-only", "--sizes", "64,abc,128", "--iterations", "1"]);
+fn assert_malformed_sizes_fail_without_panic(raw_sizes: &str, expected_fragment: &str) {
+    let output = hw_eval(&["--sw-only", "--sizes", raw_sizes, "--iterations", "1"]);
 
     assert!(
         !output.status.success(),
@@ -47,13 +46,12 @@ fn malformed_size_reports_token_and_raw_list_without_json_or_panic() {
 
     let stdout = stdout(&output);
     let stderr = stderr(&output);
-
     assert!(
-        stderr.contains("abc"),
-        "stderr should name invalid token: {stderr}"
+        stderr.contains(expected_fragment),
+        "stderr should contain {expected_fragment:?}: {stderr}"
     );
     assert!(
-        stderr.contains("64,abc,128"),
+        stderr.contains(raw_sizes),
         "stderr should include original --sizes list: {stderr}"
     );
     assert!(
@@ -65,6 +63,24 @@ fn malformed_size_reports_token_and_raw_list_without_json_or_panic() {
         "failed CLI validation should not emit a valid JSON report: {stdout}"
     );
     assert_no_payload_bytes(&stderr);
+}
+
+#[test]
+fn malformed_size_reports_token_and_raw_list_without_json_or_panic() {
+    assert_malformed_sizes_fail_without_panic("64,abc,128", "abc");
+}
+
+#[test]
+fn malformed_size_boundaries_fail_without_json_or_panic() {
+    for (raw_sizes, expected_fragment) in [
+        ("", "--sizes must not contain empty entries"),
+        (",", "--sizes must not contain empty entries"),
+        ("64,,128", "--sizes must not contain empty entries"),
+        ("0", "greater than zero"),
+        ("64,0,128", "greater than zero"),
+    ] {
+        assert_malformed_sizes_fail_without_panic(raw_sizes, expected_fragment);
+    }
 }
 
 #[test]
@@ -113,6 +129,49 @@ fn software_only_json_preserves_top_level_report_contract() {
 
     assert_no_payload_bytes(&stdout(&output));
     assert_no_payload_bytes(&stderr(&output));
+}
+
+#[test]
+fn missing_hardware_device_is_structured_nonzero_error() {
+    let missing_device = std::env::temp_dir().join(format!(
+        "hw-eval-missing-wq-contract-{}",
+        std::process::id()
+    ));
+    let missing_device = missing_device
+        .to_str()
+        .expect("temp path should be valid UTF-8 for CLI test");
+    let output = hw_eval(&[
+        "--device",
+        missing_device,
+        "--sizes",
+        "64",
+        "--iterations",
+        "1",
+    ]);
+
+    assert!(
+        !output.status.success(),
+        "missing hardware WQ should fail visibly; stdout:\n{}\nstderr:\n{}",
+        stdout(&output),
+        stderr(&output)
+    );
+
+    let stderr = stderr(&output);
+    assert!(stderr.contains("open_wq"), "missing operation: {stderr}");
+    assert!(stderr.contains("dsa"), "missing accelerator: {stderr}");
+    assert!(
+        stderr.contains(missing_device),
+        "missing device path: {stderr}"
+    );
+    assert!(
+        stderr.contains("CAP_SYS_RAWIO") && stderr.contains("dsa_launcher"),
+        "missing operator hint: {stderr}"
+    );
+    assert!(
+        !stderr.to_ascii_lowercase().contains("panicked"),
+        "WQ open failure should not panic: {stderr}"
+    );
+    assert_no_payload_bytes(&stderr);
 }
 
 #[test]

@@ -14,6 +14,7 @@ use hw_eval::iax;
 use hw_eval::submit::*;
 use hw_eval::sw::*;
 use serde::Serialize;
+use snafu::{ResultExt, Snafu};
 use std::num::ParseIntError;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -183,52 +184,64 @@ impl BenchmarkConfig {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Snafu)]
 enum BenchmarkConfigError {
-    EmptySizes {
-        raw: String,
-    },
-    EmptySizeToken {
-        raw: String,
-    },
+    #[snafu(display("--sizes must contain at least one size (got {raw:?})"))]
+    EmptySizes { raw: String },
+    #[snafu(display("--sizes must not contain empty entries (got {raw:?})"))]
+    EmptySizeToken { raw: String },
+    #[snafu(display("invalid --sizes entry {token:?} in {raw:?}; expected positive byte counts"))]
     InvalidSize {
         raw: String,
         token: String,
         source: ParseIntError,
     },
-    ZeroSize {
-        raw: String,
+    #[snafu(display(
+        "--sizes entries must be positive byte counts greater than zero (got {raw:?})"
+    ))]
+    ZeroSize { raw: String },
+}
+
+#[derive(Debug, Snafu)]
+enum HwEvalError {
+    #[snafu(display("invalid hw-eval configuration: {source}"))]
+    Config { source: BenchmarkConfigError },
+    #[snafu(display(
+        "failed to {operation} for accelerator {accelerator} at {device}: {source} ({hint})"
+    ))]
+    OpenWq {
+        accelerator: &'static str,
+        device: String,
+        operation: &'static str,
+        hint: &'static str,
+        source: std::io::Error,
+    },
+    #[snafu(display("failed to serialize hw-eval JSON report: {source}"))]
+    SerializeReport { source: serde_json::Error },
+}
+
+#[derive(Debug, Snafu)]
+enum PinWarning {
+    #[snafu(display(
+        "warning: failed to pin benchmark thread to core {requested_core}: {source}"
+    ))]
+    Affinity {
+        requested_core: usize,
+        source: std::io::Error,
     },
 }
 
-impl std::fmt::Display for BenchmarkConfigError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::EmptySizes { raw } => {
-                write!(f, "--sizes must contain at least one size (got {raw:?})")
-            }
-            Self::EmptySizeToken { raw } => {
-                write!(f, "--sizes must not contain empty entries (got {raw:?})")
-            }
-            Self::InvalidSize { raw, token, .. } => write!(
-                f,
-                "invalid --sizes entry {token:?} in {raw:?}; expected positive byte counts"
-            ),
-            Self::ZeroSize { raw } => write!(
-                f,
-                "--sizes entries must be positive byte counts greater than zero (got {raw:?})"
-            ),
-        }
-    }
+fn pin_benchmark_thread(core: usize) -> Result<usize, PinWarning> {
+    pin_to_core(core).map_err(|source| PinWarning::Affinity {
+        requested_core: core,
+        source,
+    })
 }
 
-impl std::error::Error for BenchmarkConfigError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::InvalidSize { source, .. } => Some(source),
-            Self::EmptySizes { .. } | Self::EmptySizeToken { .. } | Self::ZeroSize { .. } => None,
-        }
-    }
+fn print_json_report(report: &FullReport) -> Result<(), HwEvalError> {
+    let rendered = serde_json::to_string_pretty(report).context(SerializeReportSnafu)?;
+    println!("{rendered}");
+    Ok(())
 }
 
 #[cfg(test)]
@@ -293,13 +306,33 @@ mod tests {
     fn parse_sizes_rejects_malformed_tokens_without_panicking() {
         let error = parse_sizes("64,abc,128").unwrap_err();
 
-        match error {
+        match &error {
             BenchmarkConfigError::InvalidSize { raw, token, .. } => {
                 assert_eq!(raw, "64,abc,128");
                 assert_eq!(token, "abc");
             }
             other => panic!("unexpected error: {other:?}"),
         }
+        assert!(
+            std::error::Error::source(&error).is_some(),
+            "invalid numeric tokens should preserve ParseIntError as source"
+        );
+    }
+
+    #[test]
+    fn hw_eval_config_error_preserves_source_chain() {
+        let error = BenchmarkConfig::builder()
+            .sizes("64,abc".to_string())
+            .build()
+            .context(ConfigSnafu)
+            .unwrap_err();
+
+        let config_source = std::error::Error::source(&error)
+            .expect("HwEvalError::Config should expose BenchmarkConfigError as source");
+        assert!(
+            std::error::Error::source(config_source).is_some(),
+            "BenchmarkConfigError::InvalidSize should expose ParseIntError as source"
+        );
     }
 
     #[test]
@@ -1648,24 +1681,25 @@ fn bench_software_baselines(
 // ============================================================================
 
 fn main() {
+    if let Err(error) = run() {
+        eprintln!("error: {error}");
+        std::process::exit(1);
+    }
+}
+
+fn run() -> Result<(), HwEvalError> {
     let args = Args::parse();
-    let config = match BenchmarkConfig::from_args(args) {
-        Ok(config) => config,
-        Err(error) => {
-            eprintln!("error: {error}");
-            std::process::exit(2);
-        }
-    };
+    let config = BenchmarkConfig::from_args(args).context(ConfigSnafu)?;
 
     // Thread pinning
     let core = config.pin_core.unwrap_or_else(|| current_core());
-    match pin_to_core(core) {
+    match pin_benchmark_thread(core) {
         Ok(c) => {
             if !config.json {
                 println!("Pinned to core {}", c)
             }
         }
-        Err(e) => eprintln!("WARNING: failed to pin to core {}: {}", core, e),
+        Err(warning) => eprintln!("{warning}"),
     }
 
     // TSC frequency
@@ -1717,43 +1751,37 @@ fn main() {
                 latency: latency_results,
                 throughput: throughput_results,
             };
-            println!("{}", serde_json::to_string_pretty(&report).unwrap());
+            print_json_report(&report)?;
         }
-        return;
+        return Ok(());
     }
 
     // Open WQ
-    let wq = match WqPortal::open(&config.device) {
-        Ok(wq) => {
-            if !config.json {
-                println!(
-                    "\nOpened WQ: {} ({})",
-                    config.device.display(),
-                    if wq.is_dedicated() {
-                        "dedicated"
-                    } else {
-                        "shared"
-                    }
-                );
-                if let Some(node) = device_numa_node(&config.device) {
-                    println!(
-                        "{} NUMA node: {}",
-                        config.accel.as_str().to_uppercase(),
-                        node
-                    );
-                }
+    let wq = WqPortal::open(&config.device).context(OpenWqSnafu {
+        accelerator: config.accel.as_str(),
+        device: config.device.display().to_string(),
+        operation: "open_wq",
+        hint: "need CAP_SYS_RAWIO or run via dsa_launcher",
+    })?;
+
+    if !config.json {
+        println!(
+            "\nOpened WQ: {} ({})",
+            config.device.display(),
+            if wq.is_dedicated() {
+                "dedicated"
+            } else {
+                "shared"
             }
-            wq
-        }
-        Err(e) => {
-            eprintln!(
-                "\nFailed to open {}: {} (need CAP_SYS_RAWIO or run via dsa_launcher)",
-                config.device.display(),
-                e
+        );
+        if let Some(node) = device_numa_node(&config.device) {
+            println!(
+                "{} NUMA node: {}",
+                config.accel.as_str().to_uppercase(),
+                node
             );
-            return;
         }
-    };
+    }
 
     match config.accel {
         AccelKind::Dsa => {
@@ -1936,8 +1964,10 @@ fn main() {
             latency: latency_results,
             throughput: throughput_results,
         };
-        println!("{}", serde_json::to_string_pretty(&report).unwrap());
+        print_json_report(&report)?;
     } else {
         println!("\nDone.");
     }
+
+    Ok(())
 }

@@ -714,6 +714,7 @@ dependencies = [
  "libc",
  "serde",
  "serde_json",
+ "snafu",
 ]
 
 [[package]]
