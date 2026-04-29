@@ -109,6 +109,10 @@ require_literal 'idxd-rust/src/bin/tokio_memmove_bench/artifact.rs' 'planned_own
 require_literal 'idxd-rust/src/bin/tokio_memmove_bench.rs' 'planned_owner_entrypoint'
 require_literal 'idxd-rust/scripts/verify_tokio_memmove_bench.sh' 'planned_owner_verifier'
 
+require_literal 'Final owner map' 'final_owner_map_section'
+require_literal 'final module layout' 'final_module_layout_phrase'
+require_literal 'Full S03 proof package' 'full_s03_proof_package_section'
+
 require_literal 'CLI/config owner' 'section_cli_config'
 require_literal 'Suite/mode dispatch owner' 'section_suite_mode_dispatch'
 require_literal 'Software diagnostic backend' 'section_software_diagnostic_backend'
@@ -182,6 +186,8 @@ require_literal_in_file "${CRATE_DIR}/tests/async_benchmark_verifier_contract.rs
 require_literal_in_file "${CRATE_DIR}/tests/async_benchmark_verifier_contract.rs" 'benchmark_verifier_rejects_payload_dump_fields_in_result_rows' 'verifier_contract_payload_rejection'
 require_literal_in_file "${CRATE_DIR}/scripts/verify_tokio_memmove_bench.sh" 'log_phase done' 'verifier_script_done_phase'
 require_literal_in_file "${CRATE_DIR}/scripts/verify_tokio_memmove_bench.sh" 'fail_phase artifact_validation' 'verifier_script_artifact_validation_phase'
+require_literal_in_file "${CRATE_DIR}/scripts/verify_tokio_memmove_bench.sh" 'validate_artifact_contract()' 'verifier_script_artifact_validation_owner_function'
+require_literal_in_file "${CRATE_DIR}/scripts/verify_tokio_memmove_bench.sh" 'complete_with_explicit_failure()' 'verifier_script_expected_failure_owner_function'
 require_literal_in_file "${CRATE_DIR}/scripts/verify_tokio_memmove_bench.sh" 'stdout and artifact diverged' 'verifier_script_stdout_artifact_mismatch'
 require_literal_in_file "${CRATE_DIR}/scripts/verify_tokio_memmove_bench.sh" 'software artifacts must not be claim eligible' 'verifier_script_software_claim_guard'
 require_literal_in_file "${CRATE_DIR}/scripts/verify_tokio_memmove_bench.sh" 'hardware success missing direct sync comparison row' 'verifier_script_sync_comparison_guard'
