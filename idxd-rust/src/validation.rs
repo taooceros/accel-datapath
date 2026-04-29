@@ -5,7 +5,7 @@ use bon::Builder;
 use idxd_sys::{
     DSA_COMP_PAGE_FAULT_NOBOF, DSA_COMP_STATUS_MASK, DSA_COMP_SUCCESS, DsaCompletionRecord,
 };
-use thiserror::Error;
+use snafu::Snafu;
 
 /// Repo-wide default DSA work-queue path.
 pub const DEFAULT_DEVICE_PATH: &str = "/dev/dsa/wq0.0";
@@ -40,10 +40,7 @@ impl<S: memmove_validation_config_builder::IsComplete> MemmoveValidationConfigBu
     /// validation path as the compatibility constructors.
     pub fn build(self) -> Result<MemmoveValidationConfig, MemmoveError> {
         let config = self.build_internal();
-        MemmoveValidationConfig::with_retries(
-            config.device_path,
-            config.max_page_fault_retries,
-        )
+        MemmoveValidationConfig::with_retries(config.device_path, config.max_page_fault_retries)
     }
 }
 
@@ -203,40 +200,44 @@ impl std::fmt::Display for MemmovePhase {
 
 /// Typed failure surface for queue-open, completion, retry, and post-copy
 /// validation faults.
-#[derive(Debug, Error)]
+#[derive(Debug, Snafu)]
 pub enum MemmoveError {
-    #[error("invalid DSA work-queue path: {device_path}")]
+    #[snafu(display("invalid DSA work-queue path: {}", device_path.display()))]
     InvalidDevicePath { device_path: PathBuf },
 
-    #[error("invalid memmove length {requested_len}; expected 1..={max_len}")]
+    #[snafu(display("invalid memmove length {requested_len}; expected 1..={max_len}"))]
     InvalidLength {
         requested_len: usize,
         max_len: usize,
     },
 
-    #[error("destination buffer too small: src_len={src_len}, dst_len={dst_len}")]
+    #[snafu(display("destination buffer too small: src_len={src_len}, dst_len={dst_len}"))]
     DestinationTooSmall { src_len: usize, dst_len: usize },
 
-    #[error("failed to open DSA work queue {device_path} during {phase}: {source}")]
+    #[snafu(display(
+        "failed to open DSA work queue {} during {phase}: {source}",
+        device_path.display()
+    ))]
     QueueOpen {
         device_path: PathBuf,
         phase: MemmovePhase,
-        #[source]
         source: io::Error,
     },
 
-    #[error(
-        "completion polling timed out for {device_path} during {phase} after {page_fault_retries} retries"
-    )]
+    #[snafu(display(
+        "completion polling timed out for {} during {phase} after {page_fault_retries} retries",
+        device_path.display()
+    ))]
     CompletionTimeout {
         device_path: PathBuf,
         phase: MemmovePhase,
         page_fault_retries: u32,
     },
 
-    #[error(
-        "malformed completion for {device_path} during {phase} after {page_fault_retries} retries: status=0x{status:02x}, result={result}, bytes_completed={bytes_completed}, fault_addr=0x{fault_addr:x} ({detail})"
-    )]
+    #[snafu(display(
+        "malformed completion for {} during {phase} after {page_fault_retries} retries: status=0x{status:02x}, result={result}, bytes_completed={bytes_completed}, fault_addr=0x{fault_addr:x} ({detail})",
+        device_path.display()
+    ))]
     MalformedCompletion {
         device_path: PathBuf,
         phase: MemmovePhase,
@@ -248,9 +249,10 @@ pub enum MemmoveError {
         detail: &'static str,
     },
 
-    #[error(
-        "page-fault retry exhausted for {device_path} during {phase}: retries={retries}, bytes_completed={bytes_completed}, fault_addr=0x{fault_addr:x}"
-    )]
+    #[snafu(display(
+        "page-fault retry exhausted for {} during {phase}: retries={retries}, bytes_completed={bytes_completed}, fault_addr=0x{fault_addr:x}",
+        device_path.display()
+    ))]
     PageFaultRetryExhausted {
         device_path: PathBuf,
         phase: MemmovePhase,
@@ -259,9 +261,10 @@ pub enum MemmoveError {
         fault_addr: u64,
     },
 
-    #[error(
-        "memmove completion failed for {device_path} during {phase} after {page_fault_retries} retries: status=0x{status:02x}, bytes_completed={bytes_completed}, fault_addr=0x{fault_addr:x}"
-    )]
+    #[snafu(display(
+        "memmove completion failed for {} during {phase} after {page_fault_retries} retries: status=0x{status:02x}, bytes_completed={bytes_completed}, fault_addr=0x{fault_addr:x}",
+        device_path.display()
+    ))]
     CompletionStatus {
         device_path: PathBuf,
         phase: MemmovePhase,
@@ -271,9 +274,10 @@ pub enum MemmoveError {
         page_fault_retries: u32,
     },
 
-    #[error(
-        "post-copy verification failed for {device_path} during {phase}: mismatch_offset={mismatch_offset}, requested_bytes={requested_bytes}, final_status=0x{final_status:02x}, retries={page_fault_retries}"
-    )]
+    #[snafu(display(
+        "post-copy verification failed for {} during {phase}: mismatch_offset={mismatch_offset}, requested_bytes={requested_bytes}, final_status=0x{final_status:02x}, retries={page_fault_retries}",
+        device_path.display()
+    ))]
     ByteMismatch {
         device_path: PathBuf,
         phase: MemmovePhase,

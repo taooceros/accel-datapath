@@ -4,6 +4,7 @@ use idxd_rust::{
     MemmoveValidationReport, classify_memmove_completion,
 };
 use idxd_sys::{DsaCompletionRecord, DsaHwDesc};
+use std::error::Error as StdError;
 use std::mem::{align_of, size_of};
 
 fn test_config() -> MemmoveValidationConfig {
@@ -12,6 +13,20 @@ fn test_config() -> MemmoveValidationConfig {
         .max_page_fault_retries(1)
         .build()
         .expect("test config")
+}
+
+fn assert_display_excludes_payload_bytes(message: &str) {
+    for forbidden in [
+        "[1, 2, 3, 4]",
+        "source_bytes",
+        "destination_bytes",
+        "payload",
+    ] {
+        assert!(
+            !message.contains(forbidden),
+            "display leaked forbidden payload marker {forbidden:?}: {message}"
+        );
+    }
 }
 
 #[test]
@@ -195,7 +210,9 @@ fn session_builder_rejects_empty_device_path_before_queue_open() {
 #[test]
 fn session_builder_preserves_explicit_config_on_queue_open_failure() {
     let config = MemmoveValidationConfig::builder()
-        .device_path(std::path::PathBuf::from("/dev/dsa/nonexistent-builder-test"))
+        .device_path(std::path::PathBuf::from(
+            "/dev/dsa/nonexistent-builder-test",
+        ))
         .max_page_fault_retries(7)
         .build()
         .expect("non-empty paths should validate before queue open");
@@ -212,6 +229,22 @@ fn session_builder_preserves_explicit_config_on_queue_open_failure() {
         Some("/dev/dsa/nonexistent-builder-test")
     );
     assert_eq!(err.phase(), Some(MemmovePhase::QueueOpen));
+}
+
+#[test]
+fn queue_open_failure_preserves_io_source_chain() {
+    let err = DsaSession::open("/dev/dsa/nonexistent-source-chain-test")
+        .expect_err("missing work queue should surface queue-open diagnostics");
+
+    let source = StdError::source(&err).expect("queue-open errors should expose io source");
+    assert!(source.is::<std::io::Error>());
+    assert_eq!(err.kind(), "queue_open");
+    assert_eq!(err.phase(), Some(MemmovePhase::QueueOpen));
+
+    let message = err.to_string();
+    assert!(message.contains("/dev/dsa/nonexistent-source-chain-test"));
+    assert!(message.contains("queue_open"));
+    assert_display_excludes_payload_bytes(&message);
 }
 
 #[test]
@@ -394,4 +427,77 @@ fn error_accessors_preserve_phase_path_and_retry_context() {
     );
     assert_eq!(err.phase(), Some(MemmovePhase::CompletionPoll));
     assert_eq!(err.page_fault_retries(), Some(2));
+}
+
+#[test]
+fn display_preserves_completion_metadata_without_payload_bytes() {
+    let timeout = classify_memmove_completion(
+        &test_config(),
+        1024,
+        CompletionSnapshot::new(0xff, 0, 0, 0),
+        1,
+    )
+    .expect_err("timeout sentinel should map to a typed timeout")
+    .to_string();
+    assert!(timeout.contains("completion_poll"));
+    assert!(timeout.contains("after 1 retries"));
+    assert_display_excludes_payload_bytes(&timeout);
+
+    let malformed = classify_memmove_completion(
+        &test_config(),
+        1024,
+        CompletionSnapshot::new(3, 2, 128, 0xdead_beef),
+        0,
+    )
+    .expect_err("invalid page-fault direction should be rejected as malformed")
+    .to_string();
+    assert!(malformed.contains("page_fault_retry"));
+    assert!(malformed.contains("status=0x03"));
+    assert!(malformed.contains("result=2"));
+    assert!(malformed.contains("bytes_completed=128"));
+    assert!(malformed.contains("fault_addr=0xdeadbeef"));
+    assert_display_excludes_payload_bytes(&malformed);
+
+    let exhausted = classify_memmove_completion(
+        &test_config(),
+        1024,
+        CompletionSnapshot::new(3, 0, 128, 0xdead_beef),
+        1,
+    )
+    .expect_err("retry exhaustion should surface explicitly")
+    .to_string();
+    assert!(exhausted.contains("retries=1"));
+    assert!(exhausted.contains("bytes_completed=128"));
+    assert!(exhausted.contains("fault_addr=0xdeadbeef"));
+    assert_display_excludes_payload_bytes(&exhausted);
+
+    let status = classify_memmove_completion(
+        &test_config(),
+        1024,
+        CompletionSnapshot::new(0x12, 0, 64, 0xfeed_face),
+        2,
+    )
+    .expect_err("non-success statuses should surface directly")
+    .to_string();
+    assert!(status.contains("status=0x12"));
+    assert!(status.contains("after 2 retries"));
+    assert!(status.contains("bytes_completed=64"));
+    assert!(status.contains("fault_addr=0xfeedface"));
+    assert_display_excludes_payload_bytes(&status);
+
+    let mismatch = MemmoveError::ByteMismatch {
+        device_path: std::path::PathBuf::from("/dev/dsa/wq0.0"),
+        phase: MemmovePhase::PostCopyVerify,
+        requested_bytes: 4,
+        mismatch_offset: 2,
+        final_status: 1,
+        page_fault_retries: 1,
+    }
+    .to_string();
+    assert!(mismatch.contains("post_copy_verify"));
+    assert!(mismatch.contains("mismatch_offset=2"));
+    assert!(mismatch.contains("requested_bytes=4"));
+    assert!(mismatch.contains("final_status=0x01"));
+    assert!(mismatch.contains("retries=1"));
+    assert_display_excludes_payload_bytes(&mismatch);
 }

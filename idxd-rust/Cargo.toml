@@ -9,5 +9,6 @@ bytes = { workspace = true }
 idxd-sys = { path = "../idxd-sys" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+snafu = "0.8"
 thiserror = "1"
 tokio = { workspace = true }
