@@ -8,9 +8,11 @@ use std::process::ExitCode;
 use bytes::{buf::UninitSlice, Bytes, BytesMut};
 
 use idxd_rust::{
-    AsyncDsaSession, AsyncMemmoveError, AsyncMemmoveRequest, AsyncMemmoveWorker, MemmoveError,
-    MemmovePhase, MemmoveRequest, MemmoveValidationReport, DEFAULT_DEVICE_PATH,
+    direct_test_support::ScriptedDirectBackend, AsyncDsaSession, AsyncMemmoveError,
+    AsyncMemmoveRequest, AsyncMemmoveWorker, MemmoveError, MemmovePhase, MemmoveRequest,
+    MemmoveValidationConfig, MemmoveValidationReport, DEFAULT_DEVICE_PATH,
 };
+use idxd_sys::EnqcmdSubmission;
 
 const TEST_SCENARIO_ENV: &str = "IDXD_TONIC_ASYNC_HANDLE_TEST_SCENARIO";
 const PROOF_SEAM: &str = "downstream_async_handle";
@@ -66,6 +68,7 @@ enum TestScenario {
     WorkerFailure,
     InvalidDestinationLen,
     CompletionTimeout,
+    DirectFailure,
 }
 
 impl TestScenario {
@@ -86,8 +89,9 @@ impl TestScenario {
             "worker_failure" => Ok(Self::WorkerFailure),
             "invalid_destination_len" => Ok(Self::InvalidDestinationLen),
             "completion_timeout" => Ok(Self::CompletionTimeout),
+            "direct_failure" => Ok(Self::DirectFailure),
             other => Err(format!(
-                "unsupported `{TEST_SCENARIO_ENV}` value `{other}`; expected success, owner_shutdown, worker_failure, invalid_destination_len, or completion_timeout"
+                "unsupported `{TEST_SCENARIO_ENV}` value `{other}`; expected success, owner_shutdown, worker_failure, invalid_destination_len, completion_timeout, or direct_failure"
             )),
         }
     }
@@ -187,6 +191,7 @@ struct RunOutcome {
     error_kind: Option<&'static str>,
     lifecycle_failure_kind: Option<&'static str>,
     worker_failure_kind: Option<&'static str>,
+    direct_failure_kind: Option<&'static str>,
     validation_phase: Option<String>,
     validation_error_kind: Option<&'static str>,
     message: String,
@@ -324,6 +329,22 @@ async fn execute_test_scenario(
             let session = match AsyncDsaSession::spawn_with_factory(move || {
                 Ok(CompletionTimeoutWorker { device_path })
             }) {
+                Ok(session) => session,
+                Err(err) => return async_failure_outcome(args, err),
+            };
+            execute_with_session(args, session, requests).await
+        }
+        TestScenario::DirectFailure => {
+            let submissions = std::iter::repeat_n(EnqcmdSubmission::Rejected, 130);
+            let backend = ScriptedDirectBackend::with_submissions(submissions);
+            let config = match MemmoveValidationConfig::builder()
+                .device_path(args.device_path.clone())
+                .build()
+            {
+                Ok(config) => config,
+                Err(err) => return validation_failure_outcome(args, err),
+            };
+            let session = match AsyncDsaSession::spawn_with_direct_backend(config, backend) {
                 Ok(session) => session,
                 Err(err) => return async_failure_outcome(args, err),
             };
@@ -472,7 +493,8 @@ fn async_failure_outcome(args: &CliArgs, err: AsyncMemmoveError) -> RunOutcome {
             "async_direct",
             Some("direct_failure"),
             format!("downstream async-handle direct failure: {failure}"),
-        ),
+        )
+        .with_direct(failure.kind().as_str()),
     }
 }
 
@@ -501,6 +523,7 @@ fn validation_failure_outcome(args: &CliArgs, err: MemmoveError) -> RunOutcome {
         error_kind: Some("validation_failure"),
         lifecycle_failure_kind: None,
         worker_failure_kind: None,
+        direct_failure_kind: None,
         validation_phase: Some(validation_phase),
         validation_error_kind: Some(err.kind()),
         message: err.to_string(),
@@ -527,6 +550,7 @@ fn base_outcome(
         error_kind,
         lifecycle_failure_kind: None,
         worker_failure_kind: None,
+        direct_failure_kind: None,
         validation_phase: None,
         validation_error_kind: None,
         message,
@@ -541,6 +565,11 @@ impl RunOutcome {
 
     fn with_worker(mut self, kind: &'static str) -> Self {
         self.worker_failure_kind = Some(kind);
+        self
+    }
+
+    fn with_direct(mut self, kind: &'static str) -> Self {
+        self.direct_failure_kind = Some(kind);
         self
     }
 
@@ -589,6 +618,11 @@ fn render_text(outcome: &RunOutcome) -> String {
     );
     let _ = writeln!(
         text,
+        "direct_failure_kind={}",
+        outcome.direct_failure_kind.unwrap_or("null")
+    );
+    let _ = writeln!(
+        text,
         "validation_phase={}",
         outcome.validation_phase.as_deref().unwrap_or("null")
     );
@@ -617,6 +651,7 @@ fn render_json(outcome: &RunOutcome) -> String {
             "\"error_kind\":{},",
             "\"lifecycle_failure_kind\":{},",
             "\"worker_failure_kind\":{},",
+            "\"direct_failure_kind\":{},",
             "\"validation_phase\":{},",
             "\"validation_error_kind\":{},",
             "\"message\":\"{}\"",
@@ -641,6 +676,10 @@ fn render_json(outcome: &RunOutcome) -> String {
             .unwrap_or_else(|| "null".to_string()),
         outcome
             .worker_failure_kind
+            .map(|value| format!("\"{}\"", escape_json(value)))
+            .unwrap_or_else(|| "null".to_string()),
+        outcome
+            .direct_failure_kind
             .map(|value| format!("\"{}\"", escape_json(value)))
             .unwrap_or_else(|| "null".to_string()),
         outcome

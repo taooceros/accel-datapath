@@ -1693,6 +1693,7 @@ dependencies = [
  "clap",
  "hdrhistogram",
  "idxd-rust",
+ "idxd-sys",
  "libc",
  "prost",
  "protoc-bin-vendored",
