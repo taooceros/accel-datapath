@@ -8,6 +8,7 @@ description = "Raw hardware performance evaluation for Intel DSA and IAX — no 
 idxd-sys = { path = "../idxd-sys" }
 libc = "0.2"
 clap = { version = "4", features = ["derive"] }
+bon = "3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

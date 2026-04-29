@@ -14,8 +14,13 @@ use hw_eval::iax;
 use hw_eval::submit::*;
 use hw_eval::sw::*;
 use serde::Serialize;
+use std::num::ParseIntError;
 use std::path::PathBuf;
 use std::time::Instant;
+
+const DEFAULT_SIZES: &str = "64,256,1024,4096,16384,65536,262144,1048576";
+const DEFAULT_ITERATIONS: usize = 10_000;
+const DEFAULT_MAX_CONCURRENCY: usize = 128;
 
 #[derive(Parser)]
 #[command(
@@ -32,19 +37,15 @@ struct Args {
     device: Option<PathBuf>,
 
     /// Message sizes to test (bytes, comma-separated)
-    #[arg(
-        short,
-        long,
-        default_value = "64,256,1024,4096,16384,65536,262144,1048576"
-    )]
+    #[arg(short, long, default_value = DEFAULT_SIZES)]
     sizes: String,
 
     /// Number of iterations per measurement
-    #[arg(short, long, default_value = "10000")]
+    #[arg(short, long, default_value_t = DEFAULT_ITERATIONS)]
     iterations: usize,
 
     /// Maximum concurrency for sliding window test
-    #[arg(short, long, default_value = "128")]
+    #[arg(short, long, default_value_t = DEFAULT_MAX_CONCURRENCY)]
     max_concurrency: usize,
 
     /// Run software baselines only (no hardware required)
@@ -86,10 +87,232 @@ fn default_device(accel: AccelKind) -> PathBuf {
     }
 }
 
-fn parse_sizes(s: &str) -> Vec<usize> {
-    s.split(',')
-        .map(|s| s.trim().parse().expect("invalid size"))
-        .collect()
+fn parse_sizes(s: &str) -> Result<Vec<usize>, BenchmarkConfigError> {
+    let raw = s.to_string();
+    let mut sizes = Vec::new();
+
+    for token in s.split(',') {
+        let trimmed = token.trim();
+        if trimmed.is_empty() {
+            return Err(BenchmarkConfigError::EmptySizeToken { raw });
+        }
+
+        let size =
+            trimmed
+                .parse::<usize>()
+                .map_err(|source| BenchmarkConfigError::InvalidSize {
+                    raw: raw.clone(),
+                    token: trimmed.to_string(),
+                    source,
+                })?;
+
+        if size == 0 {
+            return Err(BenchmarkConfigError::ZeroSize { raw });
+        }
+
+        sizes.push(size);
+    }
+
+    if sizes.is_empty() {
+        return Err(BenchmarkConfigError::EmptySizes { raw });
+    }
+
+    Ok(sizes)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BenchmarkConfig {
+    accel: AccelKind,
+    device: PathBuf,
+    sizes: Vec<usize>,
+    iterations: usize,
+    max_concurrency: usize,
+    sw_only: bool,
+    pin_core: Option<usize>,
+    cold: bool,
+    json: bool,
+}
+
+#[bon::bon]
+impl BenchmarkConfig {
+    /// Build normalized benchmark runtime state from already-parsed CLI values.
+    ///
+    /// Clap remains the external parser. This internal builder only resolves
+    /// defaults that depend on other fields and validates the comma-separated
+    /// size list before any benchmark loop or hardware queue-open path runs.
+    #[builder(start_fn = builder, finish_fn = build)]
+    fn from_parts(
+        #[builder(default = AccelKind::Dsa)] accel: AccelKind,
+        device: Option<PathBuf>,
+        #[builder(default = DEFAULT_SIZES.to_string(), into)] sizes: String,
+        #[builder(default = DEFAULT_ITERATIONS)] iterations: usize,
+        #[builder(default = DEFAULT_MAX_CONCURRENCY)] max_concurrency: usize,
+        #[builder(default)] sw_only: bool,
+        pin_core: Option<usize>,
+        #[builder(default)] cold: bool,
+        #[builder(default)] json: bool,
+    ) -> Result<Self, BenchmarkConfigError> {
+        let device = device.unwrap_or_else(|| default_device(accel));
+        let sizes = parse_sizes(&sizes)?;
+
+        Ok(Self {
+            accel,
+            device,
+            sizes,
+            iterations,
+            max_concurrency,
+            sw_only,
+            pin_core,
+            cold,
+            json,
+        })
+    }
+
+    fn from_args(args: Args) -> Result<Self, BenchmarkConfigError> {
+        Self::builder()
+            .accel(args.accel)
+            .maybe_device(args.device)
+            .sizes(args.sizes)
+            .iterations(args.iterations)
+            .max_concurrency(args.max_concurrency)
+            .sw_only(args.sw_only)
+            .maybe_pin_core(args.pin_core)
+            .cold(args.cold)
+            .json(args.json)
+            .build()
+    }
+}
+
+#[derive(Debug)]
+enum BenchmarkConfigError {
+    EmptySizes {
+        raw: String,
+    },
+    EmptySizeToken {
+        raw: String,
+    },
+    InvalidSize {
+        raw: String,
+        token: String,
+        source: ParseIntError,
+    },
+    ZeroSize {
+        raw: String,
+    },
+}
+
+impl std::fmt::Display for BenchmarkConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::EmptySizes { raw } => {
+                write!(f, "--sizes must contain at least one size (got {raw:?})")
+            }
+            Self::EmptySizeToken { raw } => {
+                write!(f, "--sizes must not contain empty entries (got {raw:?})")
+            }
+            Self::InvalidSize { raw, token, .. } => write!(
+                f,
+                "invalid --sizes entry {token:?} in {raw:?}; expected positive byte counts"
+            ),
+            Self::ZeroSize { raw } => write!(
+                f,
+                "--sizes entries must be positive byte counts greater than zero (got {raw:?})"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for BenchmarkConfigError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::InvalidSize { source, .. } => Some(source),
+            Self::EmptySizes { .. } | Self::EmptySizeToken { .. } | Self::ZeroSize { .. } => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn benchmark_config_builder_uses_dsa_defaults() {
+        let config = BenchmarkConfig::builder().build().unwrap();
+
+        assert_eq!(config.accel, AccelKind::Dsa);
+        assert_eq!(config.device, PathBuf::from("/dev/dsa/wq0.0"));
+        assert_eq!(
+            config.sizes,
+            vec![64, 256, 1024, 4096, 16384, 65536, 262144, 1048576]
+        );
+        assert_eq!(config.iterations, DEFAULT_ITERATIONS);
+        assert_eq!(config.max_concurrency, DEFAULT_MAX_CONCURRENCY);
+        assert!(!config.sw_only);
+        assert_eq!(config.pin_core, None);
+        assert!(!config.cold);
+        assert!(!config.json);
+    }
+
+    #[test]
+    fn benchmark_config_builder_uses_iax_default_device_when_device_omitted() {
+        let config = BenchmarkConfig::builder()
+            .accel(AccelKind::Iax)
+            .build()
+            .unwrap();
+
+        assert_eq!(config.accel, AccelKind::Iax);
+        assert_eq!(config.device, PathBuf::from("/dev/iax/wq1.0"));
+    }
+
+    #[test]
+    fn benchmark_config_preserves_explicit_device_and_runtime_knobs() {
+        let config = BenchmarkConfig::from_parts(
+            AccelKind::Iax,
+            Some(PathBuf::from("/tmp/custom-wq")),
+            "64, 128,256".to_string(),
+            7,
+            4,
+            true,
+            Some(3),
+            true,
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(config.device, PathBuf::from("/tmp/custom-wq"));
+        assert_eq!(config.sizes, vec![64, 128, 256]);
+        assert_eq!(config.iterations, 7);
+        assert_eq!(config.max_concurrency, 4);
+        assert!(config.sw_only);
+        assert_eq!(config.pin_core, Some(3));
+        assert!(config.cold);
+        assert!(config.json);
+    }
+
+    #[test]
+    fn parse_sizes_rejects_malformed_tokens_without_panicking() {
+        let error = parse_sizes("64,abc,128").unwrap_err();
+
+        match error {
+            BenchmarkConfigError::InvalidSize { raw, token, .. } => {
+                assert_eq!(raw, "64,abc,128");
+                assert_eq!(token, "abc");
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_sizes_rejects_empty_entries_and_zero_sizes() {
+        assert!(matches!(
+            parse_sizes("64,,128"),
+            Err(BenchmarkConfigError::EmptySizeToken { .. })
+        ));
+        assert!(matches!(
+            parse_sizes("64,0,128"),
+            Err(BenchmarkConfigError::ZeroSize { .. })
+        ));
+    }
 }
 
 // ============================================================================
@@ -1426,17 +1649,19 @@ fn bench_software_baselines(
 
 fn main() {
     let args = Args::parse();
-    let sizes = parse_sizes(&args.sizes);
-    let device = args
-        .device
-        .clone()
-        .unwrap_or_else(|| default_device(args.accel));
+    let config = match BenchmarkConfig::from_args(args) {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("error: {error}");
+            std::process::exit(2);
+        }
+    };
 
     // Thread pinning
-    let core = args.pin_core.unwrap_or_else(|| current_core());
+    let core = config.pin_core.unwrap_or_else(|| current_core());
     match pin_to_core(core) {
         Ok(c) => {
-            if !args.json {
+            if !config.json {
                 println!("Pinned to core {}", c)
             }
         }
@@ -1446,17 +1671,17 @@ fn main() {
     // TSC frequency
     let tsc_freq = tsc_frequency_hz();
 
-    if !args.json {
+    if !config.json {
         println!(
             "hw-eval: Raw {} Hardware Performance Evaluation",
-            args.accel.as_str().to_uppercase()
+            config.accel.as_str().to_uppercase()
         );
         println!("================================================");
         println!("TSC frequency: {:.3} GHz", tsc_freq as f64 / 1e9);
-        println!("Accelerator: {}", args.accel.as_str());
-        println!("Sizes: {:?}", sizes);
-        println!("Iterations: {}", args.iterations);
-        if args.cold {
+        println!("Accelerator: {}", config.accel.as_str());
+        println!("Sizes: {:?}", config.sizes);
+        println!("Iterations: {}", config.iterations);
+        if config.cold {
             println!("Mode: cold-cache (clflush between iterations)");
         }
         if let Some(node) = cpu_numa_node(core) {
@@ -1468,21 +1693,26 @@ fn main() {
     let mut throughput_results: Vec<ThroughputResult> = Vec::new();
 
     // Software baselines
-    bench_software_baselines(&sizes, args.iterations, args.json, &mut latency_results);
+    bench_software_baselines(
+        &config.sizes,
+        config.iterations,
+        config.json,
+        &mut latency_results,
+    );
 
-    if args.sw_only {
-        if args.json {
+    if config.sw_only {
+        if config.json {
             let report = FullReport {
                 metadata: Metadata {
-                    accelerator: args.accel.as_str().to_string(),
+                    accelerator: config.accel.as_str().to_string(),
                     tsc_freq_hz: tsc_freq,
                     pinned_core: core,
                     cpu_numa_node: cpu_numa_node(core),
                     device_numa_node: None,
-                    device: device.display().to_string(),
+                    device: config.device.display().to_string(),
                     wq_dedicated: None,
-                    iterations: args.iterations,
-                    cold_cache: args.cold,
+                    iterations: config.iterations,
+                    cold_cache: config.cold,
                 },
                 latency: latency_results,
                 throughput: throughput_results,
@@ -1493,20 +1723,24 @@ fn main() {
     }
 
     // Open WQ
-    let wq = match WqPortal::open(&device) {
+    let wq = match WqPortal::open(&config.device) {
         Ok(wq) => {
-            if !args.json {
+            if !config.json {
                 println!(
                     "\nOpened WQ: {} ({})",
-                    device.display(),
+                    config.device.display(),
                     if wq.is_dedicated() {
                         "dedicated"
                     } else {
                         "shared"
                     }
                 );
-                if let Some(node) = device_numa_node(&device) {
-                    println!("{} NUMA node: {}", args.accel.as_str().to_uppercase(), node);
+                if let Some(node) = device_numa_node(&config.device) {
+                    println!(
+                        "{} NUMA node: {}",
+                        config.accel.as_str().to_uppercase(),
+                        node
+                    );
                 }
             }
             wq
@@ -1514,31 +1748,31 @@ fn main() {
         Err(e) => {
             eprintln!(
                 "\nFailed to open {}: {} (need CAP_SYS_RAWIO or run via dsa_launcher)",
-                device.display(),
+                config.device.display(),
                 e
             );
             return;
         }
     };
 
-    match args.accel {
+    match config.accel {
         AccelKind::Dsa => {
             bench_noop_latency(
                 &wq,
-                args.iterations,
+                config.iterations,
                 tsc_freq,
-                args.json,
+                config.json,
                 &mut latency_results,
             );
 
             bench_single_op_latency(
                 &wq,
                 "memmove",
-                &sizes,
-                args.iterations,
+                &config.sizes,
+                config.iterations,
                 tsc_freq,
-                args.cold,
-                args.json,
+                config.cold,
+                config.json,
                 &mut latency_results,
                 |desc, src, dst, size| {
                     desc.fill_memmove(src, dst, size);
@@ -1548,11 +1782,11 @@ fn main() {
             bench_single_op_latency(
                 &wq,
                 "crc_gen",
-                &sizes,
-                args.iterations,
+                &config.sizes,
+                config.iterations,
                 tsc_freq,
-                args.cold,
-                args.json,
+                config.cold,
+                config.json,
                 &mut latency_results,
                 |desc, src, _dst, size| {
                     desc.fill_crc_gen(src, size, 0);
@@ -1562,11 +1796,11 @@ fn main() {
             bench_single_op_latency(
                 &wq,
                 "copy_crc",
-                &sizes,
-                args.iterations,
+                &config.sizes,
+                config.iterations,
                 tsc_freq,
-                args.cold,
-                args.json,
+                config.cold,
+                config.json,
                 &mut latency_results,
                 |desc, src, dst, size| {
                     desc.fill_copy_crc(src, dst, size, 0);
@@ -1576,68 +1810,68 @@ fn main() {
             bench_batch_latency(
                 &wq,
                 4096,
-                args.iterations,
+                config.iterations,
                 tsc_freq,
-                args.json,
+                config.json,
                 &mut latency_results,
             );
 
-            for &size in sizes.iter() {
+            for &size in config.sizes.iter() {
                 bench_pipelined_batch(
                     &wq,
                     size,
-                    args.iterations,
-                    args.max_concurrency,
-                    args.json,
+                    config.iterations,
+                    config.max_concurrency,
+                    config.json,
                     &mut throughput_results,
                 );
             }
 
-            for &size in &sizes {
+            for &size in &config.sizes {
                 bench_burst(
                     &wq,
                     "memmove",
                     size,
-                    args.iterations,
-                    args.max_concurrency,
-                    args.json,
+                    config.iterations,
+                    config.max_concurrency,
+                    config.json,
                     &mut throughput_results,
                     |desc, src, dst, sz| desc.fill_memmove(src, dst, sz),
                 );
             }
 
-            for &size in &sizes {
+            for &size in &config.sizes {
                 bench_burst_batch(
                     &wq,
                     size,
-                    args.iterations,
-                    args.max_concurrency,
-                    args.json,
+                    config.iterations,
+                    config.max_concurrency,
+                    config.json,
                     &mut throughput_results,
                 );
             }
 
-            for &size in &sizes {
+            for &size in &config.sizes {
                 bench_sliding_window(
                     &wq,
                     "memmove",
                     size,
-                    args.iterations,
-                    args.max_concurrency,
-                    args.json,
+                    config.iterations,
+                    config.max_concurrency,
+                    config.json,
                     &mut throughput_results,
                     |desc, src, dst, sz| desc.fill_memmove(src, dst, sz),
                 );
             }
 
-            for &size in &sizes {
+            for &size in &config.sizes {
                 bench_sliding_window(
                     &wq,
                     "copy_crc",
                     size,
-                    args.iterations,
-                    args.max_concurrency,
-                    args.json,
+                    config.iterations,
+                    config.max_concurrency,
+                    config.json,
                     &mut throughput_results,
                     |desc, src, dst, sz| desc.fill_copy_crc(src, dst, sz, 0),
                 );
@@ -1646,58 +1880,58 @@ fn main() {
         AccelKind::Iax => {
             bench_noop_latency_iax(
                 &wq,
-                args.iterations,
+                config.iterations,
                 tsc_freq,
-                args.json,
+                config.json,
                 &mut latency_results,
             );
 
             bench_single_op_latency_iax_crc64(
                 &wq,
-                &sizes,
-                args.iterations,
+                &config.sizes,
+                config.iterations,
                 tsc_freq,
-                args.cold,
-                args.json,
+                config.cold,
+                config.json,
                 &mut latency_results,
             );
 
-            for &size in &sizes {
+            for &size in &config.sizes {
                 bench_burst_iax_crc64(
                     &wq,
                     size,
-                    args.iterations,
-                    args.max_concurrency,
-                    args.json,
+                    config.iterations,
+                    config.max_concurrency,
+                    config.json,
                     &mut throughput_results,
                 );
             }
 
-            for &size in &sizes {
+            for &size in &config.sizes {
                 bench_sliding_window_iax_crc64(
                     &wq,
                     size,
-                    args.iterations,
-                    args.max_concurrency,
-                    args.json,
+                    config.iterations,
+                    config.max_concurrency,
+                    config.json,
                     &mut throughput_results,
                 );
             }
         }
     }
 
-    if args.json {
+    if config.json {
         let report = FullReport {
             metadata: Metadata {
-                accelerator: args.accel.as_str().to_string(),
+                accelerator: config.accel.as_str().to_string(),
                 tsc_freq_hz: tsc_freq,
                 pinned_core: core,
                 cpu_numa_node: cpu_numa_node(core),
-                device_numa_node: device_numa_node(&device),
-                device: device.display().to_string(),
+                device_numa_node: device_numa_node(&config.device),
+                device: config.device.display().to_string(),
                 wq_dedicated: Some(wq.is_dedicated()),
-                iterations: args.iterations,
-                cold_cache: args.cold,
+                iterations: config.iterations,
+                cold_cache: config.cold,
             },
             latency: latency_results,
             throughput: throughput_results,
