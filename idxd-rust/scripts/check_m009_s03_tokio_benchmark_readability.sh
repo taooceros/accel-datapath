@@ -63,6 +63,8 @@ source_paths=(
   "${REPO_ROOT}/docs/report/architecture/012.hardware_rust_readability_baseline.md"
   "${REPO_ROOT}/docs/report/architecture/013.idxd_rust_direct_async_readability.md"
   "${CRATE_DIR}/src/bin/tokio_memmove_bench.rs"
+  "${CRATE_DIR}/src/bin/tokio_memmove_bench/cli.rs"
+  "${CRATE_DIR}/src/bin/tokio_memmove_bench/artifact.rs"
   "${CRATE_DIR}/tests/async_benchmark_cli_contract.rs"
   "${CRATE_DIR}/tests/async_benchmark_verifier_contract.rs"
   "${CRATE_DIR}/scripts/verify_tokio_memmove_bench.sh"
@@ -141,17 +143,17 @@ require_literal 'bash idxd-rust/scripts/check_m009_s03_tokio_benchmark_readabili
 require_literal 'cargo test --manifest-path ./Cargo.toml -p idxd-rust --test async_benchmark_readability_contract -- --nocapture' 'cargo_guard_command'
 require_literal 'cargo test --manifest-path ./Cargo.toml -p idxd-rust --test async_benchmark_cli_contract --test async_benchmark_verifier_contract -- --nocapture' 'existing_contract_command'
 
-require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench.rs" 'const SCHEMA_VERSION: u32 = 1;' 'source_schema_version_constant'
-require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench.rs" 'struct CliArgs' 'source_cli_args_owner'
-require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench.rs" 'enum Suite' 'source_suite_owner'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/artifact.rs" 'const SCHEMA_VERSION: u32 = 1;' 'source_schema_version_constant'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/cli.rs" 'struct CliArgs' 'source_cli_args_owner'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/cli.rs" 'enum Suite' 'source_suite_owner'
 require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench.rs" 'struct SoftwareDirectBackend' 'source_software_backend_owner'
 require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench.rs" 'async fn hardware_artifact' 'source_hardware_artifact_owner'
-require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench.rs" 'struct BenchmarkArtifact' 'source_artifact_struct_owner'
-require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench.rs" 'fn emit_artifact' 'source_emit_artifact_owner'
-require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench.rs" 'fn write_artifact' 'source_write_artifact_owner'
-require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench.rs" 'SOFTWARE_TARGET: &str = "software_direct_async_diagnostic"' 'source_software_target_constant'
-require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench.rs" 'HARDWARE_ASYNC_TARGET: &str = "direct_async"' 'source_hardware_async_target_constant'
-require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench.rs" 'HARDWARE_SYNC_TARGET: &str = "direct_sync"' 'source_hardware_sync_target_constant'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/artifact.rs" 'struct BenchmarkArtifact' 'source_artifact_struct_owner'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/artifact.rs" 'fn emit_artifact' 'source_emit_artifact_owner'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/artifact.rs" 'fn write_artifact' 'source_write_artifact_owner'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/artifact.rs" 'SOFTWARE_TARGET: &str = "software_direct_async_diagnostic"' 'source_software_target_constant'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/artifact.rs" 'HARDWARE_ASYNC_TARGET: &str = "direct_async"' 'source_hardware_async_target_constant'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/artifact.rs" 'HARDWARE_SYNC_TARGET: &str = "direct_sync"' 'source_hardware_sync_target_constant'
 require_literal_in_file "${CRATE_DIR}/tests/async_benchmark_cli_contract.rs" 'writes_artifact_matching_stdout_exactly' 'cli_contract_stdout_artifact_equality'
 require_literal_in_file "${CRATE_DIR}/tests/async_benchmark_cli_contract.rs" 'assert_no_payload_dump_fields' 'cli_contract_no_payload'
 require_literal_in_file "${CRATE_DIR}/tests/async_benchmark_verifier_contract.rs" 'malformed_json_is_hard_artifact_validation_failure' 'verifier_contract_malformed_json'
