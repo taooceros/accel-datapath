@@ -264,16 +264,23 @@ mod tests {
         let error = parse_sizes("64,abc,128").unwrap_err();
 
         match &error {
-            BenchmarkConfigError::InvalidSize { raw, token, .. } => {
+            BenchmarkConfigError::InvalidSize { raw, token, source } => {
                 assert_eq!(raw, "64,abc,128");
                 assert_eq!(token, "abc");
+                assert_eq!(source.to_string(), "invalid digit found in string");
             }
             other => panic!("unexpected error: {other:?}"),
         }
+
+        let display = error.to_string();
         assert!(
-            std::error::Error::source(&error).is_some(),
-            "invalid numeric tokens should preserve ParseIntError as source"
+            display.contains("abc") && display.contains("64,abc,128"),
+            "invalid size display should preserve token and raw input: {display}"
         );
+
+        let source = std::error::Error::source(&error)
+            .expect("invalid numeric tokens should preserve ParseIntError as source");
+        assert_eq!(source.to_string(), "invalid digit found in string");
     }
 
     #[test]
