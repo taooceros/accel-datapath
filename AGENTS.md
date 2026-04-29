@@ -8,7 +8,7 @@ Research monorepo for Intel DSA/IAX data-path work.
 ## SOURCE ORDER
 1. Current conversation
 2. Repo docs in `docs/` and `remark/`
-3. Local indexes and tools: `codemogger`, Turso KB, `read`, `grep`, `glob`, `lsp_*`
+3. Local indexes and tools: `codemogger`, Turso KB, `read`, `bash`
 4. External docs and web search
 
 ## DELEGATION
