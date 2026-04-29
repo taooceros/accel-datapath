@@ -28,6 +28,36 @@ fn stdout_json(output: &Output) -> Value {
     serde_json::from_slice(&output.stdout).expect("stdout should be valid json")
 }
 
+fn assert_no_payload_dump_fields(value: &Value) {
+    match value {
+        Value::Object(map) => {
+            for (key, child) in map {
+                assert!(
+                    !matches!(
+                        key.as_str(),
+                        "payload"
+                            | "payload_bytes"
+                            | "source"
+                            | "source_bytes"
+                            | "source_payload"
+                            | "destination"
+                            | "destination_bytes"
+                            | "destination_payload"
+                    ),
+                    "unexpected payload dump field `{key}` in {value}"
+                );
+                assert_no_payload_dump_fields(child);
+            }
+        }
+        Value::Array(items) => {
+            for child in items {
+                assert_no_payload_dump_fields(child);
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+    }
+}
+
 #[test]
 fn prints_help_without_touching_hardware() {
     let output = run(&["--help"]);
@@ -75,6 +105,15 @@ fn rejects_invalid_enum_and_device_inputs_before_touching_hardware() {
         assert!(String::from_utf8_lossy(&output.stdout).is_empty());
         assert!(!String::from_utf8_lossy(&output.stderr).is_empty());
     }
+}
+
+#[test]
+fn rejects_missing_artifact_value_before_benchmark_execution() {
+    let output = run(&["--artifact"]);
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stdout).is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("missing value for `--artifact`"));
 }
 
 #[test]
@@ -138,6 +177,7 @@ fn emits_software_canonical_json_with_required_schema_fields() {
     assert!(artifact["direct_failure_kind"].is_null());
     assert!(artifact["validation_phase"].is_null());
     assert!(artifact["validation_error_kind"].is_null());
+    assert_no_payload_dump_fields(&artifact);
 
     let results = artifact["results"]
         .as_array()
@@ -274,6 +314,7 @@ fn hardware_nonexistent_device_emits_typed_queue_open_failure_json() {
             .expect("results array")
             .is_empty()
     );
+    assert_no_payload_dump_fields(&artifact);
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(!stdout.contains("payload"));
@@ -315,6 +356,7 @@ fn writes_artifact_matching_stdout_exactly() {
     let parsed: Value = serde_json::from_str(&artifact).expect("artifact should parse as json");
     assert_eq!(parsed["claim_eligible"], false);
     assert_eq!(parsed["requested_bytes"], 1);
+    assert_no_payload_dump_fields(&parsed);
 
     fs::remove_file(&artifact_path).expect("artifact cleanup should succeed");
 }
