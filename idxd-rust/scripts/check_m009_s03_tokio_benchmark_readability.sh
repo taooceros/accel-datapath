@@ -65,6 +65,11 @@ source_paths=(
   "${CRATE_DIR}/src/bin/tokio_memmove_bench.rs"
   "${CRATE_DIR}/src/bin/tokio_memmove_bench/cli.rs"
   "${CRATE_DIR}/src/bin/tokio_memmove_bench/artifact.rs"
+  "${CRATE_DIR}/src/bin/tokio_memmove_bench/failure.rs"
+  "${CRATE_DIR}/src/bin/tokio_memmove_bench/hardware.rs"
+  "${CRATE_DIR}/src/bin/tokio_memmove_bench/modes.rs"
+  "${CRATE_DIR}/src/bin/tokio_memmove_bench/runner.rs"
+  "${CRATE_DIR}/src/bin/tokio_memmove_bench/software.rs"
   "${CRATE_DIR}/tests/async_benchmark_cli_contract.rs"
   "${CRATE_DIR}/tests/async_benchmark_verifier_contract.rs"
   "${CRATE_DIR}/scripts/verify_tokio_memmove_bench.sh"
@@ -97,6 +102,9 @@ require_literal 'idxd-rust/src/bin/tokio_memmove_bench/cli.rs' 'planned_owner_cl
 require_literal 'idxd-rust/src/bin/tokio_memmove_bench/suite.rs' 'planned_owner_suite'
 require_literal 'idxd-rust/src/bin/tokio_memmove_bench/software.rs' 'planned_owner_software'
 require_literal 'idxd-rust/src/bin/tokio_memmove_bench/hardware.rs' 'planned_owner_hardware'
+require_literal 'idxd-rust/src/bin/tokio_memmove_bench/modes.rs' 'planned_owner_modes'
+require_literal 'idxd-rust/src/bin/tokio_memmove_bench/failure.rs' 'planned_owner_failure'
+require_literal 'idxd-rust/src/bin/tokio_memmove_bench/runner.rs' 'planned_owner_runner'
 require_literal 'idxd-rust/src/bin/tokio_memmove_bench/artifact.rs' 'planned_owner_artifact'
 require_literal 'idxd-rust/src/bin/tokio_memmove_bench.rs' 'planned_owner_entrypoint'
 require_literal 'idxd-rust/scripts/verify_tokio_memmove_bench.sh' 'planned_owner_verifier'
@@ -146,8 +154,19 @@ require_literal 'cargo test --manifest-path ./Cargo.toml -p idxd-rust --test asy
 require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/artifact.rs" 'const SCHEMA_VERSION: u32 = 1;' 'source_schema_version_constant'
 require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/cli.rs" 'struct CliArgs' 'source_cli_args_owner'
 require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/cli.rs" 'enum Suite' 'source_suite_owner'
-require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench.rs" 'struct SoftwareDirectBackend' 'source_software_backend_owner'
-require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench.rs" 'async fn hardware_artifact' 'source_hardware_artifact_owner'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/software.rs" 'struct SoftwareDirectBackend' 'source_software_backend_owner'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/software.rs" 'fn initialize_success_destination' 'source_software_success_copy_owner'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/software.rs" 'claim_eligible: false' 'source_software_non_claim_eligible_owner'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/hardware.rs" 'async fn hardware_artifact' 'source_hardware_artifact_owner'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/hardware.rs" 'fn run_sync_comparison' 'source_sync_comparison_owner'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/hardware.rs" 'claim_eligible: first_failure.is_none()' 'source_hardware_claim_gating_owner'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/modes.rs" 'async fn run_async_mode' 'source_async_mode_owner'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/modes.rs" 'JoinSet' 'source_joinset_owner'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/modes.rs" 'fn deterministic_source' 'source_request_data_owner'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/failure.rs" 'struct RowFailure' 'source_row_failure_owner'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/failure.rs" 'fn async_error' 'source_async_failure_owner'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/failure.rs" 'fn sync_error' 'source_sync_failure_owner'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/runner.rs" 'async fn execute' 'source_runner_dispatch_owner'
 require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/artifact.rs" 'struct BenchmarkArtifact' 'source_artifact_struct_owner'
 require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/artifact.rs" 'fn emit_artifact' 'source_emit_artifact_owner'
 require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/artifact.rs" 'fn write_artifact' 'source_write_artifact_owner'
