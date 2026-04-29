@@ -8,10 +8,10 @@ use std::time::Duration;
 
 use bytes::{Bytes, BytesMut, buf::UninitSlice};
 use idxd_rust::{
-    AsyncDirectFailureKind, AsyncDsaSession, AsyncLifecycleFailureKind, AsyncMemmoveError,
-    AsyncMemmoveRequest, AsyncMemmoveWorker, AsyncWorkerFailureKind, CompletionSnapshot,
-    DirectAsyncMemmoveRuntime, MemmoveError, MemmovePhase, MemmoveRequest, MemmoveValidationConfig,
-    MemmoveValidationReport, direct_test_support::ScriptedDirectBackend,
+    AsyncDirectFailure, AsyncDirectFailureKind, AsyncDsaSession, AsyncLifecycleFailureKind,
+    AsyncMemmoveError, AsyncMemmoveRequest, AsyncMemmoveWorker, AsyncWorkerFailureKind,
+    CompletionSnapshot, DirectAsyncMemmoveRuntime, MemmoveError, MemmovePhase, MemmoveRequest,
+    MemmoveValidationConfig, MemmoveValidationReport, direct_test_support::ScriptedDirectBackend,
 };
 use idxd_sys::{DSA_COMP_PAGE_FAULT_NOBOF, DSA_COMP_SUCCESS, EnqcmdSubmission};
 use tokio::sync::Notify;
@@ -814,6 +814,14 @@ async fn backpressure_exhaustion_reports_retry_budget_without_payload_bytes() {
     assert_eq!(failure.retry_budget(), 2);
     assert_eq!(failure.retry_count(), 3);
     let failure_message = failure.to_string();
+    assert!(failure_message.contains("requested_bytes=14"));
+    assert!(failure_message.contains("retry_count=3"));
+    assert!(failure_message.contains("retry_budget=2"));
+    assert!(!failure_message.contains("completion_status="));
+    let source_error = StdError::source(&err)
+        .expect("direct async failures should expose AsyncDirectFailure as the source");
+    assert!(source_error.is::<AsyncDirectFailure>());
+    assert_eq!(source_error.to_string(), failure_message);
     let err_message = err.to_string();
     assert_display_excludes_async_payload_markers(&failure_message);
     assert_display_excludes_async_payload_markers(&err_message);
@@ -1026,13 +1034,28 @@ async fn retry_continuation_backpressure_reports_snapshot_and_recovers_buffers()
     assert_eq!(failure.retry_budget(), 1);
     assert_eq!(failure.retry_count(), 1);
     assert_eq!(failure.requested_bytes(), 12);
+    let source_error = StdError::source(&err)
+        .expect("retry direct failures should expose AsyncDirectFailure as the source");
+    assert!(source_error.is::<AsyncDirectFailure>());
     let snapshot = failure
         .completion_snapshot()
         .expect("retry failure should retain the page-fault snapshot");
     assert_eq!(snapshot.status, DSA_COMP_PAGE_FAULT_NOBOF);
     assert_eq!(snapshot.bytes_completed, 5);
     assert_eq!(snapshot.fault_addr, 0xfeed);
-    assert_display_excludes_async_payload_markers(&failure.to_string());
+    let failure_message = failure.to_string();
+    assert!(failure_message.contains("requested_bytes=12"));
+    assert!(failure_message.contains("retry_count=1"));
+    assert!(failure_message.contains("retry_budget=1"));
+    assert!(failure_message.contains(&format!(
+        "completion_status=0x{:02x}",
+        DSA_COMP_PAGE_FAULT_NOBOF
+    )));
+    assert!(failure_message.contains("completion_result=0"));
+    assert!(failure_message.contains("bytes_completed=5"));
+    assert!(failure_message.contains("fault_addr=0xfeed"));
+    assert_eq!(source_error.to_string(), failure_message);
+    assert_display_excludes_async_payload_markers(&failure_message);
     assert_display_excludes_async_payload_markers(&err.to_string());
     let recovered = err
         .into_request()

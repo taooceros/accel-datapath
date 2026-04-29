@@ -178,7 +178,10 @@ fn live_verifier_reports_default_root_launcher_path_as_expected_failure() {
     assert!(stdout.contains("phase=done"));
     assert!(stdout.contains("verdict=expected_failure"));
     assert!(stdout.contains("failure_phase=preflight"));
-    assert!(stdout.contains("launcher_status=missing_launcher"));
+    assert!(
+        stdout.contains("launcher_status=missing_launcher"),
+        "stdout should report missing launcher, got: {stdout}"
+    );
     assert!(stdout.contains(&format!("launcher_path={}", expected_launcher.display())));
     assert!(!stdout.contains(&format!(
         "launcher_path={}",
@@ -209,7 +212,10 @@ fn async_verifier_reports_default_root_launcher_path_as_expected_failure() {
     assert!(stdout.contains("phase=done"));
     assert!(stdout.contains("verdict=expected_failure"));
     assert!(stdout.contains("failure_phase=preflight"));
-    assert!(stdout.contains("launcher_status=missing_launcher"));
+    assert!(
+        stdout.contains("launcher_status=missing_launcher"),
+        "stdout should report missing launcher, got: {stdout}"
+    );
     assert!(stdout.contains(&format!("launcher_path={}", expected_launcher.display())));
     assert!(!stdout.contains(&format!(
         "launcher_path={}",
