@@ -492,11 +492,12 @@ impl AsyncDsaSession {
 
     /// Open the public direct async runtime from an already-normalized config.
     ///
-    /// Builder-oriented callers can construct a [`MemmoveValidationConfig`]
-    /// once, then pass it here without losing invalid-path or queue-open
-    /// diagnostics. The hidden direct-backend fixture seam remains separate in
-    /// `spawn_with_direct_backend` so tests can keep injecting deterministic
-    /// backends without going through a live work queue.
+    /// The generated `AsyncDsaSession::builder().open()` path is kept as a
+    /// named way to pass a prebuilt config into live direct-backend opening
+    /// while preserving queue-open diagnostics and direct-runtime failure
+    /// mapping. The hidden direct-backend fixture seam remains separate in
+    /// `spawn_with_direct_backend` so tests can inject deterministic backends
+    /// without going through a live work queue.
     #[builder(start_fn = builder, finish_fn = open)]
     pub fn open_config(
         #[builder(default)] validation_config: MemmoveValidationConfig,
