@@ -1,9 +1,13 @@
 use std::collections::HashMap;
 
+mod monitor;
 mod operation;
+#[doc(hidden)]
+pub mod test_support;
+
 use std::path::Path;
 use std::sync::{
-    Arc, Mutex, Weak,
+    Arc, Mutex,
     atomic::{AtomicBool, AtomicU64, Ordering},
 };
 use std::time::Duration;
@@ -13,6 +17,7 @@ use idxd_sys::{DsaHwDesc, EnqcmdSubmission, WqPortal};
 use snafu::Snafu;
 use tokio::sync::oneshot;
 
+use monitor::monitor_completion_records;
 use operation::PendingOperation;
 
 use crate::async_session::{AsyncMemmoveError, AsyncMemmoveRequest, AsyncMemmoveResult};
@@ -428,168 +433,6 @@ impl<B> Drop for DirectAsyncMemmoveRuntime<B> {
                 ),
                 request: operation.recover_request(),
             }));
-        }
-    }
-}
-
-async fn monitor_completion_records<B>(inner: Weak<RuntimeInner<B>>)
-where
-    B: DirectMemmoveBackend,
-{
-    loop {
-        let Some(inner) = inner.upgrade() else {
-            return;
-        };
-
-        let operations = {
-            let pending = inner.pending.lock().expect("pending registry poisoned");
-            pending.values().cloned().collect::<Vec<_>>()
-        };
-
-        if operations.is_empty() {
-            if inner.closed.load(Ordering::Acquire) {
-                return;
-            }
-            drop(inner);
-            tokio::time::sleep(MONITOR_IDLE_BACKOFF).await;
-            continue;
-        }
-
-        for operation in operations {
-            if let Some(snapshot) = operation.completion_snapshot(&inner.backend) {
-                let terminal = operation.handle_snapshot(&inner, snapshot).await;
-                if terminal {
-                    inner
-                        .pending
-                        .lock()
-                        .expect("pending registry poisoned")
-                        .remove(&operation.id());
-                }
-            }
-        }
-
-        drop(inner);
-        tokio::task::yield_now().await;
-    }
-}
-
-#[doc(hidden)]
-pub mod test_support {
-    use std::collections::{HashMap, VecDeque};
-    use std::sync::{
-        Arc, Mutex,
-        atomic::{AtomicUsize, Ordering},
-    };
-
-    use bytes::buf::UninitSlice;
-    use idxd_sys::{DsaHwDesc, EnqcmdSubmission};
-
-    use crate::CompletionSnapshot;
-
-    use super::DirectMemmoveBackend;
-
-    #[derive(Debug, Clone)]
-    pub struct ScriptedDirectBackend {
-        inner: Arc<ScriptedInner>,
-    }
-
-    #[derive(Debug, Default)]
-    struct ScriptedInner {
-        submissions: AtomicUsize,
-        completions: AtomicUsize,
-        scripts: Mutex<VecDeque<EnqcmdSubmission>>,
-        snapshots: Mutex<HashMap<u64, CompletionSnapshot>>,
-        copy_on_success: bool,
-    }
-
-    impl ScriptedDirectBackend {
-        pub fn new() -> Self {
-            Self {
-                inner: Arc::new(ScriptedInner {
-                    copy_on_success: true,
-                    ..ScriptedInner::default()
-                }),
-            }
-        }
-
-        pub fn with_submissions(submissions: impl IntoIterator<Item = EnqcmdSubmission>) -> Self {
-            let backend = Self::new();
-            *backend.inner.scripts.lock().expect("script lock poisoned") =
-                submissions.into_iter().collect();
-            backend
-        }
-
-        pub fn submissions(&self) -> usize {
-            self.inner.submissions.load(Ordering::SeqCst)
-        }
-
-        pub fn completions(&self) -> usize {
-            self.inner.completions.load(Ordering::SeqCst)
-        }
-
-        pub fn complete(&self, op_id: u64, snapshot: CompletionSnapshot) {
-            self.inner
-                .snapshots
-                .lock()
-                .expect("snapshot lock poisoned")
-                .insert(op_id, snapshot);
-        }
-
-        pub fn clear_completion(&self, op_id: u64) {
-            self.inner
-                .snapshots
-                .lock()
-                .expect("snapshot lock poisoned")
-                .remove(&op_id);
-        }
-
-        pub fn zero_success_copy() -> Self {
-            Self {
-                inner: Arc::new(ScriptedInner {
-                    copy_on_success: false,
-                    ..ScriptedInner::default()
-                }),
-            }
-        }
-    }
-
-    impl Default for ScriptedDirectBackend {
-        fn default() -> Self {
-            Self::new()
-        }
-    }
-
-    impl DirectMemmoveBackend for ScriptedDirectBackend {
-        fn submit(&self, _op_id: u64, _descriptor: &DsaHwDesc) -> EnqcmdSubmission {
-            self.inner.submissions.fetch_add(1, Ordering::SeqCst);
-            self.inner
-                .scripts
-                .lock()
-                .expect("script lock poisoned")
-                .pop_front()
-                .unwrap_or(EnqcmdSubmission::Accepted)
-        }
-
-        fn completion_snapshot(
-            &self,
-            op_id: u64,
-            _state: &crate::direct_memmove::DirectMemmoveState,
-        ) -> Option<CompletionSnapshot> {
-            self.inner
-                .snapshots
-                .lock()
-                .expect("snapshot lock poisoned")
-                .remove(&op_id)
-        }
-
-        fn initialize_success_destination(&self, _op_id: u64, dst: &mut UninitSlice, src: &[u8]) {
-            self.inner.completions.fetch_add(1, Ordering::SeqCst);
-            if self.inner.copy_on_success {
-                dst.copy_from_slice(src);
-            } else {
-                let zeros = vec![0; src.len()];
-                dst.copy_from_slice(&zeros);
-            }
         }
     }
 }

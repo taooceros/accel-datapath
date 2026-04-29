@@ -65,6 +65,8 @@ source_paths=(
   "${CRATE_DIR}/src/async_session.rs"
   "${CRATE_DIR}/src/async_direct.rs"
   "${CRATE_DIR}/src/async_direct/operation.rs"
+  "${CRATE_DIR}/src/async_direct/monitor.rs"
+  "${CRATE_DIR}/src/async_direct/test_support.rs"
   "${CRATE_DIR}/src/direct_memmove.rs"
   "${CRATE_DIR}/tests/async_memmove_contract.rs"
   "${CRATE_DIR}/tests/tokio_handle_contract.rs"
@@ -125,6 +127,8 @@ require_literal 'No prepared-host hardware success claim from ordinary-host' 'or
 require_literal 'idxd-rust/src/async_session.rs' 'source_path_async_session'
 require_literal 'idxd-rust/src/async_direct.rs' 'source_path_async_direct'
 require_literal 'idxd-rust/src/async_direct/operation.rs' 'source_path_async_direct_operation'
+require_literal 'idxd-rust/src/async_direct/monitor.rs' 'source_path_async_direct_monitor'
+require_literal 'idxd-rust/src/async_direct/test_support.rs' 'source_path_async_direct_test_support'
 require_literal 'idxd-rust/src/direct_memmove.rs' 'source_path_direct_memmove'
 require_literal 'idxd-rust/tests/async_memmove_contract.rs' 'source_path_async_memmove_contract'
 require_literal 'idxd-rust/tests/tokio_handle_contract.rs' 'source_path_tokio_handle_contract'
@@ -142,7 +146,7 @@ require_literal_in_file "${CRATE_DIR}/src/async_session.rs" 'AsyncMemmoveRequest
 require_literal_in_file "${CRATE_DIR}/src/async_session.rs" 'open_default' 'source_async_session_open_default'
 require_literal_in_file "${CRATE_DIR}/src/async_session.rs" 'spawn_with_direct_backend' 'source_async_session_direct_fixture_seam'
 require_literal_in_file "${CRATE_DIR}/src/async_direct.rs" 'DirectAsyncMemmoveRuntime' 'source_async_direct_runtime'
-require_literal_in_file "${CRATE_DIR}/src/async_direct.rs" 'monitor_completion_records' 'source_async_direct_monitor'
+require_literal_in_file "${CRATE_DIR}/src/async_direct.rs" 'monitor::monitor_completion_records' 'source_async_direct_monitor_spawn_wiring'
 require_literal_in_file "${CRATE_DIR}/src/async_direct.rs" 'operation::PendingOperation' 'source_async_direct_pending_operation_import'
 require_literal_in_file "${CRATE_DIR}/src/async_direct.rs" 'EnqcmdSubmission::Accepted' 'source_async_direct_enqcmd_accept'
 require_literal_in_file "${CRATE_DIR}/src/async_direct.rs" 'EnqcmdSubmission::Rejected' 'source_async_direct_enqcmd_reject'
@@ -153,6 +157,14 @@ require_literal_in_file "${CRATE_DIR}/src/async_direct/operation.rs" 'finish_suc
 require_literal_in_file "${CRATE_DIR}/src/async_direct/operation.rs" 'submit_continuation' 'source_async_direct_operation_retry_continuation'
 require_literal_in_file "${CRATE_DIR}/src/async_direct/operation.rs" 'recover_request' 'source_async_direct_operation_safe_recovery'
 require_literal_in_file "${CRATE_DIR}/src/async_direct/operation.rs" 'destination.set_len(original_len + self.requested_bytes)' 'source_async_direct_operation_destination_len_advancement'
+require_literal_in_file "${CRATE_DIR}/src/async_direct/monitor.rs" 'pending_operations' 'source_async_direct_monitor_pending_snapshot_collection'
+require_literal_in_file "${CRATE_DIR}/src/async_direct/monitor.rs" 'tokio::time::sleep(MONITOR_IDLE_BACKOFF).await' 'source_async_direct_monitor_idle_sleep'
+require_literal_in_file "${CRATE_DIR}/src/async_direct/monitor.rs" 'tokio::task::yield_now().await' 'source_async_direct_monitor_yield'
+require_literal_in_file "${CRATE_DIR}/src/async_direct/monitor.rs" 'operation.handle_snapshot(&inner, snapshot).await' 'source_async_direct_monitor_snapshot_dispatch'
+require_literal_in_file "${CRATE_DIR}/src/async_direct/test_support.rs" 'pub struct ScriptedDirectBackend' 'source_async_direct_test_support_backend'
+require_literal_in_file "${CRATE_DIR}/src/async_direct/test_support.rs" 'impl DirectMemmoveBackend for ScriptedDirectBackend' 'source_async_direct_test_support_backend_impl'
+require_literal_in_file "${CRATE_DIR}/src/async_direct/test_support.rs" 'EnqcmdSubmission::Accepted' 'source_async_direct_test_support_default_accept'
+require_literal_in_file "${CRATE_DIR}/src/async_direct/test_support.rs" 'zero_success_copy' 'source_async_direct_test_support_mismatch_fixture'
 require_literal_in_file "${CRATE_DIR}/src/direct_memmove.rs" 'Operation-local memmove state that can be submitted now and completed later.' 'source_direct_memmove_operation_local_comment'
 require_literal_in_file "${CRATE_DIR}/src/direct_memmove.rs" 'The caller must keep `src..src + request.len()` allocated and immutable' 'source_direct_memmove_safety_source_lifetime'
 require_literal_in_file "${CRATE_DIR}/src/direct_memmove.rs" 'verify_initialized_destination' 'source_direct_memmove_no_payload_verify_helper'
