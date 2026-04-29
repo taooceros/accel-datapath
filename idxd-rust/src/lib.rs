@@ -71,9 +71,9 @@ impl DsaSession {
 
     /// Open a DSA work queue from an already-normalized validation config.
     ///
-    /// This is the named config entrypoint used by builder-oriented callers.
-    /// Queue-open failures still preserve the normalized device path and phase
-    /// metadata from the supplied [`MemmoveValidationConfig`].
+    /// The generated `DsaSession::builder().open()` path is kept as a named
+    /// way to supply a prebuilt config while preserving the same queue-open
+    /// device path and phase diagnostics as the direct constructor helpers.
     #[builder(start_fn = builder, finish_fn = open)]
     pub fn open_config(
         #[builder(default)] validation_config: MemmoveValidationConfig,

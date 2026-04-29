@@ -1,9 +1,8 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use bon::Builder;
 use idxd_sys::{
-    DSA_COMP_PAGE_FAULT_NOBOF, DSA_COMP_STATUS_MASK, DSA_COMP_SUCCESS, DsaCompletionRecord,
+    DsaCompletionRecord, DSA_COMP_PAGE_FAULT_NOBOF, DSA_COMP_STATUS_MASK, DSA_COMP_SUCCESS,
 };
 use snafu::Snafu;
 
@@ -17,12 +16,9 @@ pub const DEFAULT_MAX_PAGE_FAULT_RETRIES: u32 = 1;
 pub const MAX_MEMMOVE_BYTES: usize = u32::MAX as usize;
 
 /// Stable configuration for one reusable DSA memmove session.
-#[derive(Debug, Clone, PartialEq, Eq, Builder)]
-#[builder(finish_fn(vis = "", name = build_internal))]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MemmoveValidationConfig {
-    #[builder(default = PathBuf::from(DEFAULT_DEVICE_PATH), into)]
     device_path: PathBuf,
-    #[builder(default = DEFAULT_MAX_PAGE_FAULT_RETRIES)]
     max_page_fault_retries: u32,
 }
 
@@ -35,16 +31,16 @@ impl Default for MemmoveValidationConfig {
     }
 }
 
-impl<S: memmove_validation_config_builder::IsComplete> MemmoveValidationConfigBuilder<S> {
-    /// Build a config after normalizing the device path through the same
-    /// validation path as the compatibility constructors.
-    pub fn build(self) -> Result<MemmoveValidationConfig, MemmoveError> {
-        let config = self.build_internal();
-        MemmoveValidationConfig::with_retries(config.device_path, config.max_page_fault_retries)
-    }
-}
-
+#[bon::bon]
 impl MemmoveValidationConfig {
+    #[builder(finish_fn = build)]
+    pub fn builder(
+        #[builder(default = PathBuf::from(DEFAULT_DEVICE_PATH), into)] device_path: PathBuf,
+        #[builder(default = DEFAULT_MAX_PAGE_FAULT_RETRIES)] max_page_fault_retries: u32,
+    ) -> Result<Self, MemmoveError> {
+        Self::with_retries(device_path, max_page_fault_retries)
+    }
+
     pub fn new<P: AsRef<Path>>(device_path: P) -> Result<Self, MemmoveError> {
         Self::with_retries(device_path, DEFAULT_MAX_PAGE_FAULT_RETRIES)
     }
@@ -288,6 +284,24 @@ pub enum MemmoveError {
     },
 }
 
+struct MemmoveErrorContext<'a> {
+    device_path: Option<&'a Path>,
+    phase: Option<MemmovePhase>,
+    page_fault_retries: Option<u32>,
+    final_status: Option<u8>,
+    requested_bytes: Option<usize>,
+}
+
+impl MemmoveErrorContext<'_> {
+    const EMPTY: Self = Self {
+        device_path: None,
+        phase: None,
+        page_fault_retries: None,
+        final_status: None,
+        requested_bytes: None,
+    };
+}
+
 impl MemmoveError {
     pub fn kind(&self) -> &'static str {
         match self {
@@ -304,84 +318,107 @@ impl MemmoveError {
     }
 
     pub fn device_path(&self) -> Option<&Path> {
-        match self {
-            Self::InvalidDevicePath { device_path }
-            | Self::QueueOpen { device_path, .. }
-            | Self::CompletionTimeout { device_path, .. }
-            | Self::MalformedCompletion { device_path, .. }
-            | Self::PageFaultRetryExhausted { device_path, .. }
-            | Self::CompletionStatus { device_path, .. }
-            | Self::ByteMismatch { device_path, .. } => Some(device_path.as_path()),
-            Self::InvalidLength { .. } | Self::DestinationTooSmall { .. } => None,
-        }
+        self.context().device_path
     }
 
     pub fn phase(&self) -> Option<MemmovePhase> {
-        match self {
-            Self::QueueOpen { phase, .. }
-            | Self::CompletionTimeout { phase, .. }
-            | Self::MalformedCompletion { phase, .. }
-            | Self::PageFaultRetryExhausted { phase, .. }
-            | Self::CompletionStatus { phase, .. }
-            | Self::ByteMismatch { phase, .. } => Some(*phase),
-            Self::InvalidDevicePath { .. }
-            | Self::InvalidLength { .. }
-            | Self::DestinationTooSmall { .. } => None,
-        }
+        self.context().phase
     }
 
     pub fn page_fault_retries(&self) -> Option<u32> {
-        match self {
-            Self::CompletionTimeout {
-                page_fault_retries, ..
-            }
-            | Self::MalformedCompletion {
-                page_fault_retries, ..
-            }
-            | Self::CompletionStatus {
-                page_fault_retries, ..
-            }
-            | Self::ByteMismatch {
-                page_fault_retries, ..
-            } => Some(*page_fault_retries),
-            Self::PageFaultRetryExhausted { retries, .. } => Some(*retries),
-            Self::InvalidDevicePath { .. }
-            | Self::InvalidLength { .. }
-            | Self::DestinationTooSmall { .. }
-            | Self::QueueOpen { .. } => None,
-        }
+        self.context().page_fault_retries
     }
 
     pub fn final_status(&self) -> Option<u8> {
-        match self {
-            Self::MalformedCompletion { status, .. }
-            | Self::CompletionStatus { status, .. }
-            | Self::ByteMismatch {
-                final_status: status,
-                ..
-            } => Some(*status),
-            Self::InvalidDevicePath { .. }
-            | Self::InvalidLength { .. }
-            | Self::DestinationTooSmall { .. }
-            | Self::QueueOpen { .. }
-            | Self::CompletionTimeout { .. }
-            | Self::PageFaultRetryExhausted { .. } => None,
-        }
+        self.context().final_status
     }
 
     pub fn requested_bytes(&self) -> Option<usize> {
+        self.context().requested_bytes
+    }
+
+    fn context(&self) -> MemmoveErrorContext<'_> {
         match self {
-            Self::InvalidLength { requested_len, .. } => Some(*requested_len),
-            Self::DestinationTooSmall { src_len, .. } => Some(*src_len),
+            Self::InvalidDevicePath { device_path } => MemmoveErrorContext {
+                device_path: Some(device_path.as_path()),
+                ..MemmoveErrorContext::EMPTY
+            },
+            Self::InvalidLength { requested_len, .. } => MemmoveErrorContext {
+                requested_bytes: Some(*requested_len),
+                ..MemmoveErrorContext::EMPTY
+            },
+            Self::DestinationTooSmall { src_len, .. } => MemmoveErrorContext {
+                requested_bytes: Some(*src_len),
+                ..MemmoveErrorContext::EMPTY
+            },
+            Self::QueueOpen {
+                device_path, phase, ..
+            } => MemmoveErrorContext {
+                device_path: Some(device_path.as_path()),
+                phase: Some(*phase),
+                ..MemmoveErrorContext::EMPTY
+            },
+            Self::CompletionTimeout {
+                device_path,
+                phase,
+                page_fault_retries,
+            } => MemmoveErrorContext {
+                device_path: Some(device_path.as_path()),
+                phase: Some(*phase),
+                page_fault_retries: Some(*page_fault_retries),
+                ..MemmoveErrorContext::EMPTY
+            },
+            Self::MalformedCompletion {
+                device_path,
+                phase,
+                status,
+                page_fault_retries,
+                ..
+            } => MemmoveErrorContext {
+                device_path: Some(device_path.as_path()),
+                phase: Some(*phase),
+                page_fault_retries: Some(*page_fault_retries),
+                final_status: Some(*status),
+                ..MemmoveErrorContext::EMPTY
+            },
+            Self::PageFaultRetryExhausted {
+                device_path,
+                phase,
+                retries,
+                ..
+            } => MemmoveErrorContext {
+                device_path: Some(device_path.as_path()),
+                phase: Some(*phase),
+                page_fault_retries: Some(*retries),
+                ..MemmoveErrorContext::EMPTY
+            },
+            Self::CompletionStatus {
+                device_path,
+                phase,
+                status,
+                page_fault_retries,
+                ..
+            } => MemmoveErrorContext {
+                device_path: Some(device_path.as_path()),
+                phase: Some(*phase),
+                page_fault_retries: Some(*page_fault_retries),
+                final_status: Some(*status),
+                ..MemmoveErrorContext::EMPTY
+            },
             Self::ByteMismatch {
-                requested_bytes, ..
-            } => Some(*requested_bytes),
-            Self::InvalidDevicePath { .. }
-            | Self::QueueOpen { .. }
-            | Self::CompletionTimeout { .. }
-            | Self::MalformedCompletion { .. }
-            | Self::PageFaultRetryExhausted { .. }
-            | Self::CompletionStatus { .. } => None,
+                device_path,
+                phase,
+                requested_bytes,
+                final_status,
+                page_fault_retries,
+                ..
+            } => MemmoveErrorContext {
+                device_path: Some(device_path.as_path()),
+                phase: Some(*phase),
+                page_fault_retries: Some(*page_fault_retries),
+                final_status: Some(*final_status),
+                requested_bytes: Some(*requested_bytes),
+            },
         }
     }
 }
