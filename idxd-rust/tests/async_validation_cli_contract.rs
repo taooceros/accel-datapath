@@ -3,6 +3,8 @@ use std::path::PathBuf;
 use std::process::{Command, Output};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use serde_json::Value;
+
 const TEST_SCENARIO_ENV: &str = "IDXD_RUST_AWAIT_MEMMOVE_TEST_SCENARIO";
 
 fn await_memmove_bin() -> &'static str {
@@ -24,6 +26,40 @@ fn run_with_optional_scenario(args: &[&str], scenario: Option<&str>) -> Output {
         command.env(TEST_SCENARIO_ENV, scenario);
     }
     command.output().expect("binary should launch")
+}
+
+fn stdout_json(output: &Output) -> Value {
+    serde_json::from_slice(&output.stdout).expect("stdout should be valid json")
+}
+
+fn assert_no_payload_dump_fields(value: &Value) {
+    match value {
+        Value::Object(map) => {
+            for (key, child) in map {
+                assert!(
+                    !matches!(
+                        key.as_str(),
+                        "payload"
+                            | "payload_bytes"
+                            | "source"
+                            | "source_bytes"
+                            | "source_payload"
+                            | "destination"
+                            | "destination_bytes"
+                            | "destination_payload"
+                    ),
+                    "unexpected payload dump field `{key}` in {value}"
+                );
+                assert_no_payload_dump_fields(child);
+            }
+        }
+        Value::Array(items) => {
+            for child in items {
+                assert_no_payload_dump_fields(child);
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+    }
 }
 
 #[test]
@@ -56,6 +92,15 @@ fn rejects_empty_device_path_before_touching_hardware() {
     assert_eq!(output.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&output.stdout).is_empty());
     assert!(String::from_utf8_lossy(&output.stderr).contains("device path must not be empty"));
+}
+
+#[test]
+fn rejects_missing_artifact_value_before_touching_hardware() {
+    let output = run_with_optional_scenario(&["--artifact"], None);
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stdout).is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("missing value for `--artifact`"));
 }
 
 #[test]
@@ -94,6 +139,18 @@ fn reports_queue_open_failure_as_stable_async_json_schema() {
 
     assert_eq!(output.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&output.stderr).is_empty());
+
+    let artifact = stdout_json(&output);
+    assert_eq!(artifact["ok"], false);
+    assert_eq!(artifact["device_path"], "/dev/dsa/does-not-exist");
+    assert_eq!(artifact["requested_bytes"], 64);
+    assert!(artifact["page_fault_retries"].is_null());
+    assert!(artifact["final_status"].is_null());
+    assert_eq!(artifact["phase"], "queue_open");
+    assert_eq!(artifact["error_kind"], "validation_failure");
+    assert_eq!(artifact["validation_phase"], "queue_open");
+    assert_eq!(artifact["validation_error_kind"], "queue_open");
+    assert_no_payload_dump_fields(&artifact);
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("\"ok\":false"));
@@ -247,21 +304,23 @@ fn supports_minimal_valid_request_and_writes_matching_artifact() {
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let artifact = fs::read_to_string(&artifact_path).expect("artifact should be written");
     assert_eq!(artifact, stdout);
-    assert!(artifact.contains("\"ok\":true"));
-    assert!(artifact.contains("\"requested_bytes\":1"));
-    assert!(artifact.contains("\"phase\":\"completed\""));
-    assert!(artifact.contains("\"error_kind\":null"));
-    assert!(artifact.contains("\"lifecycle_failure_kind\":null"));
-    assert!(artifact.contains("\"worker_failure_kind\":null"));
-    assert!(artifact.contains("\"direct_failure_kind\":null"));
-    assert!(artifact.contains("\"retry_budget\":0"));
-    assert!(artifact.contains("\"retry_count\":0"));
-    assert!(artifact.contains("\"completion_result\":null"));
-    assert!(artifact.contains("\"completion_bytes_completed\":null"));
-    assert!(artifact.contains("\"completion_fault_addr\":null"));
-    assert!(artifact.contains("\"validation_phase\":\"completed\""));
-    assert!(artifact.contains("\"validation_error_kind\":null"));
-    assert!(artifact.contains("\"final_status\":\"0x01\""));
+    let parsed: Value = serde_json::from_str(&artifact).expect("artifact should parse as json");
+    assert_eq!(parsed["ok"], true);
+    assert_eq!(parsed["requested_bytes"], 1);
+    assert_eq!(parsed["phase"], "completed");
+    assert_eq!(parsed["error_kind"], Value::Null);
+    assert_eq!(parsed["lifecycle_failure_kind"], Value::Null);
+    assert_eq!(parsed["worker_failure_kind"], Value::Null);
+    assert_eq!(parsed["direct_failure_kind"], Value::Null);
+    assert_eq!(parsed["retry_budget"], 0);
+    assert_eq!(parsed["retry_count"], 0);
+    assert_eq!(parsed["completion_result"], Value::Null);
+    assert_eq!(parsed["completion_bytes_completed"], Value::Null);
+    assert_eq!(parsed["completion_fault_addr"], Value::Null);
+    assert_eq!(parsed["validation_phase"], "completed");
+    assert_eq!(parsed["validation_error_kind"], Value::Null);
+    assert_eq!(parsed["final_status"], "0x01");
+    assert_no_payload_dump_fields(&parsed);
     assert!(
         artifact.contains("verified 1 copied bytes via direct async memmove on /dev/dsa/test0.0")
     );

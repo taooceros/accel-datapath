@@ -1,8 +1,12 @@
 use idxd_sys::{
-    DSA_OPCODE_MEMMOVE, DsaCompletionRecord, DsaHwDesc, IDXD_OP_FLAG_CC, IDXD_OP_FLAG_CRAV,
-    IDXD_OP_FLAG_RCR, idxd_uapi,
+    DSA_COMP_NONE, DSA_COMP_PAGE_FAULT_NOBOF, DSA_COMP_STATUS_MASK, DSA_COMP_SUCCESS,
+    DSA_OPCODE_BATCH, DSA_OPCODE_CFLUSH, DSA_OPCODE_COMPARE, DSA_OPCODE_COMPVAL,
+    DSA_OPCODE_COPY_CRC, DSA_OPCODE_CRCGEN, DSA_OPCODE_DUALCAST, DSA_OPCODE_MEMFILL,
+    DSA_OPCODE_MEMMOVE, DSA_OPCODE_NOOP, DsaCompletionRecord, DsaHwDesc, IDXD_OP_FLAG_CC,
+    IDXD_OP_FLAG_CRAV, IDXD_OP_FLAG_RCR, idxd_uapi, reset_completion,
 };
 use std::mem::{align_of, offset_of, size_of};
+use std::ptr;
 
 #[test]
 fn generated_dsa_descriptor_layout_matches_linux_uapi_contract() {
@@ -109,6 +113,145 @@ fn public_dsa_helpers_preserve_hardware_submission_alignment() {
         32,
         "DsaCompletionRecord wrapper must restore 32-byte completion alignment"
     );
+}
+
+#[test]
+fn public_dsa_constants_are_sourced_from_generated_uapi() {
+    assert_eq!(
+        DSA_OPCODE_NOOP,
+        idxd_uapi::dsa_opcode::DSA_OPCODE_NOOP as u8
+    );
+    assert_eq!(
+        DSA_OPCODE_BATCH,
+        idxd_uapi::dsa_opcode::DSA_OPCODE_BATCH as u8
+    );
+    assert_eq!(
+        DSA_OPCODE_MEMMOVE,
+        idxd_uapi::dsa_opcode::DSA_OPCODE_MEMMOVE as u8
+    );
+    assert_eq!(
+        DSA_OPCODE_MEMFILL,
+        idxd_uapi::dsa_opcode::DSA_OPCODE_MEMFILL as u8
+    );
+    assert_eq!(
+        DSA_OPCODE_COMPARE,
+        idxd_uapi::dsa_opcode::DSA_OPCODE_COMPARE as u8
+    );
+    assert_eq!(
+        DSA_OPCODE_COMPVAL,
+        idxd_uapi::dsa_opcode::DSA_OPCODE_COMPVAL as u8
+    );
+    assert_eq!(
+        DSA_OPCODE_DUALCAST,
+        idxd_uapi::dsa_opcode::DSA_OPCODE_DUALCAST as u8
+    );
+    assert_eq!(
+        DSA_OPCODE_CRCGEN,
+        idxd_uapi::dsa_opcode::DSA_OPCODE_CRCGEN as u8
+    );
+    assert_eq!(
+        DSA_OPCODE_COPY_CRC,
+        idxd_uapi::dsa_opcode::DSA_OPCODE_COPY_CRC as u8
+    );
+    assert_eq!(
+        DSA_OPCODE_CFLUSH,
+        idxd_uapi::dsa_opcode::DSA_OPCODE_CFLUSH as u8
+    );
+
+    assert_eq!(IDXD_OP_FLAG_CRAV, idxd_uapi::IDXD_OP_FLAG_CRAV);
+    assert_eq!(IDXD_OP_FLAG_RCR, idxd_uapi::IDXD_OP_FLAG_RCR);
+    assert_eq!(IDXD_OP_FLAG_CC, idxd_uapi::IDXD_OP_FLAG_CC);
+
+    assert_eq!(
+        DSA_COMP_NONE,
+        idxd_uapi::dsa_completion_status::DSA_COMP_NONE as u8
+    );
+    assert_eq!(
+        DSA_COMP_SUCCESS,
+        idxd_uapi::dsa_completion_status::DSA_COMP_SUCCESS as u8
+    );
+    assert_eq!(
+        DSA_COMP_PAGE_FAULT_NOBOF,
+        idxd_uapi::dsa_completion_status::DSA_COMP_PAGE_FAULT_NOBOF as u8
+    );
+    assert_eq!(DSA_COMP_STATUS_MASK, idxd_uapi::DSA_COMP_STATUS_MASK as u8);
+}
+
+#[test]
+fn completion_accessors_read_generated_packed_fields() {
+    let mut completion = DsaCompletionRecord::default();
+    let base = (&mut completion as *mut DsaCompletionRecord).cast::<u8>();
+
+    // SAFETY: The wrapper is a repr(C) single-field wrapper around the generated
+    // packed completion record with a larger alignment. These writes target the
+    // generated field offsets guarded above and use unaligned stores for packed
+    // multi-byte fields, matching the raw ABI contract without requiring hardware.
+    unsafe {
+        ptr::write(
+            base.add(offset_of!(idxd_uapi::dsa_completion_record, status)),
+            0x81,
+        );
+        ptr::write(
+            base.add(offset_of!(
+                idxd_uapi::dsa_completion_record,
+                __bindgen_anon_1
+            )),
+            0x7e,
+        );
+        ptr::write_unaligned(
+            base.add(offset_of!(
+                idxd_uapi::dsa_completion_record,
+                bytes_completed
+            ))
+            .cast::<u32>(),
+            0x1122_3344,
+        );
+        ptr::write_unaligned(
+            base.add(offset_of!(idxd_uapi::dsa_completion_record, fault_addr))
+                .cast::<u64>(),
+            0x1122_3344_5566_7788,
+        );
+        ptr::write_unaligned(
+            base.add(offset_of!(
+                idxd_uapi::dsa_completion_record,
+                __bindgen_anon_2
+            ))
+            .cast::<u64>(),
+            0x8877_6655_4433_2211,
+        );
+    }
+
+    assert_eq!(completion.status(), 0x81);
+    assert_eq!(completion.result(), 0x7e);
+    assert_eq!(completion.bytes_completed(), 0x1122_3344);
+    assert_eq!(completion.fault_addr(), 0x1122_3344_5566_7788);
+    assert_eq!(completion.crc_value(), 0x8877_6655_4433_2211);
+}
+
+#[test]
+fn reset_completion_clears_record_without_changing_wrapper_contract() {
+    let mut completion = DsaCompletionRecord::default();
+    let bytes = (&mut completion as *mut DsaCompletionRecord).cast::<u8>();
+
+    // SAFETY: The byte pattern only makes the host-free record non-zero so the
+    // reset helper's raw zeroing effect is observable; no hardware observes it.
+    unsafe {
+        ptr::write_bytes(bytes, 0xa5, size_of::<DsaCompletionRecord>());
+    }
+    assert_ne!(completion.status(), DSA_COMP_NONE);
+
+    reset_completion(&mut completion);
+
+    let bytes = (&completion as *const DsaCompletionRecord).cast::<u8>();
+    for index in 0..size_of::<DsaCompletionRecord>() {
+        // SAFETY: The wrapper is initialized, and reading its object
+        // representation as bytes is valid for the reset contract check.
+        let byte = unsafe { ptr::read(bytes.add(index)) };
+        assert_eq!(byte, 0, "reset_completion left byte {index} non-zero");
+    }
+    assert_eq!(completion.status(), DSA_COMP_NONE);
+    assert_eq!(size_of::<DsaCompletionRecord>(), 32);
+    assert_eq!(align_of::<DsaCompletionRecord>(), 32);
 }
 
 #[test]

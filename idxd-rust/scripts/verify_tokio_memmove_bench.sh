@@ -66,104 +66,8 @@ complete_with_explicit_failure() {
   exit 0
 }
 
-case "${BACKEND}" in
-  hardware|software) ;;
-  *) fail_phase preflight "backend=${BACKEND} launcher_status=invalid_backend message=IDXD_RUST_VERIFY_BACKEND must be hardware or software" ;;
-esac
-
-case "${SUITE}" in
-  canonical|latency|concurrency|throughput) ;;
-  *) fail_phase preflight "backend=${BACKEND} suite=${SUITE} launcher_status=invalid_suite message=IDXD_RUST_VERIFY_SUITE must be canonical, latency, concurrency, or throughput" ;;
-esac
-
-mkdir -p "${OUTPUT_DIR}" 2>/dev/null || fail_phase preflight "backend=${BACKEND} launcher_status=output_dir_unwritable message=failed to create output directory"
-touch "${OUTPUT_DIR}/.write-test" 2>/dev/null || fail_phase preflight "backend=${BACKEND} launcher_status=output_dir_unwritable message=failed to write into output directory"
-rm -f "${OUTPUT_DIR}/.write-test"
-
-command -v python3 >/dev/null 2>&1 || fail_phase preflight "backend=${BACKEND} launcher_status=missing_python3 message=python3 command not found"
-command -v timeout >/dev/null 2>&1 || fail_phase preflight "backend=${BACKEND} launcher_status=missing_timeout message=timeout command not found"
-
-if [[ -n "${IDXD_RUST_VERIFY_BINARY:-}" && "${SKIP_BUILD}" != "1" ]]; then
-  fail_phase preflight "backend=${BACKEND} launcher_status=contradictory_overrides message=IDXD_RUST_VERIFY_BINARY requires IDXD_RUST_VERIFY_SKIP_BUILD=1 so the verifier does not build one binary and execute another"
-fi
-
-if [[ "${SKIP_BUILD}" != "1" ]]; then
-  log_phase build "backend=${BACKEND} workspace=${REPO_ROOT} binary=${BINARY_PATH} profile=${BUILD_PROFILE}"
-  (
-    cd "${REPO_ROOT}"
-    cargo build --profile "${BUILD_PROFILE}" -p idxd-rust --bin tokio_memmove_bench
-  )
-fi
-
-[[ -x "${BINARY_PATH}" ]] || fail_phase preflight "backend=${BACKEND} launcher_status=missing_binary binary=${BINARY_PATH} message=tokio_memmove_bench binary is not executable"
-
-DEVICE_PATH=${IDXD_RUST_VERIFY_DEVICE:-/dev/dsa/wq0.0}
-LAUNCHER_STATUS=not_required
-RUNNER=("${BINARY_PATH}")
-
-if [[ "${BACKEND}" == "hardware" ]]; then
-  DEVICE_PATH=$(find_default_device) || complete_with_explicit_failure preflight 'backend=hardware device_path=<none> launcher_status=missing_work_queue message=no /dev/dsa/wq* device found; set IDXD_RUST_VERIFY_DEVICE explicitly'
-  command -v devenv >/dev/null 2>&1 || complete_with_explicit_failure preflight "backend=hardware device_path=${DEVICE_PATH} launcher_status=missing_devenv message=devenv command not found"
-  [[ -x "${LAUNCHER_PATH}" ]] || complete_with_explicit_failure preflight "backend=hardware device_path=${DEVICE_PATH} launcher_status=missing_launcher launcher_path=${LAUNCHER_PATH} message=build the launcher with launch in a privileged shell before running this verifier"
-
-  if command -v getcap >/dev/null 2>&1; then
-    LAUNCHER_CAPS=$(getcap "${LAUNCHER_PATH}" || true)
-    if [[ "${LAUNCHER_CAPS}" != *"cap_sys_rawio"* ]]; then
-      complete_with_explicit_failure preflight "backend=hardware device_path=${DEVICE_PATH} launcher_status=missing_capability launcher_path=${LAUNCHER_PATH} message=launcher lacks cap_sys_rawio+eip"
-    fi
-    LAUNCHER_STATUS=ready
-  else
-    LAUNCHER_CAPS=unavailable
-    LAUNCHER_STATUS=capability_unchecked
-  fi
-
-  log_phase preflight "backend=hardware device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} binary=${BINARY_PATH} timeout=${PREFLIGHT_TIMEOUT}"
-
-  PREFLIGHT_EXIT=0
-  if timeout "${PREFLIGHT_TIMEOUT}" \
-    devenv shell -- launch "${BINARY_PATH}" --bytes abc \
-    >"${PREFLIGHT_STDOUT_PATH}" 2>"${PREFLIGHT_STDERR_PATH}"; then
-    PREFLIGHT_EXIT=0
-  else
-    PREFLIGHT_EXIT=$?
-  fi
-
-  if [[ "${PREFLIGHT_EXIT}" -eq 124 ]]; then
-    fail_phase preflight "backend=hardware device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} stdout=${PREFLIGHT_STDOUT_PATH} stderr=${PREFLIGHT_STDERR_PATH} message=launch-wrapped preflight exceeded timeout"
-  fi
-
-  if [[ "${PREFLIGHT_EXIT}" -ne 2 ]] || ! grep -q 'invalid value `abc` for `--bytes`' "${PREFLIGHT_STDERR_PATH}"; then
-    fail_phase preflight "backend=hardware device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} stdout=${PREFLIGHT_STDOUT_PATH} stderr=${PREFLIGHT_STDERR_PATH} message=launch-wrapped preflight failed"
-  fi
-
-  RUNNER=(devenv shell -- launch "${BINARY_PATH}")
-fi
-
-log_phase runtime "backend=${BACKEND} suite=${SUITE} device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} binary=${BINARY_PATH} requested_bytes=${REQUEST_BYTES} iterations=${ITERATIONS} concurrency=${CONCURRENCY} duration_ms=${DURATION_MS} timeout=${RUN_TIMEOUT}"
-
-RUN_EXIT=0
-if timeout "${RUN_TIMEOUT}" \
-  "${RUNNER[@]}" \
-    --backend "${BACKEND}" \
-    --device "${DEVICE_PATH}" \
-    --suite "${SUITE}" \
-    --bytes "${REQUEST_BYTES}" \
-    --iterations "${ITERATIONS}" \
-    --concurrency "${CONCURRENCY}" \
-    --duration-ms "${DURATION_MS}" \
-    --format json \
-    --artifact "${ARTIFACT_PATH}" \
-    >"${STDOUT_PATH}" 2>"${STDERR_PATH}"; then
-  RUN_EXIT=0
-else
-  RUN_EXIT=$?
-fi
-
-if [[ "${RUN_EXIT}" -eq 124 ]]; then
-  fail_phase runtime "backend=${BACKEND} suite=${SUITE} device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} message=benchmark exceeded timeout"
-fi
-
-ARTIFACT_FIELDS=$(python3 - <<'PY' "${ARTIFACT_PATH}" "${STDOUT_PATH}" "${BACKEND}" "${SUITE}" "${DEVICE_PATH}" "${REQUEST_BYTES}" "${ITERATIONS}" "${CONCURRENCY}" "${DURATION_MS}"
+validate_artifact_contract() {
+  python3 - <<'PY' "${ARTIFACT_PATH}" "${STDOUT_PATH}" "${BACKEND}" "${SUITE}" "${DEVICE_PATH}" "${REQUEST_BYTES}" "${ITERATIONS}" "${CONCURRENCY}" "${DURATION_MS}"
 import json
 import math
 import re
@@ -196,6 +100,32 @@ try:
     report = json.loads(artifact_text)
 except json.JSONDecodeError as exc:
     raise SystemExit(f"artifact is not valid JSON: {exc}")
+
+FORBIDDEN_PAYLOAD_FIELDS = {
+    'payload',
+    'payload_bytes',
+    'payload_dump',
+    'raw_payload',
+    'dumped_payload',
+    'source_bytes',
+    'source_payload',
+    'src_payload',
+    'destination_bytes',
+    'destination_payload',
+    'dst_payload',
+}
+
+def reject_payload_dump_fields(value, path='report'):
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key in FORBIDDEN_PAYLOAD_FIELDS:
+                raise SystemExit(f"artifact contains forbidden payload dump field {path}.{key}")
+            reject_payload_dump_fields(child, f"{path}.{key}")
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            reject_payload_dump_fields(child, f"{path}[{index}]")
+
+reject_payload_dump_fields(report)
 
 required_top = {
     'schema_version', 'ok', 'verdict', 'device_path', 'backend', 'claim_eligible',
@@ -383,7 +313,106 @@ print(f"completed_operations={completed_operations}")
 print(f"failed_operations={failed_operations}")
 print(f"targets={','.join(row_targets) if row_targets else 'none'}")
 PY
-) || fail_phase artifact_validation "backend=${BACKEND} suite=${SUITE} device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} message=artifact validation failed"
+}
+
+case "${BACKEND}" in
+  hardware|software) ;;
+  *) fail_phase preflight "backend=${BACKEND} launcher_status=invalid_backend message=IDXD_RUST_VERIFY_BACKEND must be hardware or software" ;;
+esac
+
+case "${SUITE}" in
+  canonical|latency|concurrency|throughput) ;;
+  *) fail_phase preflight "backend=${BACKEND} suite=${SUITE} launcher_status=invalid_suite message=IDXD_RUST_VERIFY_SUITE must be canonical, latency, concurrency, or throughput" ;;
+esac
+
+mkdir -p "${OUTPUT_DIR}" 2>/dev/null || fail_phase preflight "backend=${BACKEND} launcher_status=output_dir_unwritable message=failed to create output directory"
+touch "${OUTPUT_DIR}/.write-test" 2>/dev/null || fail_phase preflight "backend=${BACKEND} launcher_status=output_dir_unwritable message=failed to write into output directory"
+rm -f "${OUTPUT_DIR}/.write-test"
+
+command -v python3 >/dev/null 2>&1 || fail_phase preflight "backend=${BACKEND} launcher_status=missing_python3 message=python3 command not found"
+command -v timeout >/dev/null 2>&1 || fail_phase preflight "backend=${BACKEND} launcher_status=missing_timeout message=timeout command not found"
+
+if [[ -n "${IDXD_RUST_VERIFY_BINARY:-}" && "${SKIP_BUILD}" != "1" ]]; then
+  fail_phase preflight "backend=${BACKEND} launcher_status=contradictory_overrides message=IDXD_RUST_VERIFY_BINARY requires IDXD_RUST_VERIFY_SKIP_BUILD=1 so the verifier does not build one binary and execute another"
+fi
+
+if [[ "${SKIP_BUILD}" != "1" ]]; then
+  log_phase build "backend=${BACKEND} workspace=${REPO_ROOT} binary=${BINARY_PATH} profile=${BUILD_PROFILE}"
+  (
+    cd "${REPO_ROOT}"
+    cargo build --profile "${BUILD_PROFILE}" -p idxd-rust --bin tokio_memmove_bench
+  )
+fi
+
+[[ -x "${BINARY_PATH}" ]] || fail_phase preflight "backend=${BACKEND} launcher_status=missing_binary binary=${BINARY_PATH} message=tokio_memmove_bench binary is not executable"
+
+DEVICE_PATH=${IDXD_RUST_VERIFY_DEVICE:-/dev/dsa/wq0.0}
+LAUNCHER_STATUS=not_required
+RUNNER=("${BINARY_PATH}")
+
+if [[ "${BACKEND}" == "hardware" ]]; then
+  DEVICE_PATH=$(find_default_device) || complete_with_explicit_failure preflight 'backend=hardware device_path=<none> launcher_status=missing_work_queue message=no /dev/dsa/wq* device found; set IDXD_RUST_VERIFY_DEVICE explicitly'
+  command -v devenv >/dev/null 2>&1 || complete_with_explicit_failure preflight "backend=hardware device_path=${DEVICE_PATH} launcher_status=missing_devenv message=devenv command not found"
+  [[ -x "${LAUNCHER_PATH}" ]] || complete_with_explicit_failure preflight "backend=hardware device_path=${DEVICE_PATH} launcher_status=missing_launcher launcher_path=${LAUNCHER_PATH} message=build the launcher with launch in a privileged shell before running this verifier"
+
+  if command -v getcap >/dev/null 2>&1; then
+    LAUNCHER_CAPS=$(getcap "${LAUNCHER_PATH}" || true)
+    if [[ "${LAUNCHER_CAPS}" != *"cap_sys_rawio"* ]]; then
+      complete_with_explicit_failure preflight "backend=hardware device_path=${DEVICE_PATH} launcher_status=missing_capability launcher_path=${LAUNCHER_PATH} message=launcher lacks cap_sys_rawio+eip"
+    fi
+    LAUNCHER_STATUS=ready
+  else
+    LAUNCHER_CAPS=unavailable
+    LAUNCHER_STATUS=capability_unchecked
+  fi
+
+  log_phase preflight "backend=hardware device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} binary=${BINARY_PATH} timeout=${PREFLIGHT_TIMEOUT}"
+
+  PREFLIGHT_EXIT=0
+  if timeout "${PREFLIGHT_TIMEOUT}" \
+    devenv shell -- launch "${BINARY_PATH}" --bytes abc \
+    >"${PREFLIGHT_STDOUT_PATH}" 2>"${PREFLIGHT_STDERR_PATH}"; then
+    PREFLIGHT_EXIT=0
+  else
+    PREFLIGHT_EXIT=$?
+  fi
+
+  if [[ "${PREFLIGHT_EXIT}" -eq 124 ]]; then
+    fail_phase preflight "backend=hardware device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} stdout=${PREFLIGHT_STDOUT_PATH} stderr=${PREFLIGHT_STDERR_PATH} message=launch-wrapped preflight exceeded timeout"
+  fi
+
+  if [[ "${PREFLIGHT_EXIT}" -ne 2 ]] || ! grep -q 'invalid value `abc` for `--bytes`' "${PREFLIGHT_STDERR_PATH}"; then
+    fail_phase preflight "backend=hardware device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} stdout=${PREFLIGHT_STDOUT_PATH} stderr=${PREFLIGHT_STDERR_PATH} message=launch-wrapped preflight failed"
+  fi
+
+  RUNNER=(devenv shell -- launch "${BINARY_PATH}")
+fi
+
+log_phase runtime "backend=${BACKEND} suite=${SUITE} device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} binary=${BINARY_PATH} requested_bytes=${REQUEST_BYTES} iterations=${ITERATIONS} concurrency=${CONCURRENCY} duration_ms=${DURATION_MS} timeout=${RUN_TIMEOUT}"
+
+RUN_EXIT=0
+if timeout "${RUN_TIMEOUT}" \
+  "${RUNNER[@]}" \
+    --backend "${BACKEND}" \
+    --device "${DEVICE_PATH}" \
+    --suite "${SUITE}" \
+    --bytes "${REQUEST_BYTES}" \
+    --iterations "${ITERATIONS}" \
+    --concurrency "${CONCURRENCY}" \
+    --duration-ms "${DURATION_MS}" \
+    --format json \
+    --artifact "${ARTIFACT_PATH}" \
+    >"${STDOUT_PATH}" 2>"${STDERR_PATH}"; then
+  RUN_EXIT=0
+else
+  RUN_EXIT=$?
+fi
+
+if [[ "${RUN_EXIT}" -eq 124 ]]; then
+  fail_phase runtime "backend=${BACKEND} suite=${SUITE} device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} message=benchmark exceeded timeout"
+fi
+
+ARTIFACT_FIELDS=$(validate_artifact_contract) || fail_phase artifact_validation "backend=${BACKEND} suite=${SUITE} device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} message=artifact validation failed"
 
 ARTIFACT_OK=
 ARTIFACT_VERDICT=

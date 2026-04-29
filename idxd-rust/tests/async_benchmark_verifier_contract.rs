@@ -372,11 +372,27 @@ fn missing_launcher_is_expected_failure_with_default_repo_root_path() {
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8_lossy(&output.stdout);
     let expected_launcher = repo_root().join("tools/build/dsa_launcher");
-    assert!(stdout.contains("phase=done"));
-    assert!(stdout.contains("verdict=expected_failure"));
-    assert!(stdout.contains("failure_phase=preflight"));
-    assert!(stdout.contains("launcher_status=missing_launcher"));
-    assert!(stdout.contains(&format!("launcher_path={}", expected_launcher.display())));
+    assert!(
+        stdout.contains("phase=done"),
+        "stdout should include done phase, got: {stdout}"
+    );
+    assert!(
+        stdout.contains("verdict=expected_failure"),
+        "stdout should include expected-failure verdict, got: {stdout}"
+    );
+    assert!(
+        stdout.contains("failure_phase=preflight"),
+        "stdout should include preflight failure phase, got: {stdout}"
+    );
+    assert!(
+        stdout.contains("launcher_status=missing_launcher"),
+        "stdout should report missing launcher, got: {stdout}"
+    );
+    assert!(
+        stdout.contains(&format!("launcher_path={}", expected_launcher.display())),
+        "stdout should include default repo-root launcher path {}, got: {stdout}",
+        expected_launcher.display()
+    );
 }
 
 #[test]
@@ -621,4 +637,86 @@ report = {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("phase=artifact_validation"));
     assert!(stderr.contains("artifact validation failed"));
+}
+
+#[test]
+fn benchmark_verifier_rejects_payload_dump_fields_in_result_rows() {
+    let (temp_root, _launcher_path, _path_override) = fake_launcher_env(true);
+    let fake_binary = temp_root.join("fake_tokio_memmove_bench");
+    let body = r#"def row(mode):
+    return {
+        "mode": mode,
+        "target": "software_direct_async_diagnostic",
+        "comparison_target": None,
+        "requested_bytes": bytes_,
+        "iterations": iterations,
+        "concurrency": concurrency,
+        "duration_ms": duration_ms,
+        "completed_operations": 1,
+        "failed_operations": 0,
+        "elapsed_ns": 1000,
+        "min_latency_ns": 1000,
+        "mean_latency_ns": 1000,
+        "max_latency_ns": 1000,
+        "ops_per_sec": 1000000.0,
+        "bytes_per_sec": float(bytes_) * 1000000.0,
+        "verdict": "pass",
+        "failure_class": None,
+        "error_kind": None,
+        "direct_failure_kind": None,
+        "validation_phase": None,
+        "validation_error_kind": None,
+        "direct_retry_budget": None,
+        "direct_retry_count": None,
+        "completion_status": None,
+        "completion_result": None,
+        "completion_bytes_completed": None,
+        "completion_fault_addr": None,
+        "claim_eligible": False,
+        "payload_bytes": [1, 2, 3],
+    }
+report = {
+    "schema_version": 1,
+    "ok": True,
+    "verdict": "pass",
+    "device_path": device,
+    "backend": "software",
+    "claim_eligible": False,
+    "suite": suite,
+    "runtime_flavor": "current_thread",
+    "worker_threads": 1,
+    "requested_bytes": bytes_,
+    "iterations": iterations,
+    "concurrency": concurrency,
+    "duration_ms": duration_ms,
+    "failure_class": None,
+    "error_kind": None,
+    "direct_failure_kind": None,
+    "validation_phase": None,
+    "validation_error_kind": None,
+    "direct_retry_budget": None,
+    "direct_retry_count": None,
+    "completion_status": None,
+    "completion_result": None,
+    "completion_bytes_completed": None,
+    "completion_fault_addr": None,
+    "results": [row("single_latency"), row("concurrent_submissions"), row("fixed_duration_throughput")],
+}"#;
+    write_fake_bench(&fake_binary, &json_writer(body, 0));
+    let output_dir = unique_temp_path("row-payload-dump-output");
+    fs::create_dir_all(&output_dir).expect("output dir should be creatable");
+
+    let output = run_verifier(
+        &output_dir,
+        &[
+            ("IDXD_RUST_VERIFY_BACKEND", "software".to_string()),
+            ("IDXD_RUST_VERIFY_SKIP_BUILD", "1".to_string()),
+            ("IDXD_RUST_VERIFY_BINARY", fake_binary.display().to_string()),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("phase=artifact_validation"));
+    assert!(stderr.contains("forbidden payload dump field report.results[0].payload_bytes"));
 }

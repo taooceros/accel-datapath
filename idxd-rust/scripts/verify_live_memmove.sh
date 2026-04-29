@@ -163,6 +163,32 @@ try:
 except json.JSONDecodeError as exc:
     raise SystemExit(f"artifact is not valid JSON: {exc}")
 
+FORBIDDEN_PAYLOAD_FIELDS = {
+    'payload',
+    'payload_bytes',
+    'payload_dump',
+    'raw_payload',
+    'dumped_payload',
+    'source_bytes',
+    'source_payload',
+    'src_payload',
+    'destination_bytes',
+    'destination_payload',
+    'dst_payload',
+}
+
+def reject_payload_dump_fields(value, path='report'):
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key in FORBIDDEN_PAYLOAD_FIELDS:
+                raise SystemExit(f"artifact contains forbidden payload dump field {path}.{key}")
+            reject_payload_dump_fields(child, f"{path}.{key}")
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            reject_payload_dump_fields(child, f"{path}[{index}]")
+
+reject_payload_dump_fields(report)
+
 required = {
     'ok',
     'device_path',

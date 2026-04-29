@@ -156,7 +156,11 @@ mod tests {
     use super::*;
 
     fn test_config() -> MemmoveValidationConfig {
-        MemmoveValidationConfig::with_retries("/dev/dsa/wq0.0", 1).expect("test config")
+        MemmoveValidationConfig::builder()
+            .device_path("/dev/dsa/wq0.0")
+            .max_page_fault_retries(1)
+            .build()
+            .expect("test config")
     }
 
     fn state_for(src: &[u8], dst: &mut [u8]) -> DirectMemmoveState {
