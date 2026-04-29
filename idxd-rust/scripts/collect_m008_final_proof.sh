@@ -167,6 +167,8 @@ def run_record(spec: dict):
         "required": True,
         "forbidden_text_hits": forbidden_hits,
     }
+    if spec.get("artifact"):
+        record["artifact"] = spec["artifact"]
     if spec["type"] == "verifier":
         record.update({
             "final_line": final_line,
@@ -199,6 +201,12 @@ commands = [
         "name": "idxd_rust_bins",
         "type": "cargo",
         "command": "cargo check --manifest-path ./Cargo.toml -p idxd-rust --bins",
+    },
+    {
+        "name": "s04_compatibility_matrix",
+        "type": "shell",
+        "command": "bash idxd-rust/scripts/collect_m008_s04_compatibility.sh && bash idxd-rust/scripts/check_m008_s04_compatibility_manifest.sh target/m008-s04-compatibility/latest/manifest.json",
+        "artifact": "target/m008-s04-compatibility/latest/manifest.json",
     },
     {
         "name": "hw_eval_contracts",

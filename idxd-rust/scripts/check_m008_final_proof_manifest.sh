@@ -31,6 +31,7 @@ REQUIRED_RECORDS = {
     "final_report_guard",
     "idxd_rust_contracts",
     "idxd_rust_bins",
+    "s04_compatibility_matrix",
     "hw_eval_contracts",
     "idxd_sys_raw_boundary",
     "hw_eval_software_json",
@@ -142,6 +143,24 @@ for name, record in by_name.items():
         fail(f"record {name} has invalid interpretation {interpretation!r}")
     if interpretation == "hard_failure":
         fail(f"record {name} is a hard failure")
+
+    if name == "s04_compatibility_matrix":
+        artifact = resolve_path(record.get("artifact"), "artifact", name)
+        try:
+            s04_manifest = json.loads(artifact.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            fail(f"record {name} artifact is invalid JSON: {exc}")
+        if s04_manifest.get("milestone") != "M008" or s04_manifest.get("slice") != "S04":
+            fail("S04 compatibility artifact must identify milestone M008 slice S04")
+        s04_records = s04_manifest.get("records")
+        if not isinstance(s04_records, list) or not s04_records:
+            fail("S04 compatibility artifact missing records")
+        for s04_record in s04_records:
+            if s04_record.get("type") == "verifier":
+                fields = s04_record.get("final_line_fields")
+                if not isinstance(fields, dict) or "phase" not in fields or "verdict" not in fields:
+                    fail(f"S04 verifier record {s04_record.get('name')} missing final-line diagnostics")
+        reject_forbidden_json(s04_manifest, "s04_manifest")
 
     if name not in VERIFIER_RECORDS:
         if record.get("exit_code") != 0 or interpretation != "pass":
