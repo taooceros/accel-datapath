@@ -431,6 +431,65 @@ fn error_accessors_preserve_phase_path_and_retry_context() {
 }
 
 #[test]
+fn error_accessors_preserve_status_and_requested_boundaries() {
+    let malformed = classify_memmove_completion(
+        &test_config(),
+        1024,
+        CompletionSnapshot::new(3, 2, 128, 0xdead_beef),
+        0,
+    )
+    .expect_err("malformed completions should retain status metadata");
+
+    assert_eq!(malformed.kind(), "malformed_completion");
+    assert_eq!(malformed.phase(), Some(MemmovePhase::PageFaultRetry));
+    assert_eq!(malformed.page_fault_retries(), Some(0));
+    assert_eq!(malformed.final_status(), Some(3));
+    assert_eq!(malformed.requested_bytes(), None);
+
+    let status = classify_memmove_completion(
+        &test_config(),
+        1024,
+        CompletionSnapshot::new(0x12, 0, 64, 0xfeed_face),
+        2,
+    )
+    .expect_err("non-success completions should retain final status metadata");
+
+    assert_eq!(status.kind(), "completion_status");
+    assert_eq!(status.phase(), Some(MemmovePhase::CompletionPoll));
+    assert_eq!(status.page_fault_retries(), Some(2));
+    assert_eq!(status.final_status(), Some(0x12));
+    assert_eq!(status.requested_bytes(), None);
+
+    let mismatch = MemmoveError::ByteMismatch {
+        device_path: std::path::PathBuf::from("/dev/dsa/wq0.0"),
+        phase: MemmovePhase::PostCopyVerify,
+        requested_bytes: 4,
+        mismatch_offset: 2,
+        final_status: 1,
+        page_fault_retries: 1,
+    };
+
+    assert_eq!(mismatch.kind(), "byte_mismatch");
+    assert_eq!(mismatch.phase(), Some(MemmovePhase::PostCopyVerify));
+    assert_eq!(mismatch.page_fault_retries(), Some(1));
+    assert_eq!(mismatch.final_status(), Some(1));
+    assert_eq!(mismatch.requested_bytes(), Some(4));
+
+    let invalid_len = MemmoveRequest::new(0).expect_err("zero-length requests should fail");
+    assert_eq!(invalid_len.kind(), "invalid_length");
+    assert_eq!(invalid_len.device_path(), None);
+    assert_eq!(invalid_len.phase(), None);
+    assert_eq!(invalid_len.page_fault_retries(), None);
+    assert_eq!(invalid_len.final_status(), None);
+    assert_eq!(invalid_len.requested_bytes(), Some(0));
+
+    let too_small = MemmoveRequest::for_buffers(255, 256)
+        .expect_err("destination preconditions should fail before queue-open");
+    assert_eq!(too_small.kind(), "destination_too_small");
+    assert_eq!(too_small.requested_bytes(), Some(256));
+}
+
+#[test]
 fn display_preserves_completion_metadata_without_payload_bytes() {
     let timeout = classify_memmove_completion(
         &test_config(),
