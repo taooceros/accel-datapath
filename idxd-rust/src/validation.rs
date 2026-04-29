@@ -1,7 +1,6 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use bon::Builder;
 use idxd_sys::{
     DSA_COMP_PAGE_FAULT_NOBOF, DSA_COMP_STATUS_MASK, DSA_COMP_SUCCESS, DsaCompletionRecord,
 };
@@ -17,12 +16,9 @@ pub const DEFAULT_MAX_PAGE_FAULT_RETRIES: u32 = 1;
 pub const MAX_MEMMOVE_BYTES: usize = u32::MAX as usize;
 
 /// Stable configuration for one reusable DSA memmove session.
-#[derive(Debug, Clone, PartialEq, Eq, Builder)]
-#[builder(finish_fn(vis = "", name = build_internal))]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MemmoveValidationConfig {
-    #[builder(default = PathBuf::from(DEFAULT_DEVICE_PATH), into)]
     device_path: PathBuf,
-    #[builder(default = DEFAULT_MAX_PAGE_FAULT_RETRIES)]
     max_page_fault_retries: u32,
 }
 
@@ -35,16 +31,16 @@ impl Default for MemmoveValidationConfig {
     }
 }
 
-impl<S: memmove_validation_config_builder::IsComplete> MemmoveValidationConfigBuilder<S> {
-    /// Build a config after normalizing the device path through the same
-    /// validation path as the compatibility constructors.
-    pub fn build(self) -> Result<MemmoveValidationConfig, MemmoveError> {
-        let config = self.build_internal();
-        MemmoveValidationConfig::with_retries(config.device_path, config.max_page_fault_retries)
-    }
-}
-
+#[bon::bon]
 impl MemmoveValidationConfig {
+    #[builder(finish_fn = build)]
+    pub fn builder(
+        #[builder(default = PathBuf::from(DEFAULT_DEVICE_PATH), into)] device_path: PathBuf,
+        #[builder(default = DEFAULT_MAX_PAGE_FAULT_RETRIES)] max_page_fault_retries: u32,
+    ) -> Result<Self, MemmoveError> {
+        Self::with_retries(device_path, max_page_fault_retries)
+    }
+
     pub fn new<P: AsRef<Path>>(device_path: P) -> Result<Self, MemmoveError> {
         Self::with_retries(device_path, DEFAULT_MAX_PAGE_FAULT_RETRIES)
     }
