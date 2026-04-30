@@ -1,13 +1,12 @@
-// Two-week progress presentation, 2026-04-30
+// Simplified two-week progress presentation, 2026-04-30
 // Reader: technical advisor / project collaborator reviewing the last two weeks.
-// Post-read action: decide which claim is now supported, which claim remains blocked, and which next work item is worth funding.
+// Small claim: the Rust IDXD path is now cleaner and has a small real-hardware proof; this is not yet a Tonic speedup claim.
 // Sources:
 // - git log --since 2026-04-16 on branch gsd/quick/5-generate-a-presentation-based-on-what-i
 // - docs/report/benchmarking/014.idxd_tonic_same_repo_claim_package.md
 // - docs/report/architecture/004.bytes_async_memmove_contract.md
 // - docs/report/api/006_async_memmove_inline_contract.md
 // - docs/report/architecture/007.direct_tokio_async_memmove_implementation.md
-// - docs/report/architecture/009.direct_tokio_baseline_evidence.md
 // - docs/report/integration-review/004.idxd_ffi_consolidation_inventory.md
 // - docs/report/m008/006.cleanup_conventions_and_integrated_proof.md
 // - docs/report/architecture/015.hardware_rust_integrated_readability_evidence.md
@@ -16,13 +15,13 @@
 // - docs/report/benchmarking/015.m011_representative_idxd_numbers_2026-04-30.md
 // - docs/report/architecture/017.generic_idxd_elegance_audit.md
 
-#import "../template.typ": callout, card, deck, fit-badge, note, palette, panel, stage-card
+#import "../template.typ": callout, card, deck, note, palette, panel, stage-card
 
 #show: deck.with(
   margin: (x: 42pt, y: 30pt),
-  size: 13.2pt,
-  leading: 0.82em,
-  spacing: 0.62em,
+  size: 13.5pt,
+  leading: 0.84em,
+  spacing: 0.66em,
 )
 
 #let c-title = palette.title
@@ -47,10 +46,10 @@
   #text(size: 10.2pt, fill: luma(65))[#body]
 ]
 
-= Two-week project progress
+= Two-week progress update
 
 #align(center + horizon)[
-  #text(size: 18pt)[From Tonic characterization to a generic IDXD proof seam]
+  #text(size: 18pt)[A cleaner Rust IDXD path, with a small hardware proof]
   #v(0.7em)
   #text(size: 15pt)[Hongtao Zhang]
   #v(0.25em)
@@ -60,120 +59,120 @@
 #v(0.7em)
 
 #callout(fill: c-blue, stroke: c-accent)[
-  The main shift was from "can we talk about accelerator benefit?" to a more disciplined answer: #text(weight: "bold")[keep Tonic claims narrow], make the Rust IDXD path observable and maintainable, then prove a small generic DSA/IAX seam on prepared hardware.
+  Small claim for this update: #text(weight: "bold")[the Rust IDXD path is now cleaner, easier to test, and has a small real-hardware proof]. This is #text(weight: "bold")[not yet] a claim that IDXD speeds up Tonic end to end.
 ]
 
-== Executive summary
+== The short version
 
 #grid(
   columns: (1fr, 1fr, 1fr),
   gutter: 12pt,
   [#panel(fill: c-blue)[
-    #text(weight: "bold", fill: c-title)[Claim discipline]
+    #text(weight: "bold", fill: c-title)[Tonic result]
     #v(0.25em)
-    + Rebuilt the Tonic comparison story around what the retained evidence actually proves.
-    + Current ordinary-vs-IDXD package is a #text(weight: "bold")[workflow and falsification surface], not a fresh same-host acceleration win.
-    + Stronger Tonic claims still require a prepared-host rerun.
+    + I cleaned up the Tonic evidence package.
+    + The current data does not show an IDXD speedup.
+    + A stronger Tonic result needs a fresh prepared-host rerun.
   ]],
   [#panel(fill: c-green)[
-    #text(weight: "bold", fill: c-title)[Rust path made real]
+    #text(weight: "bold", fill: c-title)[Rust IDXD work]
     #v(0.25em)
-    + Migrated async memmove to explicit `Bytes` / `BytesMut` ownership.
-    + Implemented direct Tokio completion-record async submission.
-    + Consolidated legacy `dsa-ffi` / `idxd-bindings` surfaces into `idxd-rust` + `idxd-sys`.
+    + Moved async memmove to explicit owned buffers.
+    + Added a direct Tokio completion path.
+    + Replaced legacy crate names with `idxd-rust` and `idxd-sys`.
   ]],
   [#panel(fill: c-row)[
-    #text(weight: "bold", fill: c-title)[Generic IDXD seam]
+    #text(weight: "bold", fill: c-title)[Hardware proof]
     #v(0.25em)
-    + Added `IdxdSession<Accel>` as the shared DSA/IAX session boundary.
-    + Shared the blocking lifecycle through `run_blocking_operation`.
-    + Collected hardware proof and small release-profile numbers for DSA memmove + IAX crc64.
+    + Added one shared session shape for DSA and IAX.
+    + Ran DSA memmove and IAX crc64 on prepared hardware.
+    + Collected a small release-mode measurement.
   ]],
 )
 
 #v(0.35em)
 
 #note[
-  This deck deliberately separates three evidence classes: host-free contract proof, ordinary-host expected-failure classification, and prepared-host hardware proof.
+  The update is useful because it narrows the story. We now know what is proved, what is not proved, and what should be tested next.
 ]
 
-== Timeline: what changed in the branch
+== Work done during the two weeks
 
 #grid(
   columns: (0.92fr, 1.08fr),
   column-gutter: 16pt,
   [#panel(fill: c-row)[
-    #text(weight: "bold", fill: c-title)[Recent work volume]
+    #text(weight: "bold", fill: c-title)[Work volume]
     #v(0.35em)
     #grid(
       columns: (1fr, 1fr),
       gutter: 8pt,
-      [#metric-card([Commits], [136], [non-merge commits since Apr 16 on this branch], fill: white)],
+      [#metric-card([Commits], [136], [non-merge commits since Apr 16], fill: white)],
       [#metric-card([Active days], [6], [Apr 24, 25, 27, 28, 29, 30], fill: white, accent: rgb("#16a34a"))],
-      [#metric-card([Core crates], [3], [`idxd-rust`, `idxd-sys`, `hw-eval`], fill: white, accent: rgb("#f97316"))],
-      [#metric-card([Proof style], [3 lanes], [host-free, expected-failure, prepared-host], fill: white, accent: rgb("#7c3aed"))],
+      [#metric-card([Main crates], [3], [`idxd-rust`, `idxd-sys`, `hw-eval`], fill: white, accent: rgb("#f97316"))],
+      [#metric-card([Deck claim], [small], [library progress plus limited hardware proof], fill: white, accent: rgb("#7c3aed"))],
     )
   ]],
   [#panel(fill: c-blue)[
-    #text(weight: "bold", fill: c-title)[Milestone arcs]
+    #text(weight: "bold", fill: c-title)[Main phases]
     #v(0.3em)
     #stage-card(
-      [Apr 24--27: boundary cleanup],
-      [Tonic claim package tightened; package surfaces consolidated from stale `dsa-ffi` / `idxd-bindings` names toward canonical `idxd-rust` + `idxd-sys`.],
-      [Stop overclaiming; remove naming confusion.],
+      [Apr 24--27: clean up the evidence boundary],
+      [Tonic evidence was rewritten around what the current package can actually show. Legacy package names were also consolidated.],
+      [Make the story honest and easier to follow.],
       fill: white,
       accent: c-accent,
     )
     #v(0.18em)
     #stage-card(
-      [Apr 27--28: async binding],
-      [Owned-buffer async API, inline ENQCMD policy, direct Tokio monitor, and benchmark/verifier surfaces landed.],
-      [Make async IDXD observable.],
+      [Apr 27--28: build the async path],
+      [The async API now uses caller-owned buffers, and direct Tokio completion is the main path.],
+      [Make async IDXD testable and observable.],
       fill: white,
       accent: rgb("#16a34a"),
     )
     #v(0.18em)
     #stage-card(
-      [Apr 29--30: maintainability + generic IDXD],
-      [Readability split, lean `bon`/`snafu` convention, generic `IdxdSession<Accel>`, and representative DSA/IAX hardware proof.],
-      [Prepare handoff-worthy architecture.],
+      [Apr 29--30: simplify and generalize],
+      [The hardware Rust code was split by responsibility, then DSA and IAX were connected through one shared session pattern.],
+      [Make the code easier to extend.],
       fill: white,
       accent: rgb("#f97316"),
     )
   ]],
 )
 
-== Tonic claim package: honest boundary first
+== Tonic: the current result is negative or inconclusive
 
 #callout(fill: c-orange, stroke: rgb("#f97316"))[
-  The current Tonic comparison evidence rejects casual acceleration claims. It proves the retained software verifier, IDXD-path verifier, and comparison-package workflow; it does #text(weight: "bold")[not] prove a fresh prepared-host same-host IDXD win.
+  Do not claim a Tonic speedup yet. The current package proves that the workflow exists, but the current rows do not show IDXD beating the ordinary software path.
 ]
 
 #v(0.25em)
 
 #table(
-  columns: (0.78fr, 0.72fr, 1.5fr),
+  columns: (0.8fr, 0.72fr, 1.48fr),
   inset: (x: 7pt, y: 5pt),
   stroke: 0.4pt + luma(200),
-  [#text(weight: "bold")[Surface]],
-  [#text(weight: "bold")[Status]],
-  [#text(weight: "bold")[Meaning now]],
+  [#text(weight: "bold")[Part]],
+  [#text(weight: "bold")[State]],
+  [#text(weight: "bold")[Plain meaning]],
 
-  [`S02 software`],
-  [#text(fill: rgb("#16a34a"), weight: "bold")[retained]],
-  [Validates curated ordinary Tonic workloads and stable artifact labels.],
+  [Software path],
+  [#text(fill: rgb("#16a34a"), weight: "bold")[works]],
+  [The ordinary Tonic workloads can be validated and packaged.],
 
-  [`S03 IDXD`],
-  [#text(fill: rgb("#16a34a"), weight: "bold")[visible gate]],
-  [Prepared-host gate for accelerated artifacts; preflight blocks remain explicit instead of hidden.],
+  [IDXD path],
+  [#text(fill: rgb("#2563eb"), weight: "bold")[gated]],
+  [The IDXD verifier is in place, but a clean live rerun needs the prepared host to pass preflight.],
 
-  [`S04 package`],
-  [#text(fill: rgb("#2563eb"), weight: "bold")[stable report]],
-  [Assembles software, IDXD, and control-floor evidence into CSV / JSON / markdown outputs.],
+  [Claim package],
+  [#text(fill: rgb("#16a34a"), weight: "bold")[stable]],
+  [The workflow emits JSON, CSV, and markdown summaries that can be reviewed.],
 
-  [Current ratios],
+  [Current numbers],
   [#text(fill: rgb("#dc2626"), weight: "bold")[no win]],
-  [Existing `latest/` rows show IDXD at about `0.003x`--`0.653x` software throughput across curated rows.],
+  [The current rows show IDXD at about `0.003x`--`0.653x` of software throughput.],
 )
 
 #v(0.35em)
@@ -182,158 +181,146 @@
   columns: (1fr, 1fr),
   gutter: 12pt,
   [#card(
-    [What is safe to say],
-    [The repository can validate the ordinary path, validate the IDXD path contract, and publish a stable comparison package. The current table is useful as a blocking or falsifying surface.],
+    [Small claim],
+    [The Tonic measurement workflow is now clearer and easier to rerun. It does not currently support a positive acceleration claim.],
     fill: c-row,
     body-size: 10.8pt,
   )],
   [#card(
-    [What remains blocked],
-    [A stronger Tonic acceleration claim needs a prepared-host S03 pass and an S04 package regenerated from fresh live accelerated artifacts, not fixture-backed mixed provenance.],
+    [Next proof needed],
+    [Run the IDXD side again on a prepared host, then rebuild the comparison package from fresh live artifacts.],
     fill: c-red,
     body-size: 10.8pt,
   )],
 )
 
-== Async IDXD path: owned buffers plus direct completion
+== Rust IDXD API: make ownership explicit
 
 #grid(
   columns: (0.92fr, 1.08fr),
   column-gutter: 16pt,
   [#panel(fill: c-blue)[
-    #text(weight: "bold", fill: c-title)[Public contract]
+    #text(weight: "bold", fill: c-title)[Public API change]
     #v(0.35em)
     #card(
       [`AsyncMemmoveRequest::new(source: Bytes, destination: BytesMut)`],
-      [The caller owns both buffers. The source length is the transfer size; the destination is returned in `AsyncMemmoveResult` with the validation report.],
+      [The caller provides both buffers. The library does the memmove and returns the destination plus a validation report.],
       fill: white,
-      body-size: 10.6pt,
+      body-size: 10.8pt,
     )
     #v(0.4em)
     #card(
-      [Rejected stale surfaces],
-      [`copy_exact`, `copy_into`, source-only constructors, public borrowed copy-back helpers, and `result.bytes` are intentionally not the post-migration API.],
+      [Why this is simpler],
+      [The API no longer hides destination allocation or copy-back behavior. The caller can see exactly what memory is submitted.],
       fill: white,
-      body-size: 10.4pt,
+      body-size: 10.8pt,
     )
   ]],
   [#panel(fill: c-green)[
-    #text(weight: "bold", fill: c-title)[Runtime implementation]
+    #text(weight: "bold", fill: c-title)[Direct Tokio path]
     #v(0.35em)
-    + Direct Tokio runtime owns descriptors, completion records, source, destination, retry metadata, and waiter state until terminal completion.
-    + ENQCMD acceptance/rejection is bounded and typed; backpressure includes retry budget/count and completion snapshot metadata.
-    + The monitor resolves futures from completion snapshots and preserves accepted operation ownership even if an awaiter is dropped.
-    + Hardware claim evidence remains gated by verifier `verdict=pass claim_eligible=true`.
+    + Each accepted operation owns its descriptor, completion record, source, and destination until it finishes.
+    + Completion records, not submit acceptance alone, decide when the future resolves.
+    + Backpressure, retry count, completion status, and validation phase stay visible in errors.
+    + Payload bytes are not printed in diagnostics.
   ]],
 )
 
 #v(0.35em)
 
 #note[
-  Important design constraint: inline ENQCMD is allowed for v1; software aggregation, batching, and MOVDIR64 support are future optimization topics, not prerequisites.
+  Software batching and alternate submit paths are still future work. They are not needed to explain the current API.
 ]
 
-== Canonical package shape: less legacy ambiguity
+== Package cleanup: one safe crate, one raw crate
 
 #grid(
   columns: (0.95fr, 1.05fr),
   column-gutter: 16pt,
   [#panel(fill: c-orange)[
-    #text(weight: "bold", fill: c-title)[Before consolidation]
+    #text(weight: "bold", fill: c-title)[Before]
     #v(0.35em)
-    + Active safe crate: `accel-rpc/dsa-ffi`.
-    + Raw package name: `idxd-bindings` in `dsa-bindings/`.
-    + Top-level `dsa-ffi/` wrapper scripts looked like another owner.
-    + `tonic-profile` depended on the stale safe crate name.
+    + Safe code lived under `dsa-ffi`.
+    + Raw bindings were named `idxd-bindings`.
+    + Wrapper scripts made it hard to tell which path was current.
+    + Downstream code still pointed at old names.
   ]],
   [#panel(fill: c-green)[
-    #text(weight: "bold", fill: c-title)[After the pass]
+    #text(weight: "bold", fill: c-title)[Now]
     #v(0.35em)
-    + Canonical raw layer: `idxd-sys`.
-    + Canonical safe/Tokio layer: `idxd-rust`.
-    + Top-level compatibility wrappers dispatch to canonical scripts instead of defining ownership.
-    + Package inventory verifier rejects active drift back to `dsa-ffi`, `idxd-bindings`, or `dsa-bindings`.
+    + `idxd-rust` is the safe Rust and Tokio-facing crate.
+    + `idxd-sys` is the raw UAPI and MMIO crate.
+    + Compatibility wrappers point to the new scripts.
+    + A package inventory check catches old active references.
   ]],
 )
 
 #v(0.4em)
 
 #callout(fill: c-blue, stroke: c-accent)[
-  The cleanup matters because future Tonic or generic-IDXD work can now depend on one named safe layer and one named raw layer instead of rediscovering which legacy crate owns the proof surface.
+  This is not a performance result. It is a cleanup result: future work has fewer names to reason about and fewer stale entrypoints to trip over.
 ]
 
-== Maintainability work: cleanup without semantics drift
+== Code quality: easier to navigate, less magic
 
 #table(
   columns: (0.9fr, 1.08fr, 1.02fr),
   inset: (x: 7pt, y: 5pt),
   stroke: 0.4pt + luma(200),
-  [#text(weight: "bold")[Track]],
-  [#text(weight: "bold")[What improved]],
-  [#text(weight: "bold")[Non-change boundary]],
+  [#text(weight: "bold")[Area]],
+  [#text(weight: "bold")[What changed]],
+  [#text(weight: "bold")[What did not change]],
 
-  [`bon` / `snafu`],
-  [Builders and SNAFU stayed where they clarify config or diagnostics: validation config, `hw-eval` config, sync/async/direct errors, and WQ-open context.],
-  [No builder around request buffers, raw descriptors, proof-private CLI structs, report schemas, or hot-loop policy.],
+  [Builders and errors],
+  [Used builders and SNAFU errors only where they made config or diagnostics clearer.],
+  [No builder was added around raw descriptors, request buffers, benchmark hot loops, or report records.],
 
-  [Readability split],
-  [`idxd-rust` direct async, `tokio_memmove_bench`, `hw-eval`, and `idxd-sys` now have clearer owner modules and guard scripts.],
-  [No public API churn, schema version churn, raw unsafe hiding, or prepared-host claim from host-free proof.],
+  [Module split],
+  [`idxd-rust`, `idxd-sys`, and `hw-eval` now have clearer owner modules and guard scripts.],
+  [Public APIs, JSON fields, verifier output, and raw hardware behavior were kept stable.],
 
-  [`idxd-sys` raw boundary],
-  [Descriptor, portal, completion, timing, topology, and cache concerns are separated behind a lean facade.],
-  [Raw ABI layout, `std::io::Result`, volatile status reads, and ENQCMD accepted/rejected signals stay visible.],
+  [Raw boundary],
+  [`idxd-sys` now separates descriptor, portal, completion, timing, topology, and cache helpers.],
+  [Low-level facts such as OS errors, volatile status reads, and ENQCMD accepted/rejected results stay visible.],
 )
 
 #v(0.35em)
 
-#grid(
-  columns: (1fr, 1fr),
-  gutter: 12pt,
-  [#card(
-    [Why this was worth doing],
-    [Most of the next risk is integration complexity, not one missing helper. Making owner boundaries visible reduces the chance that future work duplicates lifecycle code or overstates ordinary-host checks.],
-    fill: c-row,
-    body-size: 10.8pt,
-  )],
-  [#card(
-    [Proof discipline preserved],
-    [Reports and verifiers keep the no-payload rule: diagnostics may include paths, lengths, phases, statuses, retry counts, and timings, but not source/destination bytes or dumps.],
-    fill: c-blue,
-    body-size: 10.8pt,
-  )],
-)
+#callout(fill: c-blue, stroke: c-accent)[
+  The practical benefit is maintenance: a future change should now have a clearer owner, a clearer test, and a smaller chance of duplicating lifecycle code.
+]
 
-== Generic IDXD architecture: one seam, representative operations
+== Generic IDXD session: shared shape for DSA and IAX
 
 #grid(
   columns: (1fr, 1fr),
   gutter: 14pt,
   [#panel(fill: c-green)[
-    #text(weight: "bold", fill: c-title)[Core architecture]
+    #text(weight: "bold", fill: c-title)[What was added]
     #v(0.35em)
-    + `IdxdSession<Accel>` owns one `WqPortal` and one typed config.
-    + `Dsa`, `Iax`, and `Iaa` keep accelerator-family naming explicit.
-    + `IdxdSession<Dsa>::memmove` and `IdxdSession<Iax>::crc64` are the representative public operations.
-    + Static marker types avoid public `dyn` dispatch or a broad operation hierarchy.
+    + `IdxdSession<Dsa>` for DSA memmove.
+    + `IdxdSession<Iax>` for IAX crc64.
+    + One portal owner and one config shape.
+    + Separate operation code for DSA and IAX details.
   ]],
   [#panel(fill: c-blue)[
-    #text(weight: "bold", fill: c-title)[Shared lifecycle]
+    #text(weight: "bold", fill: c-title)[What is shared]
     #v(0.35em)
-    + `run_blocking_operation` owns reset, fill, submit, observe, classify, retry, and return.
-    + DSA and IAX adapters own descriptor/completion state and operation-specific classification.
-    + `WqPortal::submit_desc64` owns the dedicated/shared 64-byte descriptor submission branch.
-    + Proof and benchmark CLIs consume the API instead of bypassing it.
+    + Reset and fill a descriptor.
+    + Submit it to the work queue.
+    + Watch the completion record.
+    + Classify success, retry, or failure.
+    + Return typed operation results.
   ]],
 )
 
 #v(0.35em)
 
-#callout(fill: c-orange, stroke: rgb("#f97316"))[
-  The elegance decision is intentionally scoped: no full DSA/IAX surface, no scheduler, no pooling, no batching framework, no RPC integration, and no benchmark matrix inside M011.
+#note[
+  This is intentionally small. It does not try to cover every DSA or IAX operation yet.
 ]
 
-== Prepared-host proof and measured rows
+== Small hardware proof
 
 #table(
   columns: (0.72fr, 0.68fr, 0.66fr, 0.62fr, 0.62fr, 0.7fr, 0.7fr),
@@ -347,23 +334,23 @@
   [#text(weight: "bold", size: 10.4pt)[Mean latency]],
   [#text(weight: "bold", size: 10.4pt)[Rate]],
 
-  [S03],
+  [Operation proof],
   [`dsa-memmove`],
   [`/dev/dsa/wq0.0`],
   [`64`],
   [n/a],
   [`completed`],
-  [`verdict=pass`],
+  [`pass`],
 
-  [S03],
+  [Operation proof],
   [`iax-crc64`],
   [`/dev/iax/wq1.0`],
   [`64`],
   [n/a],
   [`completed`],
-  [`crc64_verified=true`],
+  [`crc ok`],
 
-  [S04],
+  [Small bench],
   [`dsa-memmove`],
   [`/dev/dsa/wq0.0`],
   [`4096`],
@@ -371,7 +358,7 @@
   [`6,837 ns`],
   [`146,246 ops/s`],
 
-  [S04],
+  [Small bench],
   [`iax-crc64`],
   [`/dev/iax/wq1.0`],
   [`4096`],
@@ -385,69 +372,69 @@
 #grid(
   columns: (1fr, 1fr, 1fr),
   gutter: 10pt,
-  [#metric-card([Verifier], [`verdict=pass`], [S03 operation proof and S04 measured-number proof both passed], fill: c-green, accent: rgb("#16a34a"))],
-  [#metric-card([Profile], [`release`], [S04 required release-profile measurements with `claim_eligible=true`], fill: c-blue)],
-  [#metric-card([Failures], [`0 / 2000`], [S04 representative benchmark completed all required operations], fill: c-row, accent: rgb("#f97316"))],
+  [#metric-card([Verifier], [pass], [operation proof and small benchmark both passed], fill: c-green, accent: rgb("#16a34a"))],
+  [#metric-card([Build], [release], [measurements were collected in release mode], fill: c-blue)],
+  [#metric-card([Failures], [`0 / 2000`], [benchmark operations completed without failed rows], fill: c-row, accent: rgb("#f97316"))],
 )
 
 #v(0.2em)
 
 #note[
-  These are representative proof rows, not a performance characterization: no size sweep, concurrency sweep, batching comparison, software baseline, or optional shared-DSA claim is included.
+  This is a proof that the new path works on two representative operations. It is not a full benchmark study.
 ]
 
-== What is now stronger than two weeks ago?
+== What this means
 
 #grid(
   columns: (1fr, 1fr),
   gutter: 14pt,
   [#panel(fill: c-green)[
-    #text(weight: "bold", fill: c-title)[Supported now]
+    #text(weight: "bold", fill: c-title)[Safe to say now]
     #v(0.35em)
-    + The canonical Rust IDXD stack has a real safe layer and raw layer with host-free guards.
-    + Direct Tokio async memmove has explicit buffer ownership, completion-driven futures, and typed failure metadata.
-    + Generic DSA/IAX session architecture is not just sketched: representative DSA memmove and IAX crc64 completed on prepared hardware.
-    + Release-profile representative rows prove the new seam can produce positive measured metrics.
+    + The Rust IDXD code is in a cleaner shape.
+    + Async memmove has a clearer ownership model.
+    + DSA memmove and IAX crc64 both ran through the new generic session path.
+    + The small release-mode benchmark produced positive metrics for both rows.
   ]],
   [#panel(fill: c-red)[
-    #text(weight: "bold", fill: c-title)[Still not supported]
+    #text(weight: "bold", fill: c-title)[Do not say yet]
     #v(0.35em)
-    + A Tonic end-to-end IDXD speedup claim.
-    + Full DSA/IAX/IAA operation coverage.
-    + A production scheduler, pooling layer, batching policy, or MOVDIR64 strategy.
-    + Broad benchmark conclusions from the tiny representative S04 proof.
+    + IDXD speeds up Tonic end to end.
+    + The benchmark results generalize across sizes or workloads.
+    + The generic session covers the full DSA/IAX surface.
+    + The code is ready for production scheduling or batching.
   ]],
 )
 
 #v(0.4em)
 
 #callout(fill: c-blue, stroke: c-accent)[
-  The progress is architectural credibility plus proof plumbing: the project can now make small hardware-backed claims honestly, while rejecting bigger claims until the matching evidence exists.
+  The small conclusion is enough: the library path is cleaner, the proof path is real, and the next Tonic claim needs a focused rerun.
 ]
 
-== Recommended next discussion
+== Next step
 
 #grid(
   columns: (1fr, 1fr, 1fr),
   gutter: 12pt,
   [#stage-card(
-    [Option A — Tonic rerun],
-    [Use the prepared-host path to refresh the IDXD subtree and rebuild the ordinary-vs-IDXD package.],
-    [Best if the meeting needs an application-level claim.],
+    [1. Rerun Tonic evidence],
+    [Use a prepared host to refresh the IDXD side, then rebuild the ordinary-vs-IDXD comparison package.],
+    [Best next step for an advisor update.],
     fill: c-row,
     accent: c-accent,
   )],
   [#stage-card(
-    [Option B — generic seam expansion],
-    [Add the next DSA or IAX operation only when a concrete consumer and verifier exist.],
-    [Best if architecture maturation is the goal.],
+    [2. Add one more operation],
+    [Extend the generic session only when there is a real consumer and a verifier for the new operation.],
+    [Best next step for library growth.],
     fill: c-row,
     accent: rgb("#16a34a"),
   )],
   [#stage-card(
-    [Option C — proof utility extraction],
-    [Wait for one more peer verifier, then extract shared launcher/artifact/no-payload helpers.],
-    [Best if verifier duplication starts slowing work.],
+    [3. Clean verifier helpers],
+    [Extract shared launcher and artifact helpers only after one more verifier repeats the same pattern.],
+    [Best next step if scripts become painful.],
     fill: c-row,
     accent: rgb("#f97316"),
   )],
@@ -456,5 +443,5 @@
 #v(0.5em)
 
 #note[
-  My recommendation: start with #text(weight: "bold")[Option A] if the advisor meeting is about the original Tonic motivation; choose #text(weight: "bold")[Option B] only if the next milestone is explicitly about the IDXD library surface.
+  Recommended next step: rerun the Tonic comparison on a prepared host, because that is the result closest to the original project question.
 ]
