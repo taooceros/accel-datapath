@@ -15,10 +15,16 @@
 //! record observation. The async API intentionally has no public allocation
 //! convenience constructor and no borrowed copy-back helper; destination
 //! allocation and ownership stay explicit at the call site.
+//!
+//! `IdxdSession<Accel>` is the new generic IDXD architecture seam for DSA and IAX/IAA
+//! work-queue ownership. In this first version it opens one queue and exposes metadata only;
+//! `DsaSession` and `AsyncDsaSession` remain the live memmove submission paths until later
+//! slices add generic operations deliberately.
 
 mod async_direct;
 mod async_session;
 mod direct_memmove;
+mod session;
 mod validation;
 
 #[doc(hidden)]
@@ -32,6 +38,7 @@ pub use async_session::{
     AsyncMemmoveRequest, AsyncMemmoveRequestError, AsyncMemmoveResult, AsyncMemmoveWorker,
     AsyncWorkerFailureKind,
 };
+pub use session::{Accelerator, Dsa, Iaa, Iax, IdxdSession, IdxdSessionConfig, IdxdSessionError};
 pub use validation::{
     COMPLETION_TIMEOUT_STATUS, CompletionAction, CompletionSnapshot, DEFAULT_DEVICE_PATH,
     DEFAULT_MAX_PAGE_FAULT_RETRIES, DsaConfig, MAX_MEMMOVE_BYTES, MemmoveError, MemmovePhase,
