@@ -131,6 +131,16 @@ bash idxd-rust/scripts/check_m011_s04_benchmark_report.sh docs/report/benchmarki
 
 Expected-failure output is useful diagnostics for an unprepared host, but it is not R023 evidence. The no-payload rule still applies: reports and artifacts may record operation metadata, status values, CRC scalars, timing aggregates, and artifact paths, but must not include raw buffer bytes or byte dumps.
 
+## S05 architecture and elegance audit
+
+Use the final M011/S05 audit when you need the handoff verdict for whether the generic `IdxdSession<Accel>` architecture stayed clean, lean, and free of avoidable lifecycle duplication. The audit lives at `docs/report/architecture/017.generic_idxd_elegance_audit.md`; validate its report/source guard with:
+
+```bash
+bash idxd-rust/scripts/check_m011_s05_elegance_audit.sh docs/report/architecture/017.generic_idxd_elegance_audit.md
+```
+
+The audit consumes the S03/S04 evidence above. It does not replace a fresh hardware verifier run if milestone closure policy separately asks for one.
+
 ## Choose the proof path
 
 Use the synchronous proof path when you are isolating the raw crate-owned DSA memmove contract:
