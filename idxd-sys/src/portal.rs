@@ -1,4 +1,5 @@
 use crate::descriptor::DsaHwDesc;
+use crate::iax::IaxHwDesc;
 use std::fs::OpenOptions;
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
@@ -30,7 +31,7 @@ unsafe impl Send for WqPortal {}
 unsafe impl Sync for WqPortal {}
 
 impl WqPortal {
-    /// Open a DSA work queue device (e.g., "/dev/dsa/wq0.0").
+    /// Open an IDXD work queue device (e.g., "/dev/dsa/wq0.0" or "/dev/iax/wq1.0").
     pub fn open(path: &Path) -> std::io::Result<Self> {
         let file = OpenOptions::new().read(true).write(true).open(path)?;
         let fd = file.as_raw_fd();
@@ -65,54 +66,137 @@ impl WqPortal {
         self.dedicated
     }
 
-    /// Submit a descriptor to the work queue via MOVDIR64B (dedicated WQ).
+    /// Submit a raw 64-byte descriptor to a dedicated WQ via MOVDIR64B.
+    ///
+    /// # Safety
+    /// `desc` must be non-null, valid to read 64 bytes from, and 64-byte
+    /// aligned. The descriptor's completion record and all referenced buffers
+    /// must remain valid until the operation completes. The caller must only use
+    /// this helper with a dedicated work queue that accepts MOVDIR64B.
+    #[inline(always)]
+    pub unsafe fn submit_movdir64b_desc64(&self, desc: *const u8) {
+        // SAFETY: The caller guarantees that `desc` points to a valid,
+        // 64-byte-aligned descriptor and that its completion record stays alive
+        // until hardware completion. `self.portal` is a live WQ portal mapping
+        // owned by this `WqPortal`.
+        unsafe {
+            core::arch::asm!(
+                "movdir64b ({src}), {dst}",
+                dst = in(reg) self.portal,
+                src = in(reg) desc,
+                options(nostack, preserves_flags, att_syntax),
+            );
+        }
+    }
+
+    /// Submit a raw 64-byte descriptor via ENQCMD. Returns true if accepted.
+    ///
+    /// # Safety
+    /// `desc` must be non-null, valid to read 64 bytes from, and 64-byte
+    /// aligned. The descriptor's completion record and all referenced buffers
+    /// must remain valid until hardware completion if this returns true. The
+    /// caller must only use this helper with a shared work queue that accepts
+    /// ENQCMD submission.
+    #[inline(always)]
+    pub unsafe fn submit_enqcmd_desc64(&self, desc: *const u8) -> bool {
+        let mut accepted: u8;
+        // SAFETY: The caller guarantees that `desc` points to a valid,
+        // 64-byte-aligned descriptor and that its completion record stays alive
+        // until hardware completion. `self.portal` is a live WQ portal mapping
+        // owned by this `WqPortal`. ENQCMD reports shared-WQ backpressure
+        // through ZF, which is copied into `accepted` once.
+        unsafe {
+            core::arch::asm!(
+                "enqcmd {dst}, [{src}]", // Intel syntax: dst, [src]
+                "setnz {accepted}",      // ZF=0 (success) -> accepted=1
+                dst = in(reg) self.portal,
+                src = in(reg) desc,
+                accepted = out(reg_byte) accepted,
+                // Removed preserves_flags because we modify ZF.
+                options(nostack),
+            );
+        }
+        accepted != 0
+    }
+
+    /// Submit a raw 64-byte descriptor via ENQCMD once and expose hardware backpressure.
+    ///
+    /// This helper never falls back to MOVDIR64B and never retries or spins;
+    /// async callers should pair [`EnqcmdSubmission::Rejected`] with bounded
+    /// yielding or backoff in async context.
+    ///
+    /// # Safety
+    /// `desc` must be non-null, valid to read 64 bytes from, and 64-byte
+    /// aligned. The descriptor's completion record and all referenced buffers
+    /// must remain valid until hardware completion if this method returns
+    /// [`EnqcmdSubmission::Accepted`]. The caller must only use this helper with
+    /// a shared work queue that accepts ENQCMD submission.
+    #[inline(always)]
+    pub unsafe fn submit_enqcmd_once_desc64(&self, desc: *const u8) -> EnqcmdSubmission {
+        // SAFETY: Forwarding this unsafe API's descriptor/completion lifetime
+        // requirements to the raw ENQCMD primitive. This wrapper adds only the
+        // typed accepted/rejected result and does not call `submit_desc64`.
+        if unsafe { self.submit_enqcmd_desc64(desc) } {
+            EnqcmdSubmission::Accepted
+        } else {
+            EnqcmdSubmission::Rejected
+        }
+    }
+
+    /// Submit a raw 64-byte descriptor using the appropriate method for this WQ type.
+    ///
+    /// Shared queues spin until ENQCMD accepts the descriptor, preserving the
+    /// blocking helper semantics used by the existing DSA synchronous path.
+    ///
+    /// # Safety
+    /// `desc` must be non-null, valid to read 64 bytes from, and 64-byte
+    /// aligned. The descriptor's completion record and all referenced buffers
+    /// must remain valid until the operation completes.
+    #[inline(always)]
+    pub unsafe fn submit_desc64(&self, desc: *const u8) {
+        if self.dedicated {
+            // SAFETY: Forwarding this unsafe API's descriptor/completion
+            // validity requirements to the dedicated-WQ raw primitive.
+            unsafe { self.submit_movdir64b_desc64(desc) };
+        } else {
+            // Retry until accepted (shared WQ may reject under contention).
+            loop {
+                // SAFETY: Forwarding this unsafe API's descriptor/completion
+                // validity requirements to the shared-WQ raw primitive.
+                if unsafe { self.submit_enqcmd_desc64(desc) } {
+                    break;
+                }
+                core::hint::spin_loop();
+            }
+        }
+    }
+
+    /// Submit a DSA descriptor to the work queue via MOVDIR64B (dedicated WQ).
     ///
     /// # Safety
     /// Descriptor must be valid and 64-byte aligned. Completion record must
     /// remain valid until the operation completes.
     #[inline(always)]
     pub unsafe fn submit_movdir64b(&self, desc: &DsaHwDesc) {
-        // SAFETY: The caller guarantees that `desc` points to a valid,
-        // 64-byte-aligned DSA descriptor and that its completion record stays
-        // alive until hardware completion. `self.portal` is a live WQ portal
-        // mapping owned by this `WqPortal`.
-        unsafe {
-            core::arch::asm!(
-                "movdir64b ({src}), {dst}",
-                dst = in(reg) self.portal,
-                src = in(reg) desc.as_raw_ptr(),
-                options(nostack, preserves_flags, att_syntax),
-            );
-        }
+        // SAFETY: `DsaHwDesc` restores 64-byte descriptor alignment and this
+        // typed wrapper forwards the caller's descriptor/completion lifetime
+        // requirements to the raw MOVDIR64B primitive.
+        unsafe { self.submit_movdir64b_desc64(desc.as_raw_ptr().cast::<u8>()) };
     }
 
-    /// Submit a descriptor via ENQCMD (shared WQ). Returns true if accepted.
+    /// Submit a DSA descriptor via ENQCMD (shared WQ). Returns true if accepted.
     ///
     /// # Safety
     /// Same requirements as submit_movdir64b.
     #[inline(always)]
     pub unsafe fn submit_enqcmd(&self, desc: &DsaHwDesc) -> bool {
-        let mut retry: u8;
-        // SAFETY: The caller guarantees that `desc` points to a valid,
-        // 64-byte-aligned DSA descriptor and that its completion record stays
-        // alive until hardware completion. `self.portal` is a live WQ portal
-        // mapping owned by this `WqPortal`. ENQCMD reports shared-WQ
-        // backpressure through ZF, which is copied into `retry` once.
-        unsafe {
-            core::arch::asm!(
-                "enqcmd {dst}, [{src}]", // Intel syntax: dst, [src]
-                "setnz {result}",        // ZF=0 (success) -> result=1
-                dst = in(reg) self.portal,
-                src = in(reg) desc.as_raw_ptr(),
-                result = out(reg_byte) retry,
-                // Removed preserves_flags because we modify ZF.
-                options(nostack),
-            );
-        }
-        retry != 0
+        // SAFETY: `DsaHwDesc` restores 64-byte descriptor alignment and this
+        // typed wrapper forwards the caller's descriptor/completion lifetime
+        // requirements to the raw ENQCMD primitive.
+        unsafe { self.submit_enqcmd_desc64(desc.as_raw_ptr().cast::<u8>()) }
     }
 
-    /// Submit a descriptor via ENQCMD once and expose hardware backpressure.
+    /// Submit a DSA descriptor via ENQCMD once and expose hardware backpressure.
     ///
     /// This helper never falls back to MOVDIR64B and never retries or spins;
     /// direct async callers should pair `Rejected` with bounded yielding or
@@ -125,37 +209,36 @@ impl WqPortal {
     /// this helper with a shared work queue that accepts ENQCMD submission.
     #[inline(always)]
     pub unsafe fn submit_enqcmd_once(&self, desc: &DsaHwDesc) -> EnqcmdSubmission {
-        // SAFETY: Forwarding this unsafe API's descriptor/completion lifetime
-        // requirements to the raw ENQCMD primitive. This wrapper adds only the
-        // typed accepted/rejected result and does not call `submit`.
-        if unsafe { self.submit_enqcmd(desc) } {
-            EnqcmdSubmission::Accepted
-        } else {
-            EnqcmdSubmission::Rejected
-        }
+        // SAFETY: `DsaHwDesc` restores 64-byte descriptor alignment and this
+        // typed wrapper forwards the caller's descriptor/completion lifetime
+        // requirements to the non-spinning raw ENQCMD-once primitive.
+        unsafe { self.submit_enqcmd_once_desc64(desc.as_raw_ptr().cast::<u8>()) }
     }
 
-    /// Submit a descriptor using the appropriate method for this WQ type.
+    /// Submit a DSA descriptor using the appropriate method for this WQ type.
     ///
     /// # Safety
     /// Descriptor and completion record must be valid.
     #[inline(always)]
     pub unsafe fn submit(&self, desc: &DsaHwDesc) {
-        if self.dedicated {
-            // SAFETY: Forwarding this unsafe API's descriptor/completion
-            // validity requirements to the dedicated-WQ submission primitive.
-            unsafe { self.submit_movdir64b(desc) };
-        } else {
-            // Retry until accepted (shared WQ may reject under contention).
-            loop {
-                // SAFETY: Forwarding this unsafe API's descriptor/completion
-                // validity requirements to the shared-WQ submission primitive.
-                if unsafe { self.submit_enqcmd(desc) } {
-                    break;
-                }
-                core::hint::spin_loop();
-            }
-        }
+        // SAFETY: `DsaHwDesc` restores 64-byte descriptor alignment and this
+        // typed wrapper forwards the caller's descriptor/completion lifetime
+        // requirements to the one raw WQ-mode branch.
+        unsafe { self.submit_desc64(desc.as_raw_ptr().cast::<u8>()) };
+    }
+
+    /// Submit an IAX/IAA descriptor using the appropriate method for this WQ type.
+    ///
+    /// # Safety
+    /// Descriptor and completion record must be valid. The descriptor must have
+    /// been filled for the target IAX/IAA operation, and all referenced buffers
+    /// must remain valid until hardware completion.
+    #[inline(always)]
+    pub unsafe fn submit_iax(&self, desc: &IaxHwDesc) {
+        // SAFETY: `IaxHwDesc` restores 64-byte descriptor alignment and this
+        // typed wrapper forwards the caller's descriptor/completion lifetime
+        // requirements to the one raw WQ-mode branch.
+        unsafe { self.submit_desc64(desc.as_raw_ptr().cast::<u8>()) };
     }
 }
 

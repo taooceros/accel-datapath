@@ -23,6 +23,7 @@ pub use idxd_uapi as idxd;
 mod cache;
 mod completion;
 mod descriptor;
+mod iax;
 mod portal;
 mod timing;
 mod topology;
@@ -35,6 +36,14 @@ pub use descriptor::{
     DSA_OPCODE_COMPARE, DSA_OPCODE_COMPVAL, DSA_OPCODE_COPY_CRC, DSA_OPCODE_CRCGEN,
     DSA_OPCODE_DUALCAST, DSA_OPCODE_MEMFILL, DSA_OPCODE_MEMMOVE, DSA_OPCODE_NOOP,
     DsaCompletionRecord, DsaHwDesc, IDXD_OP_FLAG_CC, IDXD_OP_FLAG_CRAV, IDXD_OP_FLAG_RCR,
+};
+pub use iax::{
+    BindgenIaxCompletionRecord, BindgenIaxHwDesc, IAX_COMP_NONE, IAX_COMP_OUTBUF_OVERFLOW,
+    IAX_COMP_PAGE_FAULT_IR, IAX_COMP_STATUS_MASK, IAX_COMP_SUCCESS, IAX_CRC64_FLAGS_OFFSET,
+    IAX_CRC64_POLY_OFFSET, IAX_CRC64_POLY_T10DIF, IAX_CRC64_RESULT_OFFSET, IAX_OPCODE_COMPRESS,
+    IAX_OPCODE_CRC64, IAX_OPCODE_DECOMPRESS, IAX_OPCODE_MEMMOVE, IAX_OPCODE_NOOP,
+    IAX_STATUS_ANALYTICS_ERROR, IaxCompletionRecord, IaxHwDesc, crc16_t10dif, crc64_t10dif_field,
+    drain_iax_completions, poll_iax_completion, reset_iax_completion, touch_iax_fault_page,
 };
 pub use portal::{EnqcmdSubmission, WqPortal};
 pub use timing::{cycles_to_ns, lfence, rdtscp, tsc_frequency_hz};
