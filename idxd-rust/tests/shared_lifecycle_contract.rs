@@ -128,6 +128,66 @@ fn generic_representative_operations_delegate_to_shared_lifecycle() {
 }
 
 #[test]
+fn representative_proof_binary_uses_generic_sessions_only() {
+    let source = read_crate_file("src/bin/live_idxd_op.rs");
+
+    for required in [
+        "IdxdSession::<Dsa>::open",
+        "IdxdSession::<Iax>::open",
+        "session.memmove(&mut dst, &src)",
+        "session.crc64(&src)",
+    ] {
+        assert!(
+            source.contains(required),
+            "representative proof binary should exercise the generic session operation path: missing {required:?}"
+        );
+    }
+
+    for forbidden in [
+        "DsaSession",
+        "WqPortal",
+        "submit_movdir64b",
+        "submit_enqcmd",
+        "is_dedicated",
+        "run_direct_memmove",
+        "run_iax_crc64",
+        "portal.submit(",
+    ] {
+        assert!(
+            !source.contains(forbidden),
+            "representative proof binary must not bypass the generic session/lifecycle boundary: found {forbidden:?}"
+        );
+    }
+}
+
+#[test]
+fn readme_documents_representative_proof_contract() {
+    let readme = read_crate_file("README.md");
+
+    for required in [
+        "live_idxd_op",
+        "verify_idxd_representative_ops.sh",
+        "IDXD_RUST_VERIFY_DSA_DEVICE",
+        "IDXD_RUST_VERIFY_IAX_DEVICE",
+        "IDXD_RUST_VERIFY_DSA_SHARED_DEVICE",
+        "dsa-memmove",
+        "iax-crc64",
+        "verdict=pass",
+        "verdict=expected_failure",
+        "artifact_paths",
+        "stdout_paths",
+        "stderr_paths",
+        "no-payload",
+        "not a benchmark",
+    ] {
+        assert!(
+            readme.contains(required),
+            "README should document the representative proof contract token {required:?}"
+        );
+    }
+}
+
+#[test]
 fn operation_modules_do_not_branch_on_work_queue_mode() {
     let operation_modules = [
         (
