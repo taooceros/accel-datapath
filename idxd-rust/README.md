@@ -1,7 +1,9 @@
 # idxd-rust
 
-`idxd-rust` is the crate-local proof surface for the first real Rust DSA memmove path in this repo.
-It does one thing truthfully: open one Intel DSA work queue, submit one real memmove, verify the copied bytes, and report the exact failure class instead of silently falling back to software.
+`idxd-rust` is the crate-local proof surface for real Rust Intel IDXD data paths in this repo.
+It truthfully opens work queues, submits representative operations, verifies or reports the exact failure class, and avoids silently falling back to software.
+
+The mature path is DSA memmove. The generic `IdxdSession<Accel>` seam now also exposes representative operations for DSA memmove and IAX/IAA crc64 so downstream hardware proof can exercise both accelerator families without adopting a broad operation framework.
 
 ## Who this is for
 
@@ -15,13 +17,15 @@ After reading, you should be able to:
 
 ## What lives here
 
-- `DsaSession` is the only live submission path.
+- `DsaSession` is the established DSA memmove submission path. It remains a separate public type and is not an alias for the generic session seam.
+- `IdxdSession<Dsa>` and `IdxdSession<Iax>` are the concrete marker-family uses of the lean `IdxdSession<Accel>` operation seam. `IdxdSession<Dsa>::memmove` uses the same blocking DSA lifecycle as `DsaSession`; `IdxdSession<Iax>::crc64` and the `Iaa` spelling use the representative IAX/IAA crc64 lifecycle. This is intentionally narrow coverage, not a public operation hierarchy or a full accelerator runtime.
 - `AsyncDsaSession` is the explicit lifecycle owner for the async path.
 - `AsyncDsaHandle` is the only cloneable Tokio-facing surface. Cloning it shares one direct async runtime with one mapped work-queue portal and completion monitor; it never duplicates hardware ownership.
-- `live_memmove` is the crate-local synchronous validation binary.
+- `live_memmove` is the crate-local synchronous validation binary for the legacy direct `DsaSession` proof path.
+- `live_idxd_op` is the narrow S03 representative proof binary for generic `IdxdSession<Dsa>` memmove and `IdxdSession<Iax>` crc64 runs.
 - `await_memmove` is the crate-local async validation binary that exercises the public owner-plus-handle contract.
 - `tokio_memmove_bench` is the standalone Tokio-only direct async benchmark/proof binary. It emits JSON-first evidence for single latency, concurrent submissions, and fixed-duration throughput.
-- `verify_live_memmove.sh`, `verify_async_memmove.sh`, and `verify_tokio_memmove_bench.sh` are the operational verifiers that wrap hardware proof binaries in the repo's `launch` capability flow and check the machine-readable artifacts they emit.
+- `verify_live_memmove.sh`, `verify_async_memmove.sh`, `verify_tokio_memmove_bench.sh`, and `verify_idxd_representative_ops.sh` are the operational verifiers that wrap hardware proof binaries in the repo's `launch` capability flow and check the machine-readable artifacts they emit.
 
 ## Prerequisites
 
@@ -33,6 +37,109 @@ You need a host that is already prepared for user-space DSA access:
 - `tools/build/dsa_launcher` built with `cap_sys_rawio+eip`.
 
 The repo's launcher background and capability model are documented in the launcher docs under `tools/`.
+
+## S03 representative hardware proof
+
+Use the representative proof when you need to show that the generic session seam runs one DSA operation and one IAX/IAA operation on real work queues. It is not a benchmark: it records whether representative hardware work ran and how failures were classified, not latency or throughput numbers. `hw-eval` remains diagnostic and benchmark prior art, and `live_memmove` remains the legacy direct `DsaSession` proof. S03 closure evidence must come from `live_idxd_op` or `verify_idxd_representative_ops.sh` exercising `IdxdSession<Accel>`.
+
+The verifier is the preferred operator entrypoint because it builds the proof binary, runs it through the launcher flow, validates artifacts, and prints machine-readable phase lines:
+
+```bash
+IDXD_RUST_VERIFY_DSA_DEVICE=/dev/dsa/wq0.0 \
+IDXD_RUST_VERIFY_IAX_DEVICE=/dev/iax/wq1.0 \
+IDXD_RUST_VERIFY_BYTES=64 \
+bash idxd-rust/scripts/verify_idxd_representative_ops.sh
+```
+
+The required target roles are `dsa-memmove` on a DSA work queue and `iax-crc64` on an IAX/IAA work queue. Set `IDXD_RUST_VERIFY_DSA_SHARED_DEVICE=/dev/dsa/wq0.1` when you also want the optional shared-DSA target; if unset, the verifier uses a second discovered DSA work queue when one is visible.
+
+Useful verifier knobs:
+
+- `IDXD_RUST_VERIFY_DSA_DEVICE` — required DSA target override when discovery should not pick the first `/dev/dsa/wq*`.
+- `IDXD_RUST_VERIFY_IAX_DEVICE` — required IAX/IAA target override when discovery should not pick the first `/dev/iax/wq*`.
+- `IDXD_RUST_VERIFY_DSA_SHARED_DEVICE` — optional second DSA target for the shared-WQ representative check.
+- `IDXD_RUST_VERIFY_BYTES` — requested bytes per operation; the verifier default is the small proof size `64`.
+- `IDXD_RUST_VERIFY_OUTPUT_DIR` — stable directory for JSON artifacts plus captured stdout/stderr.
+- `IDXD_RUST_VERIFY_PREFLIGHT_TIMEOUT` and `IDXD_RUST_VERIFY_RUN_TIMEOUT` — separate bounds for launcher preflight and runtime operation phases.
+- `IDXD_RUST_VERIFY_PROFILE` — Cargo profile used to build `live_idxd_op` before execution.
+- `IDXD_RUST_VERIFY_SKIP_BUILD=1`, `IDXD_RUST_VERIFY_BINARY`, and `IDXD_RUST_VERIFY_LAUNCHER_PATH` — reuse an existing proof binary or launcher. Pair a binary override with `IDXD_RUST_VERIFY_SKIP_BUILD=1` so the verifier does not build one binary and execute another.
+
+Each `live_idxd_op` JSON artifact uses the same no-payload schema for success and failure:
+
+- `ok`
+- `operation`
+- `accelerator`
+- `device_path`
+- `requested_bytes`
+- `page_fault_retries`
+- `final_status`
+- `phase`
+- `error_kind`
+- `completion_error_code`
+- `invalid_flags`
+- `fault_addr`
+- `crc64`
+- `expected_crc64`
+- `crc64_verified`
+- `message`
+
+The verifier also prints phase lines with `launcher_status`, `targets`, `artifact_paths`, `stdout_paths`, and `stderr_paths`. A final `verdict=pass` line means the required representative targets completed and the artifacts matched stdout. A final `verdict=expected_failure` line means the host, launcher, queue, timeout, or operation failure was classified truthfully; that is useful diagnostic output on an unprepared host, but it is not S03 closure evidence and does not satisfy the prepared-host representative proof requirement.
+
+The no-payload rule is strict. Reports may include operation metadata, status values, retry counts, CRC scalars, and artifact paths; they must not dump raw buffers. The verifier rejects malformed JSON, stdout/artifact disagreement, contradictory exit statuses, and payload dump fields before downstream evidence can consume the output.
+
+For a narrower repro, run the proof binary directly against one target:
+
+```bash
+cargo run -p idxd-rust --bin live_idxd_op -- \
+  --op dsa-memmove \
+  --device /dev/dsa/wq0.0 \
+  --bytes 64 \
+  --format json \
+  --artifact /tmp/live_idxd_op-dsa.json
+
+cargo run -p idxd-rust --bin live_idxd_op -- \
+  --op iax-crc64 \
+  --device /dev/iax/wq1.0 \
+  --bytes 64 \
+  --format json \
+  --artifact /tmp/live_idxd_op-iax.json
+```
+
+Direct binary runs are useful for debugging one target. The verifier remains the stable S03/S04 handoff contract because it records all target roles and artifact/stdout/stderr paths in one validated output stream.
+
+## S04 representative measured-number proof
+
+Use the S04 measured-number proof when you need a small release-profile benchmark run for the representative generic session paths. It exercises `IdxdSession<Accel>` through the required `dsa-memmove` and `iax-crc64` rows, records positive latency and throughput aggregates, and keeps the claim narrow: this is not a broad benchmark matrix or final performance comparison.
+
+```bash
+mkdir -p target/m011-s04-representative-bench && \
+IDXD_RUST_VERIFY_PROFILE=release \
+IDXD_RUST_VERIFY_DSA_DEVICE=/dev/dsa/wq0.0 \
+IDXD_RUST_VERIFY_IAX_DEVICE=/dev/iax/wq1.0 \
+IDXD_RUST_VERIFY_BYTES=4096 \
+IDXD_RUST_VERIFY_ITERATIONS=1000 \
+IDXD_RUST_VERIFY_OUTPUT_DIR=target/m011-s04-representative-bench \
+bash idxd-rust/scripts/verify_idxd_representative_bench.sh | \
+tee target/m011-s04-representative-bench/verify.log
+```
+
+A valid closure run ends with `verdict=pass`, `launcher_status=ready`, `profile=release`, and `claim_eligible=true`. It writes JSON, stdout, stderr, and raw launcher stdout files into the configured output directory. The tracked measured-number report is `docs/report/benchmarking/015.m011_representative_idxd_numbers_2026-04-30.md`; validate it with:
+
+```bash
+bash idxd-rust/scripts/check_m011_s04_benchmark_report.sh docs/report/benchmarking/015.m011_representative_idxd_numbers_2026-04-30.md
+```
+
+Expected-failure output is useful diagnostics for an unprepared host, but it is not R023 evidence. The no-payload rule still applies: reports and artifacts may record operation metadata, status values, CRC scalars, timing aggregates, and artifact paths, but must not include raw buffer bytes or byte dumps.
+
+## S05 architecture and elegance audit
+
+Use the final M011/S05 audit when you need the handoff verdict for whether the generic `IdxdSession<Accel>` architecture stayed clean, lean, and free of avoidable lifecycle duplication. The audit lives at `docs/report/architecture/017.generic_idxd_elegance_audit.md`; validate its report/source guard with:
+
+```bash
+bash idxd-rust/scripts/check_m011_s05_elegance_audit.sh docs/report/architecture/017.generic_idxd_elegance_audit.md
+```
+
+The audit consumes the S03/S04 evidence above. It does not replace a fresh hardware verifier run if milestone closure policy separately asks for one.
 
 ## Choose the proof path
 

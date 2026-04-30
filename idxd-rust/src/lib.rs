@@ -15,10 +15,21 @@
 //! record observation. The async API intentionally has no public allocation
 //! convenience constructor and no borrowed copy-back helper; destination
 //! allocation and ownership stay explicit at the call site.
+//!
+//! `IdxdSession<Accel>` is the generic IDXD architecture direction for the sealed `Dsa`
+//! and `Iax`/`Iaa` marker families. It opens one work queue and now carries narrow
+//! representative operations: `IdxdSession<Dsa>::memmove` reuses the same blocking DSA
+//! lifecycle as `DsaSession`, while `IdxdSession<Iax>::crc64`/`IdxdSession<Iaa>::crc64`
+//! use an IAX-owned descriptor/completion interpreter. This is intentionally not full
+//! DSA/IAX coverage and does not introduce a public operation trait hierarchy or runtime
+//! accelerator dispatch.
 
 mod async_direct;
 mod async_session;
 mod direct_memmove;
+mod iax_crc64;
+mod lifecycle;
+mod session;
 mod validation;
 
 #[doc(hidden)]
@@ -32,6 +43,11 @@ pub use async_session::{
     AsyncMemmoveRequest, AsyncMemmoveRequestError, AsyncMemmoveResult, AsyncMemmoveWorker,
     AsyncWorkerFailureKind,
 };
+pub use iax_crc64::{
+    IAX_CRC64_COMPLETION_TIMEOUT_STATUS, IaxCrc64Error, IaxCrc64Phase, IaxCrc64Report,
+    IaxCrc64Result, MAX_IAX_CRC64_BYTES,
+};
+pub use session::{Accelerator, Dsa, Iaa, Iax, IdxdSession, IdxdSessionConfig, IdxdSessionError};
 pub use validation::{
     COMPLETION_TIMEOUT_STATUS, CompletionAction, CompletionSnapshot, DEFAULT_DEVICE_PATH,
     DEFAULT_MAX_PAGE_FAULT_RETRIES, DsaConfig, MAX_MEMMOVE_BYTES, MemmoveError, MemmovePhase,
@@ -41,8 +57,8 @@ pub use validation::{
 use std::path::Path;
 
 use bytes::buf::UninitSlice;
-use direct_memmove::{DirectMemmoveState, verify_initialized_destination};
-use idxd_sys::{WqPortal, poll_completion, touch_fault_page};
+use direct_memmove::{run_direct_memmove, verify_initialized_destination};
+use idxd_sys::WqPortal;
 
 /// Thin reusable session over one mapped DSA work queue.
 pub struct DsaSession {
@@ -142,28 +158,8 @@ impl DsaSession {
         // SAFETY: `DsaSession::memmove` and `memmove_uninit` validated that the
         // source and destination ranges cover `request.len()` bytes. Both calls
         // keep those buffers borrowed for this entire synchronous operation, so
-        // the descriptor and completion record inside `state` cannot outlive the
-        // memory referenced by hardware.
-        let mut state = unsafe { DirectMemmoveState::new(src, dst, request) };
-
-        loop {
-            state.reset_and_fill_descriptor();
-
-            unsafe {
-                self.portal.submit(state.descriptor());
-            }
-
-            let polled_status = poll_completion(state.completion());
-            let snapshot = CompletionSnapshot::from_record(state.completion(), polled_status);
-            match state.classify_snapshot(self.dsa_config(), snapshot)? {
-                CompletionAction::Success => {
-                    return state.success_report(self.device_path(), snapshot.status);
-                }
-                CompletionAction::Retry(retry) => {
-                    touch_fault_page(state.completion());
-                    state.apply_retry(retry);
-                }
-            }
-        }
+        // the lifecycle-owned descriptor and completion record cannot outlive
+        // the memory referenced by hardware.
+        unsafe { run_direct_memmove(&self.portal, self.dsa_config(), src, dst, request) }
     }
 }
