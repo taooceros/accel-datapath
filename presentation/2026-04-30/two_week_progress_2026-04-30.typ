@@ -406,32 +406,47 @@
   My preferred first pass is `4 KiB` and `1 MiB` uncompressed. Compression should come after the copy/buffer story is clean.
 ]
 
-== My struggle with the agent
+== My struggle with the agent — why it helped
+
+#callout(fill: c-blue, stroke: c-accent)[
+  This was not criticism. The useful loop was: the agent kept the details safe, and I kept steering the story toward what I could explain to my advisor.
+]
+
+#v(0.35em)
 
 #grid(
-  columns: (1fr, 1fr),
-  gutter: 14pt,
+  columns: (1fr, 1fr, 1fr),
+  gutter: 12pt,
   [#panel(fill: c-orange)[
-    #text(weight: "bold", fill: c-title)[What the agent kept giving me]
-    #v(0.35em)
-    + too many internal artifact names
-    + too many verification details
-    + a status report instead of a story
+    #text(weight: "bold", fill: c-title)[Agent default]
+    #v(0.3em)
+    + many artifacts and exact paths
+    + careful verification language
+    + lots of small true statements
+    + too much repo-internal wording
   ]],
   [#panel(fill: c-green)[
-    #text(weight: "bold", fill: c-title)[What I kept asking for]
-    #v(0.35em)
-    + one small claim
-    + human wording
-    + connection to the old DSA experiment
-    + a clear next experiment
+    #text(weight: "bold", fill: c-title)[My revisions]
+    #v(0.3em)
+    + make one small claim
+    + sound like a human talk
+    + connect to the old DSA method
+    + explain the next experiment
+  ]],
+  [#panel(fill: c-row)[
+    #text(weight: "bold", fill: c-title)[Why it worked]
+    #v(0.3em)
+    + detail stayed available
+    + claims stayed honest
+    + the narrative became clearer
+    + collaboration improved the slide
   ]],
 )
 
 #v(0.45em)
 
 #callout(fill: c-blue, stroke: c-accent)[
-  The real revision was turning implementation progress into a research story I can say out loud.
+  The final story came from combining agent memory with human judgment: keep the evidence, but present the research argument.
 ]
 
 == What I want feedback on
