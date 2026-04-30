@@ -406,6 +406,34 @@
   My preferred first pass is `4 KiB` and `1 MiB` uncompressed. Compression should come after the copy/buffer story is clean.
 ]
 
+== My struggle with the agent
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 14pt,
+  [#panel(fill: c-orange)[
+    #text(weight: "bold", fill: c-title)[What the agent kept giving me]
+    #v(0.35em)
+    + too many internal artifact names
+    + too many verification details
+    + a status report instead of a story
+  ]],
+  [#panel(fill: c-green)[
+    #text(weight: "bold", fill: c-title)[What I kept asking for]
+    #v(0.35em)
+    + one small claim
+    + human wording
+    + connection to the old DSA experiment
+    + a clear next experiment
+  ]],
+)
+
+#v(0.45em)
+
+#callout(fill: c-blue, stroke: c-accent)[
+  The real revision was turning implementation progress into a research story I can say out loud.
+]
+
 == What I want feedback on
 
 #grid(
