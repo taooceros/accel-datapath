@@ -223,7 +223,7 @@ fn execute_dsa_memmove(args: &CliArgs) -> OperationReport {
 }
 
 fn execute_iax_crc64(args: &CliArgs) -> OperationReport {
-    let src = deterministic_src(args.requested_bytes);
+    let src = deterministic_crc64_src(args.requested_bytes);
 
     let session = match IdxdSession::<Iax>::open(&args.device_path) {
         Ok(session) => session,
@@ -570,6 +570,28 @@ fn deterministic_src(len: usize) -> Vec<u8> {
     (0..len)
         .map(|index| ((index * 31 + 17) % 251) as u8)
         .collect()
+}
+
+fn deterministic_crc64_src(len: usize) -> Vec<u8> {
+    if len < 2 {
+        return vec![0; len];
+    }
+
+    let mut src = deterministic_src(len);
+    for high in 0..=u8::MAX {
+        for low in 0..=u8::MAX {
+            src[len - 2] = high;
+            src[len - 1] = low;
+            if crc64_t10dif_field(&src) == 0 {
+                return src;
+            }
+        }
+    }
+
+    // CRC16/T10DIF over two unconstrained trailer bytes can always drive the
+    // final residue to zero. Keep a conservative all-zero fallback rather than
+    // failing before queue-open if a future helper implementation changes.
+    vec![0; len]
 }
 
 fn opt_display<T: std::fmt::Display>(value: Option<T>) -> String {

@@ -177,7 +177,8 @@ fi
 [[ -x "${LAUNCHER_PATH}" ]] || complete_with_explicit_failure preflight "launcher_status=missing_launcher launcher_path=${LAUNCHER_PATH} message=build the launcher with launch in a privileged shell before running this verifier"
 
 if command -v getcap >/dev/null 2>&1; then
-  LAUNCHER_CAPS=$(getcap "${LAUNCHER_PATH}" || true)
+  LAUNCHER_CAP_CHECK_PATH=$(readlink -f "${LAUNCHER_PATH}" 2>/dev/null || printf '%s' "${LAUNCHER_PATH}")
+  LAUNCHER_CAPS=$(getcap "${LAUNCHER_CAP_CHECK_PATH}" || true)
   if [[ "${LAUNCHER_CAPS}" != *"cap_sys_rawio"* ]]; then
     complete_with_explicit_failure preflight "launcher_status=missing_capability launcher_path=${LAUNCHER_PATH} message=launcher lacks cap_sys_rawio+eip"
   fi
@@ -205,6 +206,33 @@ fi
 if [[ "${PREFLIGHT_EXIT}" -ne 2 ]] || ! grep -q 'invalid value `abc` for `--bytes`' "${PREFLIGHT_STDERR_PATH}"; then
   fail_phase preflight "launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} stdout=${PREFLIGHT_STDOUT_PATH} stderr=${PREFLIGHT_STDERR_PATH} message=launch-wrapped invalid-argument preflight failed"
 fi
+
+normalize_launch_stdout() {
+  local raw_stdout_path=$1
+  local normalized_stdout_path=$2
+
+  if [[ ! -f "${raw_stdout_path}" ]]; then
+    return 0
+  fi
+
+  # The repo's `launch` wrapper prints its own "Running: .../dsa_launcher ..." banner
+  # to stdout before execing the proof binary. Keep stdout_paths as the proof
+  # binary's stdout contract by dropping only that wrapper banner; preserve a raw
+  # `.raw` sibling for low-level launcher debugging.
+  python3 - <<'PY' "${raw_stdout_path}" "${normalized_stdout_path}"
+import sys
+from pathlib import Path
+
+raw_path = Path(sys.argv[1])
+normalized_path = Path(sys.argv[2])
+lines = raw_path.read_text(encoding='utf-8').splitlines()
+filtered = [line for line in lines if not (line.startswith('Running: ') and 'dsa_launcher' in line)]
+text = '\n'.join(filtered)
+if text:
+    text += '\n'
+normalized_path.write_text(text, encoding='utf-8')
+PY
+}
 
 validate_artifact() {
   local artifact=$1
@@ -411,8 +439,9 @@ run_target() {
   local artifact=${TARGET_ARTIFACTS[$index]}
   local stdout_path=${TARGET_STDOUTS[$index]}
   local stderr_path=${TARGET_STDERRS[$index]}
+  local raw_stdout_path="${stdout_path}.raw"
 
-  log_phase runtime "target=${label} operation=${op} device_path=${device} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} binary=${BINARY_PATH} requested_bytes=${REQUEST_BYTES} artifact=${artifact} stdout=${stdout_path} stderr=${stderr_path} timeout=${RUN_TIMEOUT}"
+  log_phase runtime "target=${label} operation=${op} device_path=${device} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} binary=${BINARY_PATH} requested_bytes=${REQUEST_BYTES} artifact=${artifact} stdout=${stdout_path} stderr=${stderr_path} raw_stdout=${raw_stdout_path} timeout=${RUN_TIMEOUT}"
 
   local run_exit=0
   if timeout "${RUN_TIMEOUT}" \
@@ -422,11 +451,12 @@ run_target() {
       --bytes "${REQUEST_BYTES}" \
       --format json \
       --artifact "${artifact}" \
-      >"${stdout_path}" 2>"${stderr_path}"; then
+      >"${raw_stdout_path}" 2>"${stderr_path}"; then
     run_exit=0
   else
     run_exit=$?
   fi
+  normalize_launch_stdout "${raw_stdout_path}" "${stdout_path}"
 
   if [[ "${run_exit}" -eq 124 ]]; then
     complete_with_explicit_failure runtime "target=${label} operation=${op} device_path=${device} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} failure_kind=timeout artifact=${artifact} stdout=${stdout_path} stderr=${stderr_path} message=launch-wrapped representative operation exceeded timeout"

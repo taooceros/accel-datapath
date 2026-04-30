@@ -161,6 +161,44 @@ fn representative_proof_binary_uses_generic_sessions_only() {
 }
 
 #[test]
+fn representative_benchmark_binary_uses_generic_sessions_only() {
+    let source = read_crate_file("src/bin/idxd_representative_bench.rs");
+
+    for required in [
+        "IdxdSession::<Dsa>::open",
+        "IdxdSession::<Iax>::open",
+        "session.memmove(&mut dst, &src)",
+        "session.crc64(&src)",
+        "crc64_t10dif_field",
+        "profile()",
+        "\"release\"",
+    ] {
+        assert!(
+            source.contains(required),
+            "representative benchmark should exercise the generic session operation path: missing {required:?}"
+        );
+    }
+
+    for forbidden in [
+        "DsaSession",
+        "WqPortal",
+        "submit_movdir64b",
+        "submit_enqcmd",
+        "run_direct_memmove",
+        "run_iax_crc64",
+        "portal.submit(",
+        "hw-eval",
+        "pub trait",
+        "unsafe",
+    ] {
+        assert!(
+            !source.contains(forbidden),
+            "representative benchmark must not bypass the generic session/lifecycle boundary: found {forbidden:?}"
+        );
+    }
+}
+
+#[test]
 fn readme_documents_representative_proof_contract() {
     let readme = read_crate_file("README.md");
 
