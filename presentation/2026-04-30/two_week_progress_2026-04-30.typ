@@ -1,25 +1,24 @@
-// Simplified two-week progress presentation, 2026-04-30
-// Reader: technical advisor / project collaborator reviewing the last two weeks.
-// Small claim: the Rust IDXD path is now cleaner and has a small real-hardware proof; this is not yet a Tonic speedup claim.
+// Advisor-facing two-week progress presentation, 2026-04-30
+// Reader: advisor / project collaborator reviewing the research direction.
+// Small claim: the Rust IDXD path is now cleaner and has a small real-hardware proof; the next step is a Tonic experiment modeled after the earlier dsa-stdexec layer-removal method.
 // Sources:
-// - git log --since 2026-04-16 on branch gsd/quick/5-generate-a-presentation-based-on-what-i
+// - presentation/2026-03-31/progress_2026-03-31.typ
+// - presentation/2026-04-08/tonic_research_story.typ
+// - docs/report/benchmarking/006.stdexec_overhead_results.md
+// - docs/report/benchmarking/012.tonic_characterization_refinement_results.md
+// - docs/report/benchmarking/013.fleetbench_rpc_characterization_intake.md
 // - docs/report/benchmarking/014.idxd_tonic_same_repo_claim_package.md
-// - docs/report/architecture/004.bytes_async_memmove_contract.md
-// - docs/report/api/006_async_memmove_inline_contract.md
-// - docs/report/architecture/007.direct_tokio_async_memmove_implementation.md
-// - docs/report/integration-review/004.idxd_ffi_consolidation_inventory.md
-// - docs/report/m008/006.cleanup_conventions_and_integrated_proof.md
-// - docs/report/architecture/015.hardware_rust_integrated_readability_evidence.md
-// - docs/report/architecture/016.lean_bon_snafu_refactor.md
 // - docs/report/hw_eval/011.m011_s03_representative_ops_2026-04-30.md
 // - docs/report/benchmarking/015.m011_representative_idxd_numbers_2026-04-30.md
 // - docs/report/architecture/017.generic_idxd_elegance_audit.md
+// - dsa-stdexec/benchmark/dsa/README.md
+// - dsa-stdexec/benchmark/dsa/strategies/README.md
 
 #import "../template.typ": callout, card, deck, note, palette, panel, stage-card
 
 #show: deck.with(
   margin: (x: 42pt, y: 30pt),
-  size: 13.5pt,
+  size: 13.4pt,
   leading: 0.84em,
   spacing: 0.66em,
 )
@@ -41,7 +40,7 @@
 )[
   #text(size: 10.5pt, fill: luma(90))[#label]
   #v(0.15em)
-  #text(size: 22pt, weight: "bold", fill: accent)[#value]
+  #text(size: 21pt, weight: "bold", fill: accent)[#value]
   #v(0.15em)
   #text(size: 10.2pt, fill: luma(65))[#body]
 ]
@@ -49,7 +48,7 @@
 = Two-week progress update
 
 #align(center + horizon)[
-  #text(size: 18pt)[A cleaner Rust IDXD path, with a small hardware proof]
+  #text(size: 18pt)[Building the Tonic experiment from the DSA lesson]
   #v(0.7em)
   #text(size: 15pt)[Hongtao Zhang]
   #v(0.25em)
@@ -59,268 +58,229 @@
 #v(0.7em)
 
 #callout(fill: c-blue, stroke: c-accent)[
-  Small claim for this update: #text(weight: "bold")[the Rust IDXD path is now cleaner, easier to test, and has a small real-hardware proof]. This is #text(weight: "bold")[not yet] a claim that IDXD speeds up Tonic end to end.
+  The simple story: earlier `dsa-stdexec` experiments showed how to test accelerator overhead by removing one software layer at a time. Over the last two weeks, I made the Rust IDXD path clean enough to run that style of experiment inside Tonic.
 ]
 
-== The short version
+== The big picture
 
 #grid(
   columns: (1fr, 1fr, 1fr),
   gutter: 12pt,
   [#panel(fill: c-blue)[
-    #text(weight: "bold", fill: c-title)[Tonic result]
+    #text(weight: "bold", fill: c-title)[What we learned before]
     #v(0.25em)
-    + I cleaned up the Tonic evidence package.
-    + The current data does not show an IDXD speedup.
-    + A stronger Tonic result needs a fresh prepared-host rerun.
+    + DSA can be fast when submission cost is amortized.
+    + Then the software path becomes visible.
+    + The useful method was not guessing; it was comparing controlled layers.
   ]],
   [#panel(fill: c-green)[
-    #text(weight: "bold", fill: c-title)[Rust IDXD work]
+    #text(weight: "bold", fill: c-title)[What I did now]
     #v(0.25em)
-    + Moved async memmove to explicit owned buffers.
-    + Added a direct Tokio completion path.
-    + Replaced legacy crate names with `idxd-rust` and `idxd-sys`.
+    + Cleaned up the Rust IDXD crates.
+    + Built a clearer async memmove path.
+    + Proved one DSA operation and one IAX operation on hardware.
   ]],
   [#panel(fill: c-row)[
-    #text(weight: "bold", fill: c-title)[Hardware proof]
+    #text(weight: "bold", fill: c-title)[What this enables]
     #v(0.25em)
-    + Added one shared session shape for DSA and IAX.
-    + Ran DSA memmove and IAX crc64 on prepared hardware.
-    + Collected a small release-mode measurement.
+    + A Tonic experiment with the same discipline.
+    + Ordinary path, software-control path, and IDXD path can be compared.
+    + The claim can stay small until the data supports more.
   ]],
 )
 
 #v(0.35em)
 
 #note[
-  The update is useful because it narrows the story. We now know what is proved, what is not proved, and what should be tested next.
+  Small claim for today: the Rust IDXD path is cleaner and has a limited real-hardware proof. I am not claiming a Tonic speedup yet.
 ]
 
-== Work done during the two weeks
+== Reminder: why the old DSA experiment mattered
 
 #grid(
-  columns: (0.92fr, 1.08fr),
+  columns: (1.18fr, 0.82fr),
   column-gutter: 16pt,
-  [#panel(fill: c-row)[
-    #text(weight: "bold", fill: c-title)[Work volume]
+  [#panel(fill: c-blue)[
+    #text(weight: "bold", fill: c-title)[Layer-removal result]
     #v(0.35em)
-    #grid(
-      columns: (1fr, 1fr),
-      gutter: 8pt,
-      [#metric-card([Commits], [136], [non-merge commits since Apr 16], fill: white)],
-      [#metric-card([Active days], [6], [Apr 24, 25, 27, 28, 29, 30], fill: white, accent: rgb("#16a34a"))],
-      [#metric-card([Main crates], [3], [`idxd-rust`, `idxd-sys`, `hw-eval`], fill: white, accent: rgb("#f97316"))],
-      [#metric-card([Deck claim], [small], [library progress plus limited hardware proof], fill: white, accent: rgb("#7c3aed"))],
+    #table(
+      columns: (1.45fr, 0.78fr, 0.7fr, 0.66fr),
+      inset: (x: 6pt, y: 5pt),
+      stroke: 0.4pt + luma(200),
+      [#text(weight: "bold")[Path]],
+      [#text(weight: "bold", size: 10.5pt)[Throughput]],
+      [#text(weight: "bold", size: 10.5pt)[Per-op]],
+      [#text(weight: "bold", size: 10.5pt)[vs base]],
+      [Full stdexec], [26.3 Mpps], [38.0 ns], [1.00x],
+      [Direct path], [41.6 Mpps], [24.0 ns], [1.58x],
+      [Reusable ops], [59.9 Mpps], [16.7 ns], [2.28x],
+    )
+    #v(0.4em)
+    #card(
+      [The key number],
+      [Removing framework layers cut per-operation cost by about `56%`: from `38.0 ns` to `16.7 ns`. At low concurrency, the reusable path reached `84 Mpps`.],
+      fill: white,
+      body-size: 10.8pt,
     )
   ]],
-  [#panel(fill: c-blue)[
-    #text(weight: "bold", fill: c-title)[Main phases]
-    #v(0.3em)
-    #stage-card(
-      [Apr 24--27: clean up the evidence boundary],
-      [Tonic evidence was rewritten around what the current package can actually show. Legacy package names were also consolidated.],
-      [Make the story honest and easier to follow.],
-      fill: white,
-      accent: c-accent,
-    )
-    #v(0.18em)
-    #stage-card(
-      [Apr 27--28: build the async path],
-      [The async API now uses caller-owned buffers, and direct Tokio completion is the main path.],
-      [Make async IDXD testable and observable.],
-      fill: white,
-      accent: rgb("#16a34a"),
-    )
-    #v(0.18em)
-    #stage-card(
-      [Apr 29--30: simplify and generalize],
-      [The hardware Rust code was split by responsibility, then DSA and IAX were connected through one shared session pattern.],
-      [Make the code easier to extend.],
-      fill: white,
-      accent: rgb("#f97316"),
-    )
-  ]],
-)
-
-== Tonic: the current result is negative or inconclusive
-
-#callout(fill: c-orange, stroke: rgb("#f97316"))[
-  Do not claim a Tonic speedup yet. The current package proves that the workflow exists, but the current rows do not show IDXD beating the ordinary software path.
-]
-
-#v(0.25em)
-
-#table(
-  columns: (0.8fr, 0.72fr, 1.48fr),
-  inset: (x: 7pt, y: 5pt),
-  stroke: 0.4pt + luma(200),
-  [#text(weight: "bold")[Part]],
-  [#text(weight: "bold")[State]],
-  [#text(weight: "bold")[Plain meaning]],
-
-  [Software path],
-  [#text(fill: rgb("#16a34a"), weight: "bold")[works]],
-  [The ordinary Tonic workloads can be validated and packaged.],
-
-  [IDXD path],
-  [#text(fill: rgb("#2563eb"), weight: "bold")[gated]],
-  [The IDXD verifier is in place, but a clean live rerun needs the prepared host to pass preflight.],
-
-  [Claim package],
-  [#text(fill: rgb("#16a34a"), weight: "bold")[stable]],
-  [The workflow emits JSON, CSV, and markdown summaries that can be reviewed.],
-
-  [Current numbers],
-  [#text(fill: rgb("#dc2626"), weight: "bold")[no win]],
-  [The current rows show IDXD at about `0.003x`--`0.653x` of software throughput.],
-)
-
-#v(0.35em)
-
-#grid(
-  columns: (1fr, 1fr),
-  gutter: 12pt,
-  [#card(
-    [Small claim],
-    [The Tonic measurement workflow is now clearer and easier to rerun. It does not currently support a positive acceleration claim.],
-    fill: c-row,
-    body-size: 10.8pt,
-  )],
-  [#card(
-    [Next proof needed],
-    [Run the IDXD side again on a prepared host, then rebuild the comparison package from fresh live artifacts.],
-    fill: c-red,
-    body-size: 10.8pt,
-  )],
-)
-
-== Rust IDXD API: make ownership explicit
-
-#grid(
-  columns: (0.92fr, 1.08fr),
-  column-gutter: 16pt,
-  [#panel(fill: c-blue)[
-    #text(weight: "bold", fill: c-title)[Public API change]
+  [#panel(fill: c-green)[
+    #text(weight: "bold", fill: c-title)[Real hardware context]
     #v(0.35em)
     #card(
-      [`AsyncMemmoveRequest::new(source: Bytes, destination: BytesMut)`],
-      [The caller provides both buffers. The library does the memmove and returns the destination plus a validation report.],
+      [DSA lower bound],
+      [A later hardware-floor run reached `48.4 Mops/s` for `64 B` memmove with pipelined batching.],
       fill: white,
       body-size: 10.8pt,
     )
     #v(0.4em)
     #card(
-      [Why this is simpler],
-      [The API no longer hides destination allocation or copy-back behavior. The caller can see exactly what memory is submitted.],
+      [What that means],
+      [The device is not the only problem. Once hardware work is cheap enough, software structure can decide whether offload helps.],
       fill: white,
       body-size: 10.8pt,
     )
   ]],
+)
+
+#v(0.3em)
+
+#callout(fill: c-orange, stroke: rgb("#f97316"))[
+  This is the method I want to reuse: build a ladder of comparable paths, remove one cost at a time, and only then say where the bottleneck is.
+]
+
+== Reusing that method for Tonic
+
+#table(
+  columns: (0.92fr, 1.05fr, 1.03fr),
+  inset: (x: 7pt, y: 6pt),
+  stroke: 0.4pt + luma(200),
+  [#text(weight: "bold")[Experiment step]],
+  [#text(weight: "bold")[What `dsa-stdexec` did]],
+  [#text(weight: "bold")[Tonic version]],
+
+  [1. Baseline],
+  [Full stdexec path with the normal sender/receiver stack.],
+  [Ordinary Tonic path with instrumentation off for throughput.],
+
+  [2. Software controls],
+  [Direct and reusable strategies removed framework costs one layer at a time.],
+  [Pooled buffers, copy-minimized paths, and lower-overhead stage counters.],
+
+  [3. Hardware path],
+  [Real DSA run checked whether the lower software cost transfers to hardware.],
+  [Prepared-host IDXD path through the same workload and artifact format.],
+
+  [4. Matched comparison],
+  [Same operation, size, concurrency, and strategy labels.],
+  [Same payload shape, size, concurrency, runtime, and endpoint split.],
+)
+
+#v(0.45em)
+
+#callout(fill: c-blue, stroke: c-accent)[
+  The next Tonic experiment should be a matched ladder: ordinary Tonic, software control Tonic, then IDXD Tonic.
+]
+
+== What changed in the last two weeks
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 12pt,
+  [#panel(fill: c-blue)[
+    #text(weight: "bold", fill: c-title)[Cleaner measurement boundary]
+    #v(0.25em)
+    + The current Tonic package now says plainly what it can and cannot prove.
+    + The current rows do not show an IDXD win.
+    + The workflow is still useful because it is rerunnable and reviewable.
+  ]],
   [#panel(fill: c-green)[
-    #text(weight: "bold", fill: c-title)[Direct Tokio path]
-    #v(0.35em)
-    + Each accepted operation owns its descriptor, completion record, source, and destination until it finishes.
-    + Completion records, not submit acceptance alone, decide when the future resolves.
-    + Backpressure, retry count, completion status, and validation phase stay visible in errors.
-    + Payload bytes are not printed in diagnostics.
+    #text(weight: "bold", fill: c-title)[Cleaner Rust path]
+    #v(0.25em)
+    + `idxd-rust` is now the safe Rust crate.
+    + `idxd-sys` is the raw UAPI/MMIO crate.
+    + Async memmove now uses explicit owned buffers.
+  ]],
+  [#panel(fill: c-row)[
+    #text(weight: "bold", fill: c-title)[Small hardware proof]
+    #v(0.25em)
+    + `IdxdSession<Dsa>` ran DSA memmove.
+    + `IdxdSession<Iax>` ran IAX crc64.
+    + A small release-mode benchmark produced positive rows.
   ]],
 )
 
 #v(0.35em)
 
 #note[
-  Software batching and alternate submit paths are still future work. They are not needed to explain the current API.
+  I see this as preparation work for the right experiment, not as the final application result.
 ]
 
-== Package cleanup: one safe crate, one raw crate
+== Tonic today: useful, but not a speedup claim
+
+#callout(fill: c-orange, stroke: rgb("#f97316"))[
+  The current Tonic result is negative or inconclusive: the package proves the workflow, but the current rows do not show IDXD beating the ordinary path.
+]
+
+#v(0.25em)
 
 #grid(
-  columns: (0.95fr, 1.05fr),
+  columns: (1fr, 1fr),
+  gutter: 14pt,
+  [#panel(fill: c-row)[
+    #text(weight: "bold", fill: c-title)[What is already useful]
+    #v(0.3em)
+    + Software path validation exists.
+    + IDXD verifier gate exists.
+    + JSON / CSV / markdown comparison package exists.
+    + Current rows show IDXD at roughly `0.003x`--`0.653x` of software throughput.
+  ]],
+  [#panel(fill: c-red)[
+    #text(weight: "bold", fill: c-title)[What is missing]
+    #v(0.3em)
+    + A fresh prepared-host IDXD rerun.
+    + Matched ordinary vs IDXD artifacts from the same run context.
+    + Lower-overhead stage attribution.
+    + A clear crossover rule for when offload helps.
+  ]],
+)
+
+#v(0.35em)
+
+#card(
+  [How I would say this to an advisor],
+  [I do not want to sell a speedup. I want to say that the comparison machinery is now honest enough to run the next experiment cleanly.],
+  fill: c-blue,
+  body-size: 11pt,
+)
+
+== Why the Rust cleanup matters for the experiment
+
+#grid(
+  columns: (0.92fr, 1.08fr),
   column-gutter: 16pt,
-  [#panel(fill: c-orange)[
+  [#panel(fill: c-blue)[
     #text(weight: "bold", fill: c-title)[Before]
     #v(0.35em)
-    + Safe code lived under `dsa-ffi`.
-    + Raw bindings were named `idxd-bindings`.
-    + Wrapper scripts made it hard to tell which path was current.
-    + Downstream code still pointed at old names.
+    + Old names like `dsa-ffi` and `idxd-bindings` made ownership unclear.
+    + Async request helpers hid too much buffer behavior.
+    + Some proof scripts and APIs were hard to explain as one clean path.
   ]],
   [#panel(fill: c-green)[
     #text(weight: "bold", fill: c-title)[Now]
     #v(0.35em)
-    + `idxd-rust` is the safe Rust and Tokio-facing crate.
-    + `idxd-sys` is the raw UAPI and MMIO crate.
-    + Compatibility wrappers point to the new scripts.
-    + A package inventory check catches old active references.
+    + `AsyncMemmoveRequest::new(source: Bytes, destination: BytesMut)` makes ownership explicit.
+    + Direct Tokio completion owns accepted operations until completion.
+    + Errors expose phase, retry, completion, and validation metadata without dumping payload bytes.
   ]],
 )
 
 #v(0.4em)
 
 #callout(fill: c-blue, stroke: c-accent)[
-  This is not a performance result. It is a cleanup result: future work has fewer names to reason about and fewer stale entrypoints to trip over.
+  This matters because Tonic offload will fail if the memory ownership and completion path are unclear. The cleanup makes the next experiment easier to trust.
 ]
 
-== Code quality: easier to navigate, less magic
-
-#table(
-  columns: (0.9fr, 1.08fr, 1.02fr),
-  inset: (x: 7pt, y: 5pt),
-  stroke: 0.4pt + luma(200),
-  [#text(weight: "bold")[Area]],
-  [#text(weight: "bold")[What changed]],
-  [#text(weight: "bold")[What did not change]],
-
-  [Builders and errors],
-  [Used builders and SNAFU errors only where they made config or diagnostics clearer.],
-  [No builder was added around raw descriptors, request buffers, benchmark hot loops, or report records.],
-
-  [Module split],
-  [`idxd-rust`, `idxd-sys`, and `hw-eval` now have clearer owner modules and guard scripts.],
-  [Public APIs, JSON fields, verifier output, and raw hardware behavior were kept stable.],
-
-  [Raw boundary],
-  [`idxd-sys` now separates descriptor, portal, completion, timing, topology, and cache helpers.],
-  [Low-level facts such as OS errors, volatile status reads, and ENQCMD accepted/rejected results stay visible.],
-)
-
-#v(0.35em)
-
-#callout(fill: c-blue, stroke: c-accent)[
-  The practical benefit is maintenance: a future change should now have a clearer owner, a clearer test, and a smaller chance of duplicating lifecycle code.
-]
-
-== Generic IDXD session: shared shape for DSA and IAX
-
-#grid(
-  columns: (1fr, 1fr),
-  gutter: 14pt,
-  [#panel(fill: c-green)[
-    #text(weight: "bold", fill: c-title)[What was added]
-    #v(0.35em)
-    + `IdxdSession<Dsa>` for DSA memmove.
-    + `IdxdSession<Iax>` for IAX crc64.
-    + One portal owner and one config shape.
-    + Separate operation code for DSA and IAX details.
-  ]],
-  [#panel(fill: c-blue)[
-    #text(weight: "bold", fill: c-title)[What is shared]
-    #v(0.35em)
-    + Reset and fill a descriptor.
-    + Submit it to the work queue.
-    + Watch the completion record.
-    + Classify success, retry, or failure.
-    + Return typed operation results.
-  ]],
-)
-
-#v(0.35em)
-
-#note[
-  This is intentionally small. It does not try to cover every DSA or IAX operation yet.
-]
-
-== Small hardware proof
+== Small hardware proof through the new path
 
 #table(
   columns: (0.72fr, 0.68fr, 0.66fr, 0.62fr, 0.62fr, 0.7fr, 0.7fr),
@@ -380,68 +340,95 @@
 #v(0.2em)
 
 #note[
-  This is a proof that the new path works on two representative operations. It is not a full benchmark study.
+  This is a proof that the path works for two representative operations. It is not a full performance study.
 ]
 
-== What this means
+== The next Tonic experiment I want to run
 
 #grid(
   columns: (1fr, 1fr),
   gutter: 14pt,
   [#panel(fill: c-green)[
-    #text(weight: "bold", fill: c-title)[Safe to say now]
+    #text(weight: "bold", fill: c-title)[Matched workload ladder]
     #v(0.35em)
-    + The Rust IDXD code is in a cleaner shape.
-    + Async memmove has a clearer ownership model.
-    + DSA memmove and IAX crc64 both ran through the new generic session path.
-    + The small release-mode benchmark produced positive metrics for both rows.
+    + Start with ordinary Tonic, instrumentation off.
+    + Rerun the same points with software controls: pooled buffers and copy-minimized mode.
+    + Rerun the same points through the IDXD path.
+    + Compare only matched size, payload shape, concurrency, runtime, and endpoint setup.
   ]],
-  [#panel(fill: c-red)[
-    #text(weight: "bold", fill: c-title)[Do not say yet]
+  [#panel(fill: c-blue)[
+    #text(weight: "bold", fill: c-title)[Evidence to collect]
     #v(0.35em)
-    + IDXD speeds up Tonic end to end.
-    + The benchmark results generalize across sizes or workloads.
-    + The generic session covers the full DSA/IAX surface.
-    + The code is ready for production scheduling or batching.
+    + Throughput and p99 from instrumentation-off runs.
+    + Stage attribution from lower-overhead counters.
+    + `perf` counters or flamegraphs for CPU explanation.
+    + Artifact package with ordinary, software-control, and IDXD rows side by side.
   ]],
 )
 
 #v(0.4em)
 
-#callout(fill: c-blue, stroke: c-accent)[
-  The small conclusion is enough: the library path is cleaner, the proof path is real, and the next Tonic claim needs a focused rerun.
+#callout(fill: c-orange, stroke: rgb("#f97316"))[
+  This mirrors the old DSA experiment: baseline, remove software overhead, add real hardware, then compare matched rows.
 ]
 
-== Next step
+== Which Tonic points should be first?
 
 #grid(
   columns: (1fr, 1fr, 1fr),
   gutter: 12pt,
   [#stage-card(
-    [1. Rerun Tonic evidence],
-    [Use a prepared host to refresh the IDXD side, then rebuild the ordinary-vs-IDXD comparison package.],
-    [Best next step for an advisor update.],
+    [4 KiB structured],
+    [The pooled-buffer control previously improved throughput by about `2.51x`.],
+    [Good first test for buffer policy.],
     fill: c-row,
     accent: c-accent,
   )],
   [#stage-card(
-    [2. Add one more operation],
-    [Extend the generic session only when there is a real consumer and a verifier for the new operation.],
-    [Best next step for library growth.],
+    [1 MiB structured],
+    [The earlier run was strongly memory-bound: about `63.7%` memory-bound in the refined pass.],
+    [Good first test for copy movement.],
     fill: c-row,
     accent: rgb("#16a34a"),
   )],
   [#stage-card(
-    [3. Clean verifier helpers],
-    [Extract shared launcher and artifact helpers only after one more verifier repeats the same pattern.],
-    [Best next step if scripts become painful.],
+    [64 KiB compression],
+    [Compression is payload-sensitive: structured was `0.585x`, random collapsed to `0.112x`.],
+    [Use only as a gated follow-up.],
     fill: c-row,
     accent: rgb("#f97316"),
   )],
 )
 
-#v(0.5em)
+#v(0.45em)
 
 #note[
-  Recommended next step: rerun the Tonic comparison on a prepared host, because that is the result closest to the original project question.
+  My preferred first pass is `4 KiB` and `1 MiB` uncompressed. Compression should come after the copy/buffer story is clean.
+]
+
+== What I want feedback on
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 14pt,
+  [#panel(fill: c-blue)[
+    #text(weight: "bold", fill: c-title)[Decision question]
+    #v(0.35em)
+    Does this experiment ladder answer the advisor-level question: #text(weight: "bold")[when does the software path erase the benefit of accelerator offload?]
+    #v(0.5em)
+    If yes, I should spend the next step on the prepared-host Tonic rerun.
+  ]],
+  [#panel(fill: c-green)[
+    #text(weight: "bold", fill: c-title)[Small conclusion]
+    #v(0.35em)
+    + The old DSA result gave the method.
+    + The last two weeks made the Rust IDXD path usable for that method.
+    + The next experiment should decide whether the method carries into Tonic.
+  ]],
+)
+
+#v(0.5em)
+
+#callout(fill: c-blue, stroke: c-accent)[
+  Bottom line: I am not presenting a Tonic speedup result yet. I am presenting a cleaner path to run the right experiment, with enough hardware proof to make that next experiment credible.
 ]
