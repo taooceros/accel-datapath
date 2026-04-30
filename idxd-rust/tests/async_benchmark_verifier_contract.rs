@@ -25,13 +25,6 @@ fn verifier_script() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("scripts/verify_tokio_memmove_bench.sh")
 }
 
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("idxd-rust should live at the repository root")
-        .to_path_buf()
-}
-
 fn fake_launcher_env(capability_ok: bool) -> (PathBuf, PathBuf, String) {
     let temp_root = unique_temp_path(if capability_ok {
         "launcher-ready"
@@ -99,6 +92,7 @@ bytes=64
 iterations=2
 concurrency=2
 duration_ms=10
+max_page_fault_retries=1
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --bytes)
@@ -137,6 +131,10 @@ while [[ $# -gt 0 ]]; do
       duration_ms=$2
       shift 2
       ;;
+    --max-page-fault-retries)
+      max_page_fault_retries=$2
+      shift 2
+      ;;
     --format)
       shift 2
       ;;
@@ -157,13 +155,13 @@ fi
 
 fn json_writer(python_body: &str, exit_code: i32) -> String {
     format!(
-        r#"python3 - "$artifact" "$device" "$backend" "$suite" "$bytes" "$iterations" "$concurrency" "$duration_ms" <<'PY'
+        r#"python3 - "$artifact" "$device" "$backend" "$suite" "$bytes" "$iterations" "$concurrency" "$duration_ms" "$max_page_fault_retries" <<'PY'
 import json
 import sys
 from pathlib import Path
 artifact = Path(sys.argv[1])
 device, backend, suite = sys.argv[2], sys.argv[3], sys.argv[4]
-bytes_, iterations, concurrency, duration_ms = map(int, sys.argv[5:9])
+bytes_, iterations, concurrency, duration_ms, max_page_fault_retries = map(int, sys.argv[5:10])
 {python_body}
 artifact.write_text(json.dumps(report, separators=(',', ':')), encoding='utf-8')
 print(artifact.read_text(encoding='utf-8'))
@@ -229,6 +227,7 @@ report = {{
     "iterations": iterations,
     "concurrency": concurrency,
     "duration_ms": duration_ms,
+    "max_page_fault_retries": max_page_fault_retries,
     "failure_class": None,
     "error_kind": None,
     "direct_failure_kind": None,
@@ -260,6 +259,7 @@ fn classified_failure_body() -> String {
     "iterations": iterations,
     "concurrency": concurrency,
     "duration_ms": duration_ms,
+    "max_page_fault_retries": max_page_fault_retries,
     "failure_class": "queue_open",
     "error_kind": "queue_open",
     "direct_failure_kind": None,
@@ -353,9 +353,10 @@ fn software_diagnostic_mode_passes_without_launcher_and_is_not_claim_eligible() 
 }
 
 #[test]
-fn missing_launcher_is_expected_failure_with_default_repo_root_path() {
+fn missing_configured_launcher_is_expected_failure() {
     let output_dir = unique_temp_path("missing-launcher-output");
     fs::create_dir_all(&output_dir).expect("output dir should be creatable");
+    let missing_launcher = output_dir.join("missing-dsa-launcher");
 
     let output = run_verifier(
         &output_dir,
@@ -366,12 +367,15 @@ fn missing_launcher_is_expected_failure_with_default_repo_root_path() {
                 env!("CARGO_BIN_EXE_tokio_memmove_bench").to_string(),
             ),
             ("IDXD_RUST_VERIFY_DEVICE", "/dev/dsa/test0.0".to_string()),
+            (
+                "IDXD_RUST_VERIFY_LAUNCHER_PATH",
+                missing_launcher.display().to_string(),
+            ),
         ],
     );
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let expected_launcher = repo_root().join("tools/build/dsa_launcher");
     assert!(
         stdout.contains("phase=done"),
         "stdout should include done phase, got: {stdout}"
@@ -389,9 +393,9 @@ fn missing_launcher_is_expected_failure_with_default_repo_root_path() {
         "stdout should report missing launcher, got: {stdout}"
     );
     assert!(
-        stdout.contains(&format!("launcher_path={}", expected_launcher.display())),
-        "stdout should include default repo-root launcher path {}, got: {stdout}",
-        expected_launcher.display()
+        stdout.contains(&format!("launcher_path={}", missing_launcher.display())),
+        "stdout should include configured missing launcher path {}, got: {stdout}",
+        missing_launcher.display()
     );
 }
 
@@ -602,6 +606,7 @@ report = {
     "iterations": iterations,
     "concurrency": concurrency,
     "duration_ms": duration_ms,
+    "max_page_fault_retries": max_page_fault_retries,
     "failure_class": None,
     "error_kind": None,
     "direct_failure_kind": None,
@@ -689,6 +694,7 @@ report = {
     "iterations": iterations,
     "concurrency": concurrency,
     "duration_ms": duration_ms,
+    "max_page_fault_retries": max_page_fault_retries,
     "failure_class": None,
     "error_kind": None,
     "direct_failure_kind": None,

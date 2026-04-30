@@ -86,6 +86,7 @@ bytes=64
 iterations=1
 concurrency=1
 duration_ms=10
+max_page_fault_retries=1
 artifact=
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -121,6 +122,10 @@ while [[ $# -gt 0 ]]; do
       duration_ms=${2:-}
       shift 2
       ;;
+    --max-page-fault-retries)
+      max_page_fault_retries=${2:-}
+      shift 2
+      ;;
     --artifact)
       artifact=${2:-}
       shift 2
@@ -137,7 +142,7 @@ if [[ -z "$artifact" ]]; then
   echo 'missing artifact path' >&2
   exit 91
 fi
-python3 - "$artifact" "$backend" "$suite" "$device" "$bytes" "$iterations" "$concurrency" "$duration_ms" <<'PY'
+python3 - "$artifact" "$backend" "$suite" "$device" "$bytes" "$iterations" "$concurrency" "$duration_ms" "$max_page_fault_retries" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -150,6 +155,7 @@ bytes_ = int(sys.argv[5])
 iterations = int(sys.argv[6])
 concurrency = int(sys.argv[7])
 duration_ms = int(sys.argv[8])
+max_page_fault_retries = int(sys.argv[9])
 completed = max(1, concurrency * 10)
 elapsed_ns = max(1, duration_ms * 1_000_000)
 ops_per_sec = completed * 1_000_000_000.0 / elapsed_ns
@@ -198,6 +204,7 @@ report = {
     "iterations": iterations,
     "concurrency": concurrency,
     "duration_ms": duration_ms,
+    "max_page_fault_retries": max_page_fault_retries,
     "failure_class": None,
     "error_kind": None,
     "direct_failure_kind": None,
@@ -237,6 +244,7 @@ fn matrix_script_aggregates_fake_hardware_points_into_csv() {
         .env("IDXD_RUST_BENCH_BYTES", "64,128")
         .env("IDXD_RUST_BENCH_CONCURRENCY", "1,2")
         .env("IDXD_RUST_BENCH_DURATION_MS", "7")
+        .env("IDXD_RUST_BENCH_MAX_PAGE_FAULT_RETRIES", "9")
         .output()
         .expect("matrix script should launch");
 
@@ -256,9 +264,9 @@ fn matrix_script_aggregates_fake_hardware_points_into_csv() {
     let csv = fs::read_to_string(&csv_path).expect("CSV should be written");
     let rows: Vec<&str> = csv.lines().collect();
     assert_eq!(rows.len(), 5, "header + four matrix rows expected: {csv}");
-    assert!(rows[0].contains("backend,device_path,bytes,concurrency,duration_ms"));
-    assert!(csv.contains("hardware,/dev/dsa/wq-test,64,1,7"));
-    assert!(csv.contains("hardware,/dev/dsa/wq-test,128,2,7"));
+    assert!(rows[0].contains("backend,device_path,bytes,concurrency,duration_ms,max_page_fault_retries"));
+    assert!(csv.contains("hardware,/dev/dsa/wq-test,64,1,7,9"));
+    assert!(csv.contains("hardware,/dev/dsa/wq-test,128,2,7,9"));
     assert!(csv.contains("tokio_memmove_bench.json"));
     assert!(output_dir.join("bytes-64/concurrency-1/tokio_memmove_bench.json").is_file());
 }

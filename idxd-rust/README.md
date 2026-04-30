@@ -170,11 +170,12 @@ IDXD_RUST_BENCH_DEVICE=/dev/dsa/wq0.1 \
 IDXD_RUST_BENCH_BYTES=64,4096 \
 IDXD_RUST_BENCH_CONCURRENCY=1,4,16 \
 IDXD_RUST_BENCH_DURATION_MS=100 \
+IDXD_RUST_BENCH_MAX_PAGE_FAULT_RETRIES=1 \
 IDXD_RUST_BENCH_OUTPUT_DIR=target/async-throughput-matrix \
 bash idxd-rust/scripts/bench_async_throughput_matrix.sh
 ```
 
-The CSV is written to `async_throughput_matrix.csv` by default and includes `bytes`, `concurrency`, completed/failed operation counts, `ops_per_sec`, `bytes_per_sec`, `gib_per_sec`, claim eligibility, and artifact paths. On this prepared host, prefer the shared DSA work queue `/dev/dsa/wq0.1` for the direct async benchmark path.
+The CSV is written to `async_throughput_matrix.csv` by default and includes `bytes`, `concurrency`, `duration_ms`, `max_page_fault_retries`, completed/failed operation counts, `ops_per_sec`, `bytes_per_sec`, `gib_per_sec`, claim eligibility, and artifact paths. `IDXD_RUST_BENCH_MAX_PAGE_FAULT_RETRIES` feeds `tokio_memmove_bench --max-page-fault-retries`; keep the default `1` for conservative proof runs and raise it only for diagnostic retry-budget sweeps. On this prepared host, prefer the shared DSA work queue `/dev/dsa/wq0.1` for the direct async benchmark path.
 
 Use the S04 collection workflow when you need a reviewer-ready evidence directory with focused command logs, verifier output directories, and a manifest:
 
@@ -192,6 +193,7 @@ IDXD_RUST_VERIFY_BYTES=4096 \
 IDXD_RUST_VERIFY_ITERATIONS=1000 \
 IDXD_RUST_VERIFY_CONCURRENCY=16 \
 IDXD_RUST_VERIFY_DURATION_MS=5000 \
+IDXD_RUST_VERIFY_MAX_PAGE_FAULT_RETRIES=1 \
 bash idxd-rust/scripts/verify_tokio_memmove_bench.sh
 ```
 
