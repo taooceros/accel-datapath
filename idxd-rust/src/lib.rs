@@ -25,6 +25,7 @@
 mod async_direct;
 mod async_session;
 mod direct_memmove;
+mod lifecycle;
 mod session;
 mod validation;
 
@@ -49,8 +50,8 @@ pub use validation::{
 use std::path::Path;
 
 use bytes::buf::UninitSlice;
-use direct_memmove::{DirectMemmoveState, verify_initialized_destination};
-use idxd_sys::{WqPortal, poll_completion, touch_fault_page};
+use direct_memmove::{run_direct_memmove, verify_initialized_destination};
+use idxd_sys::WqPortal;
 
 /// Thin reusable session over one mapped DSA work queue.
 pub struct DsaSession {
@@ -150,28 +151,8 @@ impl DsaSession {
         // SAFETY: `DsaSession::memmove` and `memmove_uninit` validated that the
         // source and destination ranges cover `request.len()` bytes. Both calls
         // keep those buffers borrowed for this entire synchronous operation, so
-        // the descriptor and completion record inside `state` cannot outlive the
-        // memory referenced by hardware.
-        let mut state = unsafe { DirectMemmoveState::new(src, dst, request) };
-
-        loop {
-            state.reset_and_fill_descriptor();
-
-            unsafe {
-                self.portal.submit(state.descriptor());
-            }
-
-            let polled_status = poll_completion(state.completion());
-            let snapshot = CompletionSnapshot::from_record(state.completion(), polled_status);
-            match state.classify_snapshot(self.dsa_config(), snapshot)? {
-                CompletionAction::Success => {
-                    return state.success_report(self.device_path(), snapshot.status);
-                }
-                CompletionAction::Retry(retry) => {
-                    touch_fault_page(state.completion());
-                    state.apply_retry(retry);
-                }
-            }
-        }
+        // the lifecycle-owned descriptor and completion record cannot outlive
+        // the memory referenced by hardware.
+        unsafe { run_direct_memmove(&self.portal, self.dsa_config(), src, dst, request) }
     }
 }

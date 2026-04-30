@@ -1,9 +1,11 @@
 use std::path::Path;
 
 use idxd_sys::{
-    DSA_COMP_NONE, DSA_COMP_STATUS_MASK, DsaCompletionRecord, DsaHwDesc, reset_completion,
+    DSA_COMP_NONE, DSA_COMP_STATUS_MASK, DsaCompletionRecord, DsaHwDesc, WqPortal, poll_completion,
+    reset_completion, touch_fault_page,
 };
 
+use crate::lifecycle::{BlockingOperation, BlockingOperationDecision, run_blocking_operation};
 use crate::{
     CompletionAction, CompletionSnapshot, DsaConfig, MemmoveError, MemmovePhase, MemmoveRequest,
     MemmoveRetry, MemmoveValidationReport, classify_memmove_completion,
@@ -33,6 +35,97 @@ pub struct DirectMemmoveState {
 // those allocation-backed pointers; callers must still keep the operation-owned
 // buffers alive until every accepted descriptor has completed.
 unsafe impl Send for DirectMemmoveState {}
+
+/// Blocking DSA memmove adapter for the shared submit/complete lifecycle.
+pub(crate) struct DirectMemmoveOperation<'a> {
+    config: &'a DsaConfig,
+    state: DirectMemmoveState,
+}
+
+impl<'a> DirectMemmoveOperation<'a> {
+    /// Create a lifecycle operation from caller-validated raw buffers.
+    ///
+    /// # Safety
+    /// The caller must keep `src..src + request.len()` allocated and immutable,
+    /// and `dst..dst + request.len()` allocated, writable, and unexposed as
+    /// initialized bytes until the blocking lifecycle reaches terminal success
+    /// or failure. The operation state owns the descriptor and completion record
+    /// for every accepted attempt.
+    pub(crate) unsafe fn new(
+        config: &'a DsaConfig,
+        src: *const u8,
+        dst: *mut u8,
+        request: MemmoveRequest,
+    ) -> Self {
+        Self {
+            config,
+            // SAFETY: This constructor's safety contract forwards the same
+            // buffer lifetime and initialization requirements to the raw DSA
+            // memmove state.
+            state: unsafe { DirectMemmoveState::new(src, dst, request) },
+        }
+    }
+}
+
+impl BlockingOperation for DirectMemmoveOperation<'_> {
+    type Completion = CompletionSnapshot;
+    type Output = MemmoveValidationReport;
+    type Error = MemmoveError;
+
+    fn reset_and_fill_descriptor(&mut self) {
+        self.state.reset_and_fill_descriptor();
+    }
+
+    unsafe fn submit(&self, portal: &WqPortal) {
+        // SAFETY: `DirectMemmoveOperation` owns the descriptor and completion
+        // record, and its constructor requires the referenced source and
+        // destination buffers to remain valid for the full blocking lifecycle.
+        unsafe {
+            portal.submit(self.state.descriptor());
+        }
+    }
+
+    fn observe_completion(&self) -> CompletionSnapshot {
+        let polled_status = poll_completion(self.state.completion());
+        CompletionSnapshot::from_record(self.state.completion(), polled_status)
+    }
+
+    fn classify_completion(
+        &mut self,
+        snapshot: CompletionSnapshot,
+    ) -> Result<BlockingOperationDecision<Self::Output>, Self::Error> {
+        match self.state.classify_snapshot(self.config, snapshot)? {
+            CompletionAction::Success => self
+                .state
+                .success_report(self.config.device_path(), snapshot.status)
+                .map(BlockingOperationDecision::Complete),
+            CompletionAction::Retry(retry) => {
+                touch_fault_page(self.state.completion());
+                self.state.apply_retry(retry);
+                Ok(BlockingOperationDecision::Retry)
+            }
+        }
+    }
+}
+
+/// Run one validated DSA memmove through the shared blocking lifecycle.
+///
+/// # Safety
+/// The caller must keep `src..src + request.len()` allocated and immutable, and
+/// `dst..dst + request.len()` allocated, writable, and unexposed as initialized
+/// destination bytes until this synchronous operation returns.
+pub(crate) unsafe fn run_direct_memmove(
+    portal: &WqPortal,
+    config: &DsaConfig,
+    src: *const u8,
+    dst: *mut u8,
+    request: MemmoveRequest,
+) -> Result<MemmoveValidationReport, MemmoveError> {
+    // SAFETY: This helper's safety contract is exactly the raw-buffer lifetime
+    // contract required by `DirectMemmoveOperation::new`.
+    let mut operation = unsafe { DirectMemmoveOperation::new(config, src, dst, request) };
+    run_blocking_operation(portal, &mut operation)
+}
 
 impl DirectMemmoveState {
     /// Create reusable descriptor/completion state for one validated request.
