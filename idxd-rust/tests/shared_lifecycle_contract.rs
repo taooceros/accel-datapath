@@ -2,7 +2,8 @@ use std::fs;
 use std::path::PathBuf;
 
 use idxd_rust::{
-    AsyncDsaHandle, AsyncDsaSession, DsaConfig, DsaSession, MemmoveError, MemmoveValidationReport,
+    AsyncDsaHandle, AsyncDsaSession, Dsa, DsaConfig, DsaSession, Iaa, Iax, IaxCrc64Result,
+    IdxdSession, MemmoveError, MemmoveValidationReport,
 };
 
 fn crate_path(relative: &str) -> PathBuf {
@@ -14,10 +15,6 @@ fn read_crate_file(relative: &str) -> String {
         .unwrap_or_else(|error| panic!("failed to read tracked crate file {relative}: {error}"))
 }
 
-fn maybe_read_crate_file(relative: &str) -> Option<String> {
-    fs::read_to_string(crate_path(relative)).ok()
-}
-
 #[test]
 fn lifecycle_module_is_crate_private_static_dispatch() {
     let lib = read_crate_file("src/lib.rs");
@@ -26,6 +23,10 @@ fn lifecycle_module_is_crate_private_static_dispatch() {
     assert!(
         lib.contains("mod lifecycle;"),
         "crate root should register the private lifecycle module"
+    );
+    assert!(
+        lib.contains("mod iax_crc64;"),
+        "crate root should register the private IAX crc64 operation module"
     );
     assert!(
         !lib.contains("pub mod lifecycle"),
@@ -90,16 +91,50 @@ fn legacy_dsa_memmove_delegates_to_shared_lifecycle() {
 }
 
 #[test]
+fn generic_representative_operations_delegate_to_shared_lifecycle() {
+    let session = read_crate_file("src/session.rs");
+    let iax_crc64 = read_crate_file("src/iax_crc64.rs");
+
+    let dsa_impl = session
+        .split("impl IdxdSession<Dsa>")
+        .nth(1)
+        .and_then(|tail| tail.split("impl IdxdSession<Iax>").next())
+        .expect("session should have a DSA-specific generic impl");
+    assert!(
+        dsa_impl.contains("run_direct_memmove(") && dsa_impl.contains("&self.portal"),
+        "IdxdSession<Dsa>::memmove should reuse the DSA helper and the already-open portal"
+    );
+    assert!(
+        !dsa_impl.contains("WqPortal::open"),
+        "IdxdSession<Dsa>::memmove must not re-open the queue"
+    );
+
+    assert!(
+        session.contains("impl IdxdSession<Iax>"),
+        "session should expose an IAX-specific generic impl"
+    );
+    assert!(
+        session.contains("run_iax_crc64(&self.portal"),
+        "IdxdSession<Iax>::crc64 should reuse the already-open portal"
+    );
+    assert!(
+        iax_crc64.contains("impl BlockingOperation for IaxCrc64State<'_>"),
+        "IAX crc64 should implement the private lifecycle contract"
+    );
+    assert!(
+        iax_crc64.contains("run_blocking_operation(portal"),
+        "IAX crc64 helper should use the shared lifecycle loop"
+    );
+}
+
+#[test]
 fn operation_modules_do_not_branch_on_work_queue_mode() {
     let operation_modules = [
         (
             "src/direct_memmove.rs",
             read_crate_file("src/direct_memmove.rs"),
         ),
-        (
-            "src/iax_crc64.rs",
-            maybe_read_crate_file("src/iax_crc64.rs").unwrap_or_default(),
-        ),
+        ("src/iax_crc64.rs", read_crate_file("src/iax_crc64.rs")),
     ];
 
     for (path, source) in operation_modules {
@@ -116,6 +151,8 @@ fn operation_modules_do_not_branch_on_work_queue_mode() {
 fn legacy_dsa_and_async_compatibility_surfaces_still_import() {
     let _config_type: Option<DsaConfig> = None;
     let _session_type: Option<DsaSession> = None;
+    let _generic_dsa_type: Option<IdxdSession<Dsa>> = None;
+    let _generic_iax_type: Option<IdxdSession<Iax>> = None;
     let _async_owner_type: Option<AsyncDsaSession> = None;
     let _async_handle_type: Option<AsyncDsaHandle> = None;
     let _memmove: fn(
@@ -123,4 +160,11 @@ fn legacy_dsa_and_async_compatibility_surfaces_still_import() {
         &mut [u8],
         &[u8],
     ) -> Result<MemmoveValidationReport, MemmoveError> = DsaSession::memmove;
+    let _generic_memmove: fn(
+        &IdxdSession<Dsa>,
+        &mut [u8],
+        &[u8],
+    ) -> Result<MemmoveValidationReport, MemmoveError> = IdxdSession::<Dsa>::memmove;
+    let _iax_crc64: fn(&IdxdSession<Iax>, &[u8]) -> IaxCrc64Result = IdxdSession::<Iax>::crc64;
+    let _iaa_crc64: fn(&IdxdSession<Iaa>, &[u8]) -> IaxCrc64Result = IdxdSession::<Iaa>::crc64;
 }

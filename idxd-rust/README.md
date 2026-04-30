@@ -1,7 +1,9 @@
 # idxd-rust
 
-`idxd-rust` is the crate-local proof surface for the first real Rust DSA memmove path in this repo.
-It does one thing truthfully: open one Intel DSA work queue, submit one real memmove, verify the copied bytes, and report the exact failure class instead of silently falling back to software.
+`idxd-rust` is the crate-local proof surface for real Rust Intel IDXD data paths in this repo.
+It truthfully opens work queues, submits representative operations, verifies or reports the exact failure class, and avoids silently falling back to software.
+
+The mature path is DSA memmove. The generic `IdxdSession<Accel>` seam now also exposes representative operations for DSA memmove and IAX/IAA crc64 so downstream hardware proof can exercise both accelerator families without adopting a broad operation framework.
 
 ## Who this is for
 
@@ -15,8 +17,8 @@ After reading, you should be able to:
 
 ## What lives here
 
-- `DsaSession` is the only live DSA memmove submission path. It remains a separate public type and is not an alias for the generic session seam.
-- `IdxdSession<Dsa>` and `IdxdSession<Iax>` are the concrete marker-family uses of the lean `IdxdSession<Accel>` future-operation seam. In this slice they open one work queue and report queue metadata/open diagnostics only; shared submit/complete, real IAX crc64, and generic benchmark evidence are downstream work.
+- `DsaSession` is the established DSA memmove submission path. It remains a separate public type and is not an alias for the generic session seam.
+- `IdxdSession<Dsa>` and `IdxdSession<Iax>` are the concrete marker-family uses of the lean `IdxdSession<Accel>` operation seam. `IdxdSession<Dsa>::memmove` uses the same blocking DSA lifecycle as `DsaSession`; `IdxdSession<Iax>::crc64` and the `Iaa` spelling use the representative IAX/IAA crc64 lifecycle. This is intentionally narrow coverage, not a public operation hierarchy or a full accelerator runtime.
 - `AsyncDsaSession` is the explicit lifecycle owner for the async path.
 - `AsyncDsaHandle` is the only cloneable Tokio-facing surface. Cloning it shares one direct async runtime with one mapped work-queue portal and completion monitor; it never duplicates hardware ownership.
 - `live_memmove` is the crate-local synchronous validation binary.

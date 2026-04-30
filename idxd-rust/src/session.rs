@@ -5,6 +5,13 @@ use std::path::{Path, PathBuf};
 use idxd_sys::WqPortal;
 use snafu::Snafu;
 
+use crate::direct_memmove::{run_direct_memmove, verify_initialized_destination};
+use crate::iax_crc64::{IaxCrc64Result, run_iax_crc64};
+use crate::validation::{
+    DEFAULT_MAX_PAGE_FAULT_RETRIES, DsaConfig, MemmoveError, MemmoveRequest,
+    MemmoveValidationReport,
+};
+
 mod sealed {
     pub trait Sealed {}
 }
@@ -88,9 +95,11 @@ impl<Accel: Accelerator> IdxdSessionConfig<Accel> {
 
 /// Generic first-version IDXD session seam over one mapped work queue.
 ///
-/// `IdxdSession<Accel>` is intentionally construction-only in S01: it opens and owns one
-/// `idxd_sys::WqPortal`, exposes queue metadata, and leaves concrete accelerator operations to
-/// later slices. Existing `DsaSession` and `AsyncDsaSession` remain the live DSA memmove paths.
+/// `IdxdSession<Accel>` opens and owns one `idxd_sys::WqPortal`, exposes queue
+/// metadata, and provides accelerator-specific representative operations only
+/// for marker families whose descriptor/completion behavior is implemented in
+/// this crate. It intentionally remains a static-dispatch seam rather than a
+/// runtime accelerator dispatcher.
 pub struct IdxdSession<Accel: Accelerator> {
     config: IdxdSessionConfig<Accel>,
     portal: WqPortal,
@@ -127,6 +136,46 @@ impl<Accel: Accelerator> IdxdSession<Accel> {
     /// Return whether the opened work queue was detected as dedicated.
     pub fn is_dedicated_wq(&self) -> bool {
         self.portal.is_dedicated()
+    }
+}
+
+impl IdxdSession<Dsa> {
+    /// Submit one representative DSA memmove over this generic session's mapped work queue.
+    pub fn memmove(
+        &self,
+        dst: &mut [u8],
+        src: &[u8],
+    ) -> Result<MemmoveValidationReport, MemmoveError> {
+        let request = MemmoveRequest::for_buffers(dst.len(), src.len())?;
+        let config = DsaConfig::builder()
+            .device_path(self.device_path().to_path_buf())
+            .max_page_fault_retries(DEFAULT_MAX_PAGE_FAULT_RETRIES)
+            .build()?;
+
+        // SAFETY: The request validation above proves the source and
+        // destination ranges cover `request.len()` bytes. Both borrowed slices
+        // remain alive for the duration of this synchronous call, and the
+        // operation-owned lifecycle state keeps descriptor/completion storage
+        // alive until terminal completion.
+        let report = unsafe {
+            run_direct_memmove(
+                &self.portal,
+                &config,
+                src.as_ptr(),
+                dst.as_mut_ptr(),
+                request,
+            )?
+        };
+        verify_initialized_destination(&config, request, &report, dst, src)?;
+
+        Ok(report)
+    }
+}
+
+impl IdxdSession<Iax> {
+    /// Submit one representative IAX/IAA crc64 over this generic session's mapped work queue.
+    pub fn crc64(&self, src: &[u8]) -> IaxCrc64Result {
+        run_iax_crc64(&self.portal, self.device_path(), src)
     }
 }
 

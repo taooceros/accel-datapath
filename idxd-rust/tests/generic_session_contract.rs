@@ -2,7 +2,10 @@ use std::any::type_name;
 use std::error::Error as StdError;
 use std::path::Path;
 
-use idxd_rust::{Accelerator, Dsa, Iaa, Iax, IdxdSession, IdxdSessionConfig, IdxdSessionError};
+use idxd_rust::{
+    Accelerator, Dsa, Iaa, Iax, IaxCrc64Error, IaxCrc64Report, IaxCrc64Result, IdxdSession,
+    IdxdSessionConfig, IdxdSessionError, MemmoveError, MemmoveValidationReport,
+};
 
 fn assert_display_excludes_payload_markers(message: &str) {
     for forbidden in [
@@ -53,10 +56,19 @@ fn public_imports_compile_and_marker_defaults_are_host_free() {
 
     let _session_type: Option<IdxdSession<Dsa>> = None;
     let _error_type: Option<IdxdSessionError> = None;
+    let _iax_report_type: Option<IaxCrc64Report> = None;
+    let _iax_error_type: Option<IaxCrc64Error> = None;
     let _is_dedicated: fn(&IdxdSession<Dsa>) -> bool = IdxdSession::<Dsa>::is_dedicated_wq;
     let _device_path: fn(&IdxdSession<Dsa>) -> &Path = IdxdSession::<Dsa>::device_path;
     let _accelerator_name: fn(&IdxdSession<Dsa>) -> &'static str =
         IdxdSession::<Dsa>::accelerator_name;
+    let _dsa_memmove: fn(
+        &IdxdSession<Dsa>,
+        &mut [u8],
+        &[u8],
+    ) -> Result<MemmoveValidationReport, MemmoveError> = IdxdSession::<Dsa>::memmove;
+    let _iax_crc64: fn(&IdxdSession<Iax>, &[u8]) -> IaxCrc64Result = IdxdSession::<Iax>::crc64;
+    let _iaa_crc64: fn(&IdxdSession<Iaa>, &[u8]) -> IaxCrc64Result = IdxdSession::<Iaa>::crc64;
 }
 
 #[test]

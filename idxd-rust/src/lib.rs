@@ -16,15 +16,18 @@
 //! convenience constructor and no borrowed copy-back helper; destination
 //! allocation and ownership stay explicit at the call site.
 //!
-//! `IdxdSession<Accel>` is the new generic IDXD architecture direction for the sealed `Dsa`
-//! and `Iax`/`Iaa` marker families. In S01 it opens one work queue and exposes queue
-//! metadata/diagnostics only; it does not submit memmove or crc64 operations. `DsaSession`
-//! and `AsyncDsaSession` remain the live DSA memmove submission paths until later slices add
-//! shared submit/complete lifecycles and real generic operations deliberately.
+//! `IdxdSession<Accel>` is the generic IDXD architecture direction for the sealed `Dsa`
+//! and `Iax`/`Iaa` marker families. It opens one work queue and now carries narrow
+//! representative operations: `IdxdSession<Dsa>::memmove` reuses the same blocking DSA
+//! lifecycle as `DsaSession`, while `IdxdSession<Iax>::crc64`/`IdxdSession<Iaa>::crc64`
+//! use an IAX-owned descriptor/completion interpreter. This is intentionally not full
+//! DSA/IAX coverage and does not introduce a public operation trait hierarchy or runtime
+//! accelerator dispatch.
 
 mod async_direct;
 mod async_session;
 mod direct_memmove;
+mod iax_crc64;
 mod lifecycle;
 mod session;
 mod validation;
@@ -39,6 +42,10 @@ pub use async_session::{
     AsyncDsaHandle, AsyncDsaSession, AsyncLifecycleFailureKind, AsyncMemmoveError,
     AsyncMemmoveRequest, AsyncMemmoveRequestError, AsyncMemmoveResult, AsyncMemmoveWorker,
     AsyncWorkerFailureKind,
+};
+pub use iax_crc64::{
+    IAX_CRC64_COMPLETION_TIMEOUT_STATUS, IaxCrc64Error, IaxCrc64Phase, IaxCrc64Report,
+    IaxCrc64Result, MAX_IAX_CRC64_BYTES,
 };
 pub use session::{Accelerator, Dsa, Iaa, Iax, IdxdSession, IdxdSessionConfig, IdxdSessionError};
 pub use validation::{
