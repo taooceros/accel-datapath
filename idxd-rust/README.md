@@ -107,6 +107,30 @@ cargo run -p idxd-rust --bin live_idxd_op -- \
 
 Direct binary runs are useful for debugging one target. The verifier remains the stable S03/S04 handoff contract because it records all target roles and artifact/stdout/stderr paths in one validated output stream.
 
+## S04 representative measured-number proof
+
+Use the S04 measured-number proof when you need a small release-profile benchmark run for the representative generic session paths. It exercises `IdxdSession<Accel>` through the required `dsa-memmove` and `iax-crc64` rows, records positive latency and throughput aggregates, and keeps the claim narrow: this is not a broad benchmark matrix or final performance comparison.
+
+```bash
+mkdir -p target/m011-s04-representative-bench && \
+IDXD_RUST_VERIFY_PROFILE=release \
+IDXD_RUST_VERIFY_DSA_DEVICE=/dev/dsa/wq0.0 \
+IDXD_RUST_VERIFY_IAX_DEVICE=/dev/iax/wq1.0 \
+IDXD_RUST_VERIFY_BYTES=4096 \
+IDXD_RUST_VERIFY_ITERATIONS=1000 \
+IDXD_RUST_VERIFY_OUTPUT_DIR=target/m011-s04-representative-bench \
+bash idxd-rust/scripts/verify_idxd_representative_bench.sh | \
+tee target/m011-s04-representative-bench/verify.log
+```
+
+A valid closure run ends with `verdict=pass`, `launcher_status=ready`, `profile=release`, and `claim_eligible=true`. It writes JSON, stdout, stderr, and raw launcher stdout files into the configured output directory. The tracked measured-number report is `docs/report/benchmarking/015.m011_representative_idxd_numbers_2026-04-30.md`; validate it with:
+
+```bash
+bash idxd-rust/scripts/check_m011_s04_benchmark_report.sh docs/report/benchmarking/015.m011_representative_idxd_numbers_2026-04-30.md
+```
+
+Expected-failure output is useful diagnostics for an unprepared host, but it is not R023 evidence. The no-payload rule still applies: reports and artifacts may record operation metadata, status values, CRC scalars, timing aggregates, and artifact paths, but must not include raw buffer bytes or byte dumps.
+
 ## Choose the proof path
 
 Use the synchronous proof path when you are isolating the raw crate-owned DSA memmove contract:
