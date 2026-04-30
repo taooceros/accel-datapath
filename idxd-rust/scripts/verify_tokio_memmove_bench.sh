@@ -6,6 +6,9 @@ CRATE_DIR=$(cd -- "${SCRIPT_DIR}/.." && pwd)
 REPO_ROOT=$(cd -- "${CRATE_DIR}/.." && pwd)
 
 OUTPUT_DIR=${IDXD_RUST_VERIFY_OUTPUT_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/idxd-rust-tokio-memmove-bench.XXXXXX")}
+if [[ "${OUTPUT_DIR}" != /* ]]; then
+  OUTPUT_DIR="${PWD}/${OUTPUT_DIR}"
+fi
 BACKEND=${IDXD_RUST_VERIFY_BACKEND:-hardware}
 SUITE=${IDXD_RUST_VERIFY_SUITE:-canonical}
 REQUEST_BYTES=${IDXD_RUST_VERIFY_BYTES:-64}
@@ -23,6 +26,7 @@ RUN_TIMEOUT=${IDXD_RUST_VERIFY_RUN_TIMEOUT:-30s}
 SKIP_BUILD=${IDXD_RUST_VERIFY_SKIP_BUILD:-0}
 ARTIFACT_PATH="${OUTPUT_DIR}/tokio_memmove_bench.json"
 STDOUT_PATH="${OUTPUT_DIR}/tokio_memmove_bench.stdout"
+RAW_STDOUT_PATH="${STDOUT_PATH}.raw"
 STDERR_PATH="${OUTPUT_DIR}/tokio_memmove_bench.stderr"
 PREFLIGHT_STDOUT_PATH="${OUTPUT_DIR}/preflight.stdout"
 PREFLIGHT_STDERR_PATH="${OUTPUT_DIR}/preflight.stderr"
@@ -64,6 +68,33 @@ complete_with_explicit_failure() {
   shift
   log_phase done "verdict=expected_failure failure_phase=${phase} $*"
   exit 0
+}
+
+normalize_launch_stdout() {
+  local raw_stdout_path=$1
+  local normalized_stdout_path=$2
+
+  if [[ ! -f "${raw_stdout_path}" ]]; then
+    return 0
+  fi
+
+  # The repo's `launch` wrapper prints a "Running: .../dsa_launcher ..." banner
+  # to stdout before execing the proof binary. Keep stdout as the proof binary's
+  # JSON contract by dropping only that wrapper banner; preserve `.raw` for
+  # launcher debugging.
+  python3 - <<'PY' "${raw_stdout_path}" "${normalized_stdout_path}"
+import sys
+from pathlib import Path
+
+raw_path = Path(sys.argv[1])
+normalized_path = Path(sys.argv[2])
+lines = raw_path.read_text(encoding='utf-8').splitlines()
+filtered = [line for line in lines if not (line.startswith('Running: ') and 'dsa_launcher' in line)]
+text = '\n'.join(filtered)
+if text:
+    text += '\n'
+normalized_path.write_text(text, encoding='utf-8')
+PY
 }
 
 validate_artifact_contract() {
@@ -369,9 +400,11 @@ if [[ "${BACKEND}" == "hardware" ]]; then
   log_phase preflight "backend=hardware device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} binary=${BINARY_PATH} timeout=${PREFLIGHT_TIMEOUT}"
 
   PREFLIGHT_EXIT=0
-  if timeout "${PREFLIGHT_TIMEOUT}" \
-    devenv shell -- launch "${BINARY_PATH}" --bytes abc \
-    >"${PREFLIGHT_STDOUT_PATH}" 2>"${PREFLIGHT_STDERR_PATH}"; then
+  if (
+    cd "${REPO_ROOT}"
+    timeout "${PREFLIGHT_TIMEOUT}" \
+      devenv shell -- launch "${BINARY_PATH}" --bytes abc
+  ) >"${PREFLIGHT_STDOUT_PATH}" 2>"${PREFLIGHT_STDERR_PATH}"; then
     PREFLIGHT_EXIT=0
   else
     PREFLIGHT_EXIT=$?
@@ -385,10 +418,15 @@ if [[ "${BACKEND}" == "hardware" ]]; then
     fail_phase preflight "backend=hardware device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} stdout=${PREFLIGHT_STDOUT_PATH} stderr=${PREFLIGHT_STDERR_PATH} message=launch-wrapped preflight failed"
   fi
 
-  RUNNER=(devenv shell -- launch "${BINARY_PATH}")
+  RUNNER=(bash -c 'cd "$1" && shift && exec devenv shell -- launch "$@"' bash "${REPO_ROOT}" "${BINARY_PATH}")
 fi
 
-log_phase runtime "backend=${BACKEND} suite=${SUITE} device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} binary=${BINARY_PATH} requested_bytes=${REQUEST_BYTES} iterations=${ITERATIONS} concurrency=${CONCURRENCY} duration_ms=${DURATION_MS} timeout=${RUN_TIMEOUT}"
+log_phase runtime "backend=${BACKEND} suite=${SUITE} device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} binary=${BINARY_PATH} requested_bytes=${REQUEST_BYTES} iterations=${ITERATIONS} concurrency=${CONCURRENCY} duration_ms=${DURATION_MS} timeout=${RUN_TIMEOUT} raw_stdout=${RAW_STDOUT_PATH}"
+
+RUN_STDOUT_PATH=${STDOUT_PATH}
+if [[ "${BACKEND}" == "hardware" ]]; then
+  RUN_STDOUT_PATH=${RAW_STDOUT_PATH}
+fi
 
 RUN_EXIT=0
 if timeout "${RUN_TIMEOUT}" \
@@ -402,10 +440,13 @@ if timeout "${RUN_TIMEOUT}" \
     --duration-ms "${DURATION_MS}" \
     --format json \
     --artifact "${ARTIFACT_PATH}" \
-    >"${STDOUT_PATH}" 2>"${STDERR_PATH}"; then
+    >"${RUN_STDOUT_PATH}" 2>"${STDERR_PATH}"; then
   RUN_EXIT=0
 else
   RUN_EXIT=$?
+fi
+if [[ "${BACKEND}" == "hardware" ]]; then
+  normalize_launch_stdout "${RAW_STDOUT_PATH}" "${STDOUT_PATH}"
 fi
 
 if [[ "${RUN_EXIT}" -eq 124 ]]; then

@@ -17,7 +17,8 @@ After reading, you should be able to:
 
 ## What lives here
 
-- `DsaSession` is the established DSA memmove submission path. It remains a separate public type and is not an alias for the generic session seam.
+- `DsaSession` is the established DSA memmove submission path. It remains a separate public type and is not an alias for the generic session seam; its compatibility implementation lives in `idxd-rust/src/legacy_dsa.rs` so the crate root stays focused on current surfaces.
+- The hidden legacy async worker fixture lives in `idxd-rust/src/async_session/legacy_worker.rs`. Public `AsyncDsaSession::open` uses the direct completion-driven runtime; the fixture remains only for host-independent compatibility tests.
 - `IdxdSession<Dsa>` and `IdxdSession<Iax>` are the concrete marker-family uses of the lean `IdxdSession<Accel>` operation seam. `IdxdSession<Dsa>::memmove` uses the same blocking DSA lifecycle as `DsaSession`; `IdxdSession<Iax>::crc64` and the `Iaa` spelling use the representative IAX/IAA crc64 lifecycle. This is intentionally narrow coverage, not a public operation hierarchy or a full accelerator runtime.
 - `AsyncDsaSession` is the explicit lifecycle owner for the async path.
 - `AsyncDsaHandle` is the only cloneable Tokio-facing surface. Cloning it shares one direct async runtime with one mapped work-queue portal and completion monitor; it never duplicates hardware ownership.

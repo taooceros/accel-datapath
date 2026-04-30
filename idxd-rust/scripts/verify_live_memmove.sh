@@ -6,6 +6,9 @@ CRATE_DIR=$(cd -- "${SCRIPT_DIR}/.." && pwd)
 REPO_ROOT=$(cd -- "${CRATE_DIR}/.." && pwd)
 
 OUTPUT_DIR=${IDXD_RUST_VERIFY_OUTPUT_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/idxd-rust-live-memmove.XXXXXX")}
+if [[ "${OUTPUT_DIR}" != /* ]]; then
+  OUTPUT_DIR="${PWD}/${OUTPUT_DIR}"
+fi
 REQUEST_BYTES=${IDXD_RUST_VERIFY_BYTES:-64}
 BUILD_PROFILE=${IDXD_RUST_VERIFY_PROFILE:-dev}
 if [[ "${BUILD_PROFILE}" == "dev" ]]; then
@@ -18,6 +21,7 @@ RUN_TIMEOUT=${IDXD_RUST_VERIFY_RUN_TIMEOUT:-20s}
 SKIP_BUILD=${IDXD_RUST_VERIFY_SKIP_BUILD:-0}
 ARTIFACT_PATH="${OUTPUT_DIR}/live_memmove.json"
 STDOUT_PATH="${OUTPUT_DIR}/live_memmove.stdout"
+RAW_STDOUT_PATH="${STDOUT_PATH}.raw"
 STDERR_PATH="${OUTPUT_DIR}/live_memmove.stderr"
 PREFLIGHT_STDOUT_PATH="${OUTPUT_DIR}/preflight.stdout"
 PREFLIGHT_STDERR_PATH="${OUTPUT_DIR}/preflight.stderr"
@@ -100,9 +104,11 @@ fi
 log_phase preflight "device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} binary=${BINARY_PATH} timeout=${PREFLIGHT_TIMEOUT}"
 
 PREFLIGHT_EXIT=0
-if timeout "${PREFLIGHT_TIMEOUT}" \
-  devenv shell -- launch "${BINARY_PATH}" --bytes abc \
-  >"${PREFLIGHT_STDOUT_PATH}" 2>"${PREFLIGHT_STDERR_PATH}"; then
+if (
+  cd "${REPO_ROOT}"
+  timeout "${PREFLIGHT_TIMEOUT}" \
+    devenv shell -- launch "${BINARY_PATH}" --bytes abc
+) >"${PREFLIGHT_STDOUT_PATH}" 2>"${PREFLIGHT_STDERR_PATH}"; then
   PREFLIGHT_EXIT=0
 else
   PREFLIGHT_EXIT=$?
@@ -116,20 +122,50 @@ if [[ "${PREFLIGHT_EXIT}" -ne 2 ]] || ! grep -q 'invalid value `abc` for `--byte
   fail_phase preflight "device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} stdout=${PREFLIGHT_STDOUT_PATH} stderr=${PREFLIGHT_STDERR_PATH} message=launch-wrapped preflight failed"
 fi
 
-log_phase runtime "device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} binary=${BINARY_PATH} requested_bytes=${REQUEST_BYTES} timeout=${RUN_TIMEOUT}"
+normalize_launch_stdout() {
+  local raw_stdout_path=$1
+  local normalized_stdout_path=$2
+
+  if [[ ! -f "${raw_stdout_path}" ]]; then
+    return 0
+  fi
+
+  # The repo's `launch` wrapper prints a "Running: .../dsa_launcher ..." banner
+  # to stdout before execing the proof binary. Keep stdout as the proof binary's
+  # JSON contract by dropping only that wrapper banner; preserve `.raw` for
+  # launcher debugging.
+  python3 - <<'PY' "${raw_stdout_path}" "${normalized_stdout_path}"
+import sys
+from pathlib import Path
+
+raw_path = Path(sys.argv[1])
+normalized_path = Path(sys.argv[2])
+lines = raw_path.read_text(encoding='utf-8').splitlines()
+filtered = [line for line in lines if not (line.startswith('Running: ') and 'dsa_launcher' in line)]
+text = '\n'.join(filtered)
+if text:
+    text += '\n'
+normalized_path.write_text(text, encoding='utf-8')
+PY
+}
+
+log_phase runtime "device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} binary=${BINARY_PATH} requested_bytes=${REQUEST_BYTES} timeout=${RUN_TIMEOUT} raw_stdout=${RAW_STDOUT_PATH}"
 
 RUN_EXIT=0
-if timeout "${RUN_TIMEOUT}" \
-  devenv shell -- launch "${BINARY_PATH}" \
-    --device "${DEVICE_PATH}" \
-    --bytes "${REQUEST_BYTES}" \
-    --format json \
-    --artifact "${ARTIFACT_PATH}" \
-    >"${STDOUT_PATH}" 2>"${STDERR_PATH}"; then
+if (
+  cd "${REPO_ROOT}"
+  timeout "${RUN_TIMEOUT}" \
+    devenv shell -- launch "${BINARY_PATH}" \
+      --device "${DEVICE_PATH}" \
+      --bytes "${REQUEST_BYTES}" \
+      --format json \
+      --artifact "${ARTIFACT_PATH}"
+) >"${RAW_STDOUT_PATH}" 2>"${STDERR_PATH}"; then
   RUN_EXIT=0
 else
   RUN_EXIT=$?
 fi
+normalize_launch_stdout "${RAW_STDOUT_PATH}" "${STDOUT_PATH}"
 
 if [[ "${RUN_EXIT}" -eq 124 ]]; then
   fail_phase runtime_timeout "device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} message=launch-wrapped validation exceeded timeout"

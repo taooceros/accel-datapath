@@ -73,6 +73,7 @@ require_file "${REPORT_PATH}" report
 source_paths=(
   "${CRATE_DIR}/src/validation.rs"
   "${CRATE_DIR}/src/lib.rs"
+  "${CRATE_DIR}/src/legacy_dsa.rs"
   "${CRATE_DIR}/src/async_session.rs"
   "${CRATE_DIR}/src/async_direct.rs"
   "${REPO_ROOT}/hw-eval/src/config.rs"
@@ -126,9 +127,10 @@ require_literal_in_file "${CRATE_DIR}/src/validation.rs" 'device_path: normalize
 require_literal_in_file "${CRATE_DIR}/src/validation.rs" 'fn context(&self) -> MemmoveErrorContext' validation_error_context_helper
 reject_regex_in_file "${CRATE_DIR}/src/validation.rs" 'derive\([^)]*Builder' validation_struct_level_builder_derive
 
-require_literal_in_file "${CRATE_DIR}/src/lib.rs" 'DsaSession::builder().open()' sync_session_builder_comment
-require_literal_in_file "${CRATE_DIR}/src/lib.rs" '#[builder(start_fn = builder, finish_fn = open)]' sync_session_method_builder_boundary
-require_literal_in_file "${CRATE_DIR}/src/lib.rs" 'MemmoveError::QueueOpen' sync_session_queue_open_diagnostics
+require_literal_in_file "${CRATE_DIR}/src/lib.rs" 'pub use legacy_dsa::DsaSession;' sync_session_reexport
+require_literal_in_file "${CRATE_DIR}/src/legacy_dsa.rs" 'DsaSession::builder().open()' sync_session_builder_comment
+require_literal_in_file "${CRATE_DIR}/src/legacy_dsa.rs" '#[builder(start_fn = builder, finish_fn = open)]' sync_session_method_builder_boundary
+require_literal_in_file "${CRATE_DIR}/src/legacy_dsa.rs" 'MemmoveError::QueueOpen' sync_session_queue_open_diagnostics
 
 require_literal_in_file "${CRATE_DIR}/src/async_session.rs" 'pub struct AsyncMemmoveRequest' async_owned_request
 require_literal_in_file "${CRATE_DIR}/src/async_session.rs" 'pub struct AsyncMemmoveRequestError' async_rejected_buffers_error
