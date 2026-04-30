@@ -82,6 +82,32 @@ fn dsa_and_iax_sessions_are_distinct_static_types() {
 }
 
 #[test]
+fn legacy_dsa_and_generic_session_imports_coexist_without_aliasing() {
+    mod downstream_style {
+        use std::any::type_name;
+
+        use idxd_rust::{AsyncDsaHandle, AsyncDsaSession, Dsa, DsaConfig, DsaSession, IdxdSession};
+
+        pub fn assert_public_surfaces_are_distinct() {
+            let legacy_session = type_name::<DsaSession>();
+            let generic_session = type_name::<IdxdSession<Dsa>>();
+
+            assert_ne!(
+                legacy_session, generic_session,
+                "DsaSession must stay distinct from IdxdSession<Dsa>"
+            );
+            assert!(legacy_session.contains("DsaSession"));
+            assert!(generic_session.contains("IdxdSession"));
+            assert!(type_name::<DsaConfig>().contains("DsaConfig"));
+            assert!(type_name::<AsyncDsaSession>().contains("AsyncDsaSession"));
+            assert!(type_name::<AsyncDsaHandle>().contains("AsyncDsaHandle"));
+        }
+    }
+
+    downstream_style::assert_public_surfaces_are_distinct();
+}
+
+#[test]
 fn config_accepts_explicit_paths_without_opening_a_queue() {
     let config = IdxdSessionConfig::<Iax>::new("/dev/iax/wq3.0")
         .expect("non-empty IAX paths should validate before queue-open");

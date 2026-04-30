@@ -16,10 +16,11 @@
 //! convenience constructor and no borrowed copy-back helper; destination
 //! allocation and ownership stay explicit at the call site.
 //!
-//! `IdxdSession<Accel>` is the new generic IDXD architecture seam for DSA and IAX/IAA
-//! work-queue ownership. In this first version it opens one queue and exposes metadata only;
-//! `DsaSession` and `AsyncDsaSession` remain the live memmove submission paths until later
-//! slices add generic operations deliberately.
+//! `IdxdSession<Accel>` is the new generic IDXD architecture direction for the sealed `Dsa`
+//! and `Iax`/`Iaa` marker families. In S01 it opens one work queue and exposes queue
+//! metadata/diagnostics only; it does not submit memmove or crc64 operations. `DsaSession`
+//! and `AsyncDsaSession` remain the live DSA memmove submission paths until later slices add
+//! shared submit/complete lifecycles and real generic operations deliberately.
 
 mod async_direct;
 mod async_session;

@@ -15,7 +15,8 @@ After reading, you should be able to:
 
 ## What lives here
 
-- `DsaSession` is the only live submission path.
+- `DsaSession` is the only live DSA memmove submission path. It remains a separate public type and is not an alias for the generic session seam.
+- `IdxdSession<Dsa>` and `IdxdSession<Iax>` are the concrete marker-family uses of the lean `IdxdSession<Accel>` future-operation seam. In this slice they open one work queue and report queue metadata/open diagnostics only; shared submit/complete, real IAX crc64, and generic benchmark evidence are downstream work.
 - `AsyncDsaSession` is the explicit lifecycle owner for the async path.
 - `AsyncDsaHandle` is the only cloneable Tokio-facing surface. Cloning it shares one direct async runtime with one mapped work-queue portal and completion monitor; it never duplicates hardware ownership.
 - `live_memmove` is the crate-local synchronous validation binary.
