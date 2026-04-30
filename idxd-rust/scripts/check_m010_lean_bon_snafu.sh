@@ -122,7 +122,7 @@ require_report_literal 'Direct enum construction' direct_enum_construction_rule
 require_literal_in_file "${CRATE_DIR}/src/validation.rs" 'pub struct DsaConfig' dsa_config_struct
 require_literal_in_file "${CRATE_DIR}/src/validation.rs" '#[bon::bon]' validation_method_bon_block
 require_literal_in_file "${CRATE_DIR}/src/validation.rs" '#[builder(finish_fn = build)]' validation_method_builder_boundary
-require_literal_in_file "${CRATE_DIR}/src/validation.rs" 'Self::with_retries(device_path, max_page_fault_retries)' validation_builder_normalization_path
+require_literal_in_file "${CRATE_DIR}/src/validation.rs" 'device_path: normalize_device_path(device_path.as_ref())?' validation_builder_normalization_path
 require_literal_in_file "${CRATE_DIR}/src/validation.rs" 'fn context(&self) -> MemmoveErrorContext' validation_error_context_helper
 reject_regex_in_file "${CRATE_DIR}/src/validation.rs" 'derive\([^)]*Builder' validation_struct_level_builder_derive
 

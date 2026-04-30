@@ -182,21 +182,8 @@ impl<B> DirectAsyncMemmoveRuntime<B>
 where
     B: DirectMemmoveBackend,
 {
-    pub fn new(config: DsaConfig, backend: B) -> Self {
-        Self::with_submission_retry_budget(config, backend, DEFAULT_SUBMISSION_RETRY_BUDGET)
-    }
-
     pub fn try_new(config: DsaConfig, backend: B) -> Result<Self, AsyncDirectFailure> {
         Self::try_with_submission_retry_budget(config, backend, DEFAULT_SUBMISSION_RETRY_BUDGET)
-    }
-
-    pub fn with_submission_retry_budget(
-        config: DsaConfig,
-        backend: B,
-        submission_retry_budget: u32,
-    ) -> Self {
-        Self::try_with_submission_retry_budget(config, backend, submission_retry_budget)
-            .expect("direct async runtime requires an active Tokio runtime")
     }
 
     pub fn try_with_submission_retry_budget(

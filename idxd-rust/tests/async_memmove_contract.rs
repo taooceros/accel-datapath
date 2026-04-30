@@ -705,6 +705,25 @@ fn direct_config() -> DsaConfig {
         .expect("direct test config")
 }
 
+fn direct_runtime(
+    backend: ScriptedDirectBackend,
+) -> DirectAsyncMemmoveRuntime<ScriptedDirectBackend> {
+    DirectAsyncMemmoveRuntime::try_new(direct_config(), backend)
+        .expect("direct test runtime should start")
+}
+
+fn direct_runtime_with_submission_retry_budget(
+    backend: ScriptedDirectBackend,
+    submission_retry_budget: u32,
+) -> DirectAsyncMemmoveRuntime<ScriptedDirectBackend> {
+    DirectAsyncMemmoveRuntime::try_with_submission_retry_budget(
+        direct_config(),
+        backend,
+        submission_retry_budget,
+    )
+    .expect("direct test runtime should start")
+}
+
 fn owned_mut_request(source: &'static [u8]) -> AsyncMemmoveRequest {
     AsyncMemmoveRequest::new(
         Bytes::from_static(source),
@@ -714,7 +733,7 @@ fn owned_mut_request(source: &'static [u8]) -> AsyncMemmoveRequest {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn async_direct_session_config_preserves_explicit_retry_budget() {
+async fn async_direct_session_config_preserves_explicit_page_fault_retries() {
     let config = DsaConfig::builder()
         .device_path(std::path::PathBuf::from("/dev/dsa/test0.0"))
         .max_page_fault_retries(0)
@@ -753,7 +772,7 @@ async fn async_direct_session_config_preserves_explicit_retry_budget() {
 #[tokio::test(flavor = "current_thread")]
 async fn completion_record_drives_direct_async_completion() {
     let backend = ScriptedDirectBackend::new();
-    let runtime = DirectAsyncMemmoveRuntime::new(direct_config(), backend.clone());
+    let runtime = direct_runtime(backend.clone());
 
     let pending = tokio::spawn({
         let runtime = runtime.clone();
@@ -794,8 +813,7 @@ async fn backpressure_exhaustion_reports_retry_budget_without_payload_bytes() {
         EnqcmdSubmission::Rejected,
         EnqcmdSubmission::Rejected,
     ]);
-    let runtime =
-        DirectAsyncMemmoveRuntime::with_submission_retry_budget(direct_config(), backend, 2);
+    let runtime = direct_runtime_with_submission_retry_budget(backend, 2);
 
     let err = runtime
         .memmove(owned_mut_request(b"secret-payload"))
@@ -831,7 +849,7 @@ async fn backpressure_exhaustion_reports_retry_budget_without_payload_bytes() {
 #[tokio::test(flavor = "current_thread")]
 async fn monitor_close_resolves_accepted_direct_operation() {
     let backend = ScriptedDirectBackend::new();
-    let runtime = DirectAsyncMemmoveRuntime::new(direct_config(), backend);
+    let runtime = direct_runtime(backend);
 
     let pending = tokio::spawn({
         let runtime = runtime.clone();
@@ -863,7 +881,7 @@ async fn monitor_close_resolves_accepted_direct_operation() {
 #[tokio::test(flavor = "current_thread")]
 async fn dropped_direct_receiver_does_not_remove_accepted_operation_before_completion() {
     let backend = ScriptedDirectBackend::new();
-    let runtime = DirectAsyncMemmoveRuntime::new(direct_config(), backend.clone());
+    let runtime = direct_runtime(backend.clone());
 
     let pending = tokio::spawn({
         let runtime = runtime.clone();
@@ -891,7 +909,7 @@ async fn dropped_direct_receiver_does_not_remove_accepted_operation_before_compl
 #[tokio::test(flavor = "current_thread")]
 async fn malformed_direct_completion_surfaces_memmove_snapshot_metadata() {
     let backend = ScriptedDirectBackend::new();
-    let runtime = DirectAsyncMemmoveRuntime::new(direct_config(), backend.clone());
+    let runtime = direct_runtime(backend.clone());
 
     let pending = tokio::spawn({
         let runtime = runtime.clone();
@@ -925,7 +943,7 @@ async fn malformed_direct_completion_surfaces_memmove_snapshot_metadata() {
 #[tokio::test(flavor = "current_thread")]
 async fn concurrent_direct_requests_complete_out_of_order() {
     let backend = ScriptedDirectBackend::new();
-    let runtime = DirectAsyncMemmoveRuntime::new(direct_config(), backend.clone());
+    let runtime = direct_runtime(backend.clone());
 
     let first = tokio::spawn({
         let runtime = runtime.clone();
@@ -960,7 +978,7 @@ async fn concurrent_direct_requests_complete_out_of_order() {
 #[tokio::test(flavor = "current_thread")]
 async fn retry_completion_resubmits_and_preserves_final_retry_metadata() {
     let backend = ScriptedDirectBackend::new();
-    let runtime = DirectAsyncMemmoveRuntime::new(direct_config(), backend.clone());
+    let runtime = direct_runtime(backend.clone());
 
     let mut destination = BytesMut::from(&b"prefix:"[..]);
     destination.reserve(6);
@@ -1006,11 +1024,7 @@ async fn retry_continuation_backpressure_reports_snapshot_and_recovers_buffers()
         EnqcmdSubmission::Rejected,
         EnqcmdSubmission::Rejected,
     ]);
-    let runtime = DirectAsyncMemmoveRuntime::with_submission_retry_budget(
-        direct_config(),
-        backend.clone(),
-        1,
-    );
+    let runtime = direct_runtime_with_submission_retry_budget(backend.clone(), 1);
 
     let pending = tokio::spawn({
         let runtime = runtime.clone();
@@ -1068,7 +1082,7 @@ async fn retry_continuation_backpressure_reports_snapshot_and_recovers_buffers()
 #[tokio::test(flavor = "current_thread")]
 async fn post_copy_mismatch_preserves_destination_length_safety() {
     let backend = ScriptedDirectBackend::zero_success_copy();
-    let runtime = DirectAsyncMemmoveRuntime::new(direct_config(), backend.clone());
+    let runtime = direct_runtime(backend.clone());
 
     let mut destination = BytesMut::from(&b"prefix:"[..]);
     destination.reserve(4);

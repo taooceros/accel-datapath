@@ -482,7 +482,10 @@ impl AsyncDsaSession {
         device_path: P,
         max_page_fault_retries: u32,
     ) -> Result<Self, AsyncMemmoveError> {
-        let config = DsaConfig::with_retries(device_path, max_page_fault_retries)?;
+        let config = DsaConfig::builder()
+            .device_path(device_path.as_ref().to_path_buf())
+            .max_page_fault_retries(max_page_fault_retries)
+            .build()?;
         Self::open_config(config)
     }
 

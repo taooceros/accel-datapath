@@ -38,17 +38,6 @@ impl DsaConfig {
         #[builder(default = PathBuf::from(DEFAULT_DEVICE_PATH), into)] device_path: PathBuf,
         #[builder(default = DEFAULT_MAX_PAGE_FAULT_RETRIES)] max_page_fault_retries: u32,
     ) -> Result<Self, MemmoveError> {
-        Self::with_retries(device_path, max_page_fault_retries)
-    }
-
-    pub fn new<P: AsRef<Path>>(device_path: P) -> Result<Self, MemmoveError> {
-        Self::with_retries(device_path, DEFAULT_MAX_PAGE_FAULT_RETRIES)
-    }
-
-    pub fn with_retries<P: AsRef<Path>>(
-        device_path: P,
-        max_page_fault_retries: u32,
-    ) -> Result<Self, MemmoveError> {
         Ok(Self {
             device_path: normalize_device_path(device_path.as_ref())?,
             max_page_fault_retries,
