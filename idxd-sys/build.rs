@@ -34,7 +34,6 @@ fn main() {
         .rustified_enum("dsa_completion_status")
         .rustified_enum("iax_opcode")
         .rustified_enum("iax_completion_status")
-        .layout_tests(false)
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()
         .expect("failed to generate idxd UAPI bindings from linux/idxd.h");
