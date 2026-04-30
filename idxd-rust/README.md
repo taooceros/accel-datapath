@@ -26,6 +26,7 @@ After reading, you should be able to:
 - `live_idxd_op` is the narrow S03 representative proof binary for generic `IdxdSession<Dsa>` memmove and `IdxdSession<Iax>` crc64 runs.
 - `await_memmove` is the crate-local async validation binary that exercises the public owner-plus-handle contract.
 - `tokio_memmove_bench` is the standalone Tokio-only direct async benchmark/proof binary. It emits JSON-first evidence for single latency, concurrent submissions, and fixed-duration throughput.
+- `bench_async_throughput_matrix.sh` is the small dsa-stdexec-style operator wrapper for async throughput sweeps. It reuses `tokio_memmove_bench --suite throughput`, runs each point through the launcher-backed verifier, and emits one CSV row per bytes/concurrency point.
 - `verify_live_memmove.sh`, `verify_async_memmove.sh`, `verify_tokio_memmove_bench.sh`, and `verify_idxd_representative_ops.sh` are the operational verifiers that wrap hardware proof binaries in the repo's `launch` capability flow and check the machine-readable artifacts they emit.
 
 ## Prerequisites
@@ -161,6 +162,19 @@ Use the benchmark proof path when you need JSON-first evidence for direct Tokio 
 ```bash
 bash idxd-rust/scripts/verify_tokio_memmove_bench.sh
 ```
+
+Use the async throughput matrix when you want a small dsa-stdexec-style CSV sweep over message size and concurrency without adopting the full C++ benchmark framework. It reuses the launcher-backed Tokio throughput verifier for each matrix point and keeps per-point JSON/stdout/stderr artifacts under the output directory:
+
+```bash
+IDXD_RUST_BENCH_DEVICE=/dev/dsa/wq0.1 \
+IDXD_RUST_BENCH_BYTES=64,4096 \
+IDXD_RUST_BENCH_CONCURRENCY=1,4,16 \
+IDXD_RUST_BENCH_DURATION_MS=100 \
+IDXD_RUST_BENCH_OUTPUT_DIR=target/async-throughput-matrix \
+bash idxd-rust/scripts/bench_async_throughput_matrix.sh
+```
+
+The CSV is written to `async_throughput_matrix.csv` by default and includes `bytes`, `concurrency`, completed/failed operation counts, `ops_per_sec`, `bytes_per_sec`, `gib_per_sec`, claim eligibility, and artifact paths. On this prepared host, prefer the shared DSA work queue `/dev/dsa/wq0.1` for the direct async benchmark path.
 
 Use the S04 collection workflow when you need a reviewer-ready evidence directory with focused command logs, verifier output directories, and a manifest:
 
