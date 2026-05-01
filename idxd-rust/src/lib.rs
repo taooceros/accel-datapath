@@ -11,8 +11,8 @@
 //! least that large. Async callers should use `AsyncMemmoveRequest::new` when
 //! work must cross Tokio tasks: requests own a `bytes::Bytes` source and a
 //! caller-provided `bytes::BytesMut` destination, and `AsyncMemmoveResult`
-//! returns the owned destination plus validation report after direct completion
-//! record observation. The async API intentionally has no public allocation
+//! returns the owned destination plus lightweight completion metadata after
+//! direct completion record observation. The async API intentionally has no public allocation
 //! convenience constructor and no borrowed copy-back helper; destination
 //! allocation and ownership stay explicit at the call site.
 //!
@@ -55,7 +55,8 @@ pub use iax_crc64::{
 pub use legacy_dsa::DsaSession;
 pub use session::{Accelerator, Dsa, Iaa, Iax, IdxdSession, IdxdSessionConfig, IdxdSessionError};
 pub use validation::{
-    COMPLETION_TIMEOUT_STATUS, CompletionAction, CompletionSnapshot, DEFAULT_DEVICE_PATH,
-    DEFAULT_MAX_PAGE_FAULT_RETRIES, DsaConfig, MAX_MEMMOVE_BYTES, MemmoveError, MemmovePhase,
-    MemmoveRequest, MemmoveRetry, MemmoveValidationReport, classify_memmove_completion,
+    AsyncMemmoveValidationMode, COMPLETION_TIMEOUT_STATUS, CompletionAction, CompletionSnapshot,
+    DEFAULT_DEVICE_PATH, DEFAULT_MAX_PAGE_FAULT_RETRIES, DsaConfig, MAX_MEMMOVE_BYTES,
+    MemmoveCompletion, MemmoveError, MemmovePhase, MemmoveRequest, MemmoveRetry,
+    MemmoveValidationReport, classify_memmove_completion,
 };

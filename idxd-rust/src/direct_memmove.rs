@@ -7,8 +7,8 @@ use idxd_sys::{
 
 use crate::lifecycle::{BlockingOperation, BlockingOperationDecision, run_blocking_operation};
 use crate::{
-    CompletionAction, CompletionSnapshot, DsaConfig, MemmoveError, MemmovePhase, MemmoveRequest,
-    MemmoveRetry, MemmoveValidationReport, classify_memmove_completion,
+    CompletionAction, CompletionSnapshot, DsaConfig, MemmoveCompletion, MemmoveError, MemmovePhase,
+    MemmoveRequest, MemmoveRetry, MemmoveValidationReport, classify_memmove_completion,
 };
 
 /// Operation-local memmove state that can be submitted now and completed later.
@@ -212,6 +212,10 @@ impl DirectMemmoveState {
     ) -> Result<MemmoveValidationReport, MemmoveError> {
         MemmoveValidationReport::new(device_path, self.request, self.retries, final_status)
     }
+
+    pub(crate) fn success_completion(&self, final_status: u8) -> MemmoveCompletion {
+        MemmoveCompletion::new(self.request, self.retries, final_status)
+    }
 }
 
 /// Verify initialized destination bytes after a terminal success without
@@ -219,7 +223,7 @@ impl DirectMemmoveState {
 pub(crate) fn verify_initialized_destination(
     config: &DsaConfig,
     request: MemmoveRequest,
-    report: &MemmoveValidationReport,
+    completion: &MemmoveCompletion,
     initialized_dst: &[u8],
     src: &[u8],
 ) -> Result<(), MemmoveError> {
@@ -234,8 +238,8 @@ pub(crate) fn verify_initialized_destination(
             phase: MemmovePhase::PostCopyVerify,
             requested_bytes: request.len(),
             mismatch_offset,
-            final_status: report.final_status,
-            page_fault_retries: report.page_fault_retries,
+            final_status: completion.final_status,
+            page_fault_retries: completion.page_fault_retries,
         });
     }
 
@@ -353,12 +357,15 @@ mod tests {
     fn post_copy_verification_reports_metadata_without_buffer_contents_or_destination_length() {
         let config = test_config();
         let request = MemmoveRequest::new(4).expect("request");
-        let report =
-            MemmoveValidationReport::new(config.device_path(), request, 1, DSA_COMP_SUCCESS)
-                .expect("report");
-        let err =
-            verify_initialized_destination(&config, request, &report, &[1, 2, 9, 4], &[1, 2, 3, 4])
-                .expect_err("mismatch should fail");
+        let completion = MemmoveCompletion::new(request, 1, DSA_COMP_SUCCESS);
+        let err = verify_initialized_destination(
+            &config,
+            request,
+            &completion,
+            &[1, 2, 9, 4],
+            &[1, 2, 3, 4],
+        )
+        .expect_err("mismatch should fail");
 
         assert_eq!(err.kind(), "byte_mismatch");
         assert_eq!(err.phase(), Some(MemmovePhase::PostCopyVerify));

@@ -3,7 +3,7 @@ use idxd_sys::{
     DSA_OPCODE_BATCH, DSA_OPCODE_CFLUSH, DSA_OPCODE_COMPARE, DSA_OPCODE_COMPVAL,
     DSA_OPCODE_COPY_CRC, DSA_OPCODE_CRCGEN, DSA_OPCODE_DUALCAST, DSA_OPCODE_MEMFILL,
     DSA_OPCODE_MEMMOVE, DSA_OPCODE_NOOP, DsaCompletionRecord, DsaHwDesc, IDXD_OP_FLAG_CC,
-    IDXD_OP_FLAG_CRAV, IDXD_OP_FLAG_RCR, idxd_uapi, reset_completion,
+    IDXD_OP_FLAG_CRAV, IDXD_OP_FLAG_RCR, idxd_uapi, reset_completion, reset_completion_status,
 };
 use std::mem::{align_of, offset_of, size_of};
 use std::ptr;
@@ -255,6 +255,25 @@ fn reset_completion_clears_record_without_changing_wrapper_contract() {
 }
 
 #[test]
+fn reset_completion_status_only_clears_status_byte() {
+    let mut completion = DsaCompletionRecord::default();
+    let bytes = (&mut completion as *mut DsaCompletionRecord).cast::<u8>();
+    // SAFETY: The wrapper is initialized, and this test writes the object
+    // representation to create non-zero sentinel fields before exercising the
+    // status-only reset helper.
+    unsafe {
+        ptr::write_bytes(bytes, 0x5a, size_of::<DsaCompletionRecord>());
+    }
+
+    reset_completion_status(&mut completion);
+
+    assert_eq!(completion.status(), DSA_COMP_NONE);
+    // SAFETY: Byte 1 is still within the initialized completion-record wrapper.
+    // The status-only helper must not zero the rest of the record.
+    assert_eq!(unsafe { ptr::read(bytes.add(1)) }, 0x5a);
+}
+
+#[test]
 fn memmove_helper_writes_generated_opcode_flags_and_fields() {
     let src = [0x5a_u8; 17];
     let mut dst = [0_u8; 17];
@@ -294,4 +313,23 @@ fn memmove_helper_writes_generated_opcode_flags_and_fields() {
         (&mut completion as *mut DsaCompletionRecord) as u64,
         "set_completion must write the generated completion_addr field"
     );
+}
+
+#[test]
+fn memmove_to_memory_helper_leaves_cache_control_unset() {
+    let src = [0x7b_u8; 17];
+    let mut dst = [0_u8; 17];
+    let mut desc = DsaHwDesc::default();
+
+    desc.fill_memmove_to_memory(src.as_ptr(), dst.as_mut_ptr(), src.len() as u32);
+
+    assert_eq!(desc.opcode(), DSA_OPCODE_MEMMOVE);
+    assert_eq!(
+        desc.flags(),
+        IDXD_OP_FLAG_RCR | IDXD_OP_FLAG_CRAV,
+        "fill_memmove_to_memory must request completion records without cache-control hints"
+    );
+    assert_eq!(desc.src_addr(), src.as_ptr() as u64);
+    assert_eq!(desc.dst_addr(), dst.as_mut_ptr() as u64);
+    assert_eq!(desc.xfer_size(), src.len() as u32);
 }

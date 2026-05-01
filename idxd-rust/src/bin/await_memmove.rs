@@ -332,36 +332,36 @@ fn map_execution_outcome(
     shutdown_result: Result<(), AsyncMemmoveError>,
 ) -> RunOutcome {
     match (memmove_result, shutdown_result) {
-        (Ok(result), Ok(())) => success_outcome(result.report),
+        (Ok(result), Ok(())) => success_outcome(args, result.completion),
         (Err(err), Ok(())) => async_failure_outcome(args, err),
         (Ok(_), Err(err)) => async_failure_outcome(args, err),
         (Err(err), Err(_shutdown_err)) => async_failure_outcome(args, err),
     }
 }
 
-fn success_outcome(report: MemmoveValidationReport) -> RunOutcome {
+fn success_outcome(args: &CliArgs, completion: idxd_rust::MemmoveCompletion) -> RunOutcome {
     RunOutcome {
         ok: true,
-        device_path: report.device_path.display().to_string(),
-        requested_bytes: report.requested_bytes,
-        page_fault_retries: Some(report.page_fault_retries),
-        final_status: Some(report.final_status),
+        device_path: args.device_path.display().to_string(),
+        requested_bytes: completion.requested_bytes,
+        page_fault_retries: Some(completion.page_fault_retries),
+        final_status: Some(completion.final_status),
         phase: "completed".to_string(),
         error_kind: None,
         lifecycle_failure_kind: None,
         worker_failure_kind: None,
         direct_failure_kind: None,
-        retry_budget: Some(report.page_fault_retries),
-        retry_count: Some(report.page_fault_retries),
+        retry_budget: Some(completion.page_fault_retries),
+        retry_count: Some(completion.page_fault_retries),
         completion_result: None,
         completion_bytes_completed: None,
         completion_fault_addr: None,
         validation_phase: Some("completed".to_string()),
         validation_error_kind: None,
         message: format!(
-            "verified {} copied bytes via direct async memmove on {}",
-            report.requested_bytes,
-            report.device_path.display()
+            "completed {} copied bytes via direct async memmove on {}",
+            completion.requested_bytes,
+            args.device_path.display()
         ),
     }
 }

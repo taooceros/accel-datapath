@@ -11,7 +11,7 @@ use idxd_sys::WqPortal;
 
 use crate::direct_memmove::{run_direct_memmove, verify_initialized_destination};
 use crate::validation::{
-    DEFAULT_MAX_PAGE_FAULT_RETRIES, DsaConfig, MemmoveError, MemmoveRequest,
+    DEFAULT_MAX_PAGE_FAULT_RETRIES, DsaConfig, MemmoveCompletion, MemmoveError, MemmoveRequest,
     MemmoveValidationReport,
 };
 
@@ -79,7 +79,8 @@ impl DsaSession {
     ) -> Result<MemmoveValidationReport, MemmoveError> {
         let request = MemmoveRequest::for_buffers(dst.len(), src.len())?;
         let report = self.memmove_inner(dst.as_mut_ptr(), src.as_ptr(), request)?;
-        verify_initialized_destination(self.dsa_config(), request, &report, dst, src)?;
+        let completion = MemmoveCompletion::from(&report);
+        verify_initialized_destination(self.dsa_config(), request, &completion, dst, src)?;
 
         Ok(report)
     }
@@ -99,7 +100,14 @@ impl DsaSession {
         // success so the bytes are initialized for post-copy verification.
         let initialized_dst =
             unsafe { std::slice::from_raw_parts(dst.as_mut_ptr(), request.len()) };
-        verify_initialized_destination(self.dsa_config(), request, &report, initialized_dst, src)?;
+        let completion = MemmoveCompletion::from(&report);
+        verify_initialized_destination(
+            self.dsa_config(),
+            request,
+            &completion,
+            initialized_dst,
+            src,
+        )?;
 
         Ok(report)
     }

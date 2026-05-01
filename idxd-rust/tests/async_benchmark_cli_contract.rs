@@ -69,6 +69,7 @@ fn prints_help_without_touching_hardware() {
     assert!(stdout.contains("--backend <hardware|software>"));
     assert!(stdout.contains("--suite <canonical|latency|concurrency|throughput>"));
     assert!(stdout.contains("--max-page-fault-retries <N>"));
+    assert!(stdout.contains("--validation <completion-only|full>"));
 }
 
 #[test]
@@ -99,6 +100,7 @@ fn rejects_invalid_enum_and_device_inputs_before_touching_hardware() {
         ["--backend", "simulated"].as_slice(),
         ["--suite", "all"].as_slice(),
         ["--format", "xml"].as_slice(),
+        ["--validation", "bytes"].as_slice(),
         ["--device", ""].as_slice(),
     ] {
         let output = run(args);
@@ -164,7 +166,7 @@ fn emits_software_canonical_json_with_required_schema_fields() {
     assert!(String::from_utf8_lossy(&output.stderr).is_empty());
 
     let artifact = stdout_json(&output);
-    assert_eq!(artifact["schema_version"], 1);
+    assert_eq!(artifact["schema_version"], 2);
     assert_eq!(artifact["ok"], true);
     assert_eq!(artifact["verdict"], "pass");
     assert_eq!(artifact["backend"], "software");
@@ -177,6 +179,8 @@ fn emits_software_canonical_json_with_required_schema_fields() {
     assert_eq!(artifact["concurrency"], 4);
     assert_eq!(artifact["duration_ms"], 100);
     assert_eq!(artifact["max_page_fault_retries"], 7);
+    assert_eq!(artifact["validation_mode"], "completion-only");
+    assert_eq!(artifact["post_run_validation"], "not_run");
     assert!(artifact["failure_class"].is_null());
     assert!(artifact["error_kind"].is_null());
     assert!(artifact["direct_failure_kind"].is_null());
@@ -191,14 +195,7 @@ fn emits_software_canonical_json_with_required_schema_fields() {
         .iter()
         .map(|row| row["mode"].as_str().expect("mode should be string"))
         .collect();
-    assert_eq!(
-        modes,
-        [
-            "single_latency",
-            "concurrent_submissions",
-            "fixed_duration_throughput"
-        ]
-    );
+    assert_eq!(modes, ["raw_async_throughput"]);
 
     for row in results {
         assert_eq!(row["target"], "software_direct_async_diagnostic");
@@ -228,12 +225,8 @@ fn emits_software_canonical_json_with_required_schema_fields() {
 }
 
 #[test]
-fn individual_software_suites_emit_only_the_requested_mode_at_minimum_bounds() {
-    for (suite, expected_mode) in [
-        ("latency", "single_latency"),
-        ("concurrency", "concurrent_submissions"),
-        ("throughput", "fixed_duration_throughput"),
-    ] {
+fn individual_software_suites_emit_raw_throughput_at_minimum_bounds() {
+    for suite in ["latency", "concurrency", "throughput"] {
         let output = run(&[
             "--backend",
             "software",
@@ -261,7 +254,7 @@ fn individual_software_suites_emit_only_the_requested_mode_at_minimum_bounds() {
             .expect("results should be array");
         assert_eq!(results.len(), 1, "suite={suite}");
         let row = &results[0];
-        assert_eq!(row["mode"], expected_mode);
+        assert_eq!(row["mode"], "raw_async_throughput");
         assert_eq!(row["target"], "software_direct_async_diagnostic");
         assert!(row["completed_operations"].as_u64().unwrap() > 0);
         assert_eq!(row["failed_operations"], 0);
@@ -300,13 +293,15 @@ fn hardware_nonexistent_device_emits_typed_queue_open_failure_json() {
     assert!(String::from_utf8_lossy(&output.stderr).is_empty());
 
     let artifact = stdout_json(&output);
-    assert_eq!(artifact["schema_version"], 1);
+    assert_eq!(artifact["schema_version"], 2);
     assert_eq!(artifact["ok"], false);
     assert_eq!(artifact["verdict"], "expected_failure");
     assert_eq!(artifact["backend"], "hardware");
     assert_eq!(artifact["claim_eligible"], false);
     assert_eq!(artifact["suite"], "latency");
     assert_eq!(artifact["max_page_fault_retries"], 5);
+    assert_eq!(artifact["validation_mode"], "completion-only");
+    assert_eq!(artifact["post_run_validation"], "not_run");
     assert_eq!(artifact["failure_class"], "queue_open");
     assert_eq!(artifact["error_kind"], "queue_open");
     assert!(artifact["direct_failure_kind"].is_null());

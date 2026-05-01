@@ -322,7 +322,7 @@ fn supports_minimal_valid_request_and_writes_matching_artifact() {
     assert_eq!(parsed["final_status"], "0x01");
     assert_no_payload_dump_fields(&parsed);
     assert!(
-        artifact.contains("verified 1 copied bytes via direct async memmove on /dev/dsa/test0.0")
+        artifact.contains("completed 1 copied bytes via direct async memmove on /dev/dsa/test0.0")
     );
 
     fs::remove_file(&artifact_path).expect("artifact cleanup should succeed");

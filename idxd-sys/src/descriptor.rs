@@ -20,7 +20,9 @@ impl Default for BindgenDsaHwDesc {
         // SAFETY: The generated descriptor is plain C ABI storage. Hardware
         // descriptors are intentionally initialized from an all-zero record
         // before generated packed fields are written by the fill helpers below.
-        Self { raw: unsafe { std::mem::zeroed() } }
+        Self {
+            raw: unsafe { std::mem::zeroed() },
+        }
     }
 }
 
@@ -42,7 +44,9 @@ impl Default for BindgenDsaCompletionRecord {
     fn default() -> Self {
         // SAFETY: The generated completion record is plain C ABI storage and
         // DSA completion records are reset to an all-zero status before reuse.
-        Self { raw: unsafe { std::mem::zeroed() } }
+        Self {
+            raw: unsafe { std::mem::zeroed() },
+        }
     }
 }
 
@@ -123,6 +127,12 @@ impl BindgenDsaHwDesc {
     #[inline(always)]
     pub(crate) fn as_raw_ptr(&self) -> *const idxd_uapi::dsa_hw_desc {
         ptr::addr_of!(self.raw)
+    }
+
+    /// Return a raw 64-byte descriptor pointer for low-level submission helpers.
+    #[inline(always)]
+    pub fn as_desc64_ptr(&self) -> *const u8 {
+        self.as_raw_ptr().cast::<u8>()
     }
 
     #[inline(always)]
@@ -210,6 +220,33 @@ impl BindgenDsaHwDesc {
     pub fn fill_memmove(&mut self, src: *const u8, dst: *mut u8, size: u32) {
         *self = Self::default();
         self.set_opcode_flags(DSA_OPCODE_MEMMOVE, IDXD_OP_FLAG_CC);
+        // SAFETY: The generated descriptor is packed. Use unaligned stores into
+        // the bindgen fields while preserving the caller-provided raw addresses.
+        unsafe {
+            ptr::write_unaligned(
+                ptr::addr_of_mut!((*self.as_raw_mut_ptr()).__bindgen_anon_1.src_addr),
+                src as u64,
+            );
+            ptr::write_unaligned(
+                ptr::addr_of_mut!((*self.as_raw_mut_ptr()).__bindgen_anon_2.dst_addr),
+                dst as u64,
+            );
+            ptr::write_unaligned(
+                ptr::addr_of_mut!((*self.as_raw_mut_ptr()).__bindgen_anon_3.xfer_size),
+                size,
+            );
+        }
+    }
+
+    /// Fill for memmove with cache-control flags left unset.
+    ///
+    /// This requests ordinary completion records while allowing the device to
+    /// write destination data to memory rather than allocating destination lines
+    /// into cache. It is useful for raw throughput paths that do not consume the
+    /// destination bytes in the measured loop.
+    pub fn fill_memmove_to_memory(&mut self, src: *const u8, dst: *mut u8, size: u32) {
+        *self = Self::default();
+        self.set_opcode_flags(DSA_OPCODE_MEMMOVE, 0);
         // SAFETY: The generated descriptor is packed. Use unaligned stores into
         // the bindgen fields while preserving the caller-provided raw addresses.
         unsafe {

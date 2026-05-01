@@ -19,6 +19,9 @@ BYTE_LIST=${IDXD_RUST_BENCH_BYTES:-64,4096}
 CONCURRENCY_LIST=${IDXD_RUST_BENCH_CONCURRENCY:-1,4,16}
 DURATION_MS=${IDXD_RUST_BENCH_DURATION_MS:-100}
 MAX_PAGE_FAULT_RETRIES=${IDXD_RUST_BENCH_MAX_PAGE_FAULT_RETRIES:-1}
+VALIDATION_MODE=${IDXD_RUST_BENCH_VALIDATION:-completion-only}
+MIN_GIB_PER_SEC=${IDXD_RUST_BENCH_MIN_GIB_PER_SEC:-}
+MIN_OPS_PER_SEC=${IDXD_RUST_BENCH_MIN_OPS_PER_SEC:-}
 ITERATIONS=${IDXD_RUST_BENCH_ITERATIONS:-1}
 BUILD_PROFILE=${IDXD_RUST_BENCH_PROFILE:-release}
 SKIP_BUILD=${IDXD_RUST_BENCH_SKIP_BUILD:-0}
@@ -113,6 +116,7 @@ with path.open('w', newline='', encoding='utf-8') as f:
         'concurrency',
         'duration_ms',
         'max_page_fault_retries',
+        'validation_mode',
         'completed_operations',
         'failed_operations',
         'elapsed_ns',
@@ -150,9 +154,10 @@ verifier_log_path = Path(sys.argv[5])
 if not artifact_path.is_file():
     raise SystemExit(f'missing artifact: {artifact_path}')
 report = json.loads(artifact_path.read_text(encoding='utf-8'))
-rows = [row for row in report.get('results', []) if row.get('mode') == 'fixed_duration_throughput']
+expected_mode = 'raw_async_throughput' if report.get('backend') == 'software' else 'raw_nonbatch_submission_throughput'
+rows = [row for row in report.get('results', []) if row.get('mode') == expected_mode]
 if len(rows) != 1:
-    raise SystemExit(f'expected exactly one fixed_duration_throughput row, found {len(rows)}')
+    raise SystemExit(f'expected exactly one {expected_mode} row, found {len(rows)}')
 row = rows[0]
 bytes_per_sec = row.get('bytes_per_sec')
 gib_per_sec = None if bytes_per_sec is None else float(bytes_per_sec) / (1024.0 ** 3)
@@ -166,6 +171,7 @@ with csv_path.open('a', newline='', encoding='utf-8') as f:
         report['concurrency'],
         report['duration_ms'],
         report['max_page_fault_retries'],
+        report.get('validation_mode'),
         row['completed_operations'],
         row['failed_operations'],
         row['elapsed_ns'],
@@ -201,6 +207,10 @@ parse_positive_list "${CONCURRENCY_LIST}" "IDXD_RUST_BENCH_CONCURRENCY" CONCURRE
 parse_positive_list "${DURATION_MS}" "IDXD_RUST_BENCH_DURATION_MS" DURATION_VALUES
 parse_positive_list "${ITERATIONS}" "IDXD_RUST_BENCH_ITERATIONS" ITERATION_VALUES
 MAX_PAGE_FAULT_RETRIES=$(parse_nonnegative_scalar "${MAX_PAGE_FAULT_RETRIES}" "IDXD_RUST_BENCH_MAX_PAGE_FAULT_RETRIES")
+case "${VALIDATION_MODE}" in
+  completion-only|full) ;;
+  *) fail_phase preflight "message=IDXD_RUST_BENCH_VALIDATION must be completion-only or full validation=${VALIDATION_MODE}" ;;
+esac
 if [[ ${#DURATION_VALUES[@]} -ne 1 ]]; then
   fail_phase preflight "message=IDXD_RUST_BENCH_DURATION_MS expects one positive integer"
 fi
@@ -251,7 +261,7 @@ for bytes in "${BYTE_VALUES[@]}"; do
     stdout_path="${point_dir}/tokio_memmove_bench.stdout"
     stderr_path="${point_dir}/tokio_memmove_bench.stderr"
 
-    log_phase runtime "backend=${BACKEND} device_path=${DEVICE_PATH} bytes=${bytes} concurrency=${concurrency} duration_ms=${DURATION_MS} max_page_fault_retries=${MAX_PAGE_FAULT_RETRIES} artifact=${artifact}"
+    log_phase runtime "backend=${BACKEND} device_path=${DEVICE_PATH} bytes=${bytes} concurrency=${concurrency} duration_ms=${DURATION_MS} max_page_fault_retries=${MAX_PAGE_FAULT_RETRIES} validation=${VALIDATION_MODE} min_gib_per_sec=${MIN_GIB_PER_SEC:-none} min_ops_per_sec=${MIN_OPS_PER_SEC:-none} artifact=${artifact}"
 
     set +e
     IDXD_RUST_VERIFY_BACKEND="${BACKEND}" \
@@ -262,6 +272,9 @@ for bytes in "${BYTE_VALUES[@]}"; do
     IDXD_RUST_VERIFY_CONCURRENCY="${concurrency}" \
     IDXD_RUST_VERIFY_DURATION_MS="${DURATION_MS}" \
     IDXD_RUST_VERIFY_MAX_PAGE_FAULT_RETRIES="${MAX_PAGE_FAULT_RETRIES}" \
+    IDXD_RUST_VERIFY_VALIDATION="${VALIDATION_MODE}" \
+    IDXD_RUST_VERIFY_MIN_GIB_PER_SEC="${MIN_GIB_PER_SEC}" \
+    IDXD_RUST_VERIFY_MIN_OPS_PER_SEC="${MIN_OPS_PER_SEC}" \
     IDXD_RUST_VERIFY_OUTPUT_DIR="${point_dir}" \
     IDXD_RUST_VERIFY_PROFILE="${BUILD_PROFILE}" \
     IDXD_RUST_VERIFY_SKIP_BUILD=1 \
@@ -280,7 +293,7 @@ for bytes in "${BYTE_VALUES[@]}"; do
     row_summary=$(append_csv_row "${artifact}" "${stdout_path}" "${stderr_path}" "${verifier_log}") \
       || fail_phase artifact_validation "backend=${BACKEND} device_path=${DEVICE_PATH} bytes=${bytes} concurrency=${concurrency} artifact=${artifact} verifier_log=${verifier_log} message=failed to append CSV row"
 
-    log_phase point_done "backend=${BACKEND} device_path=${DEVICE_PATH} bytes=${bytes} concurrency=${concurrency} max_page_fault_retries=${MAX_PAGE_FAULT_RETRIES} ${row_summary//$'\n'/ } artifact=${artifact}"
+    log_phase point_done "backend=${BACKEND} device_path=${DEVICE_PATH} bytes=${bytes} concurrency=${concurrency} max_page_fault_retries=${MAX_PAGE_FAULT_RETRIES} validation=${VALIDATION_MODE} ${row_summary//$'\n'/ } artifact=${artifact}"
 
     if [[ "${row_summary}" != *"ok=true"* ]]; then
       matrix_failed=1
@@ -298,4 +311,4 @@ if [[ "${matrix_failed}" -ne 0 ]]; then
   fail_phase done "verdict=fail backend=${BACKEND} device_path=${DEVICE_PATH} points=${points} message=one or more throughput points were not claim-eligible passes"
 fi
 
-log_phase done "verdict=pass backend=${BACKEND} device_path=${DEVICE_PATH} points=${points} bytes=${BYTE_LIST} concurrency=${CONCURRENCY_LIST} duration_ms=${DURATION_MS} max_page_fault_retries=${MAX_PAGE_FAULT_RETRIES} csv=${CSV_PATH}"
+log_phase done "verdict=pass backend=${BACKEND} device_path=${DEVICE_PATH} points=${points} bytes=${BYTE_LIST} concurrency=${CONCURRENCY_LIST} duration_ms=${DURATION_MS} max_page_fault_retries=${MAX_PAGE_FAULT_RETRIES} validation=${VALIDATION_MODE} csv=${CSV_PATH}"

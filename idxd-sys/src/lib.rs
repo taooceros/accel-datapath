@@ -29,7 +29,9 @@ mod timing;
 mod topology;
 
 pub use cache::flush_range;
-pub use completion::{drain_completions, poll_completion, reset_completion, touch_fault_page};
+pub use completion::{
+    drain_completions, poll_completion, reset_completion, reset_completion_status, touch_fault_page,
+};
 pub use descriptor::{
     BindgenDsaCompletionRecord, BindgenDsaHwDesc, DSA_COMP_NONE, DSA_COMP_PAGE_FAULT_NOBOF,
     DSA_COMP_STATUS_MASK, DSA_COMP_SUCCESS, DSA_OPCODE_BATCH, DSA_OPCODE_CFLUSH,

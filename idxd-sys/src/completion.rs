@@ -1,4 +1,4 @@
-use crate::descriptor::{DsaCompletionRecord, DSA_COMP_NONE, DSA_COMP_STATUS_MASK};
+use crate::descriptor::{DSA_COMP_NONE, DSA_COMP_STATUS_MASK, DsaCompletionRecord};
 use std::ptr;
 
 /// Poll a completion record until status is non-zero.
@@ -31,6 +31,25 @@ pub fn reset_completion(comp: &mut DsaCompletionRecord) {
     // before the caller reuses it for a new descriptor.
     unsafe {
         ptr::write_bytes(comp as *mut DsaCompletionRecord, 0, 1);
+    }
+}
+
+/// Reset only the volatile completion status byte for hot completion-record reuse.
+///
+/// This avoids zeroing the whole completion record on the critical path. Callers
+/// must not read result, byte-count, or fault-address fields from a reused record
+/// until hardware has produced a non-`DSA_COMP_NONE` status for the new operation.
+#[inline(always)]
+pub fn reset_completion_status(comp: &mut DsaCompletionRecord) {
+    // SAFETY: `comp` is initialized completion-record storage. The generated
+    // `status` field is the hardware-owned completion byte, and a volatile store
+    // of `DSA_COMP_NONE` re-arms the record before descriptor resubmission without
+    // fabricating references to packed fields.
+    unsafe {
+        ptr::write_volatile(
+            ptr::addr_of_mut!((*comp.as_raw_mut_ptr()).status),
+            DSA_COMP_NONE,
+        );
     }
 }
 

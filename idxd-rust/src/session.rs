@@ -8,7 +8,7 @@ use snafu::Snafu;
 use crate::direct_memmove::{run_direct_memmove, verify_initialized_destination};
 use crate::iax_crc64::{IaxCrc64Result, run_iax_crc64};
 use crate::validation::{
-    DEFAULT_MAX_PAGE_FAULT_RETRIES, DsaConfig, MemmoveError, MemmoveRequest,
+    DEFAULT_MAX_PAGE_FAULT_RETRIES, DsaConfig, MemmoveCompletion, MemmoveError, MemmoveRequest,
     MemmoveValidationReport,
 };
 
@@ -166,7 +166,8 @@ impl IdxdSession<Dsa> {
                 request,
             )?
         };
-        verify_initialized_destination(&config, request, &report, dst, src)?;
+        let completion = MemmoveCompletion::from(&report);
+        verify_initialized_destination(&config, request, &completion, dst, src)?;
 
         Ok(report)
     }

@@ -85,6 +85,22 @@ impl RowFailure {
         }
     }
 
+    pub(crate) fn message(failure_class: &'static str, error_kind: &'static str) -> Self {
+        Self {
+            failure_class,
+            error_kind,
+            direct_failure_kind: None,
+            validation_phase: None,
+            validation_error_kind: None,
+            direct_retry_budget: None,
+            direct_retry_count: None,
+            completion_status: None,
+            completion_result: None,
+            completion_bytes_completed: None,
+            completion_fault_addr: None,
+        }
+    }
+
     pub(crate) fn join_error() -> Self {
         Self {
             failure_class: "tokio_join",

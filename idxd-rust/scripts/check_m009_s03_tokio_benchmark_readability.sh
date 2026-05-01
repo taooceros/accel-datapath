@@ -68,6 +68,7 @@ source_paths=(
   "${CRATE_DIR}/src/bin/tokio_memmove_bench/failure.rs"
   "${CRATE_DIR}/src/bin/tokio_memmove_bench/hardware.rs"
   "${CRATE_DIR}/src/bin/tokio_memmove_bench/modes.rs"
+  "${CRATE_DIR}/src/bin/tokio_memmove_bench/nonbatch.rs"
   "${CRATE_DIR}/src/bin/tokio_memmove_bench/runner.rs"
   "${CRATE_DIR}/src/bin/tokio_memmove_bench/software.rs"
   "${CRATE_DIR}/tests/async_benchmark_cli_contract.rs"
@@ -155,15 +156,15 @@ require_literal 'bash idxd-rust/scripts/check_m009_s03_tokio_benchmark_readabili
 require_literal 'cargo test --manifest-path ./Cargo.toml -p idxd-rust --test async_benchmark_readability_contract -- --nocapture' 'cargo_guard_command'
 require_literal 'cargo test --manifest-path ./Cargo.toml -p idxd-rust --test async_benchmark_cli_contract --test async_benchmark_verifier_contract -- --nocapture' 'existing_contract_command'
 
-require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/artifact.rs" 'const SCHEMA_VERSION: u32 = 1;' 'source_schema_version_constant'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/artifact.rs" 'const SCHEMA_VERSION: u32 = 2;' 'source_schema_version_constant'
 require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/cli.rs" 'struct CliArgs' 'source_cli_args_owner'
 require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/cli.rs" 'enum Suite' 'source_suite_owner'
 require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/software.rs" 'struct SoftwareDirectBackend' 'source_software_backend_owner'
 require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/software.rs" 'fn initialize_success_destination' 'source_software_success_copy_owner'
 require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/software.rs" 'claim_eligible: false' 'source_software_non_claim_eligible_owner'
 require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/hardware.rs" 'async fn hardware_artifact' 'source_hardware_artifact_owner'
-require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/hardware.rs" 'fn run_sync_comparison' 'source_sync_comparison_owner'
-require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/hardware.rs" 'claim_eligible: first_failure.is_none()' 'source_hardware_claim_gating_owner'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/hardware.rs" 'async fn run_post_run_validation' 'source_post_run_validation_owner'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/hardware.rs" 'claim_eligible: ok' 'source_hardware_claim_gating_owner'
 require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/modes.rs" 'async fn run_async_mode' 'source_async_mode_owner'
 require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/modes.rs" 'JoinSet' 'source_joinset_owner'
 require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/modes.rs" 'fn deterministic_source' 'source_request_data_owner'
@@ -176,13 +177,13 @@ require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/artifact.rs" '
 require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/artifact.rs" 'fn write_artifact' 'source_write_artifact_owner'
 require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/artifact.rs" 'SOFTWARE_TARGET: &str = "software_direct_async_diagnostic"' 'source_software_target_constant'
 require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/artifact.rs" 'HARDWARE_ASYNC_TARGET: &str = "direct_async"' 'source_hardware_async_target_constant'
-require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/artifact.rs" 'HARDWARE_SYNC_TARGET: &str = "direct_sync"' 'source_hardware_sync_target_constant'
+require_literal_in_file "${CRATE_DIR}/src/bin/tokio_memmove_bench/artifact.rs" 'SCHEMA_VERSION: u32 = 2' 'source_schema_version_v2_constant'
 require_literal_in_file "${CRATE_DIR}/tests/async_benchmark_cli_contract.rs" 'writes_artifact_matching_stdout_exactly' 'cli_contract_stdout_artifact_equality'
 require_literal_in_file "${CRATE_DIR}/tests/async_benchmark_cli_contract.rs" 'assert_no_payload_dump_fields' 'cli_contract_no_payload'
 require_literal_in_file "${CRATE_DIR}/tests/async_benchmark_verifier_contract.rs" 'malformed_json_is_hard_artifact_validation_failure' 'verifier_contract_malformed_json'
 require_literal_in_file "${CRATE_DIR}/tests/async_benchmark_verifier_contract.rs" 'stdout_artifact_mismatch_is_hard_artifact_validation_failure' 'verifier_contract_stdout_artifact_mismatch'
 require_literal_in_file "${CRATE_DIR}/tests/async_benchmark_verifier_contract.rs" 'software_claim_eligible_contradiction_is_hard_failure' 'verifier_contract_software_claim_contradiction'
-require_literal_in_file "${CRATE_DIR}/tests/async_benchmark_verifier_contract.rs" 'hardware_success_missing_sync_comparison_is_hard_failure' 'verifier_contract_missing_sync_comparison'
+require_literal_in_file "${CRATE_DIR}/tests/async_benchmark_verifier_contract.rs" 'hardware_success_missing_raw_throughput_is_hard_failure' 'verifier_contract_missing_raw_throughput'
 require_literal_in_file "${CRATE_DIR}/tests/async_benchmark_verifier_contract.rs" 'benchmark_verifier_rejects_payload_dump_fields_in_result_rows' 'verifier_contract_payload_rejection'
 require_literal_in_file "${CRATE_DIR}/scripts/verify_tokio_memmove_bench.sh" 'log_phase done' 'verifier_script_done_phase'
 require_literal_in_file "${CRATE_DIR}/scripts/verify_tokio_memmove_bench.sh" 'fail_phase artifact_validation' 'verifier_script_artifact_validation_phase'
@@ -190,7 +191,7 @@ require_literal_in_file "${CRATE_DIR}/scripts/verify_tokio_memmove_bench.sh" 'va
 require_literal_in_file "${CRATE_DIR}/scripts/verify_tokio_memmove_bench.sh" 'complete_with_explicit_failure()' 'verifier_script_expected_failure_owner_function'
 require_literal_in_file "${CRATE_DIR}/scripts/verify_tokio_memmove_bench.sh" 'stdout and artifact diverged' 'verifier_script_stdout_artifact_mismatch'
 require_literal_in_file "${CRATE_DIR}/scripts/verify_tokio_memmove_bench.sh" 'software artifacts must not be claim eligible' 'verifier_script_software_claim_guard'
-require_literal_in_file "${CRATE_DIR}/scripts/verify_tokio_memmove_bench.sh" 'hardware success missing direct sync comparison row' 'verifier_script_sync_comparison_guard'
+require_literal_in_file "${CRATE_DIR}/scripts/verify_tokio_memmove_bench.sh" 'success missing expected throughput mode' 'verifier_script_raw_throughput_guard'
 require_literal_in_file "${CRATE_DIR}/scripts/verify_tokio_memmove_bench.sh" 'artifact contains forbidden payload dump field' 'verifier_script_payload_guard'
 
 require_regex 'schema[_ -]?version.*stable|stable.*schema[_ -]?version' 'schema_stability_phrase'

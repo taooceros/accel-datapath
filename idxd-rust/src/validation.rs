@@ -15,11 +15,39 @@ pub const DEFAULT_MAX_PAGE_FAULT_RETRIES: u32 = 1;
 /// DSA descriptors encode transfer size as `u32`.
 pub const MAX_MEMMOVE_BYTES: usize = u32::MAX as usize;
 
+/// Async memmove validation policy.
+///
+/// Completion-only mode is intended for benchmark hot paths: it trusts a
+/// terminal successful completion record and advances the owned destination
+/// length without comparing every copied byte. Full byte comparison remains
+/// available for explicit proof/sample checks outside timed throughput loops.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AsyncMemmoveValidationMode {
+    CompletionOnly,
+    Full,
+}
+
+impl AsyncMemmoveValidationMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::CompletionOnly => "completion-only",
+            Self::Full => "full",
+        }
+    }
+}
+
+impl Default for AsyncMemmoveValidationMode {
+    fn default() -> Self {
+        Self::Full
+    }
+}
+
 /// Stable configuration for one reusable DSA memmove session.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DsaConfig {
     device_path: PathBuf,
     max_page_fault_retries: u32,
+    async_validation_mode: AsyncMemmoveValidationMode,
 }
 
 impl Default for DsaConfig {
@@ -27,6 +55,7 @@ impl Default for DsaConfig {
         Self {
             device_path: PathBuf::from(DEFAULT_DEVICE_PATH),
             max_page_fault_retries: DEFAULT_MAX_PAGE_FAULT_RETRIES,
+            async_validation_mode: AsyncMemmoveValidationMode::default(),
         }
     }
 }
@@ -37,10 +66,12 @@ impl DsaConfig {
     pub fn builder(
         #[builder(default = PathBuf::from(DEFAULT_DEVICE_PATH), into)] device_path: PathBuf,
         #[builder(default = DEFAULT_MAX_PAGE_FAULT_RETRIES)] max_page_fault_retries: u32,
+        #[builder(default)] async_validation_mode: AsyncMemmoveValidationMode,
     ) -> Result<Self, MemmoveError> {
         Ok(Self {
             device_path: normalize_device_path(device_path.as_ref())?,
             max_page_fault_retries,
+            async_validation_mode,
         })
     }
 
@@ -50,6 +81,10 @@ impl DsaConfig {
 
     pub fn max_page_fault_retries(&self) -> u32 {
         self.max_page_fault_retries
+    }
+
+    pub fn async_validation_mode(&self) -> AsyncMemmoveValidationMode {
+        self.async_validation_mode
     }
 }
 
@@ -161,6 +196,34 @@ impl MemmoveValidationReport {
             page_fault_retries,
             final_status,
         })
+    }
+}
+
+/// Lightweight terminal completion metadata returned by async hot paths.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MemmoveCompletion {
+    pub requested_bytes: usize,
+    pub page_fault_retries: u32,
+    pub final_status: u8,
+}
+
+impl MemmoveCompletion {
+    pub fn new(request: MemmoveRequest, page_fault_retries: u32, final_status: u8) -> Self {
+        Self {
+            requested_bytes: request.len(),
+            page_fault_retries,
+            final_status,
+        }
+    }
+}
+
+impl From<&MemmoveValidationReport> for MemmoveCompletion {
+    fn from(report: &MemmoveValidationReport) -> Self {
+        Self {
+            requested_bytes: report.requested_bytes,
+            page_fault_retries: report.page_fault_retries,
+            final_status: report.final_status,
+        }
     }
 }
 

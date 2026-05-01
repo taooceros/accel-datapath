@@ -17,8 +17,12 @@ where
             if inner.closed.load(Ordering::Acquire) {
                 return;
             }
+            let pending_notify = Arc::clone(&inner.pending_notify);
             drop(inner);
-            tokio::time::sleep(MONITOR_IDLE_BACKOFF).await;
+            tokio::select! {
+                _ = pending_notify.notified() => {}
+                _ = tokio::time::sleep(MONITOR_IDLE_BACKOFF) => {}
+            }
             continue;
         }
 

@@ -293,10 +293,9 @@ async fn async_memmove_returns_owned_destination_on_success() {
         .expect("fake worker should succeed");
 
     assert_eq!(result.destination.as_ref(), &[1, 2, 3, 4]);
-    assert_eq!(result.report.device_path.to_str(), Some("/dev/dsa/test0.0"));
-    assert_eq!(result.report.requested_bytes, 4);
-    assert_eq!(result.report.page_fault_retries, 0);
-    assert_eq!(result.report.final_status, 1);
+    assert_eq!(result.completion.requested_bytes, 4);
+    assert_eq!(result.completion.page_fault_retries, 0);
+    assert_eq!(result.completion.final_status, 1);
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
 
@@ -327,7 +326,7 @@ async fn appends_to_destination_spare_capacity_after_existing_prefix() {
         .expect("fake worker should succeed");
 
     assert_eq!(&result.destination[..], b"prefix:data");
-    assert_eq!(result.report.requested_bytes, 4);
+    assert_eq!(result.completion.requested_bytes, 4);
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
 
@@ -801,8 +800,8 @@ async fn completion_record_drives_direct_async_completion() {
         .expect("successful completion should produce a result");
 
     assert_eq!(result.destination.as_ref(), b"complete");
-    assert_eq!(result.report.requested_bytes, 8);
-    assert_eq!(result.report.final_status, DSA_COMP_SUCCESS);
+    assert_eq!(result.completion.requested_bytes, 8);
+    assert_eq!(result.completion.final_status, DSA_COMP_SUCCESS);
     assert_eq!(backend.completions(), 1);
 }
 
@@ -1012,9 +1011,9 @@ async fn retry_completion_resubmits_and_preserves_final_retry_metadata() {
         .expect("retry success should produce a result");
 
     assert_eq!(result.destination.as_ref(), b"prefix:retry");
-    assert_eq!(result.report.requested_bytes, 5);
-    assert_eq!(result.report.page_fault_retries, 1);
-    assert_eq!(result.report.final_status, DSA_COMP_SUCCESS);
+    assert_eq!(result.completion.requested_bytes, 5);
+    assert_eq!(result.completion.page_fault_retries, 1);
+    assert_eq!(result.completion.final_status, DSA_COMP_SUCCESS);
 }
 
 #[tokio::test(flavor = "current_thread")]

@@ -1,68 +1,110 @@
-use std::time::Instant;
+use idxd_rust::{AsyncDsaSession, AsyncMemmoveValidationMode, DsaConfig};
 
-use idxd_rust::{AsyncDsaSession, DsaConfig, DsaSession};
-
-use crate::artifact::{
-    BenchmarkArtifact, BenchmarkResult, HARDWARE_ASYNC_TARGET, HARDWARE_SYNC_TARGET, SCHEMA_VERSION,
-};
-use crate::cli::{Backend, BenchmarkMode, CliArgs, Suite};
+use crate::artifact::{BenchmarkArtifact, BenchmarkResult, SCHEMA_VERSION};
+use crate::cli::{Backend, CliArgs};
 use crate::failure::RowFailure;
-use crate::modes::{ModeStats, deterministic_source, run_async_mode};
+use crate::modes::build_request;
+use crate::nonbatch::run_nonbatch_submission_mode;
+
+const POST_RUN_VALIDATION_MAX_SAMPLES: u32 = 8;
 
 pub(crate) async fn hardware_artifact(args: &CliArgs) -> BenchmarkArtifact {
-    let config = match DsaConfig::builder()
+    let results = vec![run_nonbatch_submission_mode(args)];
+
+    let first_row_failure = results.iter().find(|result| result.verdict != "pass");
+    if first_row_failure.and_then(|result| result.failure_class) == Some("queue_open") {
+        return expected_failure_artifact_from_result(args, first_row_failure.unwrap());
+    }
+    let post_run_validation = if first_row_failure.is_none() {
+        run_post_run_validation(args).await
+    } else {
+        PostRunValidation::not_run()
+    };
+
+    artifact_from_results(args, results, post_run_validation)
+}
+
+fn build_config(
+    args: &CliArgs,
+    validation_mode: AsyncMemmoveValidationMode,
+) -> Result<DsaConfig, idxd_rust::MemmoveError> {
+    DsaConfig::builder()
         .device_path(args.device_path.clone())
         .max_page_fault_retries(args.max_page_fault_retries)
+        .async_validation_mode(validation_mode)
         .build()
-    {
-        Ok(config) => config,
-        Err(error) => {
-            let failure = RowFailure::sync_error(&error, "validation");
-            return failure_artifact_from_row(args, &failure);
+}
+
+#[derive(Debug)]
+struct PostRunValidation {
+    status: &'static str,
+    failure: Option<RowFailure>,
+}
+
+impl PostRunValidation {
+    fn not_run() -> Self {
+        Self {
+            status: "not_run",
+            failure: None,
         }
+    }
+
+    fn pass() -> Self {
+        Self {
+            status: "pass",
+            failure: None,
+        }
+    }
+
+    fn fail(failure: RowFailure) -> Self {
+        Self {
+            status: "fail",
+            failure: Some(failure),
+        }
+    }
+}
+
+async fn run_post_run_validation(args: &CliArgs) -> PostRunValidation {
+    let config = match build_config(args, AsyncMemmoveValidationMode::Full) {
+        Ok(config) => config,
+        Err(error) => return PostRunValidation::fail(RowFailure::sync_error(&error, "validation")),
     };
     let session = match AsyncDsaSession::open_config(config) {
         Ok(session) => session,
-        Err(error) => {
-            let failure = RowFailure::async_error(&error);
-            return failure_artifact_from_row(args, &failure);
-        }
+        Err(error) => return PostRunValidation::fail(RowFailure::async_error(&error)),
     };
     let handle = session.handle();
+    let samples = args.concurrency.clamp(1, POST_RUN_VALIDATION_MAX_SAMPLES);
 
-    let mut results = Vec::with_capacity(args.suite.modes().len() + 1);
-    for mode in args.suite.modes() {
-        results.push(
-            run_async_mode(
-                args,
-                handle.clone(),
-                *mode,
-                HARDWARE_ASYNC_TARGET,
-                sync_comparison_target_for(*mode),
-                true,
-            )
-            .await,
-        );
+    for seed in 0..samples as u64 {
+        let request = match build_request(args.bytes, seed) {
+            Ok(request) => request,
+            Err(failure) => return PostRunValidation::fail(failure),
+        };
+        if let Err(error) = handle.memmove(request).await {
+            return PostRunValidation::fail(RowFailure::async_error(&error));
+        }
     }
 
     drop(session);
+    PostRunValidation::pass()
+}
 
-    if matches!(args.suite, Suite::Canonical | Suite::Latency) {
-        results.push(run_sync_comparison(args));
-    }
-
-    let first_failure = results.iter().find(|result| result.verdict != "pass");
+fn artifact_from_results(
+    args: &CliArgs,
+    results: Vec<BenchmarkResult>,
+    post_run_validation: PostRunValidation,
+) -> BenchmarkArtifact {
+    let first_row_failure = results.iter().find(|result| result.verdict != "pass");
+    let post_failure = post_run_validation.failure.as_ref();
+    let ok = first_row_failure.is_none() && post_failure.is_none();
     BenchmarkArtifact {
         schema_version: SCHEMA_VERSION,
-        ok: first_failure.is_none(),
-        verdict: if first_failure.is_none() {
-            "pass"
-        } else {
-            "fail"
-        },
+        ok,
+        verdict: if ok { "pass" } else { "fail" },
         device_path: args.device_path.display().to_string(),
         backend: Backend::Hardware.as_str(),
-        claim_eligible: first_failure.is_none(),
+        claim_eligible: ok,
         suite: args.suite.as_str(),
         runtime_flavor: "current_thread",
         worker_threads: 1,
@@ -71,31 +113,49 @@ pub(crate) async fn hardware_artifact(args: &CliArgs) -> BenchmarkArtifact {
         concurrency: args.concurrency,
         duration_ms: args.duration_ms,
         max_page_fault_retries: args.max_page_fault_retries,
-        failure_class: first_failure.and_then(|result| result.failure_class),
-        error_kind: first_failure.and_then(|result| result.error_kind),
-        direct_failure_kind: first_failure.and_then(|result| result.direct_failure_kind),
-        validation_phase: first_failure.and_then(|result| result.validation_phase),
-        validation_error_kind: first_failure.and_then(|result| result.validation_error_kind),
-        direct_retry_budget: first_failure.and_then(|result| result.direct_retry_budget),
-        direct_retry_count: first_failure.and_then(|result| result.direct_retry_count),
-        completion_status: first_failure.and_then(|result| result.completion_status.clone()),
-        completion_result: first_failure.and_then(|result| result.completion_result),
-        completion_bytes_completed: first_failure
-            .and_then(|result| result.completion_bytes_completed),
-        completion_fault_addr: first_failure
-            .and_then(|result| result.completion_fault_addr.clone()),
+        validation_mode: args.validation_mode.as_str(),
+        post_run_validation: post_run_validation.status,
+        failure_class: first_row_failure
+            .and_then(|result| result.failure_class)
+            .or_else(|| post_failure.map(|failure| failure.failure_class)),
+        error_kind: first_row_failure
+            .and_then(|result| result.error_kind)
+            .or_else(|| post_failure.map(|failure| failure.error_kind)),
+        direct_failure_kind: first_row_failure
+            .and_then(|result| result.direct_failure_kind)
+            .or_else(|| post_failure.and_then(|failure| failure.direct_failure_kind)),
+        validation_phase: first_row_failure
+            .and_then(|result| result.validation_phase)
+            .or_else(|| post_failure.and_then(|failure| failure.validation_phase)),
+        validation_error_kind: first_row_failure
+            .and_then(|result| result.validation_error_kind)
+            .or_else(|| post_failure.and_then(|failure| failure.validation_error_kind)),
+        direct_retry_budget: first_row_failure
+            .and_then(|result| result.direct_retry_budget)
+            .or_else(|| post_failure.and_then(|failure| failure.direct_retry_budget)),
+        direct_retry_count: first_row_failure
+            .and_then(|result| result.direct_retry_count)
+            .or_else(|| post_failure.and_then(|failure| failure.direct_retry_count)),
+        completion_status: first_row_failure
+            .and_then(|result| result.completion_status.clone())
+            .or_else(|| post_failure.and_then(|failure| failure.completion_status.clone())),
+        completion_result: first_row_failure
+            .and_then(|result| result.completion_result)
+            .or_else(|| post_failure.and_then(|failure| failure.completion_result)),
+        completion_bytes_completed: first_row_failure
+            .and_then(|result| result.completion_bytes_completed)
+            .or_else(|| post_failure.and_then(|failure| failure.completion_bytes_completed)),
+        completion_fault_addr: first_row_failure
+            .and_then(|result| result.completion_fault_addr.clone())
+            .or_else(|| post_failure.and_then(|failure| failure.completion_fault_addr.clone())),
         results,
     }
 }
 
-fn sync_comparison_target_for(mode: BenchmarkMode) -> Option<&'static str> {
-    match mode {
-        BenchmarkMode::SingleLatency => Some(HARDWARE_SYNC_TARGET),
-        BenchmarkMode::ConcurrentSubmissions | BenchmarkMode::FixedDurationThroughput => None,
-    }
-}
-
-fn failure_artifact_from_row(args: &CliArgs, failure: &RowFailure) -> BenchmarkArtifact {
+fn expected_failure_artifact_from_result(
+    args: &CliArgs,
+    failure: &BenchmarkResult,
+) -> BenchmarkArtifact {
     BenchmarkArtifact {
         schema_version: SCHEMA_VERSION,
         ok: false,
@@ -111,8 +171,10 @@ fn failure_artifact_from_row(args: &CliArgs, failure: &RowFailure) -> BenchmarkA
         concurrency: args.concurrency,
         duration_ms: args.duration_ms,
         max_page_fault_retries: args.max_page_fault_retries,
-        failure_class: Some(failure.failure_class),
-        error_kind: Some(failure.error_kind),
+        validation_mode: args.validation_mode.as_str(),
+        post_run_validation: "not_run",
+        failure_class: failure.failure_class,
+        error_kind: failure.error_kind,
         direct_failure_kind: failure.direct_failure_kind,
         validation_phase: failure.validation_phase,
         validation_error_kind: failure.validation_error_kind,
@@ -124,62 +186,4 @@ fn failure_artifact_from_row(args: &CliArgs, failure: &RowFailure) -> BenchmarkA
         completion_fault_addr: failure.completion_fault_addr.clone(),
         results: Vec::new(),
     }
-}
-
-fn run_sync_comparison(args: &CliArgs) -> BenchmarkResult {
-    let start = Instant::now();
-    let mut stats = ModeStats::default();
-
-    let config = match DsaConfig::builder()
-        .device_path(args.device_path.clone())
-        .max_page_fault_retries(args.max_page_fault_retries)
-        .build()
-    {
-        Ok(config) => config,
-        Err(error) => {
-            stats.record_failure(RowFailure::sync_error(&error, "validation"));
-            return stats.into_result(
-                args,
-                BenchmarkMode::SingleLatency,
-                HARDWARE_SYNC_TARGET,
-                Some(HARDWARE_ASYNC_TARGET),
-                true,
-                start.elapsed().as_nanos().max(1),
-            );
-        }
-    };
-
-    match DsaSession::open_config(config) {
-        Ok(session) => {
-            for seed in 0..args.iterations {
-                let source = deterministic_source(args.bytes, seed);
-                let mut destination = vec![0u8; args.bytes];
-                let op_start = Instant::now();
-                match session.memmove(&mut destination, &source) {
-                    Ok(report) => record_sync_success(&mut stats, op_start, report),
-                    Err(error) => {
-                        stats.record_failure(RowFailure::sync_error(&error, "sync_memmove"))
-                    }
-                }
-            }
-        }
-        Err(error) => stats.record_failure(RowFailure::sync_error(&error, "sync_queue_open")),
-    }
-
-    stats.into_result(
-        args,
-        BenchmarkMode::SingleLatency,
-        HARDWARE_SYNC_TARGET,
-        Some(HARDWARE_ASYNC_TARGET),
-        true,
-        start.elapsed().as_nanos().max(1),
-    )
-}
-
-fn record_sync_success(
-    stats: &mut ModeStats,
-    op_start: Instant,
-    _report: idxd_rust::MemmoveValidationReport,
-) {
-    stats.record_success(op_start.elapsed().as_nanos().max(1));
 }

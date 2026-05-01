@@ -16,6 +16,9 @@ ITERATIONS=${IDXD_RUST_VERIFY_ITERATIONS:-2}
 CONCURRENCY=${IDXD_RUST_VERIFY_CONCURRENCY:-2}
 DURATION_MS=${IDXD_RUST_VERIFY_DURATION_MS:-10}
 MAX_PAGE_FAULT_RETRIES=${IDXD_RUST_VERIFY_MAX_PAGE_FAULT_RETRIES:-1}
+VALIDATION_MODE=${IDXD_RUST_VERIFY_VALIDATION:-completion-only}
+MIN_GIB_PER_SEC=${IDXD_RUST_VERIFY_MIN_GIB_PER_SEC:-}
+MIN_OPS_PER_SEC=${IDXD_RUST_VERIFY_MIN_OPS_PER_SEC:-}
 BUILD_PROFILE=${IDXD_RUST_VERIFY_PROFILE:-dev}
 if [[ "${BUILD_PROFILE}" == "dev" ]]; then
   TARGET_SUBDIR=debug
@@ -99,7 +102,7 @@ PY
 }
 
 validate_artifact_contract() {
-  python3 - <<'PY' "${ARTIFACT_PATH}" "${STDOUT_PATH}" "${BACKEND}" "${SUITE}" "${DEVICE_PATH}" "${REQUEST_BYTES}" "${ITERATIONS}" "${CONCURRENCY}" "${DURATION_MS}" "${MAX_PAGE_FAULT_RETRIES}"
+  python3 - <<'PY' "${ARTIFACT_PATH}" "${STDOUT_PATH}" "${BACKEND}" "${SUITE}" "${DEVICE_PATH}" "${REQUEST_BYTES}" "${ITERATIONS}" "${CONCURRENCY}" "${DURATION_MS}" "${MAX_PAGE_FAULT_RETRIES}" "${VALIDATION_MODE}" "${MIN_GIB_PER_SEC}" "${MIN_OPS_PER_SEC}"
 import json
 import math
 import re
@@ -116,6 +119,9 @@ expected_iterations = int(sys.argv[7])
 expected_concurrency = int(sys.argv[8])
 expected_duration_ms = int(sys.argv[9])
 expected_max_page_fault_retries = int(sys.argv[10])
+expected_validation_mode = sys.argv[11]
+min_gib_per_sec = None if sys.argv[12] == '' else float(sys.argv[12])
+min_ops_per_sec = None if sys.argv[13] == '' else float(sys.argv[13])
 
 if not artifact_path.is_file():
     raise SystemExit(f"missing artifact file: {artifact_path}")
@@ -163,7 +169,8 @@ reject_payload_dump_fields(report)
 required_top = {
     'schema_version', 'ok', 'verdict', 'device_path', 'backend', 'claim_eligible',
     'suite', 'runtime_flavor', 'worker_threads', 'requested_bytes', 'iterations',
-    'concurrency', 'duration_ms', 'max_page_fault_retries', 'failure_class', 'error_kind',
+    'concurrency', 'duration_ms', 'max_page_fault_retries', 'validation_mode',
+    'post_run_validation', 'failure_class', 'error_kind',
     'direct_failure_kind', 'validation_phase', 'validation_error_kind',
     'direct_retry_budget', 'direct_retry_count', 'completion_status',
     'completion_result', 'completion_bytes_completed', 'completion_fault_addr',
@@ -173,8 +180,8 @@ missing = sorted(required_top - report.keys())
 if missing:
     raise SystemExit(f"artifact missing required top-level fields: {', '.join(missing)}")
 
-if report['schema_version'] != 1:
-    raise SystemExit('schema_version must be 1')
+if report['schema_version'] != 2:
+    raise SystemExit('schema_version must be 2')
 if not isinstance(report['ok'], bool):
     raise SystemExit('ok must be boolean')
 if report['backend'] != expected_backend:
@@ -192,6 +199,10 @@ for key, expected in [
 ]:
     if report[key] != expected:
         raise SystemExit(f"{key}={report[key]!r} expected {expected!r}")
+if report['validation_mode'] != expected_validation_mode:
+    raise SystemExit(f"validation_mode={report['validation_mode']!r} expected {expected_validation_mode!r}")
+if report['post_run_validation'] not in {'not_run', 'pass', 'fail'}:
+    raise SystemExit('post_run_validation must be not_run, pass, or fail')
 if report['runtime_flavor'] != 'current_thread':
     raise SystemExit('runtime_flavor must be current_thread')
 if report['worker_threads'] != 1:
@@ -232,15 +243,10 @@ row_required = {
     'completion_result', 'completion_bytes_completed', 'completion_fault_addr',
     'claim_eligible',
 }
-canonical_modes = {'single_latency', 'concurrent_submissions', 'fixed_duration_throughput'}
-expected_modes = {
-    'canonical': canonical_modes,
-    'latency': {'single_latency'},
-    'concurrency': {'concurrent_submissions'},
-    'throughput': {'fixed_duration_throughput'},
-}[expected_suite]
+expected_modes = {'raw_async_throughput'} if expected_backend == 'software' else {'raw_nonbatch_submission_throughput'}
 async_modes = set()
-sync_comparison_seen = False
+raw_throughput_gib_per_sec = None
+raw_throughput_ops_per_sec = None
 completed_operations = 0
 failed_operations = 0
 row_targets = []
@@ -297,36 +303,38 @@ for index, row in enumerate(report['results']):
     row_targets.append(target)
     completed_operations += row['completed_operations']
     failed_operations += row['failed_operations']
+    if row['mode'] in expected_modes and row['bytes_per_sec'] is not None:
+        raw_throughput_gib_per_sec = float(row['bytes_per_sec']) / (1024.0 ** 3)
+    if row['mode'] in expected_modes and row['ops_per_sec'] is not None:
+        raw_throughput_ops_per_sec = float(row['ops_per_sec'])
     if expected_backend == 'hardware':
         if target == 'direct_async':
             async_modes.add(row['mode'])
             if row['claim_eligible'] != (row['verdict'] == 'pass'):
                 raise SystemExit('hardware direct_async row claim eligibility must match pass verdict')
-            if row['mode'] == 'single_latency' and row['comparison_target'] != 'direct_sync':
-                raise SystemExit('hardware single_latency async row must name direct_sync comparison_target')
-        elif target == 'direct_sync':
-            sync_comparison_seen = True
-            if row['mode'] != 'single_latency':
-                raise SystemExit('direct_sync comparison row must use single_latency mode')
-            if row['comparison_target'] != 'direct_async':
-                raise SystemExit('direct_sync comparison row must name direct_async comparison_target')
-            if row['claim_eligible'] != (row['verdict'] == 'pass'):
-                raise SystemExit('direct_sync row claim eligibility must match pass verdict')
+            if row['comparison_target'] is not None:
+                raise SystemExit('hardware raw async row must not name a comparison_target')
         else:
             raise SystemExit(f'unexpected hardware row target {target!r}')
 
 if report['ok']:
     if failed_operations != 0:
         raise SystemExit('successful artifact cannot contain failed operations')
-    if expected_backend == 'hardware':
-        if async_modes != expected_modes:
-            raise SystemExit(f'hardware success missing direct async modes: saw {sorted(async_modes)} expected {sorted(expected_modes)}')
-        if expected_suite in {'canonical', 'latency'} and not sync_comparison_seen:
-            raise SystemExit('hardware success missing direct sync comparison row')
-    elif expected_suite == 'canonical':
-        modes = {row['mode'] for row in report['results']}
-        if modes != canonical_modes:
-            raise SystemExit(f'software canonical missing modes: saw {sorted(modes)}')
+    modes = {row['mode'] for row in report['results']}
+    if modes != expected_modes:
+        raise SystemExit(f'success missing expected throughput mode: saw {sorted(modes)} expected {sorted(expected_modes)}')
+    if expected_backend == 'hardware' and report['post_run_validation'] != 'pass':
+        raise SystemExit('hardware success requires post_run_validation=pass')
+    if min_gib_per_sec is not None:
+        if raw_throughput_gib_per_sec is None:
+            raise SystemExit('minimum GiB/s threshold requires expected throughput row bytes_per_sec')
+        if raw_throughput_gib_per_sec < min_gib_per_sec:
+            raise SystemExit(f'raw throughput {raw_throughput_gib_per_sec:.6f} GiB/s below minimum {min_gib_per_sec:.6f} GiB/s')
+    if min_ops_per_sec is not None:
+        if raw_throughput_ops_per_sec is None:
+            raise SystemExit('minimum ops/sec threshold requires expected throughput row ops_per_sec')
+        if raw_throughput_ops_per_sec < min_ops_per_sec:
+            raise SystemExit(f'raw throughput {raw_throughput_ops_per_sec:.2f} ops/sec below minimum {min_ops_per_sec:.2f} ops/sec')
 else:
     if not isinstance(report['failure_class'], str) or not report['failure_class']:
         raise SystemExit('failed artifact requires top-level failure_class')
@@ -345,6 +353,10 @@ print(f"validation_phase={report['validation_phase'] if report['validation_phase
 print(f"validation_error_kind={report['validation_error_kind'] if report['validation_error_kind'] is not None else 'null'}")
 print(f"duration_ms={report['duration_ms']}")
 print(f"max_page_fault_retries={report['max_page_fault_retries']}")
+print(f"validation_mode={report['validation_mode']}")
+print(f"post_run_validation={report['post_run_validation']}")
+print(f"raw_throughput_gib_per_sec={raw_throughput_gib_per_sec if raw_throughput_gib_per_sec is not None else 'null'}")
+print(f"raw_throughput_ops_per_sec={raw_throughput_ops_per_sec if raw_throughput_ops_per_sec is not None else 'null'}")
 print(f"completed_operations={completed_operations}")
 print(f"failed_operations={failed_operations}")
 print(f"targets={','.join(row_targets) if row_targets else 'none'}")
@@ -354,6 +366,11 @@ PY
 case "${BACKEND}" in
   hardware|software) ;;
   *) fail_phase preflight "backend=${BACKEND} launcher_status=invalid_backend message=IDXD_RUST_VERIFY_BACKEND must be hardware or software" ;;
+esac
+
+case "${VALIDATION_MODE}" in
+  completion-only|full) ;;
+  *) fail_phase preflight "backend=${BACKEND} validation=${VALIDATION_MODE} launcher_status=invalid_validation message=IDXD_RUST_VERIFY_VALIDATION must be completion-only or full" ;;
 esac
 
 case "${SUITE}" in
@@ -426,7 +443,7 @@ if [[ "${BACKEND}" == "hardware" ]]; then
   RUNNER=(bash -c 'cd "$1" && shift && exec devenv shell -- launch "$@"' bash "${REPO_ROOT}" "${BINARY_PATH}")
 fi
 
-log_phase runtime "backend=${BACKEND} suite=${SUITE} device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} binary=${BINARY_PATH} requested_bytes=${REQUEST_BYTES} iterations=${ITERATIONS} concurrency=${CONCURRENCY} duration_ms=${DURATION_MS} timeout=${RUN_TIMEOUT} raw_stdout=${RAW_STDOUT_PATH}"
+log_phase runtime "backend=${BACKEND} suite=${SUITE} device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} binary=${BINARY_PATH} requested_bytes=${REQUEST_BYTES} iterations=${ITERATIONS} concurrency=${CONCURRENCY} duration_ms=${DURATION_MS} validation=${VALIDATION_MODE} min_gib_per_sec=${MIN_GIB_PER_SEC:-none} timeout=${RUN_TIMEOUT} raw_stdout=${RAW_STDOUT_PATH}"
 
 RUN_STDOUT_PATH=${STDOUT_PATH}
 if [[ "${BACKEND}" == "hardware" ]]; then
@@ -444,6 +461,7 @@ if timeout "${RUN_TIMEOUT}" \
     --concurrency "${CONCURRENCY}" \
     --duration-ms "${DURATION_MS}" \
     --max-page-fault-retries "${MAX_PAGE_FAULT_RETRIES}" \
+    --validation "${VALIDATION_MODE}" \
     --format json \
     --artifact "${ARTIFACT_PATH}" \
     >"${RUN_STDOUT_PATH}" 2>"${STDERR_PATH}"; then
@@ -472,6 +490,10 @@ ARTIFACT_DIRECT_FAILURE_KIND=
 ARTIFACT_VALIDATION_PHASE=
 ARTIFACT_VALIDATION_ERROR_KIND=
 ARTIFACT_MAX_PAGE_FAULT_RETRIES=
+ARTIFACT_VALIDATION_MODE=
+ARTIFACT_POST_RUN_VALIDATION=
+ARTIFACT_RAW_THROUGHPUT_GIB_PER_SEC=
+ARTIFACT_RAW_THROUGHPUT_OPS_PER_SEC=
 ARTIFACT_COMPLETED_OPERATIONS=
 ARTIFACT_FAILED_OPERATIONS=
 ARTIFACT_TARGETS=
@@ -488,13 +510,17 @@ while IFS='=' read -r key value; do
     validation_phase) ARTIFACT_VALIDATION_PHASE=${value} ;;
     validation_error_kind) ARTIFACT_VALIDATION_ERROR_KIND=${value} ;;
     max_page_fault_retries) ARTIFACT_MAX_PAGE_FAULT_RETRIES=${value} ;;
+    validation_mode) ARTIFACT_VALIDATION_MODE=${value} ;;
+    post_run_validation) ARTIFACT_POST_RUN_VALIDATION=${value} ;;
+    raw_throughput_gib_per_sec) ARTIFACT_RAW_THROUGHPUT_GIB_PER_SEC=${value} ;;
+    raw_throughput_ops_per_sec) ARTIFACT_RAW_THROUGHPUT_OPS_PER_SEC=${value} ;;
     completed_operations) ARTIFACT_COMPLETED_OPERATIONS=${value} ;;
     failed_operations) ARTIFACT_FAILED_OPERATIONS=${value} ;;
     targets) ARTIFACT_TARGETS=${value} ;;
   esac
 done <<< "${ARTIFACT_FIELDS}"
 
-log_phase artifact_validation "backend=${ARTIFACT_BACKEND} suite=${ARTIFACT_SUITE} claim_eligible=${ARTIFACT_CLAIM_ELIGIBLE} max_page_fault_retries=${ARTIFACT_MAX_PAGE_FAULT_RETRIES} failure_class=${ARTIFACT_FAILURE_CLASS} error_kind=${ARTIFACT_ERROR_KIND} direct_failure_kind=${ARTIFACT_DIRECT_FAILURE_KIND} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} completed_operations=${ARTIFACT_COMPLETED_OPERATIONS} failed_operations=${ARTIFACT_FAILED_OPERATIONS} targets=${ARTIFACT_TARGETS}"
+log_phase artifact_validation "backend=${ARTIFACT_BACKEND} suite=${ARTIFACT_SUITE} claim_eligible=${ARTIFACT_CLAIM_ELIGIBLE} max_page_fault_retries=${ARTIFACT_MAX_PAGE_FAULT_RETRIES} validation=${ARTIFACT_VALIDATION_MODE} post_run_validation=${ARTIFACT_POST_RUN_VALIDATION} raw_throughput_ops_per_sec=${ARTIFACT_RAW_THROUGHPUT_OPS_PER_SEC} raw_throughput_gib_per_sec=${ARTIFACT_RAW_THROUGHPUT_GIB_PER_SEC} failure_class=${ARTIFACT_FAILURE_CLASS} error_kind=${ARTIFACT_ERROR_KIND} direct_failure_kind=${ARTIFACT_DIRECT_FAILURE_KIND} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} completed_operations=${ARTIFACT_COMPLETED_OPERATIONS} failed_operations=${ARTIFACT_FAILED_OPERATIONS} targets=${ARTIFACT_TARGETS}"
 
 if [[ "${ARTIFACT_OK}" != "true" ]]; then
   if [[ "${BACKEND}" == "hardware" ]]; then
@@ -507,4 +533,4 @@ if [[ "${RUN_EXIT}" -ne 0 ]]; then
   fail_phase runtime "backend=${ARTIFACT_BACKEND} suite=${ARTIFACT_SUITE} device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} failure_class=${ARTIFACT_FAILURE_CLASS} error_kind=${ARTIFACT_ERROR_KIND} message=benchmark exited non-zero despite a success artifact"
 fi
 
-log_phase done "backend=${ARTIFACT_BACKEND} suite=${ARTIFACT_SUITE} device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} requested_bytes=${REQUEST_BYTES} iterations=${ITERATIONS} concurrency=${CONCURRENCY} duration_ms=${DURATION_MS} max_page_fault_retries=${ARTIFACT_MAX_PAGE_FAULT_RETRIES} claim_eligible=${ARTIFACT_CLAIM_ELIGIBLE} failure_class=${ARTIFACT_FAILURE_CLASS} error_kind=${ARTIFACT_ERROR_KIND} direct_failure_kind=${ARTIFACT_DIRECT_FAILURE_KIND} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} completed_operations=${ARTIFACT_COMPLETED_OPERATIONS} failed_operations=${ARTIFACT_FAILED_OPERATIONS} targets=${ARTIFACT_TARGETS} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} verdict=pass"
+log_phase done "backend=${ARTIFACT_BACKEND} suite=${ARTIFACT_SUITE} device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} requested_bytes=${REQUEST_BYTES} iterations=${ITERATIONS} concurrency=${CONCURRENCY} duration_ms=${DURATION_MS} max_page_fault_retries=${ARTIFACT_MAX_PAGE_FAULT_RETRIES} validation=${ARTIFACT_VALIDATION_MODE} post_run_validation=${ARTIFACT_POST_RUN_VALIDATION} raw_throughput_ops_per_sec=${ARTIFACT_RAW_THROUGHPUT_OPS_PER_SEC} raw_throughput_gib_per_sec=${ARTIFACT_RAW_THROUGHPUT_GIB_PER_SEC} claim_eligible=${ARTIFACT_CLAIM_ELIGIBLE} failure_class=${ARTIFACT_FAILURE_CLASS} error_kind=${ARTIFACT_ERROR_KIND} direct_failure_kind=${ARTIFACT_DIRECT_FAILURE_KIND} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} completed_operations=${ARTIFACT_COMPLETED_OPERATIONS} failed_operations=${ARTIFACT_FAILED_OPERATIONS} targets=${ARTIFACT_TARGETS} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} verdict=pass"

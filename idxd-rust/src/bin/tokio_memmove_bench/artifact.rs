@@ -6,10 +6,9 @@ use serde::Serialize;
 
 use crate::cli::{CliArgs, OutputFormat};
 
-pub(crate) const SCHEMA_VERSION: u32 = 1;
+pub(crate) const SCHEMA_VERSION: u32 = 2;
 pub(crate) const SOFTWARE_TARGET: &str = "software_direct_async_diagnostic";
 pub(crate) const HARDWARE_ASYNC_TARGET: &str = "direct_async";
-pub(crate) const HARDWARE_SYNC_TARGET: &str = "direct_sync";
 
 #[derive(Debug, Serialize)]
 pub(crate) struct BenchmarkArtifact {
@@ -27,6 +26,8 @@ pub(crate) struct BenchmarkArtifact {
     pub(crate) concurrency: u32,
     pub(crate) duration_ms: u64,
     pub(crate) max_page_fault_retries: u32,
+    pub(crate) validation_mode: &'static str,
+    pub(crate) post_run_validation: &'static str,
     pub(crate) failure_class: Option<&'static str>,
     pub(crate) error_kind: Option<&'static str>,
     pub(crate) direct_failure_kind: Option<&'static str>,
@@ -92,12 +93,14 @@ fn render_text(artifact: &BenchmarkArtifact) -> String {
     let mut out = String::new();
     let _ = writeln!(
         out,
-        "verdict={} ok={} backend={} suite={} claim_eligible={} max_page_fault_retries={}",
+        "verdict={} ok={} backend={} suite={} claim_eligible={} validation_mode={} post_run_validation={} max_page_fault_retries={}",
         artifact.verdict,
         artifact.ok,
         artifact.backend,
         artifact.suite,
         artifact.claim_eligible,
+        artifact.validation_mode,
+        artifact.post_run_validation,
         artifact.max_page_fault_retries
     );
     for result in &artifact.results {

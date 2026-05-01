@@ -15,7 +15,7 @@ use std::time::Duration;
 use bytes::buf::UninitSlice;
 use idxd_sys::{DsaHwDesc, EnqcmdSubmission, WqPortal};
 use snafu::Snafu;
-use tokio::sync::oneshot;
+use tokio::sync::{Notify, oneshot};
 
 use monitor::monitor_completion_records;
 use operation::PendingOperation;
@@ -176,6 +176,7 @@ struct RuntimeInner<B> {
     next_id: AtomicU64,
     closed: AtomicBool,
     submission_retry_budget: u32,
+    pending_notify: Arc<Notify>,
 }
 
 impl<B> DirectAsyncMemmoveRuntime<B>
@@ -198,6 +199,7 @@ where
             next_id: AtomicU64::new(1),
             closed: AtomicBool::new(false),
             submission_retry_budget,
+            pending_notify: Arc::new(Notify::new()),
         });
 
         let handle = tokio::runtime::Handle::try_current().map_err(|_| {
@@ -285,6 +287,7 @@ where
             ));
         }
         pending.insert(operation.id(), Arc::clone(operation));
+        self.inner.pending_notify.notify_one();
         Ok(())
     }
 

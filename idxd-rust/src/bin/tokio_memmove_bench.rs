@@ -12,6 +12,8 @@ mod failure;
 mod hardware;
 #[path = "tokio_memmove_bench/modes.rs"]
 mod modes;
+#[path = "tokio_memmove_bench/nonbatch.rs"]
+mod nonbatch;
 #[path = "tokio_memmove_bench/runner.rs"]
 mod runner;
 #[path = "tokio_memmove_bench/software.rs"]

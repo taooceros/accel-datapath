@@ -93,6 +93,7 @@ iterations=2
 concurrency=2
 duration_ms=10
 max_page_fault_retries=1
+validation=completion-only
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --bytes)
@@ -135,6 +136,10 @@ while [[ $# -gt 0 ]]; do
       max_page_fault_retries=$2
       shift 2
       ;;
+    --validation)
+      validation=$2
+      shift 2
+      ;;
     --format)
       shift 2
       ;;
@@ -155,13 +160,14 @@ fi
 
 fn json_writer(python_body: &str, exit_code: i32) -> String {
     format!(
-        r#"python3 - "$artifact" "$device" "$backend" "$suite" "$bytes" "$iterations" "$concurrency" "$duration_ms" "$max_page_fault_retries" <<'PY'
+        r#"python3 - "$artifact" "$device" "$backend" "$suite" "$bytes" "$iterations" "$concurrency" "$duration_ms" "$max_page_fault_retries" "$validation" <<'PY'
 import json
 import sys
 from pathlib import Path
 artifact = Path(sys.argv[1])
 device, backend, suite = sys.argv[2], sys.argv[3], sys.argv[4]
 bytes_, iterations, concurrency, duration_ms, max_page_fault_retries = map(int, sys.argv[5:10])
+validation_mode = sys.argv[10]
 {python_body}
 artifact.write_text(json.dumps(report, separators=(',', ':')), encoding='utf-8')
 print(artifact.read_text(encoding='utf-8'))
@@ -172,49 +178,42 @@ exit {exit_code}"#
 
 fn success_report_body(backend_literal: &str, claim_eligible_literal: &str) -> String {
     format!(
-        r#"def row(mode, target, comparison_target, claim_eligible):
-    return {{
-        "mode": mode,
-        "target": target,
-        "comparison_target": comparison_target,
-        "requested_bytes": bytes_,
-        "iterations": iterations,
-        "concurrency": concurrency,
-        "duration_ms": duration_ms,
-        "completed_operations": 1,
-        "failed_operations": 0,
-        "elapsed_ns": 1000,
-        "min_latency_ns": 1000,
-        "mean_latency_ns": 1000,
-        "max_latency_ns": 1000,
-        "ops_per_sec": 1000000.0,
-        "bytes_per_sec": float(bytes_) * 1000000.0,
-        "verdict": "pass",
-        "failure_class": None,
-        "error_kind": None,
-        "direct_failure_kind": None,
-        "validation_phase": None,
-        "validation_error_kind": None,
-        "direct_retry_budget": None,
-        "direct_retry_count": None,
-        "completion_status": None,
-        "completion_result": None,
-        "completion_bytes_completed": None,
-        "completion_fault_addr": None,
-        "claim_eligible": claim_eligible,
-    }}
+        r#"claim_eligible = {claim_eligible_literal}
 backend = "{backend_literal}"
-claim_eligible = {claim_eligible_literal}
 target = "direct_async" if backend == "hardware" else "software_direct_async_diagnostic"
-results = [
-    row("single_latency", target, "direct_sync" if backend == "hardware" else None, claim_eligible),
-    row("concurrent_submissions", target, None, claim_eligible),
-    row("fixed_duration_throughput", target, None, claim_eligible),
-]
-if backend == "hardware":
-    results.append(row("single_latency", "direct_sync", "direct_async", True))
+mode = "raw_nonbatch_submission_throughput" if backend == "hardware" else "raw_async_throughput"
+row = {{
+    "mode": mode,
+    "target": target,
+    "comparison_target": None,
+    "requested_bytes": bytes_,
+    "iterations": iterations,
+    "concurrency": concurrency,
+    "duration_ms": duration_ms,
+    "completed_operations": max(1, concurrency * 10),
+    "failed_operations": 0,
+    "elapsed_ns": max(1, duration_ms * 1_000_000),
+    "min_latency_ns": 1000,
+    "mean_latency_ns": 1000,
+    "max_latency_ns": 1000,
+    "ops_per_sec": 1000000.0,
+    "bytes_per_sec": float(bytes_) * 1000000.0,
+    "verdict": "pass",
+    "failure_class": None,
+    "error_kind": None,
+    "direct_failure_kind": None,
+    "validation_phase": None,
+    "validation_error_kind": None,
+    "direct_retry_budget": None,
+    "direct_retry_count": None,
+    "completion_status": None,
+    "completion_result": None,
+    "completion_bytes_completed": None,
+    "completion_fault_addr": None,
+    "claim_eligible": claim_eligible,
+}}
 report = {{
-    "schema_version": 1,
+    "schema_version": 2,
     "ok": True,
     "verdict": "pass",
     "device_path": device,
@@ -228,6 +227,8 @@ report = {{
     "concurrency": concurrency,
     "duration_ms": duration_ms,
     "max_page_fault_retries": max_page_fault_retries,
+    "validation_mode": validation_mode,
+    "post_run_validation": "pass" if backend == "hardware" else "not_run",
     "failure_class": None,
     "error_kind": None,
     "direct_failure_kind": None,
@@ -239,14 +240,14 @@ report = {{
     "completion_result": None,
     "completion_bytes_completed": None,
     "completion_fault_addr": None,
-    "results": results,
+    "results": [row],
 }}"#
     )
 }
 
 fn classified_failure_body() -> String {
     r#"report = {
-    "schema_version": 1,
+    "schema_version": 2,
     "ok": False,
     "verdict": "expected_failure",
     "device_path": device,
@@ -260,6 +261,8 @@ fn classified_failure_body() -> String {
     "concurrency": concurrency,
     "duration_ms": duration_ms,
     "max_page_fault_retries": max_page_fault_retries,
+    "validation_mode": validation_mode,
+    "post_run_validation": "not_run",
     "failure_class": "queue_open",
     "error_kind": "queue_open",
     "direct_failure_kind": None,
@@ -287,7 +290,7 @@ fn run_verifier(output_dir: &Path, envs: &[(&str, String)]) -> Output {
 }
 
 #[test]
-fn prepared_host_hardware_pass_accepts_direct_async_and_sync_rows() {
+fn prepared_host_hardware_pass_accepts_raw_nonbatch_submission_throughput_row() {
     let (temp_root, launcher_path, path_override) = fake_launcher_env(true);
     let fake_binary = temp_root.join("fake_tokio_memmove_bench");
     write_fake_bench(
@@ -317,8 +320,40 @@ fn prepared_host_hardware_pass_accepts_direct_async_and_sync_rows() {
     assert!(stdout.contains("verdict=pass"));
     assert!(stdout.contains("backend=hardware"));
     assert!(stdout.contains("claim_eligible=true"));
-    assert!(stdout.contains("targets=direct_async,direct_async,direct_async,direct_sync"));
+    assert!(stdout.contains("targets=direct_async"));
     assert!(String::from_utf8_lossy(&output.stderr).is_empty());
+}
+
+#[test]
+fn hardware_raw_ops_threshold_failure_is_hard_failure() {
+    let (temp_root, launcher_path, path_override) = fake_launcher_env(true);
+    let fake_binary = temp_root.join("fake_tokio_memmove_bench");
+    write_fake_bench(
+        &fake_binary,
+        &json_writer(&success_report_body("hardware", "True"), 0),
+    );
+    let output_dir = unique_temp_path("throughput-threshold-output");
+    fs::create_dir_all(&output_dir).expect("output dir should be creatable");
+
+    let output = run_verifier(
+        &output_dir,
+        &[
+            ("PATH", path_override),
+            ("IDXD_RUST_VERIFY_SKIP_BUILD", "1".to_string()),
+            ("IDXD_RUST_VERIFY_BINARY", fake_binary.display().to_string()),
+            ("IDXD_RUST_VERIFY_DEVICE", "/dev/dsa/test0.0".to_string()),
+            (
+                "IDXD_RUST_VERIFY_LAUNCHER_PATH",
+                launcher_path.display().to_string(),
+            ),
+            ("IDXD_RUST_VERIFY_MIN_OPS_PER_SEC", "2000000".to_string()),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("phase=artifact_validation"));
+    assert!(stderr.contains("below minimum"));
 }
 
 #[test]
@@ -348,7 +383,7 @@ fn software_diagnostic_mode_passes_without_launcher_and_is_not_claim_eligible() 
     assert!(stdout.contains("verdict=pass"));
     assert!(stdout.contains("backend=software"));
     assert!(stdout.contains("claim_eligible=false"));
-    assert!(stdout.contains("targets=software_direct_async_diagnostic,software_direct_async_diagnostic,software_direct_async_diagnostic"));
+    assert!(stdout.contains("targets=software_direct_async_diagnostic"));
     assert!(String::from_utf8_lossy(&output.stderr).is_empty());
 }
 
@@ -558,7 +593,7 @@ fn software_claim_eligible_contradiction_is_hard_failure() {
 }
 
 #[test]
-fn hardware_success_missing_sync_comparison_is_hard_failure() {
+fn hardware_success_missing_raw_throughput_is_hard_failure() {
     let (temp_root, launcher_path, path_override) = fake_launcher_env(true);
     let fake_binary = temp_root.join("fake_tokio_memmove_bench");
     let body = r#"def row(mode):
@@ -593,7 +628,7 @@ fn hardware_success_missing_sync_comparison_is_hard_failure() {
         "claim_eligible": True,
     }
 report = {
-    "schema_version": 1,
+    "schema_version": 2,
     "ok": True,
     "verdict": "pass",
     "device_path": device,
@@ -607,6 +642,8 @@ report = {
     "concurrency": concurrency,
     "duration_ms": duration_ms,
     "max_page_fault_retries": max_page_fault_retries,
+    "validation_mode": validation_mode,
+    "post_run_validation": "pass",
     "failure_class": None,
     "error_kind": None,
     "direct_failure_kind": None,
@@ -618,10 +655,10 @@ report = {
     "completion_result": None,
     "completion_bytes_completed": None,
     "completion_fault_addr": None,
-    "results": [row("single_latency"), row("concurrent_submissions"), row("fixed_duration_throughput")],
+    "results": [row("single_latency")],
 }"#;
     write_fake_bench(&fake_binary, &json_writer(body, 0));
-    let output_dir = unique_temp_path("missing-sync-output");
+    let output_dir = unique_temp_path("missing-raw-output");
     fs::create_dir_all(&output_dir).expect("output dir should be creatable");
 
     let output = run_verifier(
@@ -681,7 +718,7 @@ fn benchmark_verifier_rejects_payload_dump_fields_in_result_rows() {
         "payload_bytes": [1, 2, 3],
     }
 report = {
-    "schema_version": 1,
+    "schema_version": 2,
     "ok": True,
     "verdict": "pass",
     "device_path": device,
@@ -695,6 +732,8 @@ report = {
     "concurrency": concurrency,
     "duration_ms": duration_ms,
     "max_page_fault_retries": max_page_fault_retries,
+    "validation_mode": validation_mode,
+    "post_run_validation": "not_run",
     "failure_class": None,
     "error_kind": None,
     "direct_failure_kind": None,
@@ -706,7 +745,7 @@ report = {
     "completion_result": None,
     "completion_bytes_completed": None,
     "completion_fault_addr": None,
-    "results": [row("single_latency"), row("concurrent_submissions"), row("fixed_duration_throughput")],
+    "results": [row("raw_async_throughput")],
 }"#;
     write_fake_bench(&fake_binary, &json_writer(body, 0));
     let output_dir = unique_temp_path("row-payload-dump-output");

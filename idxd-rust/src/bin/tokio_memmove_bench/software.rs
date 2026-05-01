@@ -63,6 +63,7 @@ pub(crate) async fn software_artifact(args: &CliArgs) -> BenchmarkArtifact {
     let config = match DsaConfig::builder()
         .device_path(args.device_path.clone())
         .max_page_fault_retries(args.max_page_fault_retries)
+        .async_validation_mode(args.validation_mode)
         .build()
     {
         Ok(config) => config,
@@ -113,6 +114,8 @@ pub(crate) async fn software_artifact(args: &CliArgs) -> BenchmarkArtifact {
         concurrency: args.concurrency,
         duration_ms: args.duration_ms,
         max_page_fault_retries: args.max_page_fault_retries,
+        validation_mode: args.validation_mode.as_str(),
+        post_run_validation: "not_run",
         failure_class: first_failure.and_then(|result| result.failure_class),
         error_kind: first_failure.and_then(|result| result.error_kind),
         direct_failure_kind: first_failure.and_then(|result| result.direct_failure_kind),
@@ -152,6 +155,8 @@ fn top_level_failure_artifact(
         concurrency: args.concurrency,
         duration_ms: args.duration_ms,
         max_page_fault_retries: args.max_page_fault_retries,
+        validation_mode: args.validation_mode.as_str(),
+        post_run_validation: "not_run",
         failure_class: Some(failure_class),
         error_kind: Some(error_kind),
         direct_failure_kind: None,

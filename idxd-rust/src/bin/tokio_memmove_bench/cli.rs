@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use idxd_rust::{DEFAULT_DEVICE_PATH, DEFAULT_MAX_PAGE_FAULT_RETRIES, MemmoveRequest};
+use idxd_rust::{
+    AsyncMemmoveValidationMode, DEFAULT_DEVICE_PATH, DEFAULT_MAX_PAGE_FAULT_RETRIES, MemmoveRequest,
+};
 
 use crate::artifact::validate_artifact_path;
 
@@ -67,14 +69,9 @@ impl Suite {
 
     pub(crate) fn modes(self) -> &'static [BenchmarkMode] {
         match self {
-            Self::Canonical => &[
-                BenchmarkMode::SingleLatency,
-                BenchmarkMode::ConcurrentSubmissions,
-                BenchmarkMode::FixedDurationThroughput,
-            ],
-            Self::Latency => &[BenchmarkMode::SingleLatency],
-            Self::Concurrency => &[BenchmarkMode::ConcurrentSubmissions],
-            Self::Throughput => &[BenchmarkMode::FixedDurationThroughput],
+            Self::Canonical | Self::Latency | Self::Concurrency | Self::Throughput => {
+                &[BenchmarkMode::RawAsyncThroughput]
+            }
         }
     }
 }
@@ -99,18 +96,26 @@ impl OutputFormat {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BenchmarkMode {
-    SingleLatency,
-    ConcurrentSubmissions,
-    FixedDurationThroughput,
+    RawAsyncThroughput,
+    RawNonBatchSubmissionThroughput,
 }
 
 impl BenchmarkMode {
     pub(crate) fn as_str(self) -> &'static str {
         match self {
-            Self::SingleLatency => "single_latency",
-            Self::ConcurrentSubmissions => "concurrent_submissions",
-            Self::FixedDurationThroughput => "fixed_duration_throughput",
+            Self::RawAsyncThroughput => "raw_async_throughput",
+            Self::RawNonBatchSubmissionThroughput => "raw_nonbatch_submission_throughput",
         }
+    }
+}
+
+pub(crate) fn parse_validation_mode(raw: &str) -> Result<AsyncMemmoveValidationMode, String> {
+    match raw {
+        "completion-only" => Ok(AsyncMemmoveValidationMode::CompletionOnly),
+        "full" => Ok(AsyncMemmoveValidationMode::Full),
+        other => Err(format!(
+            "unsupported validation mode `{other}`; expected `completion-only` or `full`"
+        )),
     }
 }
 
@@ -124,6 +129,7 @@ pub(crate) struct CliArgs {
     pub(crate) concurrency: u32,
     pub(crate) duration_ms: u64,
     pub(crate) max_page_fault_retries: u32,
+    pub(crate) validation_mode: AsyncMemmoveValidationMode,
     pub(crate) format: OutputFormat,
     pub(crate) artifact_path: Option<PathBuf>,
 }
@@ -147,6 +153,7 @@ impl CliArgs {
             concurrency: 4,
             duration_ms: 100,
             max_page_fault_retries: DEFAULT_MAX_PAGE_FAULT_RETRIES,
+            validation_mode: AsyncMemmoveValidationMode::CompletionOnly,
             format: OutputFormat::Text,
             artifact_path: None,
         };
@@ -206,6 +213,10 @@ impl CliArgs {
                         MAX_PAGE_FAULT_RETRIES,
                     )?;
                 }
+                "--validation" => {
+                    cli.validation_mode =
+                        parse_validation_mode(&required_value(&mut args, "--validation")?)?
+                }
                 "--format" => {
                     cli.format = OutputFormat::parse(&required_value(&mut args, "--format")?)?
                 }
@@ -216,7 +227,7 @@ impl CliArgs {
                 }
                 other => {
                     return Err(format!(
-                        "unsupported argument `{other}`; expected `--device`, `--backend`, `--suite`, `--bytes`, `--iterations`, `--concurrency`, `--duration-ms`, `--max-page-fault-retries`, `--format`, `--artifact`, or `--help`"
+                        "unsupported argument `{other}`; expected `--device`, `--backend`, `--suite`, `--bytes`, `--iterations`, `--concurrency`, `--duration-ms`, `--max-page-fault-retries`, `--validation`, `--format`, `--artifact`, or `--help`"
                     ));
                 }
             }
@@ -272,6 +283,6 @@ fn parse_bounded_u32(raw: &str, flag: &str, min: u32, max: u32) -> Result<u32, S
 
 pub(crate) fn print_help() {
     println!(
-        "tokio_memmove_bench\n\nUSAGE:\n    tokio_memmove_bench [OPTIONS]\n\nOPTIONS:\n    --device <PATH>              DSA work queue path (default: {DEFAULT_DEVICE_PATH})\n    --backend <hardware|software>\n    --suite <canonical|latency|concurrency|throughput>\n    --bytes <N>                  Transfer size in bytes (1..={MAX_BYTES})\n    --iterations <N>             Iterations per latency/concurrency mode (1..={MAX_ITERATIONS})\n    --concurrency <N>            Concurrent submissions for concurrency/throughput modes (1..={MAX_CONCURRENCY})\n    --duration-ms <N>            Duration knob for throughput mode (1..={MAX_DURATION_MS})\n    --max-page-fault-retries <N> Maximum DSA page-fault retries per operation (0..={MAX_PAGE_FAULT_RETRIES}, default: {DEFAULT_MAX_PAGE_FAULT_RETRIES})\n    --format <json|text>\n    --artifact <PATH>            Write exactly the emitted stdout artifact to this file\n    -h, --help                   Print help"
+        "tokio_memmove_bench\n\nUSAGE:\n    tokio_memmove_bench [OPTIONS]\n\nOPTIONS:\n    --device <PATH>              DSA work queue path (default: {DEFAULT_DEVICE_PATH})\n    --backend <hardware|software>\n    --suite <canonical|latency|concurrency|throughput>\n    --bytes <N>                  Transfer size in bytes (1..={MAX_BYTES})\n    --iterations <N>             Iteration compatibility knob (1..={MAX_ITERATIONS})\n    --concurrency <N>            Raw-throughput worker/slot count (1..={MAX_CONCURRENCY})\n    --duration-ms <N>            Timed raw-throughput duration (1..={MAX_DURATION_MS})\n    --max-page-fault-retries <N> Maximum DSA page-fault retries per operation (0..={MAX_PAGE_FAULT_RETRIES}, default: {DEFAULT_MAX_PAGE_FAULT_RETRIES})\n    --validation <completion-only|full> Async validation mode for measured runs (default: completion-only)\n    --format <json|text>\n    --artifact <PATH>            Write exactly the emitted stdout artifact to this file\n    -h, --help                   Print help"
     );
 }

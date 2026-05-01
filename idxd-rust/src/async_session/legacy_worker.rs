@@ -11,7 +11,7 @@ use std::thread::{self, JoinHandle};
 use bytes::buf::UninitSlice;
 use tokio::sync::{mpsc, oneshot};
 
-use crate::{DsaSession, MemmoveError, MemmoveValidationReport};
+use crate::{DsaSession, MemmoveCompletion, MemmoveError, MemmoveValidationReport};
 
 use super::{
     AsyncMemmoveDriver, AsyncMemmoveError, AsyncMemmoveRequest, AsyncMemmoveResult, DriverFuture,
@@ -223,6 +223,10 @@ fn run_memmove<W: AsyncMemmoveWorker>(
 
     Ok(AsyncMemmoveResult {
         destination,
-        report,
+        completion: MemmoveCompletion {
+            requested_bytes: report.requested_bytes,
+            page_fault_retries: report.page_fault_retries,
+            final_status: report.final_status,
+        },
     })
 }

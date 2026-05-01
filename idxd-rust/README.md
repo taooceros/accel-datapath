@@ -157,7 +157,7 @@ Use the async proof path when you need to prove that ordinary Tokio callers can 
 bash idxd-rust/scripts/verify_async_memmove.sh
 ```
 
-Use the benchmark proof path when you need JSON-first evidence for direct Tokio memmove latency, concurrent submissions, and bounded throughput. The verifier defaults are intentionally short for operator checks:
+Use the benchmark proof path when you need JSON-first evidence for raw non-batched DSA submission throughput under Tokio. Tokio is only the execution engine; hardware runs emit `raw_nonbatch_submission_throughput`, while the software diagnostic backend still emits `raw_async_throughput`. Measured hardware runs default to `--validation completion-only` so byte comparison is not in the timed path. The verifier defaults are intentionally short for operator checks:
 
 ```bash
 bash idxd-rust/scripts/verify_tokio_memmove_bench.sh
@@ -171,11 +171,12 @@ IDXD_RUST_BENCH_BYTES=64,4096 \
 IDXD_RUST_BENCH_CONCURRENCY=1,4,16 \
 IDXD_RUST_BENCH_DURATION_MS=100 \
 IDXD_RUST_BENCH_MAX_PAGE_FAULT_RETRIES=1 \
+IDXD_RUST_BENCH_VALIDATION=completion-only \
 IDXD_RUST_BENCH_OUTPUT_DIR=target/async-throughput-matrix \
 bash idxd-rust/scripts/bench_async_throughput_matrix.sh
 ```
 
-The CSV is written to `async_throughput_matrix.csv` by default and includes `bytes`, `concurrency`, `duration_ms`, `max_page_fault_retries`, completed/failed operation counts, `ops_per_sec`, `bytes_per_sec`, `gib_per_sec`, claim eligibility, and artifact paths. `IDXD_RUST_BENCH_MAX_PAGE_FAULT_RETRIES` feeds `tokio_memmove_bench --max-page-fault-retries`; keep the default `1` for conservative proof runs and raise it only for diagnostic retry-budget sweeps. On this prepared host, prefer the shared DSA work queue `/dev/dsa/wq0.1` for the direct async benchmark path.
+The CSV is written to `async_throughput_matrix.csv` by default and includes `bytes`, `concurrency`, `duration_ms`, `max_page_fault_retries`, `validation_mode`, completed/failed operation counts, `ops_per_sec`, `bytes_per_sec`, `gib_per_sec`, claim eligibility, and artifact paths. `IDXD_RUST_BENCH_MAX_PAGE_FAULT_RETRIES` feeds `tokio_memmove_bench --max-page-fault-retries`; `IDXD_RUST_BENCH_VALIDATION` feeds `--validation`; `IDXD_RUST_BENCH_MIN_OPS_PER_SEC` can require a host-calibrated minimum message rate; and `IDXD_RUST_BENCH_MIN_GIB_PER_SEC` remains available for bandwidth-style checks. On this prepared host, prefer the shared DSA work queue `/dev/dsa/wq0.1` for the direct async benchmark path.
 
 Use the S04 collection workflow when you need a reviewer-ready evidence directory with focused command logs, verifier output directories, and a manifest:
 
@@ -185,15 +186,17 @@ bash idxd-rust/scripts/collect_tokio_memmove_evidence.sh
 
 By default it writes a timestamped directory under `target/m007-s04-evidence/`. Set `M007_S04_EVIDENCE_OUTPUT_DIR` when you need a stable rerun path, and use the existing `IDXD_RUST_VERIFY_*` knobs to pass release-profile workload settings through to the underlying verifier.
 
-For release-profile S04 hardware evidence, keep the same verifier or collection workflow but raise the profile and workload knobs explicitly:
+For release-profile hardware throughput evidence, keep the same verifier or collection workflow but raise the profile and workload knobs explicitly. Use `IDXD_RUST_VERIFY_MIN_OPS_PER_SEC` only after calibrating a prepared host:
 
 ```bash
 IDXD_RUST_VERIFY_PROFILE=release \
-IDXD_RUST_VERIFY_BYTES=4096 \
-IDXD_RUST_VERIFY_ITERATIONS=1000 \
+IDXD_RUST_VERIFY_BYTES=64 \
+IDXD_RUST_VERIFY_ITERATIONS=1 \
 IDXD_RUST_VERIFY_CONCURRENCY=16 \
-IDXD_RUST_VERIFY_DURATION_MS=5000 \
-IDXD_RUST_VERIFY_MAX_PAGE_FAULT_RETRIES=1 \
+IDXD_RUST_VERIFY_DURATION_MS=1000 \
+IDXD_RUST_VERIFY_MAX_PAGE_FAULT_RETRIES=64 \
+IDXD_RUST_VERIFY_VALIDATION=completion-only \
+IDXD_RUST_VERIFY_MIN_OPS_PER_SEC=3000000 \
 bash idxd-rust/scripts/verify_tokio_memmove_bench.sh
 ```
 
@@ -203,7 +206,7 @@ Use the software diagnostic benchmark when you need a host-free schema and Tokio
 IDXD_RUST_VERIFY_BACKEND=software bash idxd-rust/scripts/verify_tokio_memmove_bench.sh
 ```
 
-Software diagnostic artifacts are deliberately marked `claim_eligible=false`. They prove the benchmark contract and async control flow, not hardware acceleration. S04 hardware evidence must come from `backend=hardware`, `claim_eligible=true`, direct async rows, and the paired `direct_sync` comparison row.
+Software diagnostic artifacts are deliberately marked `claim_eligible=false`. They prove the benchmark contract and async control flow, not hardware acceleration. Hardware throughput evidence must come from `backend=hardware`, `claim_eligible=true`, a `raw_nonbatch_submission_throughput` direct async row, and `post_run_validation=pass`.
 
 Future worker-runtime planners should read the S05 worker-readiness handoff at `docs/report/architecture/010.worker_runtime_readiness_handoff.md` before treating M007 as execution or claim evidence. M007 is planning-ready for worker batching, MOVDIR64/MOVDIR64B, registry/pool, and Tonic/RPC work; execution readiness and claim readiness still require prepared-host verifier evidence.
 
@@ -228,9 +231,9 @@ The async surface is intentionally split in two.
 - `AsyncDsaSession` owns the direct async runtime and therefore owns shutdown.
 - `AsyncDsaHandle` is what Tokio tasks clone and await.
 - `AsyncMemmoveRequest` is the canonical async request shape. It owns both the source bytes and the destination buffer before it enters the queue.
-- `AsyncMemmoveResult` returns the explicit owned destination buffer plus the validation report; callers should inspect `report.requested_bytes` to distinguish requested source bytes from any extra destination capacity.
+- `AsyncMemmoveResult` returns the explicit owned destination buffer plus lightweight completion metadata; validation reports are not returned on the timed completion path.
 - Destination allocation is explicit at the call site. The v1 public async API does not provide an allocation convenience helper or a borrowed copy-back helper; callers choose the destination capacity, submit the owned request, and receive the same destination ownership back in the result.
-- Destination length advances only after successful completion. The direct runtime writes into spare capacity and the result exposes the initialized prefix only after validation succeeds; failed requests keep the rejected buffers available through the typed error path.
+- Destination length advances after successful terminal completion. In completion-only mode the direct runtime trusts the successful completion record; in full-validation mode it compares initialized bytes before exposing the appended range.
 - Ordinary Tokio composition such as `tokio::join!` or spawned tasks still uses that same cloneable handle surface; cloned handles do not create extra sessions or extra hardware owners. Build an owned `AsyncMemmoveRequest` and call `memmove` when work must cross a task boundary.
 - Direct async submissions use ENQCMD accept/reject semantics and operation-owned descriptor/completion/buffer state. A long-lived Tokio monitor observes per-request completion records and resolves futures only after terminal completion classification.
 - Once a request has been accepted for hardware submission, aborting or dropping the awaiting Tokio task does not cancel the in-flight memmove. The monitor still observes terminal completion, keeps descriptor/completion/buffer state alive, and discards the result only if no receiver remains.
@@ -253,8 +256,8 @@ let destination = BytesMut::with_capacity(source.len());
 let request = AsyncMemmoveRequest::new(source, destination)?;
 let result = handle.memmove(request).await?;
 
-assert_eq!(&result.destination[..result.report.requested_bytes], b"hello dsa");
-println!("copied {} bytes", result.report.requested_bytes);
+assert_eq!(&result.destination[..result.completion.requested_bytes], b"hello dsa");
+println!("copied {} bytes", result.completion.requested_bytes);
 # Ok(())
 # }
 ```

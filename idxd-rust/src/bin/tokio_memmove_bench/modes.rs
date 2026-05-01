@@ -12,20 +12,52 @@ use crate::failure::RowFailure;
 pub(crate) struct ModeStats {
     completed: u64,
     failed: u64,
-    latencies_ns: Vec<u128>,
+    min_latency_ns: Option<u128>,
+    max_latency_ns: Option<u128>,
+    total_latency_ns: u128,
     first_failure: Option<RowFailure>,
 }
 
 impl ModeStats {
     pub(crate) fn record_success(&mut self, latency_ns: u128) {
+        let latency_ns = latency_ns.max(1);
         self.completed += 1;
-        self.latencies_ns.push(latency_ns.max(1));
+        self.total_latency_ns = self.total_latency_ns.saturating_add(latency_ns);
+        self.min_latency_ns = Some(
+            self.min_latency_ns
+                .map(|current| current.min(latency_ns))
+                .unwrap_or(latency_ns),
+        );
+        self.max_latency_ns = Some(
+            self.max_latency_ns
+                .map(|current| current.max(latency_ns))
+                .unwrap_or(latency_ns),
+        );
     }
 
     pub(crate) fn record_failure(&mut self, failure: RowFailure) {
         self.failed += 1;
         if self.first_failure.is_none() {
             self.first_failure = Some(failure);
+        }
+    }
+
+    fn merge(&mut self, other: ModeStats) {
+        self.completed = self.completed.saturating_add(other.completed);
+        self.failed = self.failed.saturating_add(other.failed);
+        self.total_latency_ns = self.total_latency_ns.saturating_add(other.total_latency_ns);
+        self.min_latency_ns = match (self.min_latency_ns, other.min_latency_ns) {
+            (Some(left), Some(right)) => Some(left.min(right)),
+            (Some(value), None) | (None, Some(value)) => Some(value),
+            (None, None) => None,
+        };
+        self.max_latency_ns = match (self.max_latency_ns, other.max_latency_ns) {
+            (Some(left), Some(right)) => Some(left.max(right)),
+            (Some(value), None) | (None, Some(value)) => Some(value),
+            (None, None) => None,
+        };
+        if self.first_failure.is_none() {
+            self.first_failure = other.first_failure;
         }
     }
 
@@ -41,12 +73,10 @@ impl ModeStats {
         let simulated_bytes = self.completed.saturating_mul(args.bytes as u64);
         let ops_per_sec = rate_per_second(self.completed, elapsed_ns);
         let bytes_per_sec = rate_per_second(simulated_bytes, elapsed_ns);
-        let min_latency_ns = self.latencies_ns.iter().copied().min();
-        let max_latency_ns = self.latencies_ns.iter().copied().max();
-        let mean_latency_ns = if self.latencies_ns.is_empty() {
+        let mean_latency_ns = if self.completed == 0 {
             None
         } else {
-            Some(self.latencies_ns.iter().copied().sum::<u128>() / self.latencies_ns.len() as u128)
+            Some(self.total_latency_ns / self.completed as u128)
         };
         let first_failure = self.first_failure.as_ref();
 
@@ -61,9 +91,9 @@ impl ModeStats {
             completed_operations: self.completed,
             failed_operations: self.failed,
             elapsed_ns,
-            min_latency_ns,
+            min_latency_ns: self.min_latency_ns,
             mean_latency_ns,
-            max_latency_ns,
+            max_latency_ns: self.max_latency_ns,
             ops_per_sec,
             bytes_per_sec,
             verdict: if self.failed == 0 && self.completed > 0 {
@@ -99,12 +129,11 @@ pub(crate) async fn run_async_mode(
 ) -> BenchmarkResult {
     let start = Instant::now();
     let stats = match mode {
-        BenchmarkMode::SingleLatency => single_latency(handle, args.bytes, args.iterations).await,
-        BenchmarkMode::ConcurrentSubmissions => {
-            concurrent_submissions(handle, args.bytes, args.iterations, args.concurrency).await
+        BenchmarkMode::RawAsyncThroughput => {
+            raw_async_throughput(handle, args.bytes, args.concurrency, args.duration_ms).await
         }
-        BenchmarkMode::FixedDurationThroughput => {
-            fixed_duration_throughput(handle, args.bytes, args.concurrency, args.duration_ms).await
+        BenchmarkMode::RawNonBatchSubmissionThroughput => {
+            unreachable!("non-batch submission throughput uses the hardware slot-ring runner")
         }
     };
     let elapsed_ns = start.elapsed().as_nanos().max(1);
@@ -118,90 +147,88 @@ pub(crate) async fn run_async_mode(
     )
 }
 
-async fn single_latency(handle: AsyncDsaHandle, bytes: usize, iterations: u64) -> ModeStats {
-    let mut stats = ModeStats::default();
-    for seed in 0..iterations {
-        match submit_one(handle.clone(), bytes, seed).await {
-            Ok(latency_ns) => stats.record_success(latency_ns),
-            Err(failure) => stats.record_failure(failure),
-        }
-    }
-    stats
-}
-
-async fn concurrent_submissions(
-    handle: AsyncDsaHandle,
-    bytes: usize,
-    iterations: u64,
-    concurrency: u32,
-) -> ModeStats {
-    let mut stats = ModeStats::default();
-    let mut seed = 0;
-    for _ in 0..iterations {
-        let mut tasks = JoinSet::new();
-        for _ in 0..concurrency {
-            tasks.spawn(submit_one(handle.clone(), bytes, seed));
-            seed += 1;
-        }
-        drain_join_set(&mut tasks, &mut stats).await;
-    }
-    stats
-}
-
-async fn fixed_duration_throughput(
+async fn raw_async_throughput(
     handle: AsyncDsaHandle,
     bytes: usize,
     concurrency: u32,
     duration_ms: u64,
 ) -> ModeStats {
-    let mut stats = ModeStats::default();
     let deadline = Instant::now() + Duration::from_millis(duration_ms);
+    let source = Bytes::from(deterministic_source(bytes, 0));
     let mut tasks = JoinSet::new();
-    let mut seed = 0;
 
-    while Instant::now() < deadline {
-        while tasks.len() < concurrency as usize && Instant::now() < deadline {
-            tasks.spawn(submit_one(handle.clone(), bytes, seed));
-            seed += 1;
-        }
-
-        if tasks.len() >= concurrency as usize {
-            drain_one_join(&mut tasks, &mut stats).await;
-        } else {
-            tokio::task::yield_now().await;
-        }
+    for _slot in 0..concurrency {
+        tasks.spawn(raw_throughput_slot(
+            handle.clone(),
+            source.clone(),
+            bytes,
+            deadline,
+        ));
     }
 
-    drain_join_set(&mut tasks, &mut stats).await;
+    let mut stats = ModeStats::default();
+    while let Some(joined) = tasks.join_next().await {
+        match joined {
+            Ok(slot_stats) => stats.merge(slot_stats),
+            Err(_join_error) => stats.record_failure(RowFailure::join_error()),
+        }
+    }
     stats
 }
 
-async fn drain_join_set(tasks: &mut JoinSet<Result<u128, RowFailure>>, stats: &mut ModeStats) {
-    while !tasks.is_empty() {
-        drain_one_join(tasks, stats).await;
+async fn raw_throughput_slot(
+    handle: AsyncDsaHandle,
+    source: Bytes,
+    bytes: usize,
+    deadline: Instant,
+) -> ModeStats {
+    let mut stats = ModeStats::default();
+    let mut slot = RequestSlot::new(source, bytes);
+
+    while Instant::now() < deadline {
+        let op_start = Instant::now();
+        match slot.submit(&handle).await {
+            Ok(()) => stats.record_success(op_start.elapsed().as_nanos().max(1)),
+            Err(failure) => {
+                stats.record_failure(failure);
+                break;
+            }
+        }
+    }
+
+    stats
+}
+
+#[derive(Debug)]
+pub(crate) struct RequestSlot {
+    source: Bytes,
+    destination: BytesMut,
+}
+
+impl RequestSlot {
+    pub(crate) fn new(source: Bytes, bytes: usize) -> Self {
+        Self {
+            source,
+            destination: BytesMut::with_capacity(bytes),
+        }
+    }
+
+    async fn submit(&mut self, handle: &AsyncDsaHandle) -> Result<(), RowFailure> {
+        let destination = std::mem::take(&mut self.destination);
+        let request = AsyncMemmoveRequest::new(self.source.clone(), destination)
+            .map_err(|error| RowFailure::request(error.kind()))?;
+        let result = handle
+            .memmove(request)
+            .await
+            .map_err(|error| RowFailure::async_error(&error))?;
+        let mut destination = result.destination;
+        destination.clear();
+        self.destination = destination;
+        Ok(())
     }
 }
 
-async fn drain_one_join(tasks: &mut JoinSet<Result<u128, RowFailure>>, stats: &mut ModeStats) {
-    match tasks.join_next().await {
-        Some(Ok(Ok(latency_ns))) => stats.record_success(latency_ns),
-        Some(Ok(Err(failure))) => stats.record_failure(failure),
-        Some(Err(_join_error)) => stats.record_failure(RowFailure::join_error()),
-        None => {}
-    }
-}
-
-async fn submit_one(handle: AsyncDsaHandle, bytes: usize, seed: u64) -> Result<u128, RowFailure> {
-    let request = build_request(bytes, seed)?;
-    let start = Instant::now();
-    handle
-        .memmove(request)
-        .await
-        .map_err(|error| RowFailure::async_error(&error))?;
-    Ok(start.elapsed().as_nanos().max(1))
-}
-
-fn build_request(bytes: usize, seed: u64) -> Result<AsyncMemmoveRequest, RowFailure> {
+pub(crate) fn build_request(bytes: usize, seed: u64) -> Result<AsyncMemmoveRequest, RowFailure> {
     let source = Bytes::from(deterministic_source(bytes, seed));
     let destination = BytesMut::with_capacity(bytes);
     AsyncMemmoveRequest::new(source, destination).map_err(|error| RowFailure::request(error.kind()))

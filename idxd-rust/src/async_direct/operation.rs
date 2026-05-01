@@ -6,7 +6,9 @@ use tokio::sync::oneshot;
 
 use crate::async_session::{AsyncMemmoveError, AsyncMemmoveRequest, AsyncMemmoveResult};
 use crate::direct_memmove::{DirectMemmoveState, verify_initialized_destination};
-use crate::{CompletionAction, CompletionSnapshot, DsaConfig, MemmoveRequest};
+use crate::{
+    AsyncMemmoveValidationMode, CompletionAction, CompletionSnapshot, DsaConfig, MemmoveRequest,
+};
 
 use super::{
     AsyncDirectFailure, AsyncDirectFailureKind, DirectMemmoveBackend, RuntimeInner,
@@ -224,42 +226,52 @@ impl PendingOperation {
                 .initialize_success_destination(self.id, dst, &source);
         }
 
-        let report = {
+        let completion = {
             let state = self.state.lock().expect("direct memmove state poisoned");
-            state.success_report(inner.config.device_path(), final_status)
+            state.success_completion(final_status)
         };
 
-        let result = report
-            .and_then(|report| {
-                // SAFETY: Terminal success means hardware or the test backend has
-                // initialized exactly `requested_bytes` bytes in the destination
-                // spare capacity. The slice is used only for validation, and the
-                // destination length is advanced only after validation succeeds.
-                let initialized_dst = unsafe {
-                    std::slice::from_raw_parts(
-                        destination.as_ptr().add(original_len),
-                        self.requested_bytes,
-                    )
-                };
+        let validation_result = if matches!(
+            self.config.async_validation_mode(),
+            AsyncMemmoveValidationMode::Full
+        ) {
+            // SAFETY: Terminal success means hardware or the test backend has
+            // initialized exactly `requested_bytes` bytes in the destination
+            // spare capacity. Full-validation mode reads that range before it is
+            // exposed by advancing the initialized length.
+            let initialized_dst = unsafe {
+                std::slice::from_raw_parts(
+                    destination.as_ptr().add(original_len),
+                    self.requested_bytes,
+                )
+            };
+            MemmoveRequest::new(self.requested_bytes).and_then(|request| {
                 verify_initialized_destination(
-                    &inner.config,
-                    MemmoveRequest::new(self.requested_bytes)?,
-                    &report,
+                    &self.config,
+                    request,
+                    &completion,
                     initialized_dst,
                     &source,
-                )?;
+                )
+            })
+        } else {
+            Ok(())
+        };
 
-                // SAFETY: Post-copy verification above read exactly the
-                // initialized bytes written by the terminally successful
-                // operation, so exposing the appended range is now safe.
+        let result = validation_result
+            .map(|()| {
+                // SAFETY: Terminal success means hardware or the test backend has
+                // initialized exactly `requested_bytes` bytes in the destination
+                // spare capacity. Completion-only mode trusts that completion;
+                // full-validation mode has additionally compared the bytes above.
                 unsafe {
                     destination.set_len(original_len + self.requested_bytes);
                 }
 
-                Ok(AsyncMemmoveResult {
+                AsyncMemmoveResult {
                     destination,
-                    report,
-                })
+                    completion,
+                }
             })
             .map_err(|source| AsyncMemmoveError::Memmove {
                 source,

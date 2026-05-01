@@ -87,6 +87,7 @@ iterations=1
 concurrency=1
 duration_ms=10
 max_page_fault_retries=1
+validation=completion-only
 artifact=
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -130,6 +131,10 @@ while [[ $# -gt 0 ]]; do
       artifact=${2:-}
       shift 2
       ;;
+    --validation)
+      validation=${2:-}
+      shift 2
+      ;;
     --format)
       shift 2
       ;;
@@ -142,7 +147,7 @@ if [[ -z "$artifact" ]]; then
   echo 'missing artifact path' >&2
   exit 91
 fi
-python3 - "$artifact" "$backend" "$suite" "$device" "$bytes" "$iterations" "$concurrency" "$duration_ms" "$max_page_fault_retries" <<'PY'
+python3 - "$artifact" "$backend" "$suite" "$device" "$bytes" "$iterations" "$concurrency" "$duration_ms" "$max_page_fault_retries" "$validation" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -156,12 +161,14 @@ iterations = int(sys.argv[6])
 concurrency = int(sys.argv[7])
 duration_ms = int(sys.argv[8])
 max_page_fault_retries = int(sys.argv[9])
+validation_mode = sys.argv[10]
 completed = max(1, concurrency * 10)
 elapsed_ns = max(1, duration_ms * 1_000_000)
 ops_per_sec = completed * 1_000_000_000.0 / elapsed_ns
 bytes_per_sec = completed * bytes_ * 1_000_000_000.0 / elapsed_ns
+mode = "raw_nonbatch_submission_throughput" if backend == "hardware" else "raw_async_throughput"
 row = {
-    "mode": "fixed_duration_throughput",
+    "mode": mode,
     "target": "direct_async",
     "comparison_target": None,
     "requested_bytes": bytes_,
@@ -191,7 +198,7 @@ row = {
     "claim_eligible": backend == "hardware",
 }
 report = {
-    "schema_version": 1,
+    "schema_version": 2,
     "ok": True,
     "verdict": "pass",
     "device_path": device,
@@ -205,6 +212,8 @@ report = {
     "concurrency": concurrency,
     "duration_ms": duration_ms,
     "max_page_fault_retries": max_page_fault_retries,
+    "validation_mode": validation_mode,
+    "post_run_validation": "pass" if backend == "hardware" else "not_run",
     "failure_class": None,
     "error_kind": None,
     "direct_failure_kind": None,
@@ -264,11 +273,17 @@ fn matrix_script_aggregates_fake_hardware_points_into_csv() {
     let csv = fs::read_to_string(&csv_path).expect("CSV should be written");
     let rows: Vec<&str> = csv.lines().collect();
     assert_eq!(rows.len(), 5, "header + four matrix rows expected: {csv}");
-    assert!(rows[0].contains("backend,device_path,bytes,concurrency,duration_ms,max_page_fault_retries"));
-    assert!(csv.contains("hardware,/dev/dsa/wq-test,64,1,7,9"));
-    assert!(csv.contains("hardware,/dev/dsa/wq-test,128,2,7,9"));
+    assert!(rows[0].contains(
+        "backend,device_path,bytes,concurrency,duration_ms,max_page_fault_retries,validation_mode"
+    ));
+    assert!(csv.contains("hardware,/dev/dsa/wq-test,64,1,7,9,completion-only"));
+    assert!(csv.contains("hardware,/dev/dsa/wq-test,128,2,7,9,completion-only"));
     assert!(csv.contains("tokio_memmove_bench.json"));
-    assert!(output_dir.join("bytes-64/concurrency-1/tokio_memmove_bench.json").is_file());
+    assert!(
+        output_dir
+            .join("bytes-64/concurrency-1/tokio_memmove_bench.json")
+            .is_file()
+    );
 }
 
 #[test]

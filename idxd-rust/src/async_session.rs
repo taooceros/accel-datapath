@@ -12,8 +12,8 @@ use snafu::Snafu;
 
 use crate::{
     AsyncDirectFailure, AsyncDirectFailureKind, DEFAULT_MAX_PAGE_FAULT_RETRIES,
-    DirectAsyncMemmoveRuntime, DirectMemmoveBackend, DirectPortalBackend, DsaConfig, MemmoveError,
-    MemmoveRequest, MemmoveValidationReport,
+    DirectAsyncMemmoveRuntime, DirectMemmoveBackend, DirectPortalBackend, DsaConfig,
+    MemmoveCompletion, MemmoveError, MemmoveRequest,
 };
 
 mod legacy_worker;
@@ -130,7 +130,7 @@ impl AsyncMemmoveRequestError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AsyncMemmoveResult {
     pub destination: BytesMut,
-    pub report: MemmoveValidationReport,
+    pub completion: MemmoveCompletion,
 }
 
 /// Explicit owner/lifecycle failure kinds that are distinct from worker failures.
