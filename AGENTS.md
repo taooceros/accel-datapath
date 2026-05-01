@@ -8,17 +8,9 @@ Research monorepo for Intel DSA/IAX data-path work.
 ## SOURCE ORDER
 1. Current conversation
 2. Repo docs in `docs/` and `remark/`
-3. Local indexes and tools: `codemogger`, `read`, `bash`
+3. Agent states in `agents/`
+3. use `codemogger` for searching code
 4. External docs and web search
-
-## DELEGATION
-- Explorer workflow details live in `.agents/workflows/explorer.md`.
-- Use `@explorer` for bounded candidate discovery, not final synthesis.
-- Agent-specific task templates live under `.agents/templates/`.
-- Use `.agents/templates/<agent_name>_*.md` naming.
-- When delegating, follow the relevant workflow doc and cite the exact matching template when one exists.
-- Do not reference `.agents/templates/` generically.
-- Restate critical task budgets and stop conditions inline even when a workflow doc or template is provided.
 
 ## CONVENTIONS
 - Before acting, read the latest relevant plan or report.
@@ -27,16 +19,15 @@ Research monorepo for Intel DSA/IAX data-path work.
 - Keep commit headlines short and consistent with current style.
 - Write commits in focused, reviewable increments, but not so small that they lose a coherent unit of work.
 - Write a human project plan in `docs/plan/YYYY-MM-DD/NN.<topic>.<state>.md` before non-trivial project changes.
-- Write agent execution/workflow plans in `agents/plan/YYYY-MM-DD/NN.<topic>.<state>.md` when the primary purpose is agent operation, delegation, tooling, prompt templates, or live-thread workflow.
+- Write agent execution/workflow plans in `agents/plan/YYYY-MM-DD/NN.<topic>.<state>.md`.
 - Write plans for humans first. State the goal, scope, intended changes, verification, and completion notes in plain language.
-- Do not write plans as agent-private shorthand, terse scratchpads, or control notes that only make sense to the executing agent.
+- Always write agent execution plans.
 - Write findings to `docs/report/<topic>/NNN.<descriptor>.<ext>`.
 - Write single-point insights to `remark/NNN_<topic>.md`.
-- Read the nearest README before modifying a module.
 - Before writing or modifying code, read `agents/CODING_REQUIREMENTS.md` and treat its requirements as active coding constraints.
 - Match code to specs, not specs to code, unless explicitly told otherwise.
 - Keep the code lean; before adding another copy of logic, stop and decide whether duplication is really necessary.
-- Favor code that stays manageable, clean, lean, and elegant over expedient duplication.
+- Elegance is a first-class goal; if some code looks heavyweight, perhaps with lots of conditionals, then think harder for a more elegant way of achieving it.
 - Keep child `AGENTS.md` files lean and local.
 - Do not repeat parent guidance in child `AGENTS.md` files.
 
