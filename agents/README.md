@@ -4,6 +4,7 @@ This directory holds repository-local material whose primary audience is coding 
 
 ## Layout
 
+- `CODING_REQUIREMENTS.md` — persistent coding requirements distilled from GSD milestone decisions; read before writing or modifying project code.
 - `plan/` — agent execution plans for changes whose primary purpose is agent operation, delegation, tooling, prompt templates, or live-thread workflow.
 - `report/workflow/` — durable reports about agent orchestration, task shaping, retrieval strategy, and live-thread workflow.
 

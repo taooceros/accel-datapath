@@ -33,6 +33,7 @@ Research monorepo for Intel DSA/IAX data-path work.
 - Write findings to `docs/report/<topic>/NNN.<descriptor>.<ext>`.
 - Write single-point insights to `remark/NNN_<topic>.md`.
 - Read the nearest README before modifying a module.
+- Before writing or modifying code, read `agents/CODING_REQUIREMENTS.md` and treat its requirements as active coding constraints.
 - Match code to specs, not specs to code, unless explicitly told otherwise.
 - Keep the code lean; before adding another copy of logic, stop and decide whether duplication is really necessary.
 - Favor code that stays manageable, clean, lean, and elegant over expedient duplication.
@@ -59,6 +60,7 @@ tools/        Launcher behavior
 - Agent prompt templates: `.agents/templates/`
 - Agent execution plans: `agents/plan/`
 - Agent-focused reports: `agents/report/workflow/`
+- Agent coding requirements: `agents/CODING_REQUIREMENTS.md`
 - C++ framework: `dsa-stdexec/AGENTS.md`
 - Rust workspace: `accel-rpc/AGENTS.md`
 - Hardware benchmarking: `hw-eval/AGENTS.md`
