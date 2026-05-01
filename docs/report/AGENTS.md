@@ -9,9 +9,8 @@ Inherits `../AGENTS.md`.
 - `architecture/` — architecture analysis, design decisions, component breakdowns, and repo-level technical interpretation.
 - `benchmarking/` — performance analysis, optimization results, profiling output, and benchmark-derived findings.
 - `hw_eval/` — hardware enablement, validation, smoke tests, bindings status, launcher issues, and device-specific investigations.
-- `literature/` — KB-searchable literature reviews, paper-ingestion summaries, and cross-paper synthesis.
-- `workflow/` — agent workflow design, orchestration policy, retrieval strategy, task-shaping guidance, and process-level improvements.
-- `artifacts/` — rendered `.pdf` / `.typ` report companions that support a markdown report but are not the primary KB input.
+- `literature/` — literature reviews, paper-ingestion summaries, and cross-paper synthesis.
+- `artifacts/` — rendered `.pdf` / `.typ` report companions that support a markdown report but are not the primary searchable source.
 - `incidents/` — one-off environment or workflow failure reports that do not belong to a technical subsystem thread.
 
 ## CONVENTIONS
@@ -26,3 +25,4 @@ Inherits `../AGENTS.md`.
 - Do not place new markdown reports directly under `docs/report/`; choose a topic directory.
 - Do not treat `artifacts/` as the primary home for KB-searchable knowledge.
 - Do not mix hardware debug notes into `benchmarking/` when the main value is device bring-up or validation.
+- Do not put agent-orchestration or task-shaping reports here; use `../../agents/report/workflow/`.

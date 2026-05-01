@@ -26,7 +26,8 @@ Research monorepo for Intel DSA/IAX data-path work.
 - Keep durable detail in plans, reports, and remarks rather than transient notes.
 - Keep commit headlines short and consistent with current style.
 - Write commits in focused, reviewable increments, but not so small that they lose a coherent unit of work.
-- Write a plan in `docs/plan/YYYY-MM-DD/NN.<topic>.<state>.md` before non-trivial changes.
+- Write a human project plan in `docs/plan/YYYY-MM-DD/NN.<topic>.<state>.md` before non-trivial project changes.
+- Write agent execution/workflow plans in `agents/plan/YYYY-MM-DD/NN.<topic>.<state>.md` when the primary purpose is agent operation, delegation, tooling, prompt templates, or live-thread workflow.
 - Write plans for humans first. State the goal, scope, intended changes, verification, and completion notes in plain language.
 - Do not write plans as agent-private shorthand, terse scratchpads, or control notes that only make sense to the executing agent.
 - Write findings to `docs/report/<topic>/NNN.<descriptor>.<ext>`.
@@ -56,6 +57,8 @@ tools/        Launcher behavior
 - Root policy: `AGENTS.md`
 - Agent workflows: `.agents/workflows/`
 - Agent prompt templates: `.agents/templates/`
+- Agent execution plans: `agents/plan/`
+- Agent-focused reports: `agents/report/workflow/`
 - C++ framework: `dsa-stdexec/AGENTS.md`
 - Rust workspace: `accel-rpc/AGENTS.md`
 - Hardware benchmarking: `hw-eval/AGENTS.md`

@@ -8,15 +8,16 @@ Documentation and knowledge-base inputs. This subtree is about document placemen
 ## WHERE TO LOOK
 | Task | Location | Notes |
 |------|----------|-------|
-| Plans | `plan/` | Pre-change work plans. KB-tracked. |
-| Reports | `report/` | Findings and validation writeups. KB-tracked. |
+| Plans | `plan/` | Human-readable project work plans. |
+| Reports | `report/` | Findings and validation writeups. |
 | Specs | `specs/README.md` | Authoritative local DSA/IAX specs. KB-tracked. |
 | Related work | `related_work/README.md` | Thesis-driven note organization. |
 
 ## CONVENTIONS
-- Keep KB-searchable project knowledge in tracked markdown under `docs/plan/`, `docs/report/`, or `docs/specs/`.
-- Plan files under `docs/plan/` are human-readable workflow records. Write them so a project reviewer can understand the goal, scope, intended changes, verification, and outcome without needing agent-specific shorthand.
-- For `docs/report/`, use topic directories and name files as `report/<topic>/NNN.<descriptor>.<ext>`; see `docs/report/AGENTS.md` for topic meanings.
+- Keep project knowledge in tracked markdown under `docs/plan/`, `docs/report/`, or `docs/specs/`.
+- Plan files under `docs/plan/` are human-readable project records. Write them so a project reviewer can understand the goal, scope, intended changes, verification, and outcome without needing agent-specific shorthand.
+- Agent execution/workflow plans belong under `../agents/plan/`, not `docs/plan/`.
+- For `docs/report/`, use topic directories and name files as `report/<topic>/NNN.<descriptor>.<ext>`; see `docs/report/AGENTS.md` for topic meanings. Agent-workflow reports belong under `../agents/report/workflow/`.
 - Use `docs/related_work/` for curated topic notes tied to the repo thesis, not as the primary dump for searchable paper extraction.
 - When a paper or PDF should become KB-searchable, extract or curate it into markdown under a tracked path, usually `docs/report/`.
 - Keep single-point observations in `../remark/`; this file only narrows rules inside `docs/`.
@@ -25,4 +26,4 @@ Documentation and knowledge-base inputs. This subtree is about document placemen
 - Do not treat raw PDFs as KB inputs.
 - Do not put spec facts into ad hoc notes when `docs/specs/` is the authoritative source.
 - Do not duplicate root workflow rules for naming plans, reports, or remarks here.
-- Do not write plan files as agent-only scratchpads or unexplained shorthand.
+- Do not write plan files as agent-only scratchpads or unexplained shorthand; even agent execution plans in `../agents/plan/` need a clear reader, scope, and verification.
