@@ -26,6 +26,11 @@ in
         package = pkgs.bun;
         install.enable = true;
       };
+      npm = {
+        enable = true;
+        package = pkgs.nodejs;
+        install.enable = true;
+      };
     };
     rust = {
       enable = true;
@@ -204,8 +209,11 @@ in
     PY
   '';
 
+  env.NPM_CONFIG_PREFIX = "~/.npm-global";
+
   # https://devenv.sh/basics/
   enterShell = ''
+
     # 1. Ask the wrapped GCC where its headers are
     # 2. Clean up the output
     # 3. Export to CPLUS_INCLUDE_PATH so clangd sees it

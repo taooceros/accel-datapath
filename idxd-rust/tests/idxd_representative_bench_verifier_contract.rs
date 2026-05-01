@@ -429,14 +429,12 @@ fn prepared_host_pass_final_line_includes_release_claim_paths_and_required_targe
     assert!(stdout.contains(
         &format!("stderr={}", output_dir.join("idxd_representative_bench.stderr").display())
     ));
-    assert!(
-        stdout.contains(&format!(
+    assert!(stdout.contains(&format!(
             "raw_stdout={}",
             output_dir
                 .join("idxd_representative_bench.stdout.raw")
                 .display()
-        ))
-    );
+        )));
 }
 
 #[test]
