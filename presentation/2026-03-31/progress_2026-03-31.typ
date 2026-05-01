@@ -216,8 +216,8 @@
     [Knowledge base design],
     [
       - moved plans, reports, and specs into one tracked `docs/` layout \
-      - built a repo-local Turso KB (Vector DB) under `.turso/knowledge.db` \
-      - supports hybrid, FTS-only, and vector search
+      - kept plans, reports, and specs as directly readable tracked markdown \
+      - uses repo-local code search and direct document reads instead of a separate KB database
     ],
     fill: c-green,
   )],

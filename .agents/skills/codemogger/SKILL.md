@@ -18,7 +18,7 @@ It is useful for:
 
 ## When Not to Use
 
-- searching plans, reports, specs, or other docs; use `tursodb-kb` or direct doc reads instead
+- searching plans, reports, specs, or other docs; use direct doc reads or text search instead
 - reading file details once the target path is already known
 - using search hits as proof without reading the underlying file
 

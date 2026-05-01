@@ -5,4 +5,4 @@ This directory holds the authoritative local markdown copies of the accelerator 
 - `dsa_architecture_spec.md`: DSA architecture reference
 - `iax(iaa)_architecture_spec.md`: IAX / IAA architecture reference
 
-These files are also included in the local Turso knowledge-base rebuild alongside `docs/plan/` and `docs/report/*.md`.
+Keep these files in tracked markdown so agents can read and cite the local specification facts directly.

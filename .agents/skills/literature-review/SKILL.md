@@ -5,14 +5,14 @@ description: Paper-specific acquisition and processing pipeline — discover, pr
 
 # Literature Review Workflow
 
-Structured pipeline for acquiring and processing academic papers. This is the paper-specific workflow within the broader repo grounding process described by `AGENTS.md`, `tursodb/README.md`, and `tursodb/kb/README.md`.
+Structured pipeline for acquiring and processing academic papers. This is the paper-specific workflow within the broader repo grounding process described by `AGENTS.md` and the tracked docs under `docs/`.
 
 ## Repository Notes
 
 - This repository's existing literature hub is `docs/related work/`, not `docs/literature-review/`.
 - The repo currently contains `docs/research_plan.md`; it does not currently contain `docs/research_log.md`.
 - The repo currently does not include `rules/knowledge_grounding.md`, `papers/`, or `local-corpus/bin/corpus`. If those are added later, treat them as the canonical paper-processing path. Until then, use this workflow with the repo's current docs and KB helpers.
-- Before broad manual scans, follow `AGENTS.md`: start with the repo-local `tursodb-kb` skill for KB retrieval, then use `devenv shell -- codemogger search "query"` for code search.
+- Before broad manual scans, follow `AGENTS.md`: read the relevant tracked docs first, then use `devenv shell -- codemogger search "query"` for code search.
 
 ## Input Modes
 
@@ -21,7 +21,7 @@ Structured pipeline for acquiring and processing academic papers. This is the pa
 
 ## Phase 0: Discover Resources
 
-1. **Check existing knowledge** — Read `docs/related work/` and use the repo-local `tursodb-kb` skill to query the local KB. If sufficient, skip to Phase 3.
+1. **Check existing knowledge** — Read `docs/related work/` and search tracked docs for existing coverage. If sufficient, skip to Phase 3.
 2. **Search** — Use the search tools below. Try multiple query formulations. Prioritize strong venues and authoritative sources. Apply search saturation criteria: stop only after multiple query reformulations converge on the same core set of papers or when marginal results stop changing the reading list.
 3. **Curate a reading list** — Select the most relevant resources. Breadth first, then depth.
 4. **Acquire** — Download PDFs locally when possible. If the repo later adds `papers/todo/`, use it as the staging area. For non-downloadable resources, note the URL and clearly flag that the paper was not acquired.
@@ -56,9 +56,7 @@ For each paper:
 
 | Need | Tool | Why |
 |------|------|-----|
-| Internal prior work, plans, reports, specs | `tursodb-kb` skill | Repo-local retrieval should be first. |
-| Exact keyword/spec lookup in indexed docs | `devenv shell -- search-kb-fts` | Best when wording is known. |
-| Semantic recall from indexed docs | `devenv shell -- search-kb-vector` | Best when wording may differ. |
+| Internal prior work, plans, reports, specs | `rg` plus direct reads under `docs/` and `remark/` | Repo-local tracked docs should be first. |
 | Repo code and implementation search | `devenv shell -- codemogger search "query"` | Required repo-first code search path. |
 | Academic paper search | Scholar or web search tooling | Use to discover papers and PDF URLs. |
 | Known URL | Direct fetch/download tools | Best for canonical landing pages or PDF downloads. |
@@ -88,4 +86,4 @@ When merging findings into topic files:
 1. Plan subtopics before starting.
 2. Work one subtopic at a time.
 3. Write findings to disk immediately instead of keeping them only in context.
-4. Re-query the local KB after updating tracked sources if the repo's KB scope includes those sources.
+4. Re-scan the relevant tracked docs after updating sources when later synthesis depends on the new material.
