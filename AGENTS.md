@@ -45,11 +45,20 @@ Research monorepo for Intel DSA/IAX data-path work.
 - Treat raw PDFs as KB-ingested content; searchable paper content belongs in tracked markdown.
 - Run hardware-facing binaries directly when the documented flow requires `launch` or `dsa_launcher`.
 
+## HARDWARE BATCHING TERMINOLOGY
+- Use `hw-eval/` as the hardware potential baseline when comparing accelerator submission strategies.
+- Keep `batch` and `concurrency` separate in plans, reports, and code names.
+- Batch size / `batch_n`: the number of logical operations submitted to hardware through one MMIO submission. Batch size 1 means one operation per MMIO submission.
+- Concurrency: the maximum number of logical operations outstanding at once, independent of how those operations are grouped into MMIO submissions.
+- If a benchmark reports outstanding submission slots instead of logical operations, convert before comparing: `logical_concurrency = batch_size * outstanding_submission_slots`.
+- Avoid ambiguous phrases like “batch size 1” without saying whether it means the no-batch/direct-descriptor baseline or a DSA `BATCH` descriptor containing one sub-descriptor.
+- Keep hw-eval-specific strategy names and command-line trigger details in `hw-eval/AGENTS.md`.
+
 ## REPO MAP
 ```text
 dsa-stdexec/  C++ stdexec sender/receiver framework
 accel-rpc/    Rust accelerator-aware RPC workspace
-hw-eval/      Benchmark harnesses
+hw-eval/      Hardware potential baseline benchmark harnesses
 docs/         Plans, reports, specs, related work
 tools/        Launcher behavior
 ```
@@ -63,6 +72,6 @@ tools/        Launcher behavior
 - Agent coding requirements: `agents/CODING_REQUIREMENTS.md`
 - C++ framework: `dsa-stdexec/AGENTS.md`
 - Rust workspace: `accel-rpc/AGENTS.md`
-- Hardware benchmarking: `hw-eval/AGENTS.md`
+- Hardware potential baseline: `hw-eval/AGENTS.md`
 - Docs placement rules: `docs/AGENTS.md`
 - Launcher behavior: `tools/README.md`
