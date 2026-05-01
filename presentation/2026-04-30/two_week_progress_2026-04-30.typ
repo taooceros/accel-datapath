@@ -11,6 +11,12 @@
 // - docs/report/hw_eval/011.m011_s03_representative_ops_2026-04-30.md
 // - docs/report/benchmarking/015.m011_representative_idxd_numbers_2026-04-30.md
 // - docs/report/architecture/017.generic_idxd_elegance_audit.md
+// - .gsd/OVERRIDES.md
+// - .gsd/DECISIONS.md
+// - .gsd/milestones/M004/M004-CONTEXT.md
+// - .gsd/milestones/M006/M006-CONTEXT.md
+// - .gsd/milestones/M010/M010-CONTEXT.md
+// - .gsd/milestones/M011/M011-CONTEXT.md
 // - dsa-stdexec/benchmark/dsa/README.md
 // - dsa-stdexec/benchmark/dsa/strategies/README.md
 
@@ -447,6 +453,67 @@
 
 #callout(fill: c-blue, stroke: c-accent)[
   The final story came from combining agent memory with human judgment: keep the evidence, but present the research argument.
+]
+
+== What the milestone trail revealed
+
+#callout(fill: c-blue, stroke: c-accent)[
+  The repeated problem was not missing effort. It was that the agent often moved forward on a technically workable path before the deeper research/API standard was explicit.
+]
+
+#v(0.3em)
+
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 12pt,
+  [#panel(fill: c-orange)[
+    #text(weight: "bold", fill: c-title)[Where I was unsatisfied]
+    #v(0.25em)
+    + duplicate FFI/package surfaces before integration
+    + handwritten descriptor ABI instead of bindgen-backed truth
+    + source-only or double-copy memmove APIs
+    + host-free proof where real hardware proof mattered
+    + cleanup that added abstraction weight
+    + correct details without a clear research claim
+  ]],
+  [#panel(fill: c-green)[
+    #text(weight: "bold", fill: c-title)[What I kept correcting toward]
+    #v(0.25em)
+    + one canonical `idxd-sys` / `idxd-rust` stack
+    + explicit source and destination ownership
+    + zero-copy / minimal-copy as API pressure
+    + proof strength matched to claim strength
+    + lean `bon` / `snafu` only where useful
+    + small, elegant, replaceable abstractions
+  ]],
+)
+
+#v(0.35em)
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 10pt,
+  [#panel(fill: c-row)[
+    #text(weight: "bold", fill: c-title)[M003 → M004]
+    #v(0.2em)
+    I stopped integration because duplicated FFI surfaces and bad ABI/API foundations remained.
+  ]],
+  [#panel(fill: c-row)[
+    #text(weight: "bold", fill: c-title)[M006 → M007]
+    #v(0.2em)
+    The async API moved toward explicit `Bytes` / `BytesMut` ownership, then completion-record-driven Tokio proof.
+  ]],
+  [#panel(fill: c-row)[
+    #text(weight: "bold", fill: c-title)[M010 → M011]
+    #v(0.2em)
+    The standard became explicit: clean, lean, elegant, hardware-backed where claimed, and no avoidable duplicate paths.
+  ]],
+)
+
+#v(0.35em)
+
+#callout(fill: c-blue, stroke: c-accent)[
+  Lesson: the agent is useful when it preserves evidence, but the milestone only becomes satisfying when the claim, API taste, and proof standard are set before implementation.
 ]
 
 == What I want feedback on
