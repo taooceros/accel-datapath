@@ -17,7 +17,8 @@ After reading, you should be able to:
 
 ## What lives here
 
-- `DsaSession` is the established DSA memmove submission path. It remains a separate public type and is not an alias for the generic session seam.
+- `DsaSession` is the established DSA memmove submission path. It remains a separate public type and is not an alias for the generic session seam; its compatibility implementation lives in `idxd-rust/src/legacy_dsa.rs` so the crate root stays focused on current surfaces.
+- The hidden legacy async worker fixture lives in `idxd-rust/src/async_session/legacy_worker.rs`. Public `AsyncDsaSession::open` uses the direct completion-driven runtime; the fixture remains only for host-independent compatibility tests.
 - `IdxdSession<Dsa>` and `IdxdSession<Iax>` are the concrete marker-family uses of the lean `IdxdSession<Accel>` operation seam. `IdxdSession<Dsa>::memmove` uses the same blocking DSA lifecycle as `DsaSession`; `IdxdSession<Iax>::crc64` and the `Iaa` spelling use the representative IAX/IAA crc64 lifecycle. This is intentionally narrow coverage, not a public operation hierarchy or a full accelerator runtime.
 - `AsyncDsaSession` is the explicit lifecycle owner for the async path.
 - `AsyncDsaHandle` is the only cloneable Tokio-facing surface. Cloning it shares one direct async runtime with one mapped work-queue portal and completion monitor; it never duplicates hardware ownership.
@@ -25,6 +26,7 @@ After reading, you should be able to:
 - `live_idxd_op` is the narrow S03 representative proof binary for generic `IdxdSession<Dsa>` memmove and `IdxdSession<Iax>` crc64 runs.
 - `await_memmove` is the crate-local async validation binary that exercises the public owner-plus-handle contract.
 - `tokio_memmove_bench` is the standalone Tokio-only direct async benchmark/proof binary. It emits JSON-first evidence for single latency, concurrent submissions, and fixed-duration throughput.
+- `bench_async_throughput_matrix.sh` is the small dsa-stdexec-style operator wrapper for async throughput sweeps. It reuses `tokio_memmove_bench --suite throughput`, runs each point through the launcher-backed verifier, and emits one CSV row per bytes/concurrency point.
 - `verify_live_memmove.sh`, `verify_async_memmove.sh`, `verify_tokio_memmove_bench.sh`, and `verify_idxd_representative_ops.sh` are the operational verifiers that wrap hardware proof binaries in the repo's `launch` capability flow and check the machine-readable artifacts they emit.
 
 ## Prerequisites
@@ -161,6 +163,20 @@ Use the benchmark proof path when you need JSON-first evidence for direct Tokio 
 bash idxd-rust/scripts/verify_tokio_memmove_bench.sh
 ```
 
+Use the async throughput matrix when you want a small dsa-stdexec-style CSV sweep over message size and concurrency without adopting the full C++ benchmark framework. It reuses the launcher-backed Tokio throughput verifier for each matrix point and keeps per-point JSON/stdout/stderr artifacts under the output directory:
+
+```bash
+IDXD_RUST_BENCH_DEVICE=/dev/dsa/wq0.1 \
+IDXD_RUST_BENCH_BYTES=64,4096 \
+IDXD_RUST_BENCH_CONCURRENCY=1,4,16 \
+IDXD_RUST_BENCH_DURATION_MS=100 \
+IDXD_RUST_BENCH_MAX_PAGE_FAULT_RETRIES=1 \
+IDXD_RUST_BENCH_OUTPUT_DIR=target/async-throughput-matrix \
+bash idxd-rust/scripts/bench_async_throughput_matrix.sh
+```
+
+The CSV is written to `async_throughput_matrix.csv` by default and includes `bytes`, `concurrency`, `duration_ms`, `max_page_fault_retries`, completed/failed operation counts, `ops_per_sec`, `bytes_per_sec`, `gib_per_sec`, claim eligibility, and artifact paths. `IDXD_RUST_BENCH_MAX_PAGE_FAULT_RETRIES` feeds `tokio_memmove_bench --max-page-fault-retries`; keep the default `1` for conservative proof runs and raise it only for diagnostic retry-budget sweeps. On this prepared host, prefer the shared DSA work queue `/dev/dsa/wq0.1` for the direct async benchmark path.
+
 Use the S04 collection workflow when you need a reviewer-ready evidence directory with focused command logs, verifier output directories, and a manifest:
 
 ```bash
@@ -177,6 +193,7 @@ IDXD_RUST_VERIFY_BYTES=4096 \
 IDXD_RUST_VERIFY_ITERATIONS=1000 \
 IDXD_RUST_VERIFY_CONCURRENCY=16 \
 IDXD_RUST_VERIFY_DURATION_MS=5000 \
+IDXD_RUST_VERIFY_MAX_PAGE_FAULT_RETRIES=1 \
 bash idxd-rust/scripts/verify_tokio_memmove_bench.sh
 ```
 

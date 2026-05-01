@@ -6,6 +6,9 @@ CRATE_DIR=$(cd -- "${SCRIPT_DIR}/.." && pwd)
 REPO_ROOT=$(cd -- "${CRATE_DIR}/.." && pwd)
 
 OUTPUT_DIR=${IDXD_RUST_VERIFY_OUTPUT_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/idxd-rust-representative-ops.XXXXXX")}
+if [[ "${OUTPUT_DIR}" != /* ]]; then
+  OUTPUT_DIR="${PWD}/${OUTPUT_DIR}"
+fi
 REQUEST_BYTES=${IDXD_RUST_VERIFY_BYTES:-64}
 BUILD_PROFILE=${IDXD_RUST_VERIFY_PROFILE:-dev}
 if [[ "${BUILD_PROFILE}" == "dev" ]]; then
@@ -191,9 +194,11 @@ fi
 log_phase preflight "launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} binary=${BINARY_PATH} timeout=${PREFLIGHT_TIMEOUT} targets=$(target_list)"
 
 PREFLIGHT_EXIT=0
-if timeout "${PREFLIGHT_TIMEOUT}" \
-  devenv shell -- launch "${BINARY_PATH}" --bytes abc \
-  >"${PREFLIGHT_STDOUT_PATH}" 2>"${PREFLIGHT_STDERR_PATH}"; then
+if (
+  cd "${REPO_ROOT}"
+  timeout "${PREFLIGHT_TIMEOUT}" \
+    devenv shell -- launch "${BINARY_PATH}" --bytes abc
+) >"${PREFLIGHT_STDOUT_PATH}" 2>"${PREFLIGHT_STDERR_PATH}"; then
   PREFLIGHT_EXIT=0
 else
   PREFLIGHT_EXIT=$?
@@ -444,14 +449,16 @@ run_target() {
   log_phase runtime "target=${label} operation=${op} device_path=${device} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} binary=${BINARY_PATH} requested_bytes=${REQUEST_BYTES} artifact=${artifact} stdout=${stdout_path} stderr=${stderr_path} raw_stdout=${raw_stdout_path} timeout=${RUN_TIMEOUT}"
 
   local run_exit=0
-  if timeout "${RUN_TIMEOUT}" \
-    devenv shell -- launch "${BINARY_PATH}" \
-      --op "${op}" \
-      --device "${device}" \
-      --bytes "${REQUEST_BYTES}" \
-      --format json \
-      --artifact "${artifact}" \
-      >"${raw_stdout_path}" 2>"${stderr_path}"; then
+  if (
+    cd "${REPO_ROOT}"
+    timeout "${RUN_TIMEOUT}" \
+      devenv shell -- launch "${BINARY_PATH}" \
+        --op "${op}" \
+        --device "${device}" \
+        --bytes "${REQUEST_BYTES}" \
+        --format json \
+        --artifact "${artifact}"
+  ) >"${raw_stdout_path}" 2>"${stderr_path}"; then
     run_exit=0
   else
     run_exit=$?

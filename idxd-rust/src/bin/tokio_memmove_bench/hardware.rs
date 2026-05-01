@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use idxd_rust::{AsyncDsaSession, DEFAULT_MAX_PAGE_FAULT_RETRIES, DsaConfig, DsaSession};
+use idxd_rust::{AsyncDsaSession, DsaConfig, DsaSession};
 
 use crate::artifact::{
     BenchmarkArtifact, BenchmarkResult, HARDWARE_ASYNC_TARGET, HARDWARE_SYNC_TARGET, SCHEMA_VERSION,
@@ -12,7 +12,7 @@ use crate::modes::{ModeStats, deterministic_source, run_async_mode};
 pub(crate) async fn hardware_artifact(args: &CliArgs) -> BenchmarkArtifact {
     let config = match DsaConfig::builder()
         .device_path(args.device_path.clone())
-        .max_page_fault_retries(DEFAULT_MAX_PAGE_FAULT_RETRIES)
+        .max_page_fault_retries(args.max_page_fault_retries)
         .build()
     {
         Ok(config) => config,
@@ -70,6 +70,7 @@ pub(crate) async fn hardware_artifact(args: &CliArgs) -> BenchmarkArtifact {
         iterations: args.iterations,
         concurrency: args.concurrency,
         duration_ms: args.duration_ms,
+        max_page_fault_retries: args.max_page_fault_retries,
         failure_class: first_failure.and_then(|result| result.failure_class),
         error_kind: first_failure.and_then(|result| result.error_kind),
         direct_failure_kind: first_failure.and_then(|result| result.direct_failure_kind),
@@ -109,6 +110,7 @@ fn failure_artifact_from_row(args: &CliArgs, failure: &RowFailure) -> BenchmarkA
         iterations: args.iterations,
         concurrency: args.concurrency,
         duration_ms: args.duration_ms,
+        max_page_fault_retries: args.max_page_fault_retries,
         failure_class: Some(failure.failure_class),
         error_kind: Some(failure.error_kind),
         direct_failure_kind: failure.direct_failure_kind,
@@ -130,7 +132,7 @@ fn run_sync_comparison(args: &CliArgs) -> BenchmarkResult {
 
     let config = match DsaConfig::builder()
         .device_path(args.device_path.clone())
-        .max_page_fault_retries(DEFAULT_MAX_PAGE_FAULT_RETRIES)
+        .max_page_fault_retries(args.max_page_fault_retries)
         .build()
     {
         Ok(config) => config,

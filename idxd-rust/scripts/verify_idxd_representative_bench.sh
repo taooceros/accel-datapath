@@ -6,6 +6,9 @@ CRATE_DIR=$(cd -- "${SCRIPT_DIR}/.." && pwd)
 REPO_ROOT=$(cd -- "${CRATE_DIR}/.." && pwd)
 
 OUTPUT_DIR=${IDXD_RUST_VERIFY_OUTPUT_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/idxd-rust-representative-bench.XXXXXX")}
+if [[ "${OUTPUT_DIR}" != /* ]]; then
+  OUTPUT_DIR="${PWD}/${OUTPUT_DIR}"
+fi
 REQUEST_BYTES=${IDXD_RUST_VERIFY_BYTES:-4096}
 ITERATIONS=${IDXD_RUST_VERIFY_ITERATIONS:-1000}
 BUILD_PROFILE=${IDXD_RUST_VERIFY_PROFILE:-release}
@@ -560,9 +563,11 @@ fi
 log_phase preflight "launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} binary=${BINARY_PATH} timeout=${PREFLIGHT_TIMEOUT} profile=${BUILD_PROFILE} requested_bytes=${REQUEST_BYTES} iterations=${ITERATIONS} targets=$(target_list)"
 
 PREFLIGHT_EXIT=0
-if timeout "${PREFLIGHT_TIMEOUT}" \
-  devenv shell -- launch "${BINARY_PATH}" --bytes abc \
-  >"${PREFLIGHT_STDOUT_PATH}" 2>"${PREFLIGHT_STDERR_PATH}"; then
+if (
+  cd "${REPO_ROOT}"
+  timeout "${PREFLIGHT_TIMEOUT}" \
+    devenv shell -- launch "${BINARY_PATH}" --bytes abc
+) >"${PREFLIGHT_STDOUT_PATH}" 2>"${PREFLIGHT_STDERR_PATH}"; then
   PREFLIGHT_EXIT=0
 else
   PREFLIGHT_EXIT=$?
@@ -591,10 +596,12 @@ fi
 log_phase runtime "launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} binary=${BINARY_PATH} profile=${BUILD_PROFILE} requested_bytes=${REQUEST_BYTES} iterations=${ITERATIONS} targets=$(target_list) timeout=${RUN_TIMEOUT}"
 
 RUN_EXIT=0
-if timeout "${RUN_TIMEOUT}" \
-  devenv shell -- launch "${BINARY_PATH}" \
-    "${BENCH_ARGS[@]}" \
-    >"${RAW_STDOUT_PATH}" 2>"${STDERR_PATH}"; then
+if (
+  cd "${REPO_ROOT}"
+  timeout "${RUN_TIMEOUT}" \
+    devenv shell -- launch "${BINARY_PATH}" \
+      "${BENCH_ARGS[@]}"
+) >"${RAW_STDOUT_PATH}" 2>"${STDERR_PATH}"; then
   RUN_EXIT=0
 else
   RUN_EXIT=$?

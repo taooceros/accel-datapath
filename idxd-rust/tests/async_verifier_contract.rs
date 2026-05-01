@@ -31,13 +31,6 @@ fn live_verifier_script() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("scripts/verify_live_memmove.sh")
 }
 
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("idxd-rust should live at the repository root")
-        .to_path_buf()
-}
-
 fn fake_launcher_env(capability_ok: bool) -> (PathBuf, PathBuf, String) {
     let temp_root = unique_temp_path(if capability_ok {
         "launcher-ready"
@@ -55,15 +48,19 @@ fn fake_launcher_env(capability_ok: bool) -> (PathBuf, PathBuf, String) {
 
     write_executable(
         &shim_dir.join("devenv"),
-        "#!/usr/bin/env bash
+        &format!(
+            "#!/usr/bin/env bash
 set -euo pipefail
-if [[ ${1:-} != shell || ${2:-} != -- || ${3:-} != launch ]]; then
+if [[ ${{1:-}} != shell || ${{2:-}} != -- || ${{3:-}} != launch ]]; then
   echo \"unexpected devenv invocation: $*\" >&2
   exit 90
 fi
 shift 3
+printf 'Running: {} %s\\n' \"$*\"
 exec \"$@\"
 ",
+            launcher_path.display()
+        ),
     );
 
     let getcap_output = if capability_ok {
@@ -156,9 +153,10 @@ fn live_verifier_fails_preflight_when_binary_override_and_build_flags_conflict()
 }
 
 #[test]
-fn live_verifier_reports_default_root_launcher_path_as_expected_failure() {
-    let output_dir = unique_temp_path("live-default-launcher-output");
+fn live_verifier_reports_missing_configured_launcher_as_expected_failure() {
+    let output_dir = unique_temp_path("live-missing-launcher-output");
     fs::create_dir_all(&output_dir).expect("output dir should be creatable");
+    let missing_launcher = output_dir.join("missing-dsa-launcher");
 
     let output = Command::new("bash")
         .arg(live_verifier_script())
@@ -168,13 +166,13 @@ fn live_verifier_reports_default_root_launcher_path_as_expected_failure() {
             env!("CARGO_BIN_EXE_live_memmove"),
         )
         .env("IDXD_RUST_VERIFY_DEVICE", "/dev/dsa/does-not-exist")
+        .env("IDXD_RUST_VERIFY_LAUNCHER_PATH", &missing_launcher)
         .env("IDXD_RUST_VERIFY_OUTPUT_DIR", &output_dir)
         .output()
         .expect("verifier should launch");
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let expected_launcher = repo_root().join("tools/build/dsa_launcher");
     assert!(stdout.contains("phase=done"));
     assert!(stdout.contains("verdict=expected_failure"));
     assert!(stdout.contains("failure_phase=preflight"));
@@ -182,17 +180,14 @@ fn live_verifier_reports_default_root_launcher_path_as_expected_failure() {
         stdout.contains("launcher_status=missing_launcher"),
         "stdout should report missing launcher, got: {stdout}"
     );
-    assert!(stdout.contains(&format!("launcher_path={}", expected_launcher.display())));
-    assert!(!stdout.contains(&format!(
-        "launcher_path={}",
-        repo_root().parent().unwrap().join("tools/build/dsa_launcher").display()
-    )));
+    assert!(stdout.contains(&format!("launcher_path={}", missing_launcher.display())));
 }
 
 #[test]
-fn async_verifier_reports_default_root_launcher_path_as_expected_failure() {
-    let output_dir = unique_temp_path("async-default-launcher-output");
+fn async_verifier_reports_missing_configured_launcher_as_expected_failure() {
+    let output_dir = unique_temp_path("async-missing-launcher-output");
     fs::create_dir_all(&output_dir).expect("output dir should be creatable");
+    let missing_launcher = output_dir.join("missing-dsa-launcher");
 
     let output = Command::new("bash")
         .arg(async_verifier_script())
@@ -202,13 +197,13 @@ fn async_verifier_reports_default_root_launcher_path_as_expected_failure() {
             env!("CARGO_BIN_EXE_await_memmove"),
         )
         .env("IDXD_RUST_VERIFY_DEVICE", "/dev/dsa/does-not-exist")
+        .env("IDXD_RUST_VERIFY_LAUNCHER_PATH", &missing_launcher)
         .env("IDXD_RUST_VERIFY_OUTPUT_DIR", &output_dir)
         .output()
         .expect("verifier should launch");
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let expected_launcher = repo_root().join("tools/build/dsa_launcher");
     assert!(stdout.contains("phase=done"));
     assert!(stdout.contains("verdict=expected_failure"));
     assert!(stdout.contains("failure_phase=preflight"));
@@ -216,11 +211,7 @@ fn async_verifier_reports_default_root_launcher_path_as_expected_failure() {
         stdout.contains("launcher_status=missing_launcher"),
         "stdout should report missing launcher, got: {stdout}"
     );
-    assert!(stdout.contains(&format!("launcher_path={}", expected_launcher.display())));
-    assert!(!stdout.contains(&format!(
-        "launcher_path={}",
-        repo_root().parent().unwrap().join("tools/build/dsa_launcher").display()
-    )));
+    assert!(stdout.contains(&format!("launcher_path={}", missing_launcher.display())));
 }
 
 #[test]
@@ -321,6 +312,13 @@ fn verifier_preserves_queue_open_failure_and_async_fields() {
         "stderr={}",
         output_dir.join("await_memmove.stderr").display()
     )));
+    let raw_stdout = fs::read_to_string(output_dir.join("await_memmove.stdout.raw"))
+        .expect("raw launcher stdout should be preserved");
+    let normalized_stdout = fs::read_to_string(output_dir.join("await_memmove.stdout"))
+        .expect("normalized proof stdout should be preserved");
+    assert!(raw_stdout.contains("Running:"));
+    assert!(raw_stdout.contains("dsa_launcher"));
+    assert!(!normalized_stdout.contains("Running:"));
 }
 
 #[test]

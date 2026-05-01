@@ -25,6 +25,10 @@ fn lifecycle_module_is_crate_private_static_dispatch() {
         "crate root should register the private lifecycle module"
     );
     assert!(
+        lib.contains("mod legacy_dsa;"),
+        "crate root should register the separate compatibility DSA module"
+    );
+    assert!(
         lib.contains("mod iax_crc64;"),
         "crate root should register the private IAX crc64 operation module"
     );
@@ -61,11 +65,20 @@ fn lifecycle_module_is_crate_private_static_dispatch() {
 
 #[test]
 fn legacy_dsa_memmove_delegates_to_shared_lifecycle() {
-    let lib = read_crate_file("src/lib.rs");
+    let crate_root = read_crate_file("src/lib.rs");
+    let legacy_dsa = read_crate_file("src/legacy_dsa.rs");
     let direct_memmove = read_crate_file("src/direct_memmove.rs");
 
     assert!(
-        lib.contains("run_direct_memmove(&self.portal"),
+        crate_root.contains("pub use legacy_dsa::DsaSession;"),
+        "crate root should re-export DsaSession from the separate compatibility module"
+    );
+    assert!(
+        !crate_root.contains("pub struct DsaSession"),
+        "DsaSession implementation should not live in src/lib.rs"
+    );
+    assert!(
+        legacy_dsa.contains("run_direct_memmove(&self.portal"),
         "DsaSession::memmove_inner should delegate to the DSA helper"
     );
     for forbidden in [
@@ -75,7 +88,7 @@ fn legacy_dsa_memmove_delegates_to_shared_lifecycle() {
         "portal.submit(",
     ] {
         assert!(
-            !lib.contains(forbidden),
+            !legacy_dsa.contains(forbidden),
             "DsaSession::memmove_inner should not grow a fresh inline submit/poll loop: {forbidden:?}"
         );
     }
@@ -88,6 +101,40 @@ fn legacy_dsa_memmove_delegates_to_shared_lifecycle() {
         direct_memmove.contains("run_blocking_operation(portal"),
         "direct memmove helper should use the shared lifecycle loop"
     );
+}
+
+#[test]
+fn legacy_async_worker_fixture_lives_in_own_module() {
+    let async_session = read_crate_file("src/async_session.rs");
+    let legacy_worker = read_crate_file("src/async_session/legacy_worker.rs");
+
+    assert!(
+        async_session.contains("mod legacy_worker;"),
+        "async_session should register the isolated legacy worker fixture module"
+    );
+    assert!(
+        async_session
+            .contains("pub use legacy_worker::{AsyncMemmoveWorker, AsyncWorkerFailureKind};"),
+        "public compatibility imports should be re-exported from the fixture module"
+    );
+    assert!(
+        async_session.contains("legacy_worker::spawn_worker_fixture(factory)?"),
+        "spawn_with_factory should delegate to the isolated fixture module"
+    );
+    for forbidden in [
+        "enum WorkerCommand",
+        "struct WorkerRuntimeDriver",
+        "fn run_memmove<W: AsyncMemmoveWorker>",
+    ] {
+        assert!(
+            !async_session.contains(forbidden),
+            "legacy worker fixture implementation should not live in async_session.rs: {forbidden:?}"
+        );
+        assert!(
+            legacy_worker.contains(forbidden),
+            "legacy worker fixture module should contain {forbidden:?}"
+        );
+    }
 }
 
 #[test]

@@ -6,12 +6,16 @@ CRATE_DIR=$(cd -- "${SCRIPT_DIR}/.." && pwd)
 REPO_ROOT=$(cd -- "${CRATE_DIR}/.." && pwd)
 
 OUTPUT_DIR=${IDXD_RUST_VERIFY_OUTPUT_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/idxd-rust-tokio-memmove-bench.XXXXXX")}
+if [[ "${OUTPUT_DIR}" != /* ]]; then
+  OUTPUT_DIR="${PWD}/${OUTPUT_DIR}"
+fi
 BACKEND=${IDXD_RUST_VERIFY_BACKEND:-hardware}
 SUITE=${IDXD_RUST_VERIFY_SUITE:-canonical}
 REQUEST_BYTES=${IDXD_RUST_VERIFY_BYTES:-64}
 ITERATIONS=${IDXD_RUST_VERIFY_ITERATIONS:-2}
 CONCURRENCY=${IDXD_RUST_VERIFY_CONCURRENCY:-2}
 DURATION_MS=${IDXD_RUST_VERIFY_DURATION_MS:-10}
+MAX_PAGE_FAULT_RETRIES=${IDXD_RUST_VERIFY_MAX_PAGE_FAULT_RETRIES:-1}
 BUILD_PROFILE=${IDXD_RUST_VERIFY_PROFILE:-dev}
 if [[ "${BUILD_PROFILE}" == "dev" ]]; then
   TARGET_SUBDIR=debug
@@ -23,6 +27,7 @@ RUN_TIMEOUT=${IDXD_RUST_VERIFY_RUN_TIMEOUT:-30s}
 SKIP_BUILD=${IDXD_RUST_VERIFY_SKIP_BUILD:-0}
 ARTIFACT_PATH="${OUTPUT_DIR}/tokio_memmove_bench.json"
 STDOUT_PATH="${OUTPUT_DIR}/tokio_memmove_bench.stdout"
+RAW_STDOUT_PATH="${STDOUT_PATH}.raw"
 STDERR_PATH="${OUTPUT_DIR}/tokio_memmove_bench.stderr"
 PREFLIGHT_STDOUT_PATH="${OUTPUT_DIR}/preflight.stdout"
 PREFLIGHT_STDERR_PATH="${OUTPUT_DIR}/preflight.stderr"
@@ -66,8 +71,35 @@ complete_with_explicit_failure() {
   exit 0
 }
 
+normalize_launch_stdout() {
+  local raw_stdout_path=$1
+  local normalized_stdout_path=$2
+
+  if [[ ! -f "${raw_stdout_path}" ]]; then
+    return 0
+  fi
+
+  # The repo's `launch` wrapper prints a "Running: .../dsa_launcher ..." banner
+  # to stdout before execing the proof binary. Keep stdout as the proof binary's
+  # JSON contract by dropping only that wrapper banner; preserve `.raw` for
+  # launcher debugging.
+  python3 - <<'PY' "${raw_stdout_path}" "${normalized_stdout_path}"
+import sys
+from pathlib import Path
+
+raw_path = Path(sys.argv[1])
+normalized_path = Path(sys.argv[2])
+lines = raw_path.read_text(encoding='utf-8').splitlines()
+filtered = [line for line in lines if not (line.startswith('Running: ') and 'dsa_launcher' in line)]
+text = '\n'.join(filtered)
+if text:
+    text += '\n'
+normalized_path.write_text(text, encoding='utf-8')
+PY
+}
+
 validate_artifact_contract() {
-  python3 - <<'PY' "${ARTIFACT_PATH}" "${STDOUT_PATH}" "${BACKEND}" "${SUITE}" "${DEVICE_PATH}" "${REQUEST_BYTES}" "${ITERATIONS}" "${CONCURRENCY}" "${DURATION_MS}"
+  python3 - <<'PY' "${ARTIFACT_PATH}" "${STDOUT_PATH}" "${BACKEND}" "${SUITE}" "${DEVICE_PATH}" "${REQUEST_BYTES}" "${ITERATIONS}" "${CONCURRENCY}" "${DURATION_MS}" "${MAX_PAGE_FAULT_RETRIES}"
 import json
 import math
 import re
@@ -83,6 +115,7 @@ expected_bytes = int(sys.argv[6])
 expected_iterations = int(sys.argv[7])
 expected_concurrency = int(sys.argv[8])
 expected_duration_ms = int(sys.argv[9])
+expected_max_page_fault_retries = int(sys.argv[10])
 
 if not artifact_path.is_file():
     raise SystemExit(f"missing artifact file: {artifact_path}")
@@ -130,7 +163,7 @@ reject_payload_dump_fields(report)
 required_top = {
     'schema_version', 'ok', 'verdict', 'device_path', 'backend', 'claim_eligible',
     'suite', 'runtime_flavor', 'worker_threads', 'requested_bytes', 'iterations',
-    'concurrency', 'duration_ms', 'failure_class', 'error_kind',
+    'concurrency', 'duration_ms', 'max_page_fault_retries', 'failure_class', 'error_kind',
     'direct_failure_kind', 'validation_phase', 'validation_error_kind',
     'direct_retry_budget', 'direct_retry_count', 'completion_status',
     'completion_result', 'completion_bytes_completed', 'completion_fault_addr',
@@ -155,6 +188,7 @@ for key, expected in [
     ('iterations', expected_iterations),
     ('concurrency', expected_concurrency),
     ('duration_ms', expected_duration_ms),
+    ('max_page_fault_retries', expected_max_page_fault_retries),
 ]:
     if report[key] != expected:
         raise SystemExit(f"{key}={report[key]!r} expected {expected!r}")
@@ -309,6 +343,8 @@ print(f"error_kind={report['error_kind'] if report['error_kind'] is not None els
 print(f"direct_failure_kind={report['direct_failure_kind'] if report['direct_failure_kind'] is not None else 'null'}")
 print(f"validation_phase={report['validation_phase'] if report['validation_phase'] is not None else 'null'}")
 print(f"validation_error_kind={report['validation_error_kind'] if report['validation_error_kind'] is not None else 'null'}")
+print(f"duration_ms={report['duration_ms']}")
+print(f"max_page_fault_retries={report['max_page_fault_retries']}")
 print(f"completed_operations={completed_operations}")
 print(f"failed_operations={failed_operations}")
 print(f"targets={','.join(row_targets) if row_targets else 'none'}")
@@ -369,9 +405,11 @@ if [[ "${BACKEND}" == "hardware" ]]; then
   log_phase preflight "backend=hardware device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} binary=${BINARY_PATH} timeout=${PREFLIGHT_TIMEOUT}"
 
   PREFLIGHT_EXIT=0
-  if timeout "${PREFLIGHT_TIMEOUT}" \
-    devenv shell -- launch "${BINARY_PATH}" --bytes abc \
-    >"${PREFLIGHT_STDOUT_PATH}" 2>"${PREFLIGHT_STDERR_PATH}"; then
+  if (
+    cd "${REPO_ROOT}"
+    timeout "${PREFLIGHT_TIMEOUT}" \
+      devenv shell -- launch "${BINARY_PATH}" --bytes abc
+  ) >"${PREFLIGHT_STDOUT_PATH}" 2>"${PREFLIGHT_STDERR_PATH}"; then
     PREFLIGHT_EXIT=0
   else
     PREFLIGHT_EXIT=$?
@@ -385,10 +423,15 @@ if [[ "${BACKEND}" == "hardware" ]]; then
     fail_phase preflight "backend=hardware device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} stdout=${PREFLIGHT_STDOUT_PATH} stderr=${PREFLIGHT_STDERR_PATH} message=launch-wrapped preflight failed"
   fi
 
-  RUNNER=(devenv shell -- launch "${BINARY_PATH}")
+  RUNNER=(bash -c 'cd "$1" && shift && exec devenv shell -- launch "$@"' bash "${REPO_ROOT}" "${BINARY_PATH}")
 fi
 
-log_phase runtime "backend=${BACKEND} suite=${SUITE} device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} binary=${BINARY_PATH} requested_bytes=${REQUEST_BYTES} iterations=${ITERATIONS} concurrency=${CONCURRENCY} duration_ms=${DURATION_MS} timeout=${RUN_TIMEOUT}"
+log_phase runtime "backend=${BACKEND} suite=${SUITE} device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} binary=${BINARY_PATH} requested_bytes=${REQUEST_BYTES} iterations=${ITERATIONS} concurrency=${CONCURRENCY} duration_ms=${DURATION_MS} timeout=${RUN_TIMEOUT} raw_stdout=${RAW_STDOUT_PATH}"
+
+RUN_STDOUT_PATH=${STDOUT_PATH}
+if [[ "${BACKEND}" == "hardware" ]]; then
+  RUN_STDOUT_PATH=${RAW_STDOUT_PATH}
+fi
 
 RUN_EXIT=0
 if timeout "${RUN_TIMEOUT}" \
@@ -400,12 +443,16 @@ if timeout "${RUN_TIMEOUT}" \
     --iterations "${ITERATIONS}" \
     --concurrency "${CONCURRENCY}" \
     --duration-ms "${DURATION_MS}" \
+    --max-page-fault-retries "${MAX_PAGE_FAULT_RETRIES}" \
     --format json \
     --artifact "${ARTIFACT_PATH}" \
-    >"${STDOUT_PATH}" 2>"${STDERR_PATH}"; then
+    >"${RUN_STDOUT_PATH}" 2>"${STDERR_PATH}"; then
   RUN_EXIT=0
 else
   RUN_EXIT=$?
+fi
+if [[ "${BACKEND}" == "hardware" ]]; then
+  normalize_launch_stdout "${RAW_STDOUT_PATH}" "${STDOUT_PATH}"
 fi
 
 if [[ "${RUN_EXIT}" -eq 124 ]]; then
@@ -424,6 +471,7 @@ ARTIFACT_ERROR_KIND=
 ARTIFACT_DIRECT_FAILURE_KIND=
 ARTIFACT_VALIDATION_PHASE=
 ARTIFACT_VALIDATION_ERROR_KIND=
+ARTIFACT_MAX_PAGE_FAULT_RETRIES=
 ARTIFACT_COMPLETED_OPERATIONS=
 ARTIFACT_FAILED_OPERATIONS=
 ARTIFACT_TARGETS=
@@ -439,17 +487,18 @@ while IFS='=' read -r key value; do
     direct_failure_kind) ARTIFACT_DIRECT_FAILURE_KIND=${value} ;;
     validation_phase) ARTIFACT_VALIDATION_PHASE=${value} ;;
     validation_error_kind) ARTIFACT_VALIDATION_ERROR_KIND=${value} ;;
+    max_page_fault_retries) ARTIFACT_MAX_PAGE_FAULT_RETRIES=${value} ;;
     completed_operations) ARTIFACT_COMPLETED_OPERATIONS=${value} ;;
     failed_operations) ARTIFACT_FAILED_OPERATIONS=${value} ;;
     targets) ARTIFACT_TARGETS=${value} ;;
   esac
 done <<< "${ARTIFACT_FIELDS}"
 
-log_phase artifact_validation "backend=${ARTIFACT_BACKEND} suite=${ARTIFACT_SUITE} claim_eligible=${ARTIFACT_CLAIM_ELIGIBLE} failure_class=${ARTIFACT_FAILURE_CLASS} error_kind=${ARTIFACT_ERROR_KIND} direct_failure_kind=${ARTIFACT_DIRECT_FAILURE_KIND} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} completed_operations=${ARTIFACT_COMPLETED_OPERATIONS} failed_operations=${ARTIFACT_FAILED_OPERATIONS} targets=${ARTIFACT_TARGETS}"
+log_phase artifact_validation "backend=${ARTIFACT_BACKEND} suite=${ARTIFACT_SUITE} claim_eligible=${ARTIFACT_CLAIM_ELIGIBLE} max_page_fault_retries=${ARTIFACT_MAX_PAGE_FAULT_RETRIES} failure_class=${ARTIFACT_FAILURE_CLASS} error_kind=${ARTIFACT_ERROR_KIND} direct_failure_kind=${ARTIFACT_DIRECT_FAILURE_KIND} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} completed_operations=${ARTIFACT_COMPLETED_OPERATIONS} failed_operations=${ARTIFACT_FAILED_OPERATIONS} targets=${ARTIFACT_TARGETS}"
 
 if [[ "${ARTIFACT_OK}" != "true" ]]; then
   if [[ "${BACKEND}" == "hardware" ]]; then
-    complete_with_explicit_failure runtime "backend=${ARTIFACT_BACKEND} suite=${ARTIFACT_SUITE} device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} claim_eligible=${ARTIFACT_CLAIM_ELIGIBLE} failure_class=${ARTIFACT_FAILURE_CLASS} error_kind=${ARTIFACT_ERROR_KIND} direct_failure_kind=${ARTIFACT_DIRECT_FAILURE_KIND} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} completed_operations=${ARTIFACT_COMPLETED_OPERATIONS} failed_operations=${ARTIFACT_FAILED_OPERATIONS} targets=${ARTIFACT_TARGETS} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} message=hardware benchmark reported classified failure"
+    complete_with_explicit_failure runtime "backend=${ARTIFACT_BACKEND} suite=${ARTIFACT_SUITE} device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} claim_eligible=${ARTIFACT_CLAIM_ELIGIBLE} max_page_fault_retries=${ARTIFACT_MAX_PAGE_FAULT_RETRIES} failure_class=${ARTIFACT_FAILURE_CLASS} error_kind=${ARTIFACT_ERROR_KIND} direct_failure_kind=${ARTIFACT_DIRECT_FAILURE_KIND} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} completed_operations=${ARTIFACT_COMPLETED_OPERATIONS} failed_operations=${ARTIFACT_FAILED_OPERATIONS} targets=${ARTIFACT_TARGETS} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} message=hardware benchmark reported classified failure"
   fi
   fail_phase runtime "backend=${ARTIFACT_BACKEND} suite=${ARTIFACT_SUITE} device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} failure_class=${ARTIFACT_FAILURE_CLASS} error_kind=${ARTIFACT_ERROR_KIND} message=software benchmark reported failure"
 fi
@@ -458,4 +507,4 @@ if [[ "${RUN_EXIT}" -ne 0 ]]; then
   fail_phase runtime "backend=${ARTIFACT_BACKEND} suite=${ARTIFACT_SUITE} device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} failure_class=${ARTIFACT_FAILURE_CLASS} error_kind=${ARTIFACT_ERROR_KIND} message=benchmark exited non-zero despite a success artifact"
 fi
 
-log_phase done "backend=${ARTIFACT_BACKEND} suite=${ARTIFACT_SUITE} device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} requested_bytes=${REQUEST_BYTES} iterations=${ITERATIONS} concurrency=${CONCURRENCY} duration_ms=${DURATION_MS} claim_eligible=${ARTIFACT_CLAIM_ELIGIBLE} failure_class=${ARTIFACT_FAILURE_CLASS} error_kind=${ARTIFACT_ERROR_KIND} direct_failure_kind=${ARTIFACT_DIRECT_FAILURE_KIND} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} completed_operations=${ARTIFACT_COMPLETED_OPERATIONS} failed_operations=${ARTIFACT_FAILED_OPERATIONS} targets=${ARTIFACT_TARGETS} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} verdict=pass"
+log_phase done "backend=${ARTIFACT_BACKEND} suite=${ARTIFACT_SUITE} device_path=${DEVICE_PATH} launcher_status=${LAUNCHER_STATUS} launcher_path=${LAUNCHER_PATH} requested_bytes=${REQUEST_BYTES} iterations=${ITERATIONS} concurrency=${CONCURRENCY} duration_ms=${DURATION_MS} max_page_fault_retries=${ARTIFACT_MAX_PAGE_FAULT_RETRIES} claim_eligible=${ARTIFACT_CLAIM_ELIGIBLE} failure_class=${ARTIFACT_FAILURE_CLASS} error_kind=${ARTIFACT_ERROR_KIND} direct_failure_kind=${ARTIFACT_DIRECT_FAILURE_KIND} validation_phase=${ARTIFACT_VALIDATION_PHASE} validation_error_kind=${ARTIFACT_VALIDATION_ERROR_KIND} completed_operations=${ARTIFACT_COMPLETED_OPERATIONS} failed_operations=${ARTIFACT_FAILED_OPERATIONS} targets=${ARTIFACT_TARGETS} stdout=${STDOUT_PATH} stderr=${STDERR_PATH} verdict=pass"

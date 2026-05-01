@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use idxd_rust::{DEFAULT_DEVICE_PATH, MemmoveRequest};
+use idxd_rust::{DEFAULT_DEVICE_PATH, DEFAULT_MAX_PAGE_FAULT_RETRIES, MemmoveRequest};
 
 use crate::artifact::validate_artifact_path;
 
@@ -8,6 +8,7 @@ const MAX_BYTES: usize = 1 << 30;
 const MAX_ITERATIONS: u64 = 1_000_000;
 const MAX_CONCURRENCY: u32 = 4096;
 const MAX_DURATION_MS: u64 = 60_000;
+const MAX_PAGE_FAULT_RETRIES: u32 = u32::MAX;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Backend {
@@ -122,6 +123,7 @@ pub(crate) struct CliArgs {
     pub(crate) iterations: u64,
     pub(crate) concurrency: u32,
     pub(crate) duration_ms: u64,
+    pub(crate) max_page_fault_retries: u32,
     pub(crate) format: OutputFormat,
     pub(crate) artifact_path: Option<PathBuf>,
 }
@@ -144,6 +146,7 @@ impl CliArgs {
             iterations: 8,
             concurrency: 4,
             duration_ms: 100,
+            max_page_fault_retries: DEFAULT_MAX_PAGE_FAULT_RETRIES,
             format: OutputFormat::Text,
             artifact_path: None,
         };
@@ -195,6 +198,14 @@ impl CliArgs {
                         MAX_DURATION_MS,
                     )?;
                 }
+                "--max-page-fault-retries" => {
+                    cli.max_page_fault_retries = parse_bounded_u32(
+                        &required_value(&mut args, "--max-page-fault-retries")?,
+                        "--max-page-fault-retries",
+                        0,
+                        MAX_PAGE_FAULT_RETRIES,
+                    )?;
+                }
                 "--format" => {
                     cli.format = OutputFormat::parse(&required_value(&mut args, "--format")?)?
                 }
@@ -205,7 +216,7 @@ impl CliArgs {
                 }
                 other => {
                     return Err(format!(
-                        "unsupported argument `{other}`; expected `--device`, `--backend`, `--suite`, `--bytes`, `--iterations`, `--concurrency`, `--duration-ms`, `--format`, `--artifact`, or `--help`"
+                        "unsupported argument `{other}`; expected `--device`, `--backend`, `--suite`, `--bytes`, `--iterations`, `--concurrency`, `--duration-ms`, `--max-page-fault-retries`, `--format`, `--artifact`, or `--help`"
                     ));
                 }
             }
@@ -261,6 +272,6 @@ fn parse_bounded_u32(raw: &str, flag: &str, min: u32, max: u32) -> Result<u32, S
 
 pub(crate) fn print_help() {
     println!(
-        "tokio_memmove_bench\n\nUSAGE:\n    tokio_memmove_bench [OPTIONS]\n\nOPTIONS:\n    --device <PATH>              DSA work queue path (default: {DEFAULT_DEVICE_PATH})\n    --backend <hardware|software>\n    --suite <canonical|latency|concurrency|throughput>\n    --bytes <N>                  Transfer size in bytes (1..={MAX_BYTES})\n    --iterations <N>             Iterations per latency/concurrency mode (1..={MAX_ITERATIONS})\n    --concurrency <N>            Concurrent submissions for concurrency/throughput modes (1..={MAX_CONCURRENCY})\n    --duration-ms <N>            Duration knob for throughput mode (1..={MAX_DURATION_MS})\n    --format <json|text>\n    --artifact <PATH>            Write exactly the emitted stdout artifact to this file\n    -h, --help                   Print help"
+        "tokio_memmove_bench\n\nUSAGE:\n    tokio_memmove_bench [OPTIONS]\n\nOPTIONS:\n    --device <PATH>              DSA work queue path (default: {DEFAULT_DEVICE_PATH})\n    --backend <hardware|software>\n    --suite <canonical|latency|concurrency|throughput>\n    --bytes <N>                  Transfer size in bytes (1..={MAX_BYTES})\n    --iterations <N>             Iterations per latency/concurrency mode (1..={MAX_ITERATIONS})\n    --concurrency <N>            Concurrent submissions for concurrency/throughput modes (1..={MAX_CONCURRENCY})\n    --duration-ms <N>            Duration knob for throughput mode (1..={MAX_DURATION_MS})\n    --max-page-fault-retries <N> Maximum DSA page-fault retries per operation (0..={MAX_PAGE_FAULT_RETRIES}, default: {DEFAULT_MAX_PAGE_FAULT_RETRIES})\n    --format <json|text>\n    --artifact <PATH>            Write exactly the emitted stdout artifact to this file\n    -h, --help                   Print help"
     );
 }

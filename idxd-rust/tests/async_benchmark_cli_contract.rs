@@ -68,6 +68,7 @@ fn prints_help_without_touching_hardware() {
     assert!(stdout.contains("tokio_memmove_bench"));
     assert!(stdout.contains("--backend <hardware|software>"));
     assert!(stdout.contains("--suite <canonical|latency|concurrency|throughput>"));
+    assert!(stdout.contains("--max-page-fault-retries <N>"));
 }
 
 #[test]
@@ -78,6 +79,7 @@ fn rejects_invalid_numeric_inputs_before_touching_hardware() {
         ("--iterations", "0"),
         ("--concurrency", "0"),
         ("--duration-ms", "0"),
+        ("--max-page-fault-retries", "abc"),
     ] {
         let output = run(&[flag, value]);
 
@@ -154,6 +156,8 @@ fn emits_software_canonical_json_with_required_schema_fields() {
         "100",
         "--format",
         "json",
+        "--max-page-fault-retries",
+        "7",
     ]);
 
     assert_eq!(output.status.code(), Some(0));
@@ -172,6 +176,7 @@ fn emits_software_canonical_json_with_required_schema_fields() {
     assert_eq!(artifact["iterations"], 8);
     assert_eq!(artifact["concurrency"], 4);
     assert_eq!(artifact["duration_ms"], 100);
+    assert_eq!(artifact["max_page_fault_retries"], 7);
     assert!(artifact["failure_class"].is_null());
     assert!(artifact["error_kind"].is_null());
     assert!(artifact["direct_failure_kind"].is_null());
@@ -285,6 +290,8 @@ fn hardware_nonexistent_device_emits_typed_queue_open_failure_json() {
         "1",
         "--duration-ms",
         "1",
+        "--max-page-fault-retries",
+        "5",
         "--format",
         "json",
     ]);
@@ -299,6 +306,7 @@ fn hardware_nonexistent_device_emits_typed_queue_open_failure_json() {
     assert_eq!(artifact["backend"], "hardware");
     assert_eq!(artifact["claim_eligible"], false);
     assert_eq!(artifact["suite"], "latency");
+    assert_eq!(artifact["max_page_fault_retries"], 5);
     assert_eq!(artifact["failure_class"], "queue_open");
     assert_eq!(artifact["error_kind"], "queue_open");
     assert!(artifact["direct_failure_kind"].is_null());

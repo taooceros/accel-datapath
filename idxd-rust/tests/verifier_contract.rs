@@ -42,15 +42,19 @@ fn fake_launcher_env(capability_ok: bool) -> (PathBuf, PathBuf, String) {
 
     write_executable(
         &shim_dir.join("devenv"),
-        "#!/usr/bin/env bash
+        &format!(
+            "#!/usr/bin/env bash
 set -euo pipefail
-if [[ ${1:-} != shell || ${2:-} != -- || ${3:-} != launch ]]; then
+if [[ ${{1:-}} != shell || ${{2:-}} != -- || ${{3:-}} != launch ]]; then
   echo \"unexpected devenv invocation: $*\" >&2
   exit 90
 fi
 shift 3
+printf 'Running: {} %s\\n' \"$*\"
 exec \"$@\"
 ",
+            launcher_path.display()
+        ),
     );
 
     let getcap_output = if capability_ok {
@@ -147,6 +151,13 @@ fn verifier_preserves_queue_open_failure_and_artifact_paths() {
         "stderr={}",
         output_dir.join("live_memmove.stderr").display()
     )));
+    let raw_stdout = fs::read_to_string(output_dir.join("live_memmove.stdout.raw"))
+        .expect("raw launcher stdout should be preserved");
+    let normalized_stdout = fs::read_to_string(output_dir.join("live_memmove.stdout"))
+        .expect("normalized proof stdout should be preserved");
+    assert!(raw_stdout.contains("Running:"));
+    assert!(raw_stdout.contains("dsa_launcher"));
+    assert!(!normalized_stdout.contains("Running:"));
 }
 
 #[test]
