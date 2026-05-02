@@ -328,7 +328,7 @@ fn bench_batch_latency(
             batch_desc.fill_batch(
                 sub_descs.as_ptr(),
                 batch_n as u32,
-                default_completion_flags(),
+                completion_flags_no_cache_control(),
             );
             batch_desc.set_completion(&mut batch_comp);
             unsafe { wq.submit(&batch_desc) };
@@ -346,7 +346,7 @@ fn bench_batch_latency(
             batch_desc.fill_batch(
                 sub_descs.as_ptr(),
                 batch_n as u32,
-                default_completion_flags(),
+                completion_flags_no_cache_control(),
             );
             batch_desc.set_completion(&mut batch_comp);
 
@@ -462,7 +462,7 @@ fn bench_pipelined_batch(
                 slot.batch_desc.fill_batch(
                     slot.sub_descs.as_ptr(),
                     batch_n as u32,
-                    default_completion_flags(),
+                    completion_flags_no_cache_control(),
                 );
                 slot.batch_desc.set_completion(&mut slot.batch_comp);
                 unsafe { wq.submit(&slot.batch_desc) };
@@ -734,7 +734,7 @@ fn bench_burst_batch(
                 slot.batch_desc.fill_batch(
                     slot.sub_descs.as_ptr(),
                     batch_n as u32,
-                    default_completion_flags(),
+                    completion_flags_no_cache_control(),
                 );
                 slot.batch_desc.set_completion(&mut slot.batch_comp);
                 unsafe { wq.submit(&slot.batch_desc) };

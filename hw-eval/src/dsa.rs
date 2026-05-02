@@ -30,6 +30,11 @@ pub const IDXD_OP_FLAG_CRAV: u32 = DsaFlag::CompletionRecordAddressValid as u32;
 pub const IDXD_OP_FLAG_RCR: u32 = DsaFlag::RequestCompletionRecord as u32;
 pub const IDXD_OP_FLAG_CC: u32 = DsaFlag::CacheControl as u32;
 
+#[inline(always)]
+pub fn completion_flags_no_cache_control() -> DsaFlags {
+    DsaFlag::RequestCompletionRecord | DsaFlag::CompletionRecordAddressValid
+}
+
 impl crate::submit::WqPortal {
     /// Submit a DSA descriptor through the local hw-eval portal.
     ///
