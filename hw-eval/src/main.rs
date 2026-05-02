@@ -129,15 +129,23 @@ fn run() -> Result<(), HwEvalError> {
     let args = Args::parse();
     let config = BenchmarkConfig::from_args(args).context(ConfigSnafu)?;
 
-    // Thread pinning
+    // Thread pinning. Multi-submitter runs should not inherit one-core
+    // affinity unless the operator explicitly asks for it with --pin-core.
     let core = config.pin_core.unwrap_or_else(|| current_core());
-    match pin_benchmark_thread(core) {
-        Ok(c) => {
-            if !config.json {
-                println!("Pinned to core {}", c)
+    if config.pin_core.is_some() || config.threads == 1 {
+        match pin_benchmark_thread(core) {
+            Ok(c) => {
+                if !config.json {
+                    println!("Pinned to core {}", c)
+                }
             }
+            Err(warning) => eprintln!("{warning}"),
         }
-        Err(warning) => eprintln!("{warning}"),
+    } else if !config.json {
+        println!(
+            "Not pinning benchmark thread; --threads={} needs scheduler-visible CPUs",
+            config.threads
+        );
     }
 
     // TSC frequency
