@@ -7,7 +7,7 @@
 //! integration, and lifecycle policy are intentionally absent.
 
 pub mod idxd_async;
-mod raw;
+pub mod raw;
 
 pub use idxd_async::{DsaEngine, DsaOperation};
 pub use raw::dsa::{

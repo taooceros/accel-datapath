@@ -42,7 +42,7 @@ pub(crate) fn run_dsa_benchmarks(
         json,
         latency_results,
         |desc, src, _dst, size| {
-            desc.fill_crc_gen(src, size, 0);
+            desc.fill_crc_gen(src, size, 0, 0);
         },
     );
 
@@ -56,7 +56,7 @@ pub(crate) fn run_dsa_benchmarks(
         json,
         latency_results,
         |desc, src, dst, size| {
-            desc.fill_copy_crc(src, dst, size, 0);
+            desc.fill_copy_crc(src, dst, size, 0, 0);
         },
     );
 
@@ -119,7 +119,7 @@ pub(crate) fn run_dsa_benchmarks(
             max_concurrency,
             json,
             throughput_results,
-            |desc, src, dst, sz| desc.fill_copy_crc(src, dst, sz, 0),
+            |desc, src, dst, sz| desc.fill_copy_crc(src, dst, sz, 0, 0),
         );
     }
 }
@@ -142,7 +142,7 @@ fn bench_noop_latency(
     // Warmup
     for _ in 0..100 {
         reset_completion(&mut comp);
-        desc.fill_noop();
+        desc.fill_noop(default_completion_flags());
         desc.set_completion(&mut comp);
         unsafe { wq.submit(&desc) };
         poll_completion(&comp);
@@ -151,7 +151,7 @@ fn bench_noop_latency(
     // Measure
     for _ in 0..iterations {
         reset_completion(&mut comp);
-        desc.fill_noop();
+        desc.fill_noop(default_completion_flags());
         desc.set_completion(&mut comp);
 
         lfence();
@@ -325,7 +325,11 @@ fn bench_batch_latency(
                 sub_descs[i].set_completion(&mut sub_comps[i]);
             }
             reset_completion(&mut batch_comp);
-            batch_desc.fill_batch(sub_descs.as_ptr(), batch_n as u32);
+            batch_desc.fill_batch(
+                sub_descs.as_ptr(),
+                batch_n as u32,
+                default_completion_flags(),
+            );
             batch_desc.set_completion(&mut batch_comp);
             unsafe { wq.submit(&batch_desc) };
             poll_completion(&batch_comp);
@@ -339,7 +343,11 @@ fn bench_batch_latency(
                 sub_descs[i].set_completion(&mut sub_comps[i]);
             }
             reset_completion(&mut batch_comp);
-            batch_desc.fill_batch(sub_descs.as_ptr(), batch_n as u32);
+            batch_desc.fill_batch(
+                sub_descs.as_ptr(),
+                batch_n as u32,
+                default_completion_flags(),
+            );
             batch_desc.set_completion(&mut batch_comp);
 
             lfence();
@@ -451,8 +459,11 @@ fn bench_pipelined_batch(
                     slot.sub_descs[i].set_completion(&mut slot.sub_comps[i]);
                 }
                 reset_completion(&mut slot.batch_comp);
-                slot.batch_desc
-                    .fill_batch(slot.sub_descs.as_ptr(), batch_n as u32);
+                slot.batch_desc.fill_batch(
+                    slot.sub_descs.as_ptr(),
+                    batch_n as u32,
+                    default_completion_flags(),
+                );
                 slot.batch_desc.set_completion(&mut slot.batch_comp);
                 unsafe { wq.submit(&slot.batch_desc) };
             };
@@ -720,8 +731,11 @@ fn bench_burst_batch(
                     slot.sub_descs[i].set_completion(&mut slot.sub_comps[i]);
                 }
                 reset_completion(&mut slot.batch_comp);
-                slot.batch_desc
-                    .fill_batch(slot.sub_descs.as_ptr(), batch_n as u32);
+                slot.batch_desc.fill_batch(
+                    slot.sub_descs.as_ptr(),
+                    batch_n as u32,
+                    default_completion_flags(),
+                );
                 slot.batch_desc.set_completion(&mut slot.batch_comp);
                 unsafe { wq.submit(&slot.batch_desc) };
             };

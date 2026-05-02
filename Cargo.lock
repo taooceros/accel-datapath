@@ -730,6 +730,7 @@ dependencies = [
  "bon",
  "clap",
  "criterion",
+ "idxd-rust",
  "idxd-sys",
  "libc",
  "serde",

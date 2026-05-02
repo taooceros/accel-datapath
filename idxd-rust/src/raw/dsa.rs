@@ -202,7 +202,7 @@ impl DsaCompletionRecord {
 
 impl DsaHwDesc {
     #[inline(always)]
-    pub(crate) fn as_desc64_ptr(&self) -> *const u8 {
+    pub fn as_desc64_ptr(&self) -> *const u8 {
         ptr::addr_of!(self.raw).cast::<u8>()
     }
 
