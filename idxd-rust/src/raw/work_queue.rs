@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::raw::dsa_memmove::DsaHwDesc;
+use crate::raw::dsa::DsaHwDesc;
 use crate::raw::iax_crc64::IaxHwDesc;
 
 /// Rust-owned wrapper around the raw `idxd-sys` MMIO work-queue portal.
@@ -14,13 +14,13 @@ impl WqPortal {
         idxd_sys::WqPortal::open(path).map(|raw| Self { raw })
     }
 
-    /// Submit one DSA memmove descriptor using the detected WQ mode.
+    /// Submit one DSA descriptor using the detected WQ mode.
     ///
     /// # Safety
     /// The descriptor, completion record, and referenced buffers must remain
     /// valid until hardware completion.
     #[inline(always)]
-    pub(crate) unsafe fn submit_dsa_memmove(&self, desc: &DsaHwDesc, dedicated: bool) {
+    pub unsafe fn submit_dsa(&self, desc: &DsaHwDesc, dedicated: bool) {
         // SAFETY: The caller provides the descriptor lifetime contract; this
         // method only selects the raw doorbell primitive.
         unsafe { self.submit_desc64(desc.as_desc64_ptr(), dedicated) }
@@ -32,7 +32,7 @@ impl WqPortal {
     /// The descriptor, completion record, and referenced buffers must remain
     /// valid until hardware completion.
     #[inline(always)]
-    pub(crate) unsafe fn submit_iax_crc64(&self, desc: &IaxHwDesc, dedicated: bool) {
+    pub unsafe fn submit_iax_crc64(&self, desc: &IaxHwDesc, dedicated: bool) {
         // SAFETY: The caller provides the descriptor lifetime contract; this
         // method only selects the raw doorbell primitive.
         unsafe { self.submit_desc64(desc.as_desc64_ptr(), dedicated) }
