@@ -465,13 +465,18 @@ fn bench_pipelined_batch(
                 poll_completion(&s.batch_comp);
             }
 
-            // Submit initial window
-            for s in slots.iter_mut() {
+            let total_batches = iterations; // iterations = number of batch completions
+            let window = concurrency.min(total_batches);
+
+            // Submit the initial window inside the timed interval. Counting
+            // completions for descriptors submitted before `start` inflates
+            // short high-concurrency runs.
+            let start = Instant::now();
+            for s in slots.iter_mut().take(window) {
                 fill_and_submit(s, wq);
             }
 
-            let total_batches = iterations; // iterations = number of batch completions
-            let start = Instant::now();
+            let mut issued_batches = window;
             let mut completed_batches = 0usize;
             let mut idx = 0usize;
 
@@ -484,7 +489,7 @@ fn bench_pipelined_batch(
                 }
                 if status != DSA_COMP_SUCCESS && status != 0x05 {
                     // Drain all in-flight batch descriptors before panic
-                    for s in &slots {
+                    for s in &slots[..window] {
                         let st = s.batch_comp.status();
                         if st == DSA_COMP_NONE {
                             poll_completion(&s.batch_comp);
@@ -497,14 +502,15 @@ fn bench_pipelined_batch(
                 }
                 completed_batches += 1;
 
-                if completed_batches + concurrency <= total_batches {
+                if issued_batches < total_batches {
                     fill_and_submit(&mut slots[idx], wq);
+                    issued_batches += 1;
                 }
-                idx = (idx + 1) % concurrency;
+                idx = (idx + 1) % window;
             }
 
-            // Drain remaining
-            for s in &slots {
+            // Drain remaining in-flight slots.
+            for s in &slots[..window] {
                 let status = s.batch_comp.status();
                 if status == DSA_COMP_NONE {
                     poll_completion(&s.batch_comp);
@@ -834,7 +840,10 @@ fn bench_sliding_window(
             })
             .collect();
 
-        // Pre-fill and submit initial window
+        // Pre-fill and submit the initial window inside the timed interval.
+        // Otherwise short high-concurrency runs count completions for work
+        // submitted before the timer started.
+        let start = Instant::now();
         for i in 0..window {
             reset_completion(&mut comps[i]);
             fill_fn(
@@ -847,7 +856,6 @@ fn bench_sliding_window(
             unsafe { wq.submit(&descs[i]) };
         }
 
-        let start = Instant::now();
         let mut issued = window;
         let mut completed = 0usize;
         let mut slot = 0usize;
@@ -892,8 +900,9 @@ fn bench_sliding_window(
             slot = (slot + 1) % window;
         }
 
-        // Drain remaining
-        drain_completions(&comps);
+        // Drain only slots that were submitted; when `iterations < concurrency`,
+        // later completion records are still in the NONE state.
+        drain_completions(&comps[..window]);
 
         let elapsed = start.elapsed();
         let ops_per_sec = iterations as f64 / elapsed.as_secs_f64();

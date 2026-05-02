@@ -328,6 +328,10 @@ fn bench_sliding_window_iax_crc64(
             .collect();
         let srcs: Vec<Vec<u8>> = (0..concurrency).map(|_| vec![0xABu8; size]).collect();
 
+        // Submit the initial window inside the timed interval. Counting
+        // completions for descriptors submitted before `start` inflates
+        // short high-concurrency runs.
+        let start = Instant::now();
         for i in 0..window {
             iax::reset_completion(&mut comps[i]);
             descs[i].fill_crc64(srcs[i].as_ptr(), size as u32);
@@ -335,7 +339,6 @@ fn bench_sliding_window_iax_crc64(
             unsafe { wq.submit_iax(&descs[i]) };
         }
 
-        let start = Instant::now();
         let mut issued = window;
         let mut completed = 0usize;
         let mut slot = 0usize;
@@ -374,7 +377,9 @@ fn bench_sliding_window_iax_crc64(
             slot = (slot + 1) % window;
         }
 
-        iax::drain_completions(&comps);
+        // Drain only slots that were submitted; when `iterations < concurrency`,
+        // later completion records are still in the NONE state.
+        iax::drain_completions(&comps[..window]);
 
         let elapsed = start.elapsed();
         let ops_per_sec = iterations as f64 / elapsed.as_secs_f64();
