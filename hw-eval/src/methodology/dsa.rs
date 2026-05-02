@@ -1,3 +1,5 @@
+use std::sync::Barrier;
+use std::thread;
 use std::time::Instant;
 
 use hw_eval::dsa::*;
@@ -10,6 +12,7 @@ pub(crate) fn run_dsa_benchmarks(
     sizes: &[usize],
     iterations: usize,
     max_concurrency: usize,
+    submit_threads: usize,
     tsc_freq: u64,
     cold: bool,
     json: bool,
@@ -106,7 +109,7 @@ pub(crate) fn run_dsa_benchmarks(
             max_concurrency,
             json,
             throughput_results,
-            |desc, src, dst, sz| desc.fill_memmove(src, dst, sz),
+            fill_memmove_desc,
         );
     }
 
@@ -119,8 +122,22 @@ pub(crate) fn run_dsa_benchmarks(
             max_concurrency,
             json,
             throughput_results,
-            |desc, src, dst, sz| desc.fill_copy_crc(src, dst, sz, 0, 0),
+            fill_copy_crc_desc,
         );
+    }
+
+    if submit_threads > 1 {
+        for &size in sizes {
+            bench_multithread_memmove(
+                wq,
+                size,
+                iterations,
+                max_concurrency,
+                submit_threads,
+                json,
+                throughput_results,
+            );
+        }
     }
 }
 
@@ -811,6 +828,16 @@ fn bench_burst_batch(
 // Sliding window throughput benchmark (per-op buffers)
 // ============================================================================
 
+type DsaFillFn = fn(&mut DsaHwDesc, *const u8, *mut u8, u32);
+
+fn fill_memmove_desc(desc: &mut DsaHwDesc, src: *const u8, dst: *mut u8, size: u32) {
+    desc.fill_memmove(src, dst, size);
+}
+
+fn fill_copy_crc_desc(desc: &mut DsaHwDesc, src: *const u8, dst: *mut u8, size: u32) {
+    desc.fill_copy_crc(src, dst, size, 0, 0);
+}
+
 fn bench_sliding_window(
     wq: &WqPortal,
     op_name: &str,
@@ -819,7 +846,7 @@ fn bench_sliding_window(
     max_concurrency: usize,
     json: bool,
     results: &mut Vec<ThroughputResult>,
-    fill_fn: impl Fn(&mut DsaHwDesc, *const u8, *mut u8, u32),
+    fill_fn: DsaFillFn,
 ) {
     if !json {
         println!(
@@ -835,92 +862,14 @@ fn bench_sliding_window(
         .filter(|&c| c <= max_concurrency)
     {
         let window = concurrency.min(iterations);
-        let mut descs: Vec<DsaHwDesc> = (0..concurrency).map(|_| DsaHwDesc::default()).collect();
-        let mut comps: Vec<DsaCompletionRecord> = (0..concurrency)
-            .map(|_| DsaCompletionRecord::default())
-            .collect();
+        let mut state = DirectWindow::new(size, window);
 
-        // Per-op buffers — each slot has its own src/dst.
-        // Touch every page to avoid DSA page faults (DSA_COMP_PAGE_FAULT_NOBOF).
-        let srcs: Vec<Vec<u8>> = (0..concurrency).map(|_| vec![0xABu8; size]).collect();
-        let mut dsts: Vec<Vec<u8>> = (0..concurrency)
-            .map(|_| {
-                let mut v = vec![0u8; size];
-                // Force page mapping by writing every page
-                for offset in (0..size).step_by(4096) {
-                    v[offset] = 0xFF;
-                }
-                v
-            })
-            .collect();
-
-        // Pre-fill and submit the initial window inside the timed interval.
-        // Otherwise short high-concurrency runs count completions for work
-        // submitted before the timer started.
         let start = Instant::now();
-        for i in 0..window {
-            reset_completion(&mut comps[i]);
-            fill_fn(
-                &mut descs[i],
-                srcs[i].as_ptr(),
-                dsts[i].as_mut_ptr(),
-                size as u32,
-            );
-            descs[i].set_completion(&mut comps[i]);
-            unsafe { wq.submit(&descs[i]) };
-        }
-
-        let mut issued = window;
-        let mut completed = 0usize;
-        let mut slot = 0usize;
-
-        while completed < iterations {
-            let status = poll_completion(&comps[slot]);
-            if status == DSA_COMP_PAGE_FAULT_NOBOF {
-                touch_fault_page(&comps[slot]);
-                reset_completion(&mut comps[slot]);
-                fill_fn(
-                    &mut descs[slot],
-                    srcs[slot].as_ptr(),
-                    dsts[slot].as_mut_ptr(),
-                    size as u32,
-                );
-                descs[slot].set_completion(&mut comps[slot]);
-                unsafe { wq.submit(&descs[slot]) };
-                continue;
-            }
-            if status != DSA_COMP_SUCCESS {
-                drain_completions(&comps);
-                panic!(
-                    "DSA {} failed: status {:#x} (size={}, conc={})",
-                    op_name, status, size, concurrency
-                );
-            }
-            completed += 1;
-
-            if issued < iterations {
-                reset_completion(&mut comps[slot]);
-                fill_fn(
-                    &mut descs[slot],
-                    srcs[slot].as_ptr(),
-                    dsts[slot].as_mut_ptr(),
-                    size as u32,
-                );
-                descs[slot].set_completion(&mut comps[slot]);
-                unsafe { wq.submit(&descs[slot]) };
-                issued += 1;
-            }
-
-            slot = (slot + 1) % window;
-        }
-
-        // Drain only slots that were submitted; when `iterations < concurrency`,
-        // later completion records are still in the NONE state.
-        drain_completions(&comps[..window]);
-
+        let total_ops = state.run(wq, size, iterations, op_name, fill_fn);
         let elapsed = start.elapsed();
-        let ops_per_sec = iterations as f64 / elapsed.as_secs_f64();
-        let bw_mb = (iterations * size) as f64 / elapsed.as_secs_f64() / 1e6;
+
+        let ops_per_sec = total_ops as f64 / elapsed.as_secs_f64();
+        let bw_mb = (total_ops * size) as f64 / elapsed.as_secs_f64() / 1e6;
 
         if !json {
             println!("{:>6} {:>14.0} {:>14.1}", concurrency, ops_per_sec, bw_mb);
@@ -933,5 +882,181 @@ fn bench_sliding_window(
             ops_per_sec,
             bandwidth_mb_s: bw_mb,
         });
+    }
+}
+
+// ============================================================================
+// Multi-thread direct memmove throughput (batch_n = 1, concrete DSA path)
+// ============================================================================
+
+fn bench_multithread_memmove(
+    wq: &WqPortal,
+    size: usize,
+    iterations: usize,
+    max_concurrency: usize,
+    submit_threads: usize,
+    json: bool,
+    results: &mut Vec<ThroughputResult>,
+) {
+    if !json {
+        println!(
+            "\n=== Multi-thread direct memmove throughput: size={} threads={} ===",
+            size, submit_threads
+        );
+        println!(
+            "{:>6} {:>8} {:>14} {:>14}",
+            "conc", "threads", "ops/sec", "bandwidth_MB/s"
+        );
+    }
+
+    for concurrency in [1, 2, 4, 8, 16, 32, 64, 128]
+        .iter()
+        .copied()
+        .filter(|&c| c <= max_concurrency && c >= submit_threads)
+    {
+        let active_threads = submit_threads;
+        let base_window = concurrency / active_threads;
+        let extra_windows = concurrency % active_threads;
+        let ready_barrier = Barrier::new(active_threads + 1);
+        let start_barrier = Barrier::new(active_threads + 1);
+
+        let (elapsed, total_ops) = thread::scope(|scope| {
+            let mut handles = Vec::with_capacity(active_threads);
+
+            for thread_idx in 0..active_threads {
+                let thread_window = base_window + usize::from(thread_idx < extra_windows);
+                let ready_barrier = &ready_barrier;
+                let start_barrier = &start_barrier;
+
+                handles.push(scope.spawn(move || {
+                    let mut state = DirectWindow::new(size, thread_window);
+                    ready_barrier.wait();
+                    start_barrier.wait();
+                    state.run(wq, size, iterations, "memmove_mt", fill_memmove_desc)
+                }));
+            }
+
+            ready_barrier.wait();
+            let start = Instant::now();
+            start_barrier.wait();
+
+            let mut total_ops = 0usize;
+            for handle in handles {
+                total_ops += handle
+                    .join()
+                    .expect("multi-thread DSA memmove worker panicked");
+            }
+
+            (start.elapsed(), total_ops)
+        });
+
+        let ops_per_sec = total_ops as f64 / elapsed.as_secs_f64();
+        let bw_mb = (total_ops * size) as f64 / elapsed.as_secs_f64() / 1e6;
+
+        if !json {
+            println!(
+                "{:>6} {:>8} {:>14.0} {:>14.1}",
+                concurrency, active_threads, ops_per_sec, bw_mb
+            );
+        }
+
+        results.push(ThroughputResult {
+            benchmark: format!("memmove_mt_t{}", active_threads),
+            size,
+            concurrency,
+            ops_per_sec,
+            bandwidth_mb_s: bw_mb,
+        });
+    }
+}
+
+struct DirectWindow {
+    descs: Vec<DsaHwDesc>,
+    comps: Vec<DsaCompletionRecord>,
+    srcs: Vec<Vec<u8>>,
+    dsts: Vec<Vec<u8>>,
+}
+
+impl DirectWindow {
+    fn new(size: usize, window: usize) -> Self {
+        let descs = (0..window).map(|_| DsaHwDesc::default()).collect();
+        let comps = (0..window)
+            .map(|_| DsaCompletionRecord::default())
+            .collect();
+        let srcs = (0..window).map(|_| vec![0xABu8; size]).collect();
+        let dsts = (0..window)
+            .map(|_| {
+                let mut v = vec![0u8; size];
+                for offset in (0..size).step_by(4096) {
+                    v[offset] = 0xFF;
+                }
+                v
+            })
+            .collect();
+
+        Self {
+            descs,
+            comps,
+            srcs,
+            dsts,
+        }
+    }
+
+    fn run(
+        &mut self,
+        wq: &WqPortal,
+        size: usize,
+        iterations: usize,
+        op_name: &str,
+        fill_fn: DsaFillFn,
+    ) -> usize {
+        let window = self.descs.len();
+
+        for slot in 0..window {
+            self.submit_slot(wq, size, fill_fn, slot);
+        }
+
+        let mut issued = window;
+        let mut completed = 0usize;
+        let mut slot = 0usize;
+
+        while completed < iterations {
+            let status = poll_completion(&self.comps[slot]);
+            if status == DSA_COMP_PAGE_FAULT_NOBOF {
+                touch_fault_page(&self.comps[slot]);
+                self.submit_slot(wq, size, fill_fn, slot);
+                continue;
+            }
+            if status != DSA_COMP_SUCCESS {
+                drain_completions(&self.comps);
+                panic!(
+                    "DSA {} failed: status {:#x} (size={}, window={})",
+                    op_name, status, size, window
+                );
+            }
+            completed += 1;
+
+            if issued < iterations {
+                self.submit_slot(wq, size, fill_fn, slot);
+                issued += 1;
+            }
+
+            slot = (slot + 1) % window;
+        }
+
+        drain_completions(&self.comps[..window]);
+        completed
+    }
+
+    fn submit_slot(&mut self, wq: &WqPortal, size: usize, fill_fn: DsaFillFn, slot: usize) {
+        reset_completion(&mut self.comps[slot]);
+        fill_fn(
+            &mut self.descs[slot],
+            self.srcs[slot].as_ptr(),
+            self.dsts[slot].as_mut_ptr(),
+            size as u32,
+        );
+        self.descs[slot].set_completion(&mut self.comps[slot]);
+        unsafe { wq.submit(&self.descs[slot]) };
     }
 }

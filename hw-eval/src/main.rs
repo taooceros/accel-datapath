@@ -84,6 +84,7 @@ fn build_report(
             device: config.device.display().to_string(),
             wq_dedicated: wq.map(WqPortal::is_dedicated),
             iterations: config.iterations,
+            threads: config.threads,
             cold_cache: config.cold,
         },
         latency: latency_results,
@@ -152,6 +153,7 @@ fn run() -> Result<(), HwEvalError> {
         println!("Accelerator: {}", config.accel.as_str());
         println!("Sizes: {:?}", config.sizes);
         println!("Iterations: {}", config.iterations);
+        println!("Submit threads: {}", config.threads);
         if config.cold {
             println!("Mode: cold-cache (clflush between iterations)");
         }
@@ -215,6 +217,7 @@ fn run() -> Result<(), HwEvalError> {
                 &config.sizes,
                 config.iterations,
                 config.max_concurrency,
+                config.threads,
                 tsc_freq,
                 config.cold,
                 config.json,

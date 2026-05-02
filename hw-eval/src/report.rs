@@ -61,6 +61,7 @@ pub(crate) struct Metadata {
     pub(crate) device: String,
     pub(crate) wq_dedicated: Option<bool>,
     pub(crate) iterations: usize,
+    pub(crate) threads: usize,
     pub(crate) cold_cache: bool,
 }
 

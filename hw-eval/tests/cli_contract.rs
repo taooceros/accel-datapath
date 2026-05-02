@@ -167,6 +167,7 @@ fn software_only_json_preserves_top_level_report_contract() {
             "device_numa_node",
             "iterations",
             "pinned_core",
+            "threads",
             "tsc_freq_hz",
             "wq_dedicated",
         ],
@@ -177,6 +178,7 @@ fn software_only_json_preserves_top_level_report_contract() {
         .expect("metadata is a JSON object");
 
     assert_eq!(metadata["iterations"], Value::from(1));
+    assert_eq!(metadata["threads"], Value::from(1));
     assert_eq!(metadata["cold_cache"], Value::Bool(false));
     assert_eq!(metadata["accelerator"], Value::from("dsa"));
     assert_eq!(metadata["device"], Value::from(missing_device));

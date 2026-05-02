@@ -6,6 +6,7 @@ use std::path::PathBuf;
 pub(crate) const DEFAULT_SIZES: &str = "64,256,1024,4096,16384,65536,262144,1048576";
 pub(crate) const DEFAULT_ITERATIONS: usize = 10_000;
 pub(crate) const DEFAULT_MAX_CONCURRENCY: usize = 128;
+pub(crate) const DEFAULT_SUBMIT_THREADS: usize = 1;
 
 #[derive(Parser)]
 #[command(
@@ -32,6 +33,10 @@ pub(crate) struct Args {
     /// Maximum concurrency for sliding window test
     #[arg(short, long, default_value_t = DEFAULT_MAX_CONCURRENCY)]
     max_concurrency: usize,
+
+    /// Number of submitter threads for DSA direct memmove multi-thread throughput
+    #[arg(long, default_value_t = DEFAULT_SUBMIT_THREADS)]
+    threads: usize,
 
     /// Run software baselines only (no hardware required)
     #[arg(long)]
@@ -112,6 +117,7 @@ pub(crate) struct BenchmarkConfig {
     pub(crate) sizes: Vec<usize>,
     pub(crate) iterations: usize,
     pub(crate) max_concurrency: usize,
+    pub(crate) threads: usize,
     pub(crate) sw_only: bool,
     pub(crate) pin_core: Option<usize>,
     pub(crate) cold: bool,
@@ -134,6 +140,7 @@ impl BenchmarkConfig {
         #[builder(default = DEFAULT_SIZES.to_string(), into)] sizes: String,
         #[builder(default = DEFAULT_ITERATIONS)] iterations: usize,
         #[builder(default = DEFAULT_MAX_CONCURRENCY)] max_concurrency: usize,
+        #[builder(default = DEFAULT_SUBMIT_THREADS)] threads: usize,
         #[builder(default)] sw_only: bool,
         pin_core: Option<usize>,
         #[builder(default)] cold: bool,
@@ -141,6 +148,9 @@ impl BenchmarkConfig {
     ) -> Result<Self, BenchmarkConfigError> {
         let device = device.unwrap_or_else(|| default_device(accel));
         let sizes = parse_sizes(&sizes)?;
+        if threads == 0 {
+            return Err(BenchmarkConfigError::ZeroThreads);
+        }
 
         Ok(Self {
             accel,
@@ -148,6 +158,7 @@ impl BenchmarkConfig {
             sizes,
             iterations,
             max_concurrency,
+            threads,
             sw_only,
             pin_core,
             cold,
@@ -162,6 +173,7 @@ impl BenchmarkConfig {
             sizes,
             iterations,
             max_concurrency,
+            threads,
             sw_only,
             pin_core,
             cold,
@@ -174,6 +186,7 @@ impl BenchmarkConfig {
             sizes,
             iterations,
             max_concurrency,
+            threads,
             sw_only,
             pin_core,
             cold,
@@ -198,6 +211,8 @@ pub(crate) enum BenchmarkConfigError {
         "--sizes entries must be positive byte counts greater than zero (got {raw:?})"
     ))]
     ZeroSize { raw: String },
+    #[snafu(display("--threads must be greater than zero"))]
+    ZeroThreads,
 }
 
 #[cfg(test)]
@@ -217,6 +232,7 @@ mod tests {
         );
         assert_eq!(config.iterations, DEFAULT_ITERATIONS);
         assert_eq!(config.max_concurrency, DEFAULT_MAX_CONCURRENCY);
+        assert_eq!(config.threads, DEFAULT_SUBMIT_THREADS);
         assert!(!config.sw_only);
         assert_eq!(config.pin_core, None);
         assert!(!config.cold);
@@ -242,6 +258,7 @@ mod tests {
             .sizes("64, 128,256".to_string())
             .iterations(7)
             .max_concurrency(4)
+            .threads(5)
             .sw_only(true)
             .pin_core(3)
             .cold(true)
@@ -253,6 +270,7 @@ mod tests {
         assert_eq!(config.sizes, vec![64, 128, 256]);
         assert_eq!(config.iterations, 7);
         assert_eq!(config.max_concurrency, 4);
+        assert_eq!(config.threads, 5);
         assert!(config.sw_only);
         assert_eq!(config.pin_core, Some(3));
         assert!(config.cold);
@@ -293,5 +311,12 @@ mod tests {
             parse_sizes("64,0,128"),
             Err(BenchmarkConfigError::ZeroSize { .. })
         ));
+    }
+
+    #[test]
+    fn benchmark_config_rejects_zero_submit_threads() {
+        let error = BenchmarkConfig::builder().threads(0).build().unwrap_err();
+        assert!(matches!(error, BenchmarkConfigError::ZeroThreads));
+        assert_eq!(error.to_string(), "--threads must be greater than zero");
     }
 }
