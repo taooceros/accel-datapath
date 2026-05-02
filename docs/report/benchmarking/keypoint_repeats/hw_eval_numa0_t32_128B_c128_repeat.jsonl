@@ -1,0 +1,5 @@
+{"benchmark":"memmove_mt_t32","size":128,"concurrency":128,"ops_per_sec":44942653.83701546,"bandwidth_mb_s":5752.659691137978}
+{"benchmark":"memmove_mt_t32","size":128,"concurrency":128,"ops_per_sec":51769912.673178114,"bandwidth_mb_s":6626.548822166798}
+{"benchmark":"memmove_mt_t32","size":128,"concurrency":128,"ops_per_sec":51938756.53363623,"bandwidth_mb_s":6648.160836305437}
+{"benchmark":"memmove_mt_t32","size":128,"concurrency":128,"ops_per_sec":52359856.46799219,"bandwidth_mb_s":6702.061627903}
+{"benchmark":"memmove_mt_t32","size":128,"concurrency":128,"ops_per_sec":52282551.3262389,"bandwidth_mb_s":6692.1665697585795}
