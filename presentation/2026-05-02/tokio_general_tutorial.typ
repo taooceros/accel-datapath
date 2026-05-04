@@ -384,7 +384,7 @@ Multiplexing frees the worker thread, but it also removes the thread stack as th
 
 #pagebreak()
 
-== Keep the async story in one place
+== Solution: Compiler to separate async logic from continuation mechanics
 
 #callout(fill: c-blue, stroke: c-accent, inset: (x: 12pt, y: 8pt))[
   The win is local control flow: read with timeout, then parse, then report. The API carries the continuation machinery.
