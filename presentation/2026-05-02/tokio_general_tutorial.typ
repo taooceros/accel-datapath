@@ -585,7 +585,7 @@ Multiplexing frees the worker thread, but it also removes the thread stack as th
 == One future stores state; `.await` defines transitions
 
 #callout(fill: c-blue, stroke: c-accent)[
-  A future is not a hidden thread. It is a value that stores “which await am I blocked on?” plus the child future and locals needed to resume.
+  A future is a value that stores “which await am I blocked on?” plus the child future and locals needed to resume.
 ]
 
 #grid(
