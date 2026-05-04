@@ -80,7 +80,7 @@
 == Blocking APIs are simple until many calls wait
 
 #callout(fill: c-blue, stroke: c-accent)[
-  The usual API story starts with blocking calls: code is easy to read because the stack itself remembers where execution should continue.
+  The traditional API story starts with blocking calls: code is easy to read because the stack itself remembers where execution should continue.
 ]
 
 #grid(
@@ -131,17 +131,24 @@
   )],
   [#card(
     [Many waiting threads],
-    [Thread creation costs; stacks consume memory; wakeups and context switches go through the kernel scheduler.],
+    [
+      - Thread creation costs; stacks consume memory;
+      - wakeups and context switches go through the kernel scheduler.
+    ],
     fill: c-red,
     body-size: 9.6pt,
   )],
   [#card(
-    [Multiplexing],
+    [Solution: Multiplexing],
     [Use fewer workers for many waits; move each paused operation's continuation out of the OS thread stack.],
     fill: c-green,
     body-size: 9.6pt,
   )],
 )
+
+#callout[
+  Interrupt is slow, so RDMA/dpdk use polling instead of interrupts. Blocking is not even an option.
+]
 
 #pagebreak()
 
@@ -157,11 +164,14 @@
   [#panel(fill: c-row)[
     #text(weight: "bold", fill: c-title)[What the event loop knows]
     #v(0.35em)
-    #mermaid(
-      "graph LR; A[epoll / I/O driver] --> B[poll events]; B --> C[I/O event]; C --> D[which operation?]; D --> E[run continuation];",
-      base-theme: "default",
-      theme: (background: "transparent"),
-    )
+    #box(height: 50%)[
+      #mermaid(
+        "graph TD; A[epoll / I/O driver] --> B[poll events]; B --> C[I/O event]; C --> D[which operation?]; D --> E[run continuation];",
+        base-theme: "default",
+        theme: (background: "transparent"),
+      )
+    ]
+
   ]],
   [#panel(fill: c-green)[
     #text(weight: "bold", fill: c-title)[What each operation must keep]
