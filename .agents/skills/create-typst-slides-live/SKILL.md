@@ -1,0 +1,144 @@
+---
+name: create-typst-slides-live
+description: Create and iterate Typst slide decks with Tinymist live preview and browser automation. Use when the user asks to make slides, preview Typst visually, use Tinymist live preview, or inspect slide layout with browser screenshots.
+---
+
+<objective>
+Create Typst slide decks with a fast visual feedback loop: compile with `typst`, serve live updates with `tinymist preview`, open the rendered data-plane URL in browser automation, capture screenshots, edit, and repeat.
+
+This skill is project-local and captures the verified workflow for this repository environment.
+</objective>
+
+<quick_start>
+Minimal loop:
+
+```bash
+# 1. Validate the source first.
+typst compile slides.typ slides.pdf
+
+# 2. Start live preview. Prefer data-plane host, not deprecated --host.
+tinymist preview slides.typ --preview-mode=slide --data-plane-host=127.0.0.1:23625 --no-open
+
+# 3. Open the rendered preview, not the blank control panel.
+npx agent-browser open http://127.0.0.1:23625/
+npx agent-browser wait 1500
+npx agent-browser screenshot preview.png
+```
+
+Observed local paths:
+
+```bash
+command -v tinymist
+# /home/hongtao/.nix-profile/bin/tinymist
+readlink -f $(command -v tinymist)
+# /nix/store/...-tinymist-0.14.16/bin/tinymist
+```
+</quick_start>
+
+<workflow>
+1. **Check tools**
+
+```bash
+command -v typst && typst --version
+command -v tinymist && tinymist --version
+npx agent-browser --help | head -40
+```
+
+If Tinymist is managed by the user Nix profile, update with:
+
+```bash
+nix profile upgrade tinymist
+```
+
+2. **Create or edit the deck**
+
+Use a normal `.typ` file. For slides, set a slide-sized page such as 16:9 and keep each slide as a page or slide macro.
+
+3. **Compile before previewing**
+
+```bash
+typst compile slides.typ slides.pdf
+```
+
+Fix compile errors first. Browser screenshots are only useful after the source compiles.
+
+4. **Start Tinymist live preview**
+
+Run in the deck directory:
+
+```bash
+tinymist preview slides.typ \
+  --preview-mode=slide \
+  --data-plane-host=127.0.0.1:23625 \
+  --no-open
+```
+
+For background runs during automation:
+
+```bash
+(tinymist preview slides.typ --preview-mode=slide --data-plane-host=127.0.0.1:23625 --no-open > tinymist.log 2>&1 & echo $! > tinymist.pid)
+sleep 1
+sed -n '1,120p' tinymist.log
+```
+
+5. **Open the data-plane URL with browser automation**
+
+Use `http://127.0.0.1:23625/` for the rendered document. The control-panel URL, commonly `http://127.0.0.1:23626/`, may load as a blank page in screenshots.
+
+```bash
+npx agent-browser open http://127.0.0.1:23625/
+npx agent-browser wait 1500
+npx agent-browser screenshot preview.png
+```
+
+6. **Iterate visually**
+
+Edit the `.typ` source, wait briefly, and take another screenshot:
+
+```bash
+sleep 1.5
+npx agent-browser screenshot preview-updated.png
+```
+
+Tinymist should log a recompilation similar to:
+
+```text
+compilation succeeded
+Preview("default_preview"): received notification
+```
+
+7. **Clean up preview process**
+
+```bash
+kill $(cat tinymist.pid) 2>/dev/null || true
+npx agent-browser close --all >/dev/null 2>&1 || true
+```
+</workflow>
+
+<validation>
+Successful validation evidence includes:
+
+- `typst compile` exits successfully and creates a PDF.
+- Tinymist logs both control-plane and data-plane listeners.
+- Browser automation opens `http://127.0.0.1:23625/` and saves a non-empty screenshot.
+- After editing the source, Tinymist recompiles and a new screenshot differs from the previous one.
+
+Useful checks:
+
+```bash
+curl -sS -I http://127.0.0.1:23625/ | head -20
+file preview.png
+ls -lh preview.png
+```
+</validation>
+
+<anti_patterns>
+- Do not rely on `--host=...`; it is deprecated and can conflict when it aliases data/static hosts.
+- Do not screenshot `http://127.0.0.1:23626/` as the rendered slide; it is the control panel and may appear blank.
+- Do not claim the slide looks right from `typst compile` alone; use browser screenshot evidence for visual iteration.
+- Do not leave background Tinymist processes running; store the PID and clean up.
+</anti_patterns>
+
+<success_criteria>
+The skill is applied successfully when a Typst slide deck can be compiled, served through Tinymist live preview, opened at the rendered data-plane URL with browser automation, screenshotted, edited, automatically recompiled, and screenshotted again for visual comparison.
+</success_criteria>
