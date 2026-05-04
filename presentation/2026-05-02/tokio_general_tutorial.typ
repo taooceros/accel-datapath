@@ -239,10 +239,10 @@ Multiplexing frees the worker thread, but it also removes the thread stack as th
 
 #pagebreak()
 
-== Example: read + timeout + parse crosses APIs
+== Problem: Composability
 
 #callout(fill: c-blue, stroke: c-accent, inset: (x: 12pt, y: 8pt))[
-  Niebler's problem appears when a useful operation crosses API boundaries. This is also one SG-IOV challenge: device work crosses submission, completion, timeout/cancel, worker, and cleanup protocols.
+  Different async providers have different callback protocols. The programmer must hand-glue them together.
 ]
 
 #panel(fill: c-row, inset: (x: 12pt, y: 9pt))[
