@@ -1,0 +1,3882 @@
+{
+  "metadata": {
+    "accelerator": "dsa",
+    "tsc_freq_hz": 2202802666,
+    "pinned_core": 64,
+    "cpu_numa_node": 0,
+    "device_numa_node": null,
+    "device": "/dev/dsa/wq0.1",
+    "wq_dedicated": false,
+    "iterations": 3000,
+    "threads": 4,
+    "cold_cache": false
+  },
+  "latency": [
+    {
+      "benchmark": "sw_memcpy",
+      "size": 128,
+      "batch_size": null,
+      "cycles": {
+        "min": 29,
+        "median": 33,
+        "mean": 36,
+        "p99": 74,
+        "p999": 276,
+        "cv": 0.4044460275359536
+      },
+      "ns": {
+        "min": 29,
+        "median": 33,
+        "mean": 36,
+        "p99": 74,
+        "p999": 276,
+        "cv": 0.4044460275359536
+      }
+    },
+    {
+      "benchmark": "sw_memcpy",
+      "size": 256,
+      "batch_size": null,
+      "cycles": {
+        "min": 25,
+        "median": 34,
+        "mean": 32,
+        "p99": 36,
+        "p999": 39,
+        "cv": 0.3905011574341809
+      },
+      "ns": {
+        "min": 25,
+        "median": 34,
+        "mean": 32,
+        "p99": 36,
+        "p999": 39,
+        "cv": 0.3905011574341809
+      }
+    },
+    {
+      "benchmark": "sw_memcpy",
+      "size": 1024,
+      "batch_size": null,
+      "cycles": {
+        "min": 33,
+        "median": 36,
+        "mean": 36,
+        "p99": 39,
+        "p999": 40,
+        "cv": 0.04485525145972984
+      },
+      "ns": {
+        "min": 33,
+        "median": 36,
+        "mean": 36,
+        "p99": 39,
+        "p999": 40,
+        "cv": 0.04485525145972984
+      }
+    },
+    {
+      "benchmark": "sw_memcpy",
+      "size": 4096,
+      "batch_size": null,
+      "cycles": {
+        "min": 77,
+        "median": 83,
+        "mean": 84,
+        "p99": 91,
+        "p999": 93,
+        "cv": 0.07024022761774919
+      },
+      "ns": {
+        "min": 77,
+        "median": 83,
+        "mean": 84,
+        "p99": 91,
+        "p999": 93,
+        "cv": 0.07024022761774919
+      }
+    },
+    {
+      "benchmark": "sw_crc32c",
+      "size": 128,
+      "batch_size": null,
+      "cycles": {
+        "min": 41,
+        "median": 44,
+        "mean": 44,
+        "p99": 46,
+        "p999": 47,
+        "cv": 0.117185232451679
+      },
+      "ns": {
+        "min": 41,
+        "median": 44,
+        "mean": 44,
+        "p99": 46,
+        "p999": 47,
+        "cv": 0.117185232451679
+      }
+    },
+    {
+      "benchmark": "sw_crc32c",
+      "size": 256,
+      "batch_size": null,
+      "cycles": {
+        "min": 64,
+        "median": 67,
+        "mean": 66,
+        "p99": 69,
+        "p999": 70,
+        "cv": 0.012311120505282809
+      },
+      "ns": {
+        "min": 64,
+        "median": 67,
+        "mean": 66,
+        "p99": 69,
+        "p999": 70,
+        "cv": 0.012311120505282809
+      }
+    },
+    {
+      "benchmark": "sw_crc32c",
+      "size": 1024,
+      "batch_size": null,
+      "cycles": {
+        "min": 200,
+        "median": 203,
+        "mean": 203,
+        "p99": 205,
+        "p999": 206,
+        "cv": 0.004401015121529271
+      },
+      "ns": {
+        "min": 200,
+        "median": 203,
+        "mean": 203,
+        "p99": 205,
+        "p999": 206,
+        "cv": 0.004401015121529271
+      }
+    },
+    {
+      "benchmark": "sw_crc32c",
+      "size": 4096,
+      "batch_size": null,
+      "cycles": {
+        "min": 745,
+        "median": 749,
+        "mean": 750,
+        "p99": 758,
+        "p999": 860,
+        "cv": 0.14700572037890164
+      },
+      "ns": {
+        "min": 745,
+        "median": 749,
+        "mean": 750,
+        "p99": 758,
+        "p999": 860,
+        "cv": 0.14700572037890164
+      }
+    },
+    {
+      "benchmark": "noop",
+      "size": null,
+      "batch_size": null,
+      "cycles": {
+        "min": 888,
+        "median": 926,
+        "mean": 931,
+        "p99": 1034,
+        "p999": 1136,
+        "cv": 0.022751324522747585
+      },
+      "ns": {
+        "min": 403,
+        "median": 420,
+        "mean": 422,
+        "p99": 469,
+        "p999": 515,
+        "cv": 0.022791114296508774
+      }
+    },
+    {
+      "benchmark": "memmove",
+      "size": 128,
+      "batch_size": null,
+      "cycles": {
+        "min": 1394,
+        "median": 1434,
+        "mean": 1438,
+        "p99": 1510,
+        "p999": 1664,
+        "cv": 0.014981828787453855
+      },
+      "ns": {
+        "min": 632,
+        "median": 650,
+        "mean": 652,
+        "p99": 685,
+        "p999": 755,
+        "cv": 0.014972007529633406
+      }
+    },
+    {
+      "benchmark": "memmove",
+      "size": 256,
+      "batch_size": null,
+      "cycles": {
+        "min": 1484,
+        "median": 1524,
+        "mean": 1526,
+        "p99": 1556,
+        "p999": 1730,
+        "cv": 0.07619045872812957
+      },
+      "ns": {
+        "min": 673,
+        "median": 691,
+        "mean": 692,
+        "p99": 706,
+        "p999": 785,
+        "cv": 0.07624282484481688
+      }
+    },
+    {
+      "benchmark": "memmove",
+      "size": 1024,
+      "batch_size": null,
+      "cycles": {
+        "min": 1592,
+        "median": 1630,
+        "mean": 1631,
+        "p99": 1702,
+        "p999": 1818,
+        "cv": 0.010239263740030471
+      },
+      "ns": {
+        "min": 722,
+        "median": 739,
+        "mean": 740,
+        "p99": 772,
+        "p999": 825,
+        "cv": 0.010254238581281714
+      }
+    },
+    {
+      "benchmark": "memmove",
+      "size": 4096,
+      "batch_size": null,
+      "cycles": {
+        "min": 2126,
+        "median": 2164,
+        "mean": 2171,
+        "p99": 2362,
+        "p999": 2412,
+        "cv": 0.04485984197447021
+      },
+      "ns": {
+        "min": 965,
+        "median": 982,
+        "mean": 985,
+        "p99": 1072,
+        "p999": 1094,
+        "cv": 0.04488201316760389
+      }
+    },
+    {
+      "benchmark": "crc_gen",
+      "size": 128,
+      "batch_size": null,
+      "cycles": {
+        "min": 1398,
+        "median": 1432,
+        "mean": 1455,
+        "p99": 1532,
+        "p999": 1624,
+        "cv": 0.8287284502668837
+      },
+      "ns": {
+        "min": 634,
+        "median": 650,
+        "mean": 660,
+        "p99": 695,
+        "p999": 737,
+        "cv": 0.8293818351850409
+      }
+    },
+    {
+      "benchmark": "crc_gen",
+      "size": 256,
+      "batch_size": null,
+      "cycles": {
+        "min": 1464,
+        "median": 1498,
+        "mean": 1499,
+        "p99": 1560,
+        "p999": 1620,
+        "cv": 0.008659987620456427
+      },
+      "ns": {
+        "min": 664,
+        "median": 680,
+        "mean": 680,
+        "p99": 708,
+        "p999": 735,
+        "cv": 0.008625994470953375
+      }
+    },
+    {
+      "benchmark": "crc_gen",
+      "size": 1024,
+      "batch_size": null,
+      "cycles": {
+        "min": 1538,
+        "median": 1586,
+        "mean": 1600,
+        "p99": 1746,
+        "p999": 1804,
+        "cv": 0.1234061553338072
+      },
+      "ns": {
+        "min": 698,
+        "median": 719,
+        "mean": 725,
+        "p99": 792,
+        "p999": 818,
+        "cv": 0.12350110706498514
+      }
+    },
+    {
+      "benchmark": "crc_gen",
+      "size": 4096,
+      "batch_size": null,
+      "cycles": {
+        "min": 2102,
+        "median": 2134,
+        "mean": 2146,
+        "p99": 2346,
+        "p999": 2366,
+        "cv": 0.07979752872815905
+      },
+      "ns": {
+        "min": 954,
+        "median": 968,
+        "mean": 973,
+        "p99": 1065,
+        "p999": 1074,
+        "cv": 0.0798455120542691
+      }
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 128,
+      "batch_size": null,
+      "cycles": {
+        "min": 1480,
+        "median": 1524,
+        "mean": 1558,
+        "p99": 1756,
+        "p999": 2022,
+        "cv": 0.20013373020873207
+      },
+      "ns": {
+        "min": 671,
+        "median": 691,
+        "mean": 707,
+        "p99": 797,
+        "p999": 917,
+        "cv": 0.20028662079241694
+      }
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 256,
+      "batch_size": null,
+      "cycles": {
+        "min": 2230,
+        "median": 2304,
+        "mean": 2363,
+        "p99": 2768,
+        "p999": 8236,
+        "cv": 0.14932523416549812
+      },
+      "ns": {
+        "min": 1012,
+        "median": 1045,
+        "mean": 1072,
+        "p99": 1256,
+        "p999": 3738,
+        "cv": 0.14938707584590336
+      }
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 1024,
+      "batch_size": null,
+      "cycles": {
+        "min": 1672,
+        "median": 1724,
+        "mean": 1738,
+        "p99": 1942,
+        "p999": 8264,
+        "cv": 0.2056311129499056
+      },
+      "ns": {
+        "min": 759,
+        "median": 782,
+        "mean": 788,
+        "p99": 881,
+        "p999": 3751,
+        "cv": 0.20574680638225257
+      }
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 4096,
+      "batch_size": null,
+      "cycles": {
+        "min": 2728,
+        "median": 2794,
+        "mean": 2894,
+        "p99": 3282,
+        "p999": 5450,
+        "cv": 0.16279330099333894
+      },
+      "ns": {
+        "min": 1238,
+        "median": 1268,
+        "mean": 1313,
+        "p99": 1489,
+        "p999": 2474,
+        "cv": 0.16285268908193404
+      }
+    },
+    {
+      "benchmark": "batch_memmove",
+      "size": 4096,
+      "batch_size": 1,
+      "cycles": {
+        "min": 1218,
+        "median": 1266,
+        "mean": 1274,
+        "p99": 1392,
+        "p999": 1488,
+        "cv": 0.16848381395892978
+      },
+      "ns": {
+        "min": 552,
+        "median": 574,
+        "mean": 577,
+        "p99": 631,
+        "p999": 675,
+        "cv": 0.16865777590527348
+      }
+    },
+    {
+      "benchmark": "batch_memmove",
+      "size": 4096,
+      "batch_size": 2,
+      "cycles": {
+        "min": 3436,
+        "median": 3500,
+        "mean": 3516,
+        "p99": 3696,
+        "p999": 3802,
+        "cv": 0.07091611110413057
+      },
+      "ns": {
+        "min": 1559,
+        "median": 1588,
+        "mean": 1596,
+        "p99": 1677,
+        "p999": 1725,
+        "cv": 0.07094164399338218
+      }
+    },
+    {
+      "benchmark": "batch_memmove",
+      "size": 4096,
+      "batch_size": 4,
+      "cycles": {
+        "min": 4084,
+        "median": 4164,
+        "mean": 4195,
+        "p99": 4466,
+        "p999": 4598,
+        "cv": 0.04820362811941109
+      },
+      "ns": {
+        "min": 1854,
+        "median": 1890,
+        "mean": 1904,
+        "p99": 2027,
+        "p999": 2087,
+        "cv": 0.04821847476180216
+      }
+    },
+    {
+      "benchmark": "batch_memmove",
+      "size": 4096,
+      "batch_size": 8,
+      "cycles": {
+        "min": 5436,
+        "median": 5750,
+        "mean": 5914,
+        "p99": 7058,
+        "p999": 9420,
+        "cv": 0.09201103862933054
+      },
+      "ns": {
+        "min": 2467,
+        "median": 2610,
+        "mean": 2684,
+        "p99": 3204,
+        "p999": 4276,
+        "cv": 0.09202970127660491
+      }
+    },
+    {
+      "benchmark": "batch_memmove",
+      "size": 4096,
+      "batch_size": 16,
+      "cycles": {
+        "min": 8194,
+        "median": 9802,
+        "mean": 9831,
+        "p99": 11104,
+        "p999": 15516,
+        "cv": 0.060952010354861474
+      },
+      "ns": {
+        "min": 3719,
+        "median": 4449,
+        "mean": 4462,
+        "p99": 5040,
+        "p999": 7043,
+        "cv": 0.06095984310138067
+      }
+    },
+    {
+      "benchmark": "batch_memmove",
+      "size": 4096,
+      "batch_size": 32,
+      "cycles": {
+        "min": 13030,
+        "median": 14808,
+        "mean": 14825,
+        "p99": 16288,
+        "p999": 21056,
+        "cv": 0.053084107360840425
+      },
+      "ns": {
+        "min": 5915,
+        "median": 6722,
+        "mean": 6729,
+        "p99": 7394,
+        "p999": 9558,
+        "cv": 0.053087454751363373
+      }
+    },
+    {
+      "benchmark": "batch_memmove",
+      "size": 4096,
+      "batch_size": 64,
+      "cycles": {
+        "min": 23382,
+        "median": 25288,
+        "mean": 25301,
+        "p99": 26610,
+        "p999": 29426,
+        "cv": 0.0773325158608681
+      },
+      "ns": {
+        "min": 10614,
+        "median": 11479,
+        "mean": 11485,
+        "p99": 12080,
+        "p999": 13358,
+        "cv": 0.07733620356816738
+      }
+    },
+    {
+      "benchmark": "batch_memmove",
+      "size": 4096,
+      "batch_size": 128,
+      "cycles": {
+        "min": 45012,
+        "median": 46766,
+        "mean": 46802,
+        "p99": 48244,
+        "p999": 64182,
+        "cv": 0.027410807326411896
+      },
+      "ns": {
+        "min": 20433,
+        "median": 21230,
+        "mean": 21246,
+        "p99": 21901,
+        "p999": 29136,
+        "cv": 0.027411717253165595
+      }
+    },
+    {
+      "benchmark": "batch_memmove",
+      "size": 4096,
+      "batch_size": 256,
+      "cycles": {
+        "min": 80184,
+        "median": 82004,
+        "mean": 82376,
+        "p99": 85350,
+        "p999": 232998,
+        "cv": 0.08576178315217847
+      },
+      "ns": {
+        "min": 36400,
+        "median": 37227,
+        "mean": 37395,
+        "p99": 38746,
+        "p999": 105773,
+        "cv": 0.08576293837940845
+      }
+    },
+    {
+      "benchmark": "batch_memmove",
+      "size": 4096,
+      "batch_size": 512,
+      "cycles": {
+        "min": 194942,
+        "median": 210484,
+        "mean": 215904,
+        "p99": 244304,
+        "p999": 350338,
+        "cv": 0.07291904035765552
+      },
+      "ns": {
+        "min": 88497,
+        "median": 95552,
+        "mean": 98013,
+        "p99": 110905,
+        "p999": 159041,
+        "cv": 0.07291934919794661
+      }
+    },
+    {
+      "benchmark": "batch_memmove",
+      "size": 4096,
+      "batch_size": 1024,
+      "cycles": {
+        "min": 344130,
+        "median": 348336,
+        "mean": 349741,
+        "p99": 372212,
+        "p999": 391610,
+        "cv": 0.01961413895847644
+      },
+      "ns": {
+        "min": 156223,
+        "median": 158133,
+        "mean": 158770,
+        "p99": 168972,
+        "p999": 177778,
+        "cv": 0.01961425111257657
+      }
+    }
+  ],
+  "throughput": [
+    {
+      "benchmark": "pipelined_batch_b4",
+      "size": 128,
+      "concurrency": 1,
+      "ops_per_sec": 3067709.72205783,
+      "bandwidth_mb_s": 392.66684442340227
+    },
+    {
+      "benchmark": "pipelined_batch_b4",
+      "size": 128,
+      "concurrency": 2,
+      "ops_per_sec": 5166256.595049434,
+      "bandwidth_mb_s": 661.2808441663276
+    },
+    {
+      "benchmark": "pipelined_batch_b4",
+      "size": 128,
+      "concurrency": 4,
+      "ops_per_sec": 3805251.056194996,
+      "bandwidth_mb_s": 487.0721351929595
+    },
+    {
+      "benchmark": "pipelined_batch_b4",
+      "size": 128,
+      "concurrency": 8,
+      "ops_per_sec": 5025207.698115673,
+      "bandwidth_mb_s": 643.2265853588061
+    },
+    {
+      "benchmark": "pipelined_batch_b4",
+      "size": 128,
+      "concurrency": 16,
+      "ops_per_sec": 7843419.207880022,
+      "bandwidth_mb_s": 1003.9576586086429
+    },
+    {
+      "benchmark": "pipelined_batch_b4",
+      "size": 128,
+      "concurrency": 32,
+      "ops_per_sec": 4551247.041689423,
+      "bandwidth_mb_s": 582.5596213362461
+    },
+    {
+      "benchmark": "pipelined_batch_b8",
+      "size": 128,
+      "concurrency": 1,
+      "ops_per_sec": 5325484.752249573,
+      "bandwidth_mb_s": 681.6620482879454
+    },
+    {
+      "benchmark": "pipelined_batch_b8",
+      "size": 128,
+      "concurrency": 2,
+      "ops_per_sec": 9272097.823722739,
+      "bandwidth_mb_s": 1186.8285214365105
+    },
+    {
+      "benchmark": "pipelined_batch_b8",
+      "size": 128,
+      "concurrency": 4,
+      "ops_per_sec": 5909645.945724334,
+      "bandwidth_mb_s": 756.4346810527147
+    },
+    {
+      "benchmark": "pipelined_batch_b8",
+      "size": 128,
+      "concurrency": 8,
+      "ops_per_sec": 5363046.997274679,
+      "bandwidth_mb_s": 686.470015651159
+    },
+    {
+      "benchmark": "pipelined_batch_b8",
+      "size": 128,
+      "concurrency": 16,
+      "ops_per_sec": 7361678.659045693,
+      "bandwidth_mb_s": 942.2948683578487
+    },
+    {
+      "benchmark": "pipelined_batch_b8",
+      "size": 128,
+      "concurrency": 32,
+      "ops_per_sec": 5066905.31790714,
+      "bandwidth_mb_s": 648.5638806921139
+    },
+    {
+      "benchmark": "pipelined_batch_b16",
+      "size": 128,
+      "concurrency": 1,
+      "ops_per_sec": 7943654.3358534025,
+      "bandwidth_mb_s": 1016.7877549892355
+    },
+    {
+      "benchmark": "pipelined_batch_b16",
+      "size": 128,
+      "concurrency": 2,
+      "ops_per_sec": 14655521.956414478,
+      "bandwidth_mb_s": 1875.9068104210533
+    },
+    {
+      "benchmark": "pipelined_batch_b16",
+      "size": 128,
+      "concurrency": 4,
+      "ops_per_sec": 6450256.962111728,
+      "bandwidth_mb_s": 825.6328911503012
+    },
+    {
+      "benchmark": "pipelined_batch_b16",
+      "size": 128,
+      "concurrency": 8,
+      "ops_per_sec": 7361174.009105466,
+      "bandwidth_mb_s": 942.2302731654997
+    },
+    {
+      "benchmark": "pipelined_batch_b16",
+      "size": 128,
+      "concurrency": 16,
+      "ops_per_sec": 5691995.453518632,
+      "bandwidth_mb_s": 728.5754180503849
+    },
+    {
+      "benchmark": "pipelined_batch_b16",
+      "size": 128,
+      "concurrency": 32,
+      "ops_per_sec": 5311283.833569594,
+      "bandwidth_mb_s": 679.844330696908
+    },
+    {
+      "benchmark": "pipelined_batch_b32",
+      "size": 128,
+      "concurrency": 1,
+      "ops_per_sec": 10614230.011691133,
+      "bandwidth_mb_s": 1358.621441496465
+    },
+    {
+      "benchmark": "pipelined_batch_b32",
+      "size": 128,
+      "concurrency": 2,
+      "ops_per_sec": 19504207.118426092,
+      "bandwidth_mb_s": 2496.5385111585397
+    },
+    {
+      "benchmark": "pipelined_batch_b32",
+      "size": 128,
+      "concurrency": 4,
+      "ops_per_sec": 6401979.065128334,
+      "bandwidth_mb_s": 819.4533203364267
+    },
+    {
+      "benchmark": "pipelined_batch_b32",
+      "size": 128,
+      "concurrency": 8,
+      "ops_per_sec": 9744040.301350685,
+      "bandwidth_mb_s": 1247.2371585728877
+    },
+    {
+      "benchmark": "pipelined_batch_b32",
+      "size": 128,
+      "concurrency": 16,
+      "ops_per_sec": 11028512.15031862,
+      "bandwidth_mb_s": 1411.6495552407835
+    },
+    {
+      "benchmark": "pipelined_batch_b32",
+      "size": 128,
+      "concurrency": 32,
+      "ops_per_sec": 10770518.39851367,
+      "bandwidth_mb_s": 1378.6263550097497
+    },
+    {
+      "benchmark": "pipelined_batch_b64",
+      "size": 128,
+      "concurrency": 1,
+      "ops_per_sec": 13912680.538768554,
+      "bandwidth_mb_s": 1780.8231089623748
+    },
+    {
+      "benchmark": "pipelined_batch_b64",
+      "size": 128,
+      "concurrency": 2,
+      "ops_per_sec": 11765527.739070008,
+      "bandwidth_mb_s": 1505.987550600961
+    },
+    {
+      "benchmark": "pipelined_batch_b64",
+      "size": 128,
+      "concurrency": 4,
+      "ops_per_sec": 17568904.64925375,
+      "bandwidth_mb_s": 2248.81979510448
+    },
+    {
+      "benchmark": "pipelined_batch_b64",
+      "size": 128,
+      "concurrency": 8,
+      "ops_per_sec": 12840675.836870983,
+      "bandwidth_mb_s": 1643.606507119486
+    },
+    {
+      "benchmark": "pipelined_batch_b64",
+      "size": 128,
+      "concurrency": 16,
+      "ops_per_sec": 15690861.266471522,
+      "bandwidth_mb_s": 2008.4302421083548
+    },
+    {
+      "benchmark": "pipelined_batch_b64",
+      "size": 128,
+      "concurrency": 32,
+      "ops_per_sec": 19076023.018798526,
+      "bandwidth_mb_s": 2441.7309464062114
+    },
+    {
+      "benchmark": "pipelined_batch_b128",
+      "size": 128,
+      "concurrency": 1,
+      "ops_per_sec": 12521922.73993235,
+      "bandwidth_mb_s": 1602.8061107113408
+    },
+    {
+      "benchmark": "pipelined_batch_b128",
+      "size": 128,
+      "concurrency": 2,
+      "ops_per_sec": 19525067.97545638,
+      "bandwidth_mb_s": 2499.2087008584167
+    },
+    {
+      "benchmark": "pipelined_batch_b128",
+      "size": 128,
+      "concurrency": 4,
+      "ops_per_sec": 30941561.382095084,
+      "bandwidth_mb_s": 3960.519856908171
+    },
+    {
+      "benchmark": "pipelined_batch_b128",
+      "size": 128,
+      "concurrency": 8,
+      "ops_per_sec": 17267353.994291972,
+      "bandwidth_mb_s": 2210.2213112693726
+    },
+    {
+      "benchmark": "pipelined_batch_b128",
+      "size": 128,
+      "concurrency": 16,
+      "ops_per_sec": 19194906.631525327,
+      "bandwidth_mb_s": 2456.948048835242
+    },
+    {
+      "benchmark": "pipelined_batch_b128",
+      "size": 128,
+      "concurrency": 32,
+      "ops_per_sec": 20386727.730579197,
+      "bandwidth_mb_s": 2609.501149514137
+    },
+    {
+      "benchmark": "pipelined_batch_b256",
+      "size": 128,
+      "concurrency": 1,
+      "ops_per_sec": 16066783.594357898,
+      "bandwidth_mb_s": 2056.548300077811
+    },
+    {
+      "benchmark": "pipelined_batch_b256",
+      "size": 128,
+      "concurrency": 2,
+      "ops_per_sec": 31530403.252919447,
+      "bandwidth_mb_s": 4035.891616373689
+    },
+    {
+      "benchmark": "pipelined_batch_b256",
+      "size": 128,
+      "concurrency": 4,
+      "ops_per_sec": 44886711.02619262,
+      "bandwidth_mb_s": 5745.4990113526555
+    },
+    {
+      "benchmark": "pipelined_batch_b256",
+      "size": 128,
+      "concurrency": 8,
+      "ops_per_sec": 18692749.347828716,
+      "bandwidth_mb_s": 2392.6719165220757
+    },
+    {
+      "benchmark": "pipelined_batch_b256",
+      "size": 128,
+      "concurrency": 16,
+      "ops_per_sec": 17039493.97495252,
+      "bandwidth_mb_s": 2181.0552287939227
+    },
+    {
+      "benchmark": "pipelined_batch_b256",
+      "size": 128,
+      "concurrency": 32,
+      "ops_per_sec": 13970625.994827267,
+      "bandwidth_mb_s": 1788.24012733789
+    },
+    {
+      "benchmark": "pipelined_batch_b4",
+      "size": 256,
+      "concurrency": 1,
+      "ops_per_sec": 2590496.289437877,
+      "bandwidth_mb_s": 663.1670500960965
+    },
+    {
+      "benchmark": "pipelined_batch_b4",
+      "size": 256,
+      "concurrency": 2,
+      "ops_per_sec": 5660713.797140773,
+      "bandwidth_mb_s": 1449.142732068038
+    },
+    {
+      "benchmark": "pipelined_batch_b4",
+      "size": 256,
+      "concurrency": 4,
+      "ops_per_sec": 4029616.336870553,
+      "bandwidth_mb_s": 1031.5817822388615
+    },
+    {
+      "benchmark": "pipelined_batch_b4",
+      "size": 256,
+      "concurrency": 8,
+      "ops_per_sec": 4600777.147939906,
+      "bandwidth_mb_s": 1177.798949872616
+    },
+    {
+      "benchmark": "pipelined_batch_b4",
+      "size": 256,
+      "concurrency": 16,
+      "ops_per_sec": 5087781.184706808,
+      "bandwidth_mb_s": 1302.4719832849428
+    },
+    {
+      "benchmark": "pipelined_batch_b4",
+      "size": 256,
+      "concurrency": 32,
+      "ops_per_sec": 4667575.287989395,
+      "bandwidth_mb_s": 1194.899273725285
+    },
+    {
+      "benchmark": "pipelined_batch_b8",
+      "size": 256,
+      "concurrency": 1,
+      "ops_per_sec": 5108536.17237393,
+      "bandwidth_mb_s": 1307.7852601277261
+    },
+    {
+      "benchmark": "pipelined_batch_b8",
+      "size": 256,
+      "concurrency": 2,
+      "ops_per_sec": 9733402.11604162,
+      "bandwidth_mb_s": 2491.7509417066544
+    },
+    {
+      "benchmark": "pipelined_batch_b8",
+      "size": 256,
+      "concurrency": 4,
+      "ops_per_sec": 5201397.008546545,
+      "bandwidth_mb_s": 1331.5576341879155
+    },
+    {
+      "benchmark": "pipelined_batch_b8",
+      "size": 256,
+      "concurrency": 8,
+      "ops_per_sec": 5712019.946373653,
+      "bandwidth_mb_s": 1462.2771062716552
+    },
+    {
+      "benchmark": "pipelined_batch_b8",
+      "size": 256,
+      "concurrency": 16,
+      "ops_per_sec": 4475621.290828855,
+      "bandwidth_mb_s": 1145.7590504521868
+    },
+    {
+      "benchmark": "pipelined_batch_b8",
+      "size": 256,
+      "concurrency": 32,
+      "ops_per_sec": 6308436.824553698,
+      "bandwidth_mb_s": 1614.9598270857468
+    },
+    {
+      "benchmark": "pipelined_batch_b16",
+      "size": 256,
+      "concurrency": 1,
+      "ops_per_sec": 7330000.117585418,
+      "bandwidth_mb_s": 1876.480030101867
+    },
+    {
+      "benchmark": "pipelined_batch_b16",
+      "size": 256,
+      "concurrency": 2,
+      "ops_per_sec": 14475908.770410277,
+      "bandwidth_mb_s": 3705.832645225031
+    },
+    {
+      "benchmark": "pipelined_batch_b16",
+      "size": 256,
+      "concurrency": 4,
+      "ops_per_sec": 5377345.71302876,
+      "bandwidth_mb_s": 1376.6005025353625
+    },
+    {
+      "benchmark": "pipelined_batch_b16",
+      "size": 256,
+      "concurrency": 8,
+      "ops_per_sec": 5973543.92066835,
+      "bandwidth_mb_s": 1529.2272436910976
+    },
+    {
+      "benchmark": "pipelined_batch_b16",
+      "size": 256,
+      "concurrency": 16,
+      "ops_per_sec": 5419325.382053971,
+      "bandwidth_mb_s": 1387.3472978058167
+    },
+    {
+      "benchmark": "pipelined_batch_b16",
+      "size": 256,
+      "concurrency": 32,
+      "ops_per_sec": 5744112.015928422,
+      "bandwidth_mb_s": 1470.4926760776762
+    },
+    {
+      "benchmark": "pipelined_batch_b32",
+      "size": 256,
+      "concurrency": 1,
+      "ops_per_sec": 2878733.184674752,
+      "bandwidth_mb_s": 736.9556952767365
+    },
+    {
+      "benchmark": "pipelined_batch_b32",
+      "size": 256,
+      "concurrency": 2,
+      "ops_per_sec": 5621957.444944493,
+      "bandwidth_mb_s": 1439.2211059057902
+    },
+    {
+      "benchmark": "pipelined_batch_b32",
+      "size": 256,
+      "concurrency": 4,
+      "ops_per_sec": 5318982.128552485,
+      "bandwidth_mb_s": 1361.6594249094362
+    },
+    {
+      "benchmark": "pipelined_batch_b32",
+      "size": 256,
+      "concurrency": 8,
+      "ops_per_sec": 7501067.144005409,
+      "bandwidth_mb_s": 1920.2731888653848
+    },
+    {
+      "benchmark": "pipelined_batch_b32",
+      "size": 256,
+      "concurrency": 16,
+      "ops_per_sec": 10290263.684791215,
+      "bandwidth_mb_s": 2634.307503306551
+    },
+    {
+      "benchmark": "pipelined_batch_b32",
+      "size": 256,
+      "concurrency": 32,
+      "ops_per_sec": 9490430.136939988,
+      "bandwidth_mb_s": 2429.550115056637
+    },
+    {
+      "benchmark": "pipelined_batch_b64",
+      "size": 256,
+      "concurrency": 1,
+      "ops_per_sec": 13095031.942670496,
+      "bandwidth_mb_s": 3352.328177323647
+    },
+    {
+      "benchmark": "pipelined_batch_b64",
+      "size": 256,
+      "concurrency": 2,
+      "ops_per_sec": 6316571.772786992,
+      "bandwidth_mb_s": 1617.0423738334698
+    },
+    {
+      "benchmark": "pipelined_batch_b64",
+      "size": 256,
+      "concurrency": 4,
+      "ops_per_sec": 11257520.771445064,
+      "bandwidth_mb_s": 2881.9253174899363
+    },
+    {
+      "benchmark": "pipelined_batch_b64",
+      "size": 256,
+      "concurrency": 8,
+      "ops_per_sec": 12996622.435053948,
+      "bandwidth_mb_s": 3327.135343373811
+    },
+    {
+      "benchmark": "pipelined_batch_b64",
+      "size": 256,
+      "concurrency": 16,
+      "ops_per_sec": 15590404.982693434,
+      "bandwidth_mb_s": 3991.143675569519
+    },
+    {
+      "benchmark": "pipelined_batch_b64",
+      "size": 256,
+      "concurrency": 32,
+      "ops_per_sec": 14259106.83479837,
+      "bandwidth_mb_s": 3650.3313497083827
+    },
+    {
+      "benchmark": "pipelined_batch_b128",
+      "size": 256,
+      "concurrency": 1,
+      "ops_per_sec": 13597281.591805428,
+      "bandwidth_mb_s": 3480.9040875021897
+    },
+    {
+      "benchmark": "pipelined_batch_b128",
+      "size": 256,
+      "concurrency": 2,
+      "ops_per_sec": 6455740.043084332,
+      "bandwidth_mb_s": 1652.669451029589
+    },
+    {
+      "benchmark": "pipelined_batch_b128",
+      "size": 256,
+      "concurrency": 4,
+      "ops_per_sec": 10992334.421164136,
+      "bandwidth_mb_s": 2814.037611818019
+    },
+    {
+      "benchmark": "pipelined_batch_b128",
+      "size": 256,
+      "concurrency": 8,
+      "ops_per_sec": 13248287.607075663,
+      "bandwidth_mb_s": 3391.56162741137
+    },
+    {
+      "benchmark": "pipelined_batch_b128",
+      "size": 256,
+      "concurrency": 16,
+      "ops_per_sec": 16480925.067456983,
+      "bandwidth_mb_s": 4219.116817268988
+    },
+    {
+      "benchmark": "pipelined_batch_b128",
+      "size": 256,
+      "concurrency": 32,
+      "ops_per_sec": 19244764.28396271,
+      "bandwidth_mb_s": 4926.6596566944545
+    },
+    {
+      "benchmark": "pipelined_batch_b256",
+      "size": 256,
+      "concurrency": 1,
+      "ops_per_sec": 3312913.020607458,
+      "bandwidth_mb_s": 848.1057332755092
+    },
+    {
+      "benchmark": "pipelined_batch_b256",
+      "size": 256,
+      "concurrency": 2,
+      "ops_per_sec": 6629563.897963968,
+      "bandwidth_mb_s": 1697.1683578787759
+    },
+    {
+      "benchmark": "pipelined_batch_b256",
+      "size": 256,
+      "concurrency": 4,
+      "ops_per_sec": 11101923.273769828,
+      "bandwidth_mb_s": 2842.092358085076
+    },
+    {
+      "benchmark": "pipelined_batch_b256",
+      "size": 256,
+      "concurrency": 8,
+      "ops_per_sec": 16386564.519196006,
+      "bandwidth_mb_s": 4194.960516914178
+    },
+    {
+      "benchmark": "pipelined_batch_b256",
+      "size": 256,
+      "concurrency": 16,
+      "ops_per_sec": 17852089.58011188,
+      "bandwidth_mb_s": 4570.134932508641
+    },
+    {
+      "benchmark": "pipelined_batch_b256",
+      "size": 256,
+      "concurrency": 32,
+      "ops_per_sec": 19341676.328480396,
+      "bandwidth_mb_s": 4951.469140090981
+    },
+    {
+      "benchmark": "pipelined_batch_b4",
+      "size": 1024,
+      "concurrency": 1,
+      "ops_per_sec": 2640343.033366895,
+      "bandwidth_mb_s": 2703.7112661677
+    },
+    {
+      "benchmark": "pipelined_batch_b4",
+      "size": 1024,
+      "concurrency": 2,
+      "ops_per_sec": 5446375.89070939,
+      "bandwidth_mb_s": 5577.088912086415
+    },
+    {
+      "benchmark": "pipelined_batch_b4",
+      "size": 1024,
+      "concurrency": 4,
+      "ops_per_sec": 3328095.281149169,
+      "bandwidth_mb_s": 3407.969567896749
+    },
+    {
+      "benchmark": "pipelined_batch_b4",
+      "size": 1024,
+      "concurrency": 8,
+      "ops_per_sec": 4608986.986909325,
+      "bandwidth_mb_s": 4719.602674595149
+    },
+    {
+      "benchmark": "pipelined_batch_b4",
+      "size": 1024,
+      "concurrency": 16,
+      "ops_per_sec": 5654536.115993384,
+      "bandwidth_mb_s": 5790.244982777225
+    },
+    {
+      "benchmark": "pipelined_batch_b4",
+      "size": 1024,
+      "concurrency": 32,
+      "ops_per_sec": 6123861.216974526,
+      "bandwidth_mb_s": 6270.833886181915
+    },
+    {
+      "benchmark": "pipelined_batch_b8",
+      "size": 1024,
+      "concurrency": 1,
+      "ops_per_sec": 2013056.6856632116,
+      "bandwidth_mb_s": 2061.370046119129
+    },
+    {
+      "benchmark": "pipelined_batch_b8",
+      "size": 1024,
+      "concurrency": 2,
+      "ops_per_sec": 4270807.641756114,
+      "bandwidth_mb_s": 4373.30702515826
+    },
+    {
+      "benchmark": "pipelined_batch_b8",
+      "size": 1024,
+      "concurrency": 4,
+      "ops_per_sec": 4331292.632778032,
+      "bandwidth_mb_s": 4435.243655964705
+    },
+    {
+      "benchmark": "pipelined_batch_b8",
+      "size": 1024,
+      "concurrency": 8,
+      "ops_per_sec": 5912503.812333187,
+      "bandwidth_mb_s": 6054.403903829184
+    },
+    {
+      "benchmark": "pipelined_batch_b8",
+      "size": 1024,
+      "concurrency": 16,
+      "ops_per_sec": 5056589.557889733,
+      "bandwidth_mb_s": 5177.947707279087
+    },
+    {
+      "benchmark": "pipelined_batch_b8",
+      "size": 1024,
+      "concurrency": 32,
+      "ops_per_sec": 6341702.001837508,
+      "bandwidth_mb_s": 6493.902849881608
+    },
+    {
+      "benchmark": "pipelined_batch_b16",
+      "size": 1024,
+      "concurrency": 1,
+      "ops_per_sec": 2593116.7983564823,
+      "bandwidth_mb_s": 2655.351601517038
+    },
+    {
+      "benchmark": "pipelined_batch_b16",
+      "size": 1024,
+      "concurrency": 2,
+      "ops_per_sec": 5186526.958918816,
+      "bandwidth_mb_s": 5311.003605932868
+    },
+    {
+      "benchmark": "pipelined_batch_b16",
+      "size": 1024,
+      "concurrency": 4,
+      "ops_per_sec": 6905878.629183092,
+      "bandwidth_mb_s": 7071.619716283486
+    },
+    {
+      "benchmark": "pipelined_batch_b16",
+      "size": 1024,
+      "concurrency": 8,
+      "ops_per_sec": 5634919.218737233,
+      "bandwidth_mb_s": 5770.157279986927
+    },
+    {
+      "benchmark": "pipelined_batch_b16",
+      "size": 1024,
+      "concurrency": 16,
+      "ops_per_sec": 6315162.943044861,
+      "bandwidth_mb_s": 6466.7268536779375
+    },
+    {
+      "benchmark": "pipelined_batch_b16",
+      "size": 1024,
+      "concurrency": 32,
+      "ops_per_sec": 8289598.50538539,
+      "bandwidth_mb_s": 8488.54886951464
+    },
+    {
+      "benchmark": "pipelined_batch_b32",
+      "size": 1024,
+      "concurrency": 1,
+      "ops_per_sec": 8460561.226041079,
+      "bandwidth_mb_s": 8663.614695466065
+    },
+    {
+      "benchmark": "pipelined_batch_b32",
+      "size": 1024,
+      "concurrency": 2,
+      "ops_per_sec": 10671186.506996075,
+      "bandwidth_mb_s": 10927.29498316398
+    },
+    {
+      "benchmark": "pipelined_batch_b32",
+      "size": 1024,
+      "concurrency": 4,
+      "ops_per_sec": 5092971.126885646,
+      "bandwidth_mb_s": 5215.202433930902
+    },
+    {
+      "benchmark": "pipelined_batch_b32",
+      "size": 1024,
+      "concurrency": 8,
+      "ops_per_sec": 7764991.873855118,
+      "bandwidth_mb_s": 7951.35167882764
+    },
+    {
+      "benchmark": "pipelined_batch_b32",
+      "size": 1024,
+      "concurrency": 16,
+      "ops_per_sec": 8406996.723022737,
+      "bandwidth_mb_s": 8608.764644375282
+    },
+    {
+      "benchmark": "pipelined_batch_b32",
+      "size": 1024,
+      "concurrency": 32,
+      "ops_per_sec": 7372469.524630076,
+      "bandwidth_mb_s": 7549.408793221198
+    },
+    {
+      "benchmark": "pipelined_batch_b64",
+      "size": 1024,
+      "concurrency": 1,
+      "ops_per_sec": 3052430.404706008,
+      "bandwidth_mb_s": 3125.688734418952
+    },
+    {
+      "benchmark": "pipelined_batch_b64",
+      "size": 1024,
+      "concurrency": 2,
+      "ops_per_sec": 3314121.8408241435,
+      "bandwidth_mb_s": 3393.6607650039227
+    },
+    {
+      "benchmark": "pipelined_batch_b64",
+      "size": 1024,
+      "concurrency": 4,
+      "ops_per_sec": 5951655.077781623,
+      "bandwidth_mb_s": 6094.4947996483825
+    },
+    {
+      "benchmark": "pipelined_batch_b64",
+      "size": 1024,
+      "concurrency": 8,
+      "ops_per_sec": 7360048.110181146,
+      "bandwidth_mb_s": 7536.689264825493
+    },
+    {
+      "benchmark": "pipelined_batch_b64",
+      "size": 1024,
+      "concurrency": 16,
+      "ops_per_sec": 8939715.309178656,
+      "bandwidth_mb_s": 9154.268476598943
+    },
+    {
+      "benchmark": "pipelined_batch_b64",
+      "size": 1024,
+      "concurrency": 32,
+      "ops_per_sec": 8683465.433566334,
+      "bandwidth_mb_s": 8891.868603971925
+    },
+    {
+      "benchmark": "pipelined_batch_b128",
+      "size": 1024,
+      "concurrency": 1,
+      "ops_per_sec": 12785288.39482036,
+      "bandwidth_mb_s": 13092.13531629605
+    },
+    {
+      "benchmark": "pipelined_batch_b128",
+      "size": 1024,
+      "concurrency": 2,
+      "ops_per_sec": 6303988.365989471,
+      "bandwidth_mb_s": 6455.284086773218
+    },
+    {
+      "benchmark": "pipelined_batch_b128",
+      "size": 1024,
+      "concurrency": 4,
+      "ops_per_sec": 6942580.986201584,
+      "bandwidth_mb_s": 7109.202929870422
+    },
+    {
+      "benchmark": "pipelined_batch_b128",
+      "size": 1024,
+      "concurrency": 8,
+      "ops_per_sec": 9108351.238517547,
+      "bandwidth_mb_s": 9326.951668241969
+    },
+    {
+      "benchmark": "pipelined_batch_b128",
+      "size": 1024,
+      "concurrency": 16,
+      "ops_per_sec": 7495449.734987054,
+      "bandwidth_mb_s": 7675.340528626743
+    },
+    {
+      "benchmark": "pipelined_batch_b128",
+      "size": 1024,
+      "concurrency": 32,
+      "ops_per_sec": 7346524.783845726,
+      "bandwidth_mb_s": 7522.841378658024
+    },
+    {
+      "benchmark": "pipelined_batch_b256",
+      "size": 1024,
+      "concurrency": 1,
+      "ops_per_sec": 3299538.1999846236,
+      "bandwidth_mb_s": 3378.7271167842546
+    },
+    {
+      "benchmark": "pipelined_batch_b256",
+      "size": 1024,
+      "concurrency": 2,
+      "ops_per_sec": 6525459.90600245,
+      "bandwidth_mb_s": 6682.070943746508
+    },
+    {
+      "benchmark": "pipelined_batch_b256",
+      "size": 1024,
+      "concurrency": 4,
+      "ops_per_sec": 11354330.160828024,
+      "bandwidth_mb_s": 11626.834084687896
+    },
+    {
+      "benchmark": "pipelined_batch_b256",
+      "size": 1024,
+      "concurrency": 8,
+      "ops_per_sec": 10500415.627779515,
+      "bandwidth_mb_s": 10752.425602846224
+    },
+    {
+      "benchmark": "pipelined_batch_b256",
+      "size": 1024,
+      "concurrency": 16,
+      "ops_per_sec": 8881152.315636154,
+      "bandwidth_mb_s": 9094.299971211422
+    },
+    {
+      "benchmark": "pipelined_batch_b256",
+      "size": 1024,
+      "concurrency": 32,
+      "ops_per_sec": 7594902.084158814,
+      "bandwidth_mb_s": 7777.179734178625
+    },
+    {
+      "benchmark": "pipelined_batch_b4",
+      "size": 4096,
+      "concurrency": 1,
+      "ops_per_sec": 1475599.4868848717,
+      "bandwidth_mb_s": 6044.055498280434
+    },
+    {
+      "benchmark": "pipelined_batch_b4",
+      "size": 4096,
+      "concurrency": 2,
+      "ops_per_sec": 2618288.834787284,
+      "bandwidth_mb_s": 10724.511067288715
+    },
+    {
+      "benchmark": "pipelined_batch_b4",
+      "size": 4096,
+      "concurrency": 4,
+      "ops_per_sec": 3785761.2471811855,
+      "bandwidth_mb_s": 15506.478068454137
+    },
+    {
+      "benchmark": "pipelined_batch_b4",
+      "size": 4096,
+      "concurrency": 8,
+      "ops_per_sec": 5663203.617654471,
+      "bandwidth_mb_s": 23196.482017912713
+    },
+    {
+      "benchmark": "pipelined_batch_b4",
+      "size": 4096,
+      "concurrency": 16,
+      "ops_per_sec": 7151234.303040705,
+      "bandwidth_mb_s": 29291.455705254728
+    },
+    {
+      "benchmark": "pipelined_batch_b4",
+      "size": 4096,
+      "concurrency": 32,
+      "ops_per_sec": 6223824.280694475,
+      "bandwidth_mb_s": 25492.78425372457
+    },
+    {
+      "benchmark": "pipelined_batch_b8",
+      "size": 4096,
+      "concurrency": 1,
+      "ops_per_sec": 1822810.7909487418,
+      "bandwidth_mb_s": 7466.232999726047
+    },
+    {
+      "benchmark": "pipelined_batch_b8",
+      "size": 4096,
+      "concurrency": 2,
+      "ops_per_sec": 3041334.781008689,
+      "bandwidth_mb_s": 12457.307263011591
+    },
+    {
+      "benchmark": "pipelined_batch_b8",
+      "size": 4096,
+      "concurrency": 4,
+      "ops_per_sec": 3547317.370799311,
+      "bandwidth_mb_s": 14529.811950793977
+    },
+    {
+      "benchmark": "pipelined_batch_b8",
+      "size": 4096,
+      "concurrency": 8,
+      "ops_per_sec": 5448822.952076921,
+      "bandwidth_mb_s": 22318.37881170707
+    },
+    {
+      "benchmark": "pipelined_batch_b8",
+      "size": 4096,
+      "concurrency": 16,
+      "ops_per_sec": 6956233.408296409,
+      "bandwidth_mb_s": 28492.732040382092
+    },
+    {
+      "benchmark": "pipelined_batch_b8",
+      "size": 4096,
+      "concurrency": 32,
+      "ops_per_sec": 6369624.534519782,
+      "bandwidth_mb_s": 26089.982093393028
+    },
+    {
+      "benchmark": "pipelined_batch_b16",
+      "size": 4096,
+      "concurrency": 1,
+      "ops_per_sec": 2029984.735360617,
+      "bandwidth_mb_s": 8314.817476037088
+    },
+    {
+      "benchmark": "pipelined_batch_b16",
+      "size": 4096,
+      "concurrency": 2,
+      "ops_per_sec": 3592004.557056448,
+      "bandwidth_mb_s": 14712.85066570321
+    },
+    {
+      "benchmark": "pipelined_batch_b16",
+      "size": 4096,
+      "concurrency": 4,
+      "ops_per_sec": 3552982.669734865,
+      "bandwidth_mb_s": 14553.017015234007
+    },
+    {
+      "benchmark": "pipelined_batch_b16",
+      "size": 4096,
+      "concurrency": 8,
+      "ops_per_sec": 5229509.555893707,
+      "bandwidth_mb_s": 21420.071140940625
+    },
+    {
+      "benchmark": "pipelined_batch_b16",
+      "size": 4096,
+      "concurrency": 16,
+      "ops_per_sec": 5925462.861976342,
+      "bandwidth_mb_s": 24270.695882655098
+    },
+    {
+      "benchmark": "pipelined_batch_b16",
+      "size": 4096,
+      "concurrency": 32,
+      "ops_per_sec": 4044470.2990953196,
+      "bandwidth_mb_s": 16566.15034509443
+    },
+    {
+      "benchmark": "pipelined_batch_b32",
+      "size": 4096,
+      "concurrency": 1,
+      "ops_per_sec": 2440667.5622391202,
+      "bandwidth_mb_s": 9996.974334931436
+    },
+    {
+      "benchmark": "pipelined_batch_b32",
+      "size": 4096,
+      "concurrency": 2,
+      "ops_per_sec": 3319546.6107913204,
+      "bandwidth_mb_s": 13596.862917801249
+    },
+    {
+      "benchmark": "pipelined_batch_b32",
+      "size": 4096,
+      "concurrency": 4,
+      "ops_per_sec": 4011324.3027837835,
+      "bandwidth_mb_s": 16430.38434420238
+    },
+    {
+      "benchmark": "pipelined_batch_b32",
+      "size": 4096,
+      "concurrency": 8,
+      "ops_per_sec": 5855640.885255789,
+      "bandwidth_mb_s": 23984.705066007715
+    },
+    {
+      "benchmark": "pipelined_batch_b32",
+      "size": 4096,
+      "concurrency": 16,
+      "ops_per_sec": 4948429.121175483,
+      "bandwidth_mb_s": 20268.765680334778
+    },
+    {
+      "benchmark": "pipelined_batch_b32",
+      "size": 4096,
+      "concurrency": 32,
+      "ops_per_sec": 3765778.316946575,
+      "bandwidth_mb_s": 15424.62798621317
+    },
+    {
+      "benchmark": "pipelined_batch_b64",
+      "size": 4096,
+      "concurrency": 1,
+      "ops_per_sec": 2859225.1559394593,
+      "bandwidth_mb_s": 11711.386238728026
+    },
+    {
+      "benchmark": "pipelined_batch_b64",
+      "size": 4096,
+      "concurrency": 2,
+      "ops_per_sec": 2995960.6959916293,
+      "bandwidth_mb_s": 12271.455010781714
+    },
+    {
+      "benchmark": "pipelined_batch_b64",
+      "size": 4096,
+      "concurrency": 4,
+      "ops_per_sec": 5229128.708956991,
+      "bandwidth_mb_s": 21418.511191887836
+    },
+    {
+      "benchmark": "pipelined_batch_b64",
+      "size": 4096,
+      "concurrency": 8,
+      "ops_per_sec": 5986709.1315586185,
+      "bandwidth_mb_s": 24521.5606028641
+    },
+    {
+      "benchmark": "pipelined_batch_b64",
+      "size": 4096,
+      "concurrency": 16,
+      "ops_per_sec": 3803772.56578169,
+      "bandwidth_mb_s": 15580.252429441804
+    },
+    {
+      "benchmark": "pipelined_batch_b64",
+      "size": 4096,
+      "concurrency": 32,
+      "ops_per_sec": 4386142.35786997,
+      "bandwidth_mb_s": 17965.639097835396
+    },
+    {
+      "benchmark": "pipelined_batch_b128",
+      "size": 4096,
+      "concurrency": 1,
+      "ops_per_sec": 3042434.6906136274,
+      "bandwidth_mb_s": 12461.812492753417
+    },
+    {
+      "benchmark": "pipelined_batch_b128",
+      "size": 4096,
+      "concurrency": 2,
+      "ops_per_sec": 3949339.4369825814,
+      "bandwidth_mb_s": 16176.494333880653
+    },
+    {
+      "benchmark": "pipelined_batch_b128",
+      "size": 4096,
+      "concurrency": 4,
+      "ops_per_sec": 5865452.118901451,
+      "bandwidth_mb_s": 24024.891879020342
+    },
+    {
+      "benchmark": "pipelined_batch_b128",
+      "size": 4096,
+      "concurrency": 8,
+      "ops_per_sec": 5864553.912248497,
+      "bandwidth_mb_s": 24021.212824569844
+    },
+    {
+      "benchmark": "pipelined_batch_b128",
+      "size": 4096,
+      "concurrency": 16,
+      "ops_per_sec": 4598623.627158158,
+      "bandwidth_mb_s": 18835.962376839816
+    },
+    {
+      "benchmark": "pipelined_batch_b128",
+      "size": 4096,
+      "concurrency": 32,
+      "ops_per_sec": 3252795.775851639,
+      "bandwidth_mb_s": 13323.451497888313
+    },
+    {
+      "benchmark": "pipelined_batch_b256",
+      "size": 4096,
+      "concurrency": 1,
+      "ops_per_sec": 3224922.6997996345,
+      "bandwidth_mb_s": 13209.283378379303
+    },
+    {
+      "benchmark": "pipelined_batch_b256",
+      "size": 4096,
+      "concurrency": 2,
+      "ops_per_sec": 4806996.282652132,
+      "bandwidth_mb_s": 19689.456773743135
+    },
+    {
+      "benchmark": "pipelined_batch_b256",
+      "size": 4096,
+      "concurrency": 4,
+      "ops_per_sec": 4985004.839316774,
+      "bandwidth_mb_s": 20418.579821841508
+    },
+    {
+      "benchmark": "pipelined_batch_b256",
+      "size": 4096,
+      "concurrency": 8,
+      "ops_per_sec": 4647631.103334371,
+      "bandwidth_mb_s": 19036.696999257583
+    },
+    {
+      "benchmark": "pipelined_batch_b256",
+      "size": 4096,
+      "concurrency": 16,
+      "ops_per_sec": 5147814.810257847,
+      "bandwidth_mb_s": 21085.449462816145
+    },
+    {
+      "benchmark": "pipelined_batch_b256",
+      "size": 4096,
+      "concurrency": 32,
+      "ops_per_sec": 4768549.06444886,
+      "bandwidth_mb_s": 19531.97696798253
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 128,
+      "concurrency": 1,
+      "ops_per_sec": 1701952.877463364,
+      "bandwidth_mb_s": 217.8499683153106
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 128,
+      "concurrency": 2,
+      "ops_per_sec": 2592139.7681763,
+      "bandwidth_mb_s": 331.7938903265664
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 128,
+      "concurrency": 4,
+      "ops_per_sec": 2557503.876216812,
+      "bandwidth_mb_s": 327.36049615575195
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 128,
+      "concurrency": 8,
+      "ops_per_sec": 3538986.8057724414,
+      "bandwidth_mb_s": 452.9903111388725
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 128,
+      "concurrency": 16,
+      "ops_per_sec": 3752263.6703173583,
+      "bandwidth_mb_s": 480.28974980062185
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 128,
+      "concurrency": 32,
+      "ops_per_sec": 4574809.355542317,
+      "bandwidth_mb_s": 585.5755975094165
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 128,
+      "concurrency": 64,
+      "ops_per_sec": 4741679.241995156,
+      "bandwidth_mb_s": 606.93494297538
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 128,
+      "concurrency": 128,
+      "ops_per_sec": 5011513.953307725,
+      "bandwidth_mb_s": 641.4737860233887
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 256,
+      "concurrency": 1,
+      "ops_per_sec": 1619011.9493875278,
+      "bandwidth_mb_s": 414.4670590432071
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 256,
+      "concurrency": 2,
+      "ops_per_sec": 2581258.0018998063,
+      "bandwidth_mb_s": 660.8020484863504
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 256,
+      "concurrency": 4,
+      "ops_per_sec": 3006405.8993700827,
+      "bandwidth_mb_s": 769.6399102387412
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 256,
+      "concurrency": 8,
+      "ops_per_sec": 3519815.6085929843,
+      "bandwidth_mb_s": 901.072795799804
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 256,
+      "concurrency": 16,
+      "ops_per_sec": 4096589.7341338866,
+      "bandwidth_mb_s": 1048.726971938275
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 256,
+      "concurrency": 32,
+      "ops_per_sec": 4484583.333858871,
+      "bandwidth_mb_s": 1148.053333467871
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 256,
+      "concurrency": 64,
+      "ops_per_sec": 4821785.913659745,
+      "bandwidth_mb_s": 1234.3771938968946
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 256,
+      "concurrency": 128,
+      "ops_per_sec": 5014988.285039606,
+      "bandwidth_mb_s": 1283.8370009701391
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 1024,
+      "concurrency": 1,
+      "ops_per_sec": 1425925.3185873644,
+      "bandwidth_mb_s": 1460.1475262334611
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 1024,
+      "concurrency": 2,
+      "ops_per_sec": 1894287.995549686,
+      "bandwidth_mb_s": 1939.7509074428785
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 1024,
+      "concurrency": 4,
+      "ops_per_sec": 2316349.2174407197,
+      "bandwidth_mb_s": 2371.941598659297
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 1024,
+      "concurrency": 8,
+      "ops_per_sec": 2989501.990074106,
+      "bandwidth_mb_s": 3061.2500378358845
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 1024,
+      "concurrency": 16,
+      "ops_per_sec": 3864305.8656057213,
+      "bandwidth_mb_s": 3957.0492063802585
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 1024,
+      "concurrency": 32,
+      "ops_per_sec": 4358629.882857282,
+      "bandwidth_mb_s": 4463.237000045857
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 1024,
+      "concurrency": 64,
+      "ops_per_sec": 4671385.544631002,
+      "bandwidth_mb_s": 4783.498797702146
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 1024,
+      "concurrency": 128,
+      "ops_per_sec": 4879830.178859882,
+      "bandwidth_mb_s": 4996.946103152519
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 4096,
+      "concurrency": 1,
+      "ops_per_sec": 897974.797439335,
+      "bandwidth_mb_s": 3678.1047703115164
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 4096,
+      "concurrency": 2,
+      "ops_per_sec": 1414337.1355429993,
+      "bandwidth_mb_s": 5793.124907184125
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 4096,
+      "concurrency": 4,
+      "ops_per_sec": 2049046.3140815757,
+      "bandwidth_mb_s": 8392.893702478133
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 4096,
+      "concurrency": 8,
+      "ops_per_sec": 2892046.762950133,
+      "bandwidth_mb_s": 11845.823541043745
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 4096,
+      "concurrency": 16,
+      "ops_per_sec": 3591426.994407325,
+      "bandwidth_mb_s": 14710.484969092404
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 4096,
+      "concurrency": 32,
+      "ops_per_sec": 3924622.3940916117,
+      "bandwidth_mb_s": 16075.253326199241
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 4096,
+      "concurrency": 64,
+      "ops_per_sec": 4181631.699259836,
+      "bandwidth_mb_s": 17127.96344016829
+    },
+    {
+      "benchmark": "burst_memmove",
+      "size": 4096,
+      "concurrency": 128,
+      "ops_per_sec": 4355829.0350715695,
+      "bandwidth_mb_s": 17841.47572765315
+    },
+    {
+      "benchmark": "burst_batch_b4",
+      "size": 128,
+      "concurrency": 1,
+      "ops_per_sec": 3015355.6988966316,
+      "bandwidth_mb_s": 385.96552945876886
+    },
+    {
+      "benchmark": "burst_batch_b4",
+      "size": 128,
+      "concurrency": 2,
+      "ops_per_sec": 4904646.519059967,
+      "bandwidth_mb_s": 627.7947544396758
+    },
+    {
+      "benchmark": "burst_batch_b4",
+      "size": 128,
+      "concurrency": 4,
+      "ops_per_sec": 3569963.398950252,
+      "bandwidth_mb_s": 456.9553150656323
+    },
+    {
+      "benchmark": "burst_batch_b4",
+      "size": 128,
+      "concurrency": 8,
+      "ops_per_sec": 5421069.426789107,
+      "bandwidth_mb_s": 693.8968866290056
+    },
+    {
+      "benchmark": "burst_batch_b4",
+      "size": 128,
+      "concurrency": 16,
+      "ops_per_sec": 5501954.798690351,
+      "bandwidth_mb_s": 704.2502142323649
+    },
+    {
+      "benchmark": "burst_batch_b4",
+      "size": 128,
+      "concurrency": 32,
+      "ops_per_sec": 6460099.381226784,
+      "bandwidth_mb_s": 826.8927207970283
+    },
+    {
+      "benchmark": "burst_batch_b8",
+      "size": 128,
+      "concurrency": 1,
+      "ops_per_sec": 4869951.990389962,
+      "bandwidth_mb_s": 623.3538547699151
+    },
+    {
+      "benchmark": "burst_batch_b8",
+      "size": 128,
+      "concurrency": 2,
+      "ops_per_sec": 7435271.316148356,
+      "bandwidth_mb_s": 951.7147284669895
+    },
+    {
+      "benchmark": "burst_batch_b8",
+      "size": 128,
+      "concurrency": 4,
+      "ops_per_sec": 5243896.923340127,
+      "bandwidth_mb_s": 671.2188061875362
+    },
+    {
+      "benchmark": "burst_batch_b8",
+      "size": 128,
+      "concurrency": 8,
+      "ops_per_sec": 5750179.842864357,
+      "bandwidth_mb_s": 736.0230198866377
+    },
+    {
+      "benchmark": "burst_batch_b8",
+      "size": 128,
+      "concurrency": 16,
+      "ops_per_sec": 6916209.633988243,
+      "bandwidth_mb_s": 885.274833150495
+    },
+    {
+      "benchmark": "burst_batch_b8",
+      "size": 128,
+      "concurrency": 32,
+      "ops_per_sec": 7164358.280266319,
+      "bandwidth_mb_s": 917.0378598740889
+    },
+    {
+      "benchmark": "burst_batch_b16",
+      "size": 128,
+      "concurrency": 1,
+      "ops_per_sec": 7961870.6016885135,
+      "bandwidth_mb_s": 1019.1194370161297
+    },
+    {
+      "benchmark": "burst_batch_b16",
+      "size": 128,
+      "concurrency": 2,
+      "ops_per_sec": 10956917.855530297,
+      "bandwidth_mb_s": 1402.4854855078781
+    },
+    {
+      "benchmark": "burst_batch_b16",
+      "size": 128,
+      "concurrency": 4,
+      "ops_per_sec": 6867295.41763618,
+      "bandwidth_mb_s": 879.0138134574311
+    },
+    {
+      "benchmark": "burst_batch_b16",
+      "size": 128,
+      "concurrency": 8,
+      "ops_per_sec": 5892019.626133248,
+      "bandwidth_mb_s": 754.1785121450557
+    },
+    {
+      "benchmark": "burst_batch_b16",
+      "size": 128,
+      "concurrency": 16,
+      "ops_per_sec": 7973953.992964211,
+      "bandwidth_mb_s": 1020.666111099419
+    },
+    {
+      "benchmark": "burst_batch_b16",
+      "size": 128,
+      "concurrency": 32,
+      "ops_per_sec": 7385059.375805262,
+      "bandwidth_mb_s": 945.2876001030735
+    },
+    {
+      "benchmark": "burst_batch_b32",
+      "size": 128,
+      "concurrency": 1,
+      "ops_per_sec": 10411654.024641132,
+      "bandwidth_mb_s": 1332.691715154065
+    },
+    {
+      "benchmark": "burst_batch_b32",
+      "size": 128,
+      "concurrency": 2,
+      "ops_per_sec": 14404425.399593389,
+      "bandwidth_mb_s": 1843.7664511479538
+    },
+    {
+      "benchmark": "burst_batch_b32",
+      "size": 128,
+      "concurrency": 4,
+      "ops_per_sec": 10206939.586586518,
+      "bandwidth_mb_s": 1306.4882670830743
+    },
+    {
+      "benchmark": "burst_batch_b32",
+      "size": 128,
+      "concurrency": 8,
+      "ops_per_sec": 7680378.181821673,
+      "bandwidth_mb_s": 983.0884072731742
+    },
+    {
+      "benchmark": "burst_batch_b32",
+      "size": 128,
+      "concurrency": 16,
+      "ops_per_sec": 10389163.593735598,
+      "bandwidth_mb_s": 1329.8129399981565
+    },
+    {
+      "benchmark": "burst_batch_b32",
+      "size": 128,
+      "concurrency": 32,
+      "ops_per_sec": 11339321.560639536,
+      "bandwidth_mb_s": 1451.4331597618607
+    },
+    {
+      "benchmark": "burst_batch_b64",
+      "size": 128,
+      "concurrency": 1,
+      "ops_per_sec": 13304903.34195611,
+      "bandwidth_mb_s": 1703.0276277703822
+    },
+    {
+      "benchmark": "burst_batch_b64",
+      "size": 128,
+      "concurrency": 2,
+      "ops_per_sec": 18458797.152672857,
+      "bandwidth_mb_s": 2362.726035542126
+    },
+    {
+      "benchmark": "burst_batch_b64",
+      "size": 128,
+      "concurrency": 4,
+      "ops_per_sec": 18384093.259058084,
+      "bandwidth_mb_s": 2353.1639371594347
+    },
+    {
+      "benchmark": "burst_batch_b64",
+      "size": 128,
+      "concurrency": 8,
+      "ops_per_sec": 19810851.509993806,
+      "bandwidth_mb_s": 2535.7889932792073
+    },
+    {
+      "benchmark": "burst_batch_b64",
+      "size": 128,
+      "concurrency": 16,
+      "ops_per_sec": 19496049.460665144,
+      "bandwidth_mb_s": 2495.4943309651385
+    },
+    {
+      "benchmark": "burst_batch_b64",
+      "size": 128,
+      "concurrency": 32,
+      "ops_per_sec": 13830986.297425315,
+      "bandwidth_mb_s": 1770.3662460704402
+    },
+    {
+      "benchmark": "burst_batch_b128",
+      "size": 128,
+      "concurrency": 1,
+      "ops_per_sec": 11809553.602871837,
+      "bandwidth_mb_s": 1511.6228611675951
+    },
+    {
+      "benchmark": "burst_batch_b128",
+      "size": 128,
+      "concurrency": 2,
+      "ops_per_sec": 20755913.056939524,
+      "bandwidth_mb_s": 2656.756871288259
+    },
+    {
+      "benchmark": "burst_batch_b128",
+      "size": 128,
+      "concurrency": 4,
+      "ops_per_sec": 25258657.865427658,
+      "bandwidth_mb_s": 3233.10820677474
+    },
+    {
+      "benchmark": "burst_batch_b128",
+      "size": 128,
+      "concurrency": 8,
+      "ops_per_sec": 18346177.718097758,
+      "bandwidth_mb_s": 2348.310747916513
+    },
+    {
+      "benchmark": "burst_batch_b128",
+      "size": 128,
+      "concurrency": 16,
+      "ops_per_sec": 15352508.35973316,
+      "bandwidth_mb_s": 1965.1210700458446
+    },
+    {
+      "benchmark": "burst_batch_b128",
+      "size": 128,
+      "concurrency": 32,
+      "ops_per_sec": 15571485.354597943,
+      "bandwidth_mb_s": 1993.1501253885367
+    },
+    {
+      "benchmark": "burst_batch_b256",
+      "size": 128,
+      "concurrency": 1,
+      "ops_per_sec": 15443697.42708001,
+      "bandwidth_mb_s": 1976.7932706662411
+    },
+    {
+      "benchmark": "burst_batch_b256",
+      "size": 128,
+      "concurrency": 2,
+      "ops_per_sec": 24125674.40762595,
+      "bandwidth_mb_s": 3088.0863241761217
+    },
+    {
+      "benchmark": "burst_batch_b256",
+      "size": 128,
+      "concurrency": 4,
+      "ops_per_sec": 24111073.87795503,
+      "bandwidth_mb_s": 3086.2174563782437
+    },
+    {
+      "benchmark": "burst_batch_b256",
+      "size": 128,
+      "concurrency": 8,
+      "ops_per_sec": 22161663.281019315,
+      "bandwidth_mb_s": 2836.6928999704724
+    },
+    {
+      "benchmark": "burst_batch_b256",
+      "size": 128,
+      "concurrency": 16,
+      "ops_per_sec": 16365606.760024834,
+      "bandwidth_mb_s": 2094.797665283179
+    },
+    {
+      "benchmark": "burst_batch_b256",
+      "size": 128,
+      "concurrency": 32,
+      "ops_per_sec": 17906443.671278782,
+      "bandwidth_mb_s": 2292.0247899236842
+    },
+    {
+      "benchmark": "burst_batch_b4",
+      "size": 256,
+      "concurrency": 1,
+      "ops_per_sec": 3033332.5328705814,
+      "bandwidth_mb_s": 776.5331284148689
+    },
+    {
+      "benchmark": "burst_batch_b4",
+      "size": 256,
+      "concurrency": 2,
+      "ops_per_sec": 4525539.59988573,
+      "bandwidth_mb_s": 1158.5381375707468
+    },
+    {
+      "benchmark": "burst_batch_b4",
+      "size": 256,
+      "concurrency": 4,
+      "ops_per_sec": 3530139.077183402,
+      "bandwidth_mb_s": 903.7156037589509
+    },
+    {
+      "benchmark": "burst_batch_b4",
+      "size": 256,
+      "concurrency": 8,
+      "ops_per_sec": 5232062.120273554,
+      "bandwidth_mb_s": 1339.4079027900298
+    },
+    {
+      "benchmark": "burst_batch_b4",
+      "size": 256,
+      "concurrency": 16,
+      "ops_per_sec": 5483926.525666919,
+      "bandwidth_mb_s": 1403.885190570731
+    },
+    {
+      "benchmark": "burst_batch_b4",
+      "size": 256,
+      "concurrency": 32,
+      "ops_per_sec": 6104122.015040621,
+      "bandwidth_mb_s": 1562.655235850399
+    },
+    {
+      "benchmark": "burst_batch_b8",
+      "size": 256,
+      "concurrency": 1,
+      "ops_per_sec": 5207364.862915035,
+      "bandwidth_mb_s": 1333.085404906249
+    },
+    {
+      "benchmark": "burst_batch_b8",
+      "size": 256,
+      "concurrency": 2,
+      "ops_per_sec": 6530654.00554262,
+      "bandwidth_mb_s": 1671.8474254189107
+    },
+    {
+      "benchmark": "burst_batch_b8",
+      "size": 256,
+      "concurrency": 4,
+      "ops_per_sec": 4955491.6836267505,
+      "bandwidth_mb_s": 1268.605871008448
+    },
+    {
+      "benchmark": "burst_batch_b8",
+      "size": 256,
+      "concurrency": 8,
+      "ops_per_sec": 4648953.411627197,
+      "bandwidth_mb_s": 1190.1320733765624
+    },
+    {
+      "benchmark": "burst_batch_b8",
+      "size": 256,
+      "concurrency": 16,
+      "ops_per_sec": 6370418.5368296625,
+      "bandwidth_mb_s": 1630.8271454283936
+    },
+    {
+      "benchmark": "burst_batch_b8",
+      "size": 256,
+      "concurrency": 32,
+      "ops_per_sec": 7268616.993714208,
+      "bandwidth_mb_s": 1860.7659503908371
+    },
+    {
+      "benchmark": "burst_batch_b16",
+      "size": 256,
+      "concurrency": 1,
+      "ops_per_sec": 7645588.734225,
+      "bandwidth_mb_s": 1957.2707159616
+    },
+    {
+      "benchmark": "burst_batch_b16",
+      "size": 256,
+      "concurrency": 2,
+      "ops_per_sec": 10104141.066439465,
+      "bandwidth_mb_s": 2586.660113008503
+    },
+    {
+      "benchmark": "burst_batch_b16",
+      "size": 256,
+      "concurrency": 4,
+      "ops_per_sec": 5639139.978286374,
+      "bandwidth_mb_s": 1443.619834441312
+    },
+    {
+      "benchmark": "burst_batch_b16",
+      "size": 256,
+      "concurrency": 8,
+      "ops_per_sec": 6973707.1264567375,
+      "bandwidth_mb_s": 1785.2690243729248
+    },
+    {
+      "benchmark": "burst_batch_b16",
+      "size": 256,
+      "concurrency": 16,
+      "ops_per_sec": 8462616.046515035,
+      "bandwidth_mb_s": 2166.4297079078488
+    },
+    {
+      "benchmark": "burst_batch_b16",
+      "size": 256,
+      "concurrency": 32,
+      "ops_per_sec": 7779877.128996805,
+      "bandwidth_mb_s": 1991.6485450231821
+    },
+    {
+      "benchmark": "burst_batch_b32",
+      "size": 256,
+      "concurrency": 1,
+      "ops_per_sec": 10535467.321504492,
+      "bandwidth_mb_s": 2697.07963430515
+    },
+    {
+      "benchmark": "burst_batch_b32",
+      "size": 256,
+      "concurrency": 2,
+      "ops_per_sec": 13986262.576345325,
+      "bandwidth_mb_s": 3580.4832195444033
+    },
+    {
+      "benchmark": "burst_batch_b32",
+      "size": 256,
+      "concurrency": 4,
+      "ops_per_sec": 4945100.626101251,
+      "bandwidth_mb_s": 1265.9457602819202
+    },
+    {
+      "benchmark": "burst_batch_b32",
+      "size": 256,
+      "concurrency": 8,
+      "ops_per_sec": 9397632.900241544,
+      "bandwidth_mb_s": 2405.7940224618355
+    },
+    {
+      "benchmark": "burst_batch_b32",
+      "size": 256,
+      "concurrency": 16,
+      "ops_per_sec": 9970587.54569236,
+      "bandwidth_mb_s": 2552.4704116972443
+    },
+    {
+      "benchmark": "burst_batch_b32",
+      "size": 256,
+      "concurrency": 32,
+      "ops_per_sec": 12339756.195178213,
+      "bandwidth_mb_s": 3158.9775859656224
+    },
+    {
+      "benchmark": "burst_batch_b64",
+      "size": 256,
+      "concurrency": 1,
+      "ops_per_sec": 12866103.466389617,
+      "bandwidth_mb_s": 3293.722487395742
+    },
+    {
+      "benchmark": "burst_batch_b64",
+      "size": 256,
+      "concurrency": 2,
+      "ops_per_sec": 17920282.184710134,
+      "bandwidth_mb_s": 4587.592239285795
+    },
+    {
+      "benchmark": "burst_batch_b64",
+      "size": 256,
+      "concurrency": 4,
+      "ops_per_sec": 10265704.640038345,
+      "bandwidth_mb_s": 2628.0203878498164
+    },
+    {
+      "benchmark": "burst_batch_b64",
+      "size": 256,
+      "concurrency": 8,
+      "ops_per_sec": 11562965.348661007,
+      "bandwidth_mb_s": 2960.119129257218
+    },
+    {
+      "benchmark": "burst_batch_b64",
+      "size": 256,
+      "concurrency": 16,
+      "ops_per_sec": 14282219.312943239,
+      "bandwidth_mb_s": 3656.248144113469
+    },
+    {
+      "benchmark": "burst_batch_b64",
+      "size": 256,
+      "concurrency": 32,
+      "ops_per_sec": 15193569.337604493,
+      "bandwidth_mb_s": 3889.55375042675
+    },
+    {
+      "benchmark": "burst_batch_b128",
+      "size": 256,
+      "concurrency": 1,
+      "ops_per_sec": 13054902.630994644,
+      "bandwidth_mb_s": 3342.0550735346287
+    },
+    {
+      "benchmark": "burst_batch_b128",
+      "size": 256,
+      "concurrency": 2,
+      "ops_per_sec": 17025374.08105377,
+      "bandwidth_mb_s": 4358.495764749766
+    },
+    {
+      "benchmark": "burst_batch_b128",
+      "size": 256,
+      "concurrency": 4,
+      "ops_per_sec": 15409848.85777455,
+      "bandwidth_mb_s": 3944.921307590285
+    },
+    {
+      "benchmark": "burst_batch_b128",
+      "size": 256,
+      "concurrency": 8,
+      "ops_per_sec": 12763173.405355632,
+      "bandwidth_mb_s": 3267.3723917710417
+    },
+    {
+      "benchmark": "burst_batch_b128",
+      "size": 256,
+      "concurrency": 16,
+      "ops_per_sec": 13282033.92731703,
+      "bandwidth_mb_s": 3400.20068539316
+    },
+    {
+      "benchmark": "burst_batch_b128",
+      "size": 256,
+      "concurrency": 32,
+      "ops_per_sec": 15764650.598611547,
+      "bandwidth_mb_s": 4035.750553244556
+    },
+    {
+      "benchmark": "burst_batch_b256",
+      "size": 256,
+      "concurrency": 1,
+      "ops_per_sec": 14958816.79966282,
+      "bandwidth_mb_s": 3829.4571007136815
+    },
+    {
+      "benchmark": "burst_batch_b256",
+      "size": 256,
+      "concurrency": 2,
+      "ops_per_sec": 17043748.88441673,
+      "bandwidth_mb_s": 4363.199714410683
+    },
+    {
+      "benchmark": "burst_batch_b256",
+      "size": 256,
+      "concurrency": 4,
+      "ops_per_sec": 22364806.926194333,
+      "bandwidth_mb_s": 5725.390573105749
+    },
+    {
+      "benchmark": "burst_batch_b256",
+      "size": 256,
+      "concurrency": 8,
+      "ops_per_sec": 13558867.378551045,
+      "bandwidth_mb_s": 3471.0700489090677
+    },
+    {
+      "benchmark": "burst_batch_b256",
+      "size": 256,
+      "concurrency": 16,
+      "ops_per_sec": 15072097.854771066,
+      "bandwidth_mb_s": 3858.457050821393
+    },
+    {
+      "benchmark": "burst_batch_b256",
+      "size": 256,
+      "concurrency": 32,
+      "ops_per_sec": 16898093.747744504,
+      "bandwidth_mb_s": 4325.911999422593
+    },
+    {
+      "benchmark": "burst_batch_b4",
+      "size": 1024,
+      "concurrency": 1,
+      "ops_per_sec": 2871584.877946874,
+      "bandwidth_mb_s": 2940.502915017599
+    },
+    {
+      "benchmark": "burst_batch_b4",
+      "size": 1024,
+      "concurrency": 2,
+      "ops_per_sec": 4545757.595960943,
+      "bandwidth_mb_s": 4654.8557782640055
+    },
+    {
+      "benchmark": "burst_batch_b4",
+      "size": 1024,
+      "concurrency": 4,
+      "ops_per_sec": 3753166.440968439,
+      "bandwidth_mb_s": 3843.2424355516814
+    },
+    {
+      "benchmark": "burst_batch_b4",
+      "size": 1024,
+      "concurrency": 8,
+      "ops_per_sec": 4541410.711655143,
+      "bandwidth_mb_s": 4650.404568734866
+    },
+    {
+      "benchmark": "burst_batch_b4",
+      "size": 1024,
+      "concurrency": 16,
+      "ops_per_sec": 6532327.758592656,
+      "bandwidth_mb_s": 6689.1036247988795
+    },
+    {
+      "benchmark": "burst_batch_b4",
+      "size": 1024,
+      "concurrency": 32,
+      "ops_per_sec": 6892158.96305171,
+      "bandwidth_mb_s": 7057.570778164952
+    },
+    {
+      "benchmark": "burst_batch_b8",
+      "size": 1024,
+      "concurrency": 1,
+      "ops_per_sec": 4599421.086199284,
+      "bandwidth_mb_s": 4709.8071922680665
+    },
+    {
+      "benchmark": "burst_batch_b8",
+      "size": 1024,
+      "concurrency": 2,
+      "ops_per_sec": 3769340.5452335393,
+      "bandwidth_mb_s": 3859.8047183191443
+    },
+    {
+      "benchmark": "burst_batch_b8",
+      "size": 1024,
+      "concurrency": 4,
+      "ops_per_sec": 4407971.338635694,
+      "bandwidth_mb_s": 4513.762650762951
+    },
+    {
+      "benchmark": "burst_batch_b8",
+      "size": 1024,
+      "concurrency": 8,
+      "ops_per_sec": 5582682.936233026,
+      "bandwidth_mb_s": 5716.667326702619
+    },
+    {
+      "benchmark": "burst_batch_b8",
+      "size": 1024,
+      "concurrency": 16,
+      "ops_per_sec": 5684259.459562519,
+      "bandwidth_mb_s": 5820.681686592019
+    },
+    {
+      "benchmark": "burst_batch_b8",
+      "size": 1024,
+      "concurrency": 32,
+      "ops_per_sec": 7353543.974451491,
+      "bandwidth_mb_s": 7530.029029838326
+    },
+    {
+      "benchmark": "burst_batch_b16",
+      "size": 1024,
+      "concurrency": 1,
+      "ops_per_sec": 2619444.9145195996,
+      "bandwidth_mb_s": 2682.31159246807
+    },
+    {
+      "benchmark": "burst_batch_b16",
+      "size": 1024,
+      "concurrency": 2,
+      "ops_per_sec": 4996954.720459161,
+      "bandwidth_mb_s": 5116.881633750181
+    },
+    {
+      "benchmark": "burst_batch_b16",
+      "size": 1024,
+      "concurrency": 4,
+      "ops_per_sec": 4522187.867464567,
+      "bandwidth_mb_s": 4630.720376283716
+    },
+    {
+      "benchmark": "burst_batch_b16",
+      "size": 1024,
+      "concurrency": 8,
+      "ops_per_sec": 5543705.724162007,
+      "bandwidth_mb_s": 5676.754661541895
+    },
+    {
+      "benchmark": "burst_batch_b16",
+      "size": 1024,
+      "concurrency": 16,
+      "ops_per_sec": 6690200.2008436425,
+      "bandwidth_mb_s": 6850.7650056638895
+    },
+    {
+      "benchmark": "burst_batch_b16",
+      "size": 1024,
+      "concurrency": 32,
+      "ops_per_sec": 6458975.696022438,
+      "bandwidth_mb_s": 6613.991112726976
+    },
+    {
+      "benchmark": "burst_batch_b32",
+      "size": 1024,
+      "concurrency": 1,
+      "ops_per_sec": 8342981.35395811,
+      "bandwidth_mb_s": 8543.212906453105
+    },
+    {
+      "benchmark": "burst_batch_b32",
+      "size": 1024,
+      "concurrency": 2,
+      "ops_per_sec": 4784393.189805026,
+      "bandwidth_mb_s": 4899.218626360347
+    },
+    {
+      "benchmark": "burst_batch_b32",
+      "size": 1024,
+      "concurrency": 4,
+      "ops_per_sec": 3903019.6382262637,
+      "bandwidth_mb_s": 3996.692109543694
+    },
+    {
+      "benchmark": "burst_batch_b32",
+      "size": 1024,
+      "concurrency": 8,
+      "ops_per_sec": 5056223.460217177,
+      "bandwidth_mb_s": 5177.572823262389
+    },
+    {
+      "benchmark": "burst_batch_b32",
+      "size": 1024,
+      "concurrency": 16,
+      "ops_per_sec": 5861107.88408873,
+      "bandwidth_mb_s": 6001.77447330686
+    },
+    {
+      "benchmark": "burst_batch_b32",
+      "size": 1024,
+      "concurrency": 32,
+      "ops_per_sec": 8416393.783865249,
+      "bandwidth_mb_s": 8618.387234678015
+    },
+    {
+      "benchmark": "burst_batch_b64",
+      "size": 1024,
+      "concurrency": 1,
+      "ops_per_sec": 2962290.139100814,
+      "bandwidth_mb_s": 3033.3851024392334
+    },
+    {
+      "benchmark": "burst_batch_b64",
+      "size": 1024,
+      "concurrency": 2,
+      "ops_per_sec": 3211558.3180978764,
+      "bandwidth_mb_s": 3288.635717732225
+    },
+    {
+      "benchmark": "burst_batch_b64",
+      "size": 1024,
+      "concurrency": 4,
+      "ops_per_sec": 5701405.374153614,
+      "bandwidth_mb_s": 5838.239103133301
+    },
+    {
+      "benchmark": "burst_batch_b64",
+      "size": 1024,
+      "concurrency": 8,
+      "ops_per_sec": 5429853.715392782,
+      "bandwidth_mb_s": 5560.170204562209
+    },
+    {
+      "benchmark": "burst_batch_b64",
+      "size": 1024,
+      "concurrency": 16,
+      "ops_per_sec": 8268465.22293486,
+      "bandwidth_mb_s": 8466.908388285296
+    },
+    {
+      "benchmark": "burst_batch_b64",
+      "size": 1024,
+      "concurrency": 32,
+      "ops_per_sec": 10529485.007875374,
+      "bandwidth_mb_s": 10782.192648064383
+    },
+    {
+      "benchmark": "burst_batch_b128",
+      "size": 1024,
+      "concurrency": 1,
+      "ops_per_sec": 12711878.29356408,
+      "bandwidth_mb_s": 13016.963372609618
+    },
+    {
+      "benchmark": "burst_batch_b128",
+      "size": 1024,
+      "concurrency": 2,
+      "ops_per_sec": 16445983.904649612,
+      "bandwidth_mb_s": 16840.687518361203
+    },
+    {
+      "benchmark": "burst_batch_b128",
+      "size": 1024,
+      "concurrency": 4,
+      "ops_per_sec": 9173674.13532746,
+      "bandwidth_mb_s": 9393.842314575319
+    },
+    {
+      "benchmark": "burst_batch_b128",
+      "size": 1024,
+      "concurrency": 8,
+      "ops_per_sec": 7218819.490610535,
+      "bandwidth_mb_s": 7392.071158385188
+    },
+    {
+      "benchmark": "burst_batch_b128",
+      "size": 1024,
+      "concurrency": 16,
+      "ops_per_sec": 7554533.532748427,
+      "bandwidth_mb_s": 7735.842337534389
+    },
+    {
+      "benchmark": "burst_batch_b128",
+      "size": 1024,
+      "concurrency": 32,
+      "ops_per_sec": 8024018.048743504,
+      "bandwidth_mb_s": 8216.594481913347
+    },
+    {
+      "benchmark": "burst_batch_b256",
+      "size": 1024,
+      "concurrency": 1,
+      "ops_per_sec": 13430271.447120491,
+      "bandwidth_mb_s": 13752.597961851383
+    },
+    {
+      "benchmark": "burst_batch_b256",
+      "size": 1024,
+      "concurrency": 2,
+      "ops_per_sec": 6011830.67218631,
+      "bandwidth_mb_s": 6156.114608318782
+    },
+    {
+      "benchmark": "burst_batch_b256",
+      "size": 1024,
+      "concurrency": 4,
+      "ops_per_sec": 6648497.8571796175,
+      "bandwidth_mb_s": 6808.061805751929
+    },
+    {
+      "benchmark": "burst_batch_b256",
+      "size": 1024,
+      "concurrency": 8,
+      "ops_per_sec": 6086547.791137867,
+      "bandwidth_mb_s": 6232.6249381251755
+    },
+    {
+      "benchmark": "burst_batch_b256",
+      "size": 1024,
+      "concurrency": 16,
+      "ops_per_sec": 7091339.770498934,
+      "bandwidth_mb_s": 7261.531924990909
+    },
+    {
+      "benchmark": "burst_batch_b256",
+      "size": 1024,
+      "concurrency": 32,
+      "ops_per_sec": 7529410.94579017,
+      "bandwidth_mb_s": 7710.116808489134
+    },
+    {
+      "benchmark": "burst_batch_b4",
+      "size": 4096,
+      "concurrency": 1,
+      "ops_per_sec": 1490549.1729687913,
+      "bandwidth_mb_s": 6105.28941248017
+    },
+    {
+      "benchmark": "burst_batch_b4",
+      "size": 4096,
+      "concurrency": 2,
+      "ops_per_sec": 2436117.6364664882,
+      "bandwidth_mb_s": 9978.337838966736
+    },
+    {
+      "benchmark": "burst_batch_b4",
+      "size": 4096,
+      "concurrency": 4,
+      "ops_per_sec": 3601542.991055943,
+      "bandwidth_mb_s": 14751.920091365142
+    },
+    {
+      "benchmark": "burst_batch_b4",
+      "size": 4096,
+      "concurrency": 8,
+      "ops_per_sec": 4891772.588830004,
+      "bandwidth_mb_s": 20036.7005238477
+    },
+    {
+      "benchmark": "burst_batch_b4",
+      "size": 4096,
+      "concurrency": 16,
+      "ops_per_sec": 5356436.237987355,
+      "bandwidth_mb_s": 21939.96283079621
+    },
+    {
+      "benchmark": "burst_batch_b4",
+      "size": 4096,
+      "concurrency": 32,
+      "ops_per_sec": 6141261.881542543,
+      "bandwidth_mb_s": 25154.608666798256
+    },
+    {
+      "benchmark": "burst_batch_b8",
+      "size": 4096,
+      "concurrency": 1,
+      "ops_per_sec": 1878256.721067764,
+      "bandwidth_mb_s": 7693.339529493562
+    },
+    {
+      "benchmark": "burst_batch_b8",
+      "size": 4096,
+      "concurrency": 2,
+      "ops_per_sec": 2408344.9151309286,
+      "bandwidth_mb_s": 9864.580772376283
+    },
+    {
+      "benchmark": "burst_batch_b8",
+      "size": 4096,
+      "concurrency": 4,
+      "ops_per_sec": 3187521.9142131605,
+      "bandwidth_mb_s": 13056.089760617106
+    },
+    {
+      "benchmark": "burst_batch_b8",
+      "size": 4096,
+      "concurrency": 8,
+      "ops_per_sec": 4428735.044628847,
+      "bandwidth_mb_s": 18140.09874279976
+    },
+    {
+      "benchmark": "burst_batch_b8",
+      "size": 4096,
+      "concurrency": 16,
+      "ops_per_sec": 5093538.8618710255,
+      "bandwidth_mb_s": 20863.13517822372
+    },
+    {
+      "benchmark": "burst_batch_b8",
+      "size": 4096,
+      "concurrency": 32,
+      "ops_per_sec": 6173617.956842423,
+      "bandwidth_mb_s": 25287.139151226565
+    },
+    {
+      "benchmark": "burst_batch_b16",
+      "size": 4096,
+      "concurrency": 1,
+      "ops_per_sec": 2127508.5930293687,
+      "bandwidth_mb_s": 8714.275197048293
+    },
+    {
+      "benchmark": "burst_batch_b16",
+      "size": 4096,
+      "concurrency": 2,
+      "ops_per_sec": 2975705.134402527,
+      "bandwidth_mb_s": 12188.48823051275
+    },
+    {
+      "benchmark": "burst_batch_b16",
+      "size": 4096,
+      "concurrency": 4,
+      "ops_per_sec": 4189340.563320552,
+      "bandwidth_mb_s": 17159.53894736098
+    },
+    {
+      "benchmark": "burst_batch_b16",
+      "size": 4096,
+      "concurrency": 8,
+      "ops_per_sec": 5284051.698556354,
+      "bandwidth_mb_s": 21643.475757286826
+    },
+    {
+      "benchmark": "burst_batch_b16",
+      "size": 4096,
+      "concurrency": 16,
+      "ops_per_sec": 5696517.7075993335,
+      "bandwidth_mb_s": 23332.93653032687
+    },
+    {
+      "benchmark": "burst_batch_b16",
+      "size": 4096,
+      "concurrency": 32,
+      "ops_per_sec": 6159309.5551931495,
+      "bandwidth_mb_s": 25228.53193807114
+    },
+    {
+      "benchmark": "burst_batch_b32",
+      "size": 4096,
+      "concurrency": 1,
+      "ops_per_sec": 2455766.088893974,
+      "bandwidth_mb_s": 10058.817900109718
+    },
+    {
+      "benchmark": "burst_batch_b32",
+      "size": 4096,
+      "concurrency": 2,
+      "ops_per_sec": 3451532.1297193635,
+      "bandwidth_mb_s": 14137.475603330513
+    },
+    {
+      "benchmark": "burst_batch_b32",
+      "size": 4096,
+      "concurrency": 4,
+      "ops_per_sec": 4073799.422666238,
+      "bandwidth_mb_s": 16686.28243524091
+    },
+    {
+      "benchmark": "burst_batch_b32",
+      "size": 4096,
+      "concurrency": 8,
+      "ops_per_sec": 4650078.701673808,
+      "bandwidth_mb_s": 19046.722362055916
+    },
+    {
+      "benchmark": "burst_batch_b32",
+      "size": 4096,
+      "concurrency": 16,
+      "ops_per_sec": 5258628.3100857,
+      "bandwidth_mb_s": 21539.341558111028
+    },
+    {
+      "benchmark": "burst_batch_b32",
+      "size": 4096,
+      "concurrency": 32,
+      "ops_per_sec": 5205750.290071879,
+      "bandwidth_mb_s": 21322.753188134415
+    },
+    {
+      "benchmark": "burst_batch_b64",
+      "size": 4096,
+      "concurrency": 1,
+      "ops_per_sec": 2843561.044813189,
+      "bandwidth_mb_s": 11647.226039554824
+    },
+    {
+      "benchmark": "burst_batch_b64",
+      "size": 4096,
+      "concurrency": 2,
+      "ops_per_sec": 4444376.904318572,
+      "bandwidth_mb_s": 18204.16780008887
+    },
+    {
+      "benchmark": "burst_batch_b64",
+      "size": 4096,
+      "concurrency": 4,
+      "ops_per_sec": 5541776.639904792,
+      "bandwidth_mb_s": 22699.11711705003
+    },
+    {
+      "benchmark": "burst_batch_b64",
+      "size": 4096,
+      "concurrency": 8,
+      "ops_per_sec": 6204402.789635216,
+      "bandwidth_mb_s": 25413.233826345844
+    },
+    {
+      "benchmark": "burst_batch_b64",
+      "size": 4096,
+      "concurrency": 16,
+      "ops_per_sec": 5497730.085319258,
+      "bandwidth_mb_s": 22518.70242946768
+    },
+    {
+      "benchmark": "burst_batch_b64",
+      "size": 4096,
+      "concurrency": 32,
+      "ops_per_sec": 4788501.8941439865,
+      "bandwidth_mb_s": 19613.70375841377
+    },
+    {
+      "benchmark": "burst_batch_b128",
+      "size": 4096,
+      "concurrency": 1,
+      "ops_per_sec": 3082603.861353084,
+      "bandwidth_mb_s": 12626.345416102233
+    },
+    {
+      "benchmark": "burst_batch_b128",
+      "size": 4096,
+      "concurrency": 2,
+      "ops_per_sec": 3456823.429168122,
+      "bandwidth_mb_s": 14159.148765872627
+    },
+    {
+      "benchmark": "burst_batch_b128",
+      "size": 4096,
+      "concurrency": 4,
+      "ops_per_sec": 4644363.517888386,
+      "bandwidth_mb_s": 19023.312969270828
+    },
+    {
+      "benchmark": "burst_batch_b128",
+      "size": 4096,
+      "concurrency": 8,
+      "ops_per_sec": 5272225.593439405,
+      "bandwidth_mb_s": 21595.036030727802
+    },
+    {
+      "benchmark": "burst_batch_b128",
+      "size": 4096,
+      "concurrency": 16,
+      "ops_per_sec": 6071688.389235402,
+      "bandwidth_mb_s": 24869.635642308207
+    },
+    {
+      "benchmark": "burst_batch_b128",
+      "size": 4096,
+      "concurrency": 32,
+      "ops_per_sec": 5117527.75858898,
+      "bandwidth_mb_s": 20961.393699180462
+    },
+    {
+      "benchmark": "burst_batch_b256",
+      "size": 4096,
+      "concurrency": 1,
+      "ops_per_sec": 3211732.9153352156,
+      "bandwidth_mb_s": 13155.258021213043
+    },
+    {
+      "benchmark": "burst_batch_b256",
+      "size": 4096,
+      "concurrency": 2,
+      "ops_per_sec": 3391445.7863215874,
+      "bandwidth_mb_s": 13891.361940773222
+    },
+    {
+      "benchmark": "burst_batch_b256",
+      "size": 4096,
+      "concurrency": 4,
+      "ops_per_sec": 4532453.103399705,
+      "bandwidth_mb_s": 18564.927911525192
+    },
+    {
+      "benchmark": "burst_batch_b256",
+      "size": 4096,
+      "concurrency": 8,
+      "ops_per_sec": 4630848.194001426,
+      "bandwidth_mb_s": 18967.95420262984
+    },
+    {
+      "benchmark": "burst_batch_b256",
+      "size": 4096,
+      "concurrency": 16,
+      "ops_per_sec": 4262765.973818131,
+      "bandwidth_mb_s": 17460.289428759064
+    },
+    {
+      "benchmark": "burst_batch_b256",
+      "size": 4096,
+      "concurrency": 32,
+      "ops_per_sec": 4854894.058599201,
+      "bandwidth_mb_s": 19885.646064022327
+    },
+    {
+      "benchmark": "memmove",
+      "size": 128,
+      "concurrency": 1,
+      "ops_per_sec": 1742759.4155482023,
+      "bandwidth_mb_s": 223.0732051901699
+    },
+    {
+      "benchmark": "memmove",
+      "size": 128,
+      "concurrency": 2,
+      "ops_per_sec": 3173521.826425282,
+      "bandwidth_mb_s": 406.2107937824361
+    },
+    {
+      "benchmark": "memmove",
+      "size": 128,
+      "concurrency": 4,
+      "ops_per_sec": 4089633.8687118473,
+      "bandwidth_mb_s": 523.4731351951165
+    },
+    {
+      "benchmark": "memmove",
+      "size": 128,
+      "concurrency": 8,
+      "ops_per_sec": 5028258.814537702,
+      "bandwidth_mb_s": 643.6171282608259
+    },
+    {
+      "benchmark": "memmove",
+      "size": 128,
+      "concurrency": 16,
+      "ops_per_sec": 5053040.0773452,
+      "bandwidth_mb_s": 646.7891299001856
+    },
+    {
+      "benchmark": "memmove",
+      "size": 128,
+      "concurrency": 32,
+      "ops_per_sec": 5048516.241076747,
+      "bandwidth_mb_s": 646.2100788578236
+    },
+    {
+      "benchmark": "memmove",
+      "size": 128,
+      "concurrency": 64,
+      "ops_per_sec": 5055603.209296918,
+      "bandwidth_mb_s": 647.1172107900054
+    },
+    {
+      "benchmark": "memmove",
+      "size": 128,
+      "concurrency": 128,
+      "ops_per_sec": 5055339.112147643,
+      "bandwidth_mb_s": 647.0834063548983
+    },
+    {
+      "benchmark": "memmove",
+      "size": 256,
+      "concurrency": 1,
+      "ops_per_sec": 1623886.2846564397,
+      "bandwidth_mb_s": 415.71488887204856
+    },
+    {
+      "benchmark": "memmove",
+      "size": 256,
+      "concurrency": 2,
+      "ops_per_sec": 3029094.452213511,
+      "bandwidth_mb_s": 775.4481797666588
+    },
+    {
+      "benchmark": "memmove",
+      "size": 256,
+      "concurrency": 4,
+      "ops_per_sec": 4050999.3815474277,
+      "bandwidth_mb_s": 1037.0558416761414
+    },
+    {
+      "benchmark": "memmove",
+      "size": 256,
+      "concurrency": 8,
+      "ops_per_sec": 5044645.109216566,
+      "bandwidth_mb_s": 1291.429147959441
+    },
+    {
+      "benchmark": "memmove",
+      "size": 256,
+      "concurrency": 16,
+      "ops_per_sec": 5040627.457305885,
+      "bandwidth_mb_s": 1290.4006290703066
+    },
+    {
+      "benchmark": "memmove",
+      "size": 256,
+      "concurrency": 32,
+      "ops_per_sec": 5032180.796191645,
+      "bandwidth_mb_s": 1288.238283825061
+    },
+    {
+      "benchmark": "memmove",
+      "size": 256,
+      "concurrency": 64,
+      "ops_per_sec": 5049782.43853994,
+      "bandwidth_mb_s": 1292.7443042662246
+    },
+    {
+      "benchmark": "memmove",
+      "size": 256,
+      "concurrency": 128,
+      "ops_per_sec": 5059806.917768018,
+      "bandwidth_mb_s": 1295.3105709486126
+    },
+    {
+      "benchmark": "memmove",
+      "size": 1024,
+      "concurrency": 1,
+      "ops_per_sec": 807947.6191399558,
+      "bandwidth_mb_s": 827.3383619993148
+    },
+    {
+      "benchmark": "memmove",
+      "size": 1024,
+      "concurrency": 2,
+      "ops_per_sec": 1881232.759285608,
+      "bandwidth_mb_s": 1926.3823455084628
+    },
+    {
+      "benchmark": "memmove",
+      "size": 1024,
+      "concurrency": 4,
+      "ops_per_sec": 3471531.1303768232,
+      "bandwidth_mb_s": 3554.847877505867
+    },
+    {
+      "benchmark": "memmove",
+      "size": 1024,
+      "concurrency": 8,
+      "ops_per_sec": 4961958.319550117,
+      "bandwidth_mb_s": 5081.045319219319
+    },
+    {
+      "benchmark": "memmove",
+      "size": 1024,
+      "concurrency": 16,
+      "ops_per_sec": 4988443.43936547,
+      "bandwidth_mb_s": 5108.166081910241
+    },
+    {
+      "benchmark": "memmove",
+      "size": 1024,
+      "concurrency": 32,
+      "ops_per_sec": 5000366.693557528,
+      "bandwidth_mb_s": 5120.375494202908
+    },
+    {
+      "benchmark": "memmove",
+      "size": 1024,
+      "concurrency": 64,
+      "ops_per_sec": 4990152.765209985,
+      "bandwidth_mb_s": 5109.916431575025
+    },
+    {
+      "benchmark": "memmove",
+      "size": 1024,
+      "concurrency": 128,
+      "ops_per_sec": 4999941.667347215,
+      "bandwidth_mb_s": 5119.940267363549
+    },
+    {
+      "benchmark": "memmove",
+      "size": 4096,
+      "concurrency": 1,
+      "ops_per_sec": 732548.4971523398,
+      "bandwidth_mb_s": 3000.518644335984
+    },
+    {
+      "benchmark": "memmove",
+      "size": 4096,
+      "concurrency": 2,
+      "ops_per_sec": 1680096.235912393,
+      "bandwidth_mb_s": 6881.674182297162
+    },
+    {
+      "benchmark": "memmove",
+      "size": 4096,
+      "concurrency": 4,
+      "ops_per_sec": 3012423.233414602,
+      "bandwidth_mb_s": 12338.88556406621
+    },
+    {
+      "benchmark": "memmove",
+      "size": 4096,
+      "concurrency": 8,
+      "ops_per_sec": 4606214.704879824,
+      "bandwidth_mb_s": 18867.05543118776
+    },
+    {
+      "benchmark": "memmove",
+      "size": 4096,
+      "concurrency": 16,
+      "ops_per_sec": 4594222.917821604,
+      "bandwidth_mb_s": 18817.93707139729
+    },
+    {
+      "benchmark": "memmove",
+      "size": 4096,
+      "concurrency": 32,
+      "ops_per_sec": 4634564.582657459,
+      "bandwidth_mb_s": 18983.176530564953
+    },
+    {
+      "benchmark": "memmove",
+      "size": 4096,
+      "concurrency": 64,
+      "ops_per_sec": 4626802.139433309,
+      "bandwidth_mb_s": 18951.381563118837
+    },
+    {
+      "benchmark": "memmove",
+      "size": 4096,
+      "concurrency": 128,
+      "ops_per_sec": 4608585.179711779,
+      "bandwidth_mb_s": 18876.764896099445
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 128,
+      "concurrency": 1,
+      "ops_per_sec": 1631041.1044105527,
+      "bandwidth_mb_s": 208.77326136455073
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 128,
+      "concurrency": 2,
+      "ops_per_sec": 2670471.792251537,
+      "bandwidth_mb_s": 341.8203894081968
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 128,
+      "concurrency": 4,
+      "ops_per_sec": 2669022.523881079,
+      "bandwidth_mb_s": 341.6348830567781
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 128,
+      "concurrency": 8,
+      "ops_per_sec": 4940141.94674527,
+      "bandwidth_mb_s": 632.3381691833946
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 128,
+      "concurrency": 16,
+      "ops_per_sec": 5074253.239064984,
+      "bandwidth_mb_s": 649.504414600318
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 128,
+      "concurrency": 32,
+      "ops_per_sec": 5063299.6848939825,
+      "bandwidth_mb_s": 648.1023596664297
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 128,
+      "concurrency": 64,
+      "ops_per_sec": 4205302.886940432,
+      "bandwidth_mb_s": 538.2787695283753
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 128,
+      "concurrency": 128,
+      "ops_per_sec": 5058603.926488368,
+      "bandwidth_mb_s": 647.501302590511
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 256,
+      "concurrency": 1,
+      "ops_per_sec": 1503629.762246062,
+      "bandwidth_mb_s": 384.9292191349919
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 256,
+      "concurrency": 2,
+      "ops_per_sec": 2703528.3748820582,
+      "bandwidth_mb_s": 692.1032639698069
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 256,
+      "concurrency": 4,
+      "ops_per_sec": 3297591.109694368,
+      "bandwidth_mb_s": 844.1833240817583
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 256,
+      "concurrency": 8,
+      "ops_per_sec": 4869995.470904212,
+      "bandwidth_mb_s": 1246.7188405514785
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 256,
+      "concurrency": 16,
+      "ops_per_sec": 5014131.493927051,
+      "bandwidth_mb_s": 1283.617662445325
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 256,
+      "concurrency": 32,
+      "ops_per_sec": 5084495.846814308,
+      "bandwidth_mb_s": 1301.6309367844628
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 256,
+      "concurrency": 64,
+      "ops_per_sec": 4462778.198435945,
+      "bandwidth_mb_s": 1142.471218799602
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 256,
+      "concurrency": 128,
+      "ops_per_sec": 4570188.962079619,
+      "bandwidth_mb_s": 1169.9683742923826
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 1024,
+      "concurrency": 1,
+      "ops_per_sec": 1389034.2230251867,
+      "bandwidth_mb_s": 1422.3710443777911
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 1024,
+      "concurrency": 2,
+      "ops_per_sec": 2040821.8797874278,
+      "bandwidth_mb_s": 2089.8016049023263
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 1024,
+      "concurrency": 4,
+      "ops_per_sec": 2436346.3899843423,
+      "bandwidth_mb_s": 2494.8187033439663
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 1024,
+      "concurrency": 8,
+      "ops_per_sec": 4497346.565526339,
+      "bandwidth_mb_s": 4605.282883098971
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 1024,
+      "concurrency": 16,
+      "ops_per_sec": 4999308.429000655,
+      "bandwidth_mb_s": 5119.291831296671
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 1024,
+      "concurrency": 32,
+      "ops_per_sec": 5008330.523103429,
+      "bandwidth_mb_s": 5128.530455657911
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 1024,
+      "concurrency": 64,
+      "ops_per_sec": 4632746.724648066,
+      "bandwidth_mb_s": 4743.93264603962
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 1024,
+      "concurrency": 128,
+      "ops_per_sec": 4757985.088474733,
+      "bandwidth_mb_s": 4872.176730598127
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 4096,
+      "concurrency": 1,
+      "ops_per_sec": 809389.5664828543,
+      "bandwidth_mb_s": 3315.2596643137713
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 4096,
+      "concurrency": 2,
+      "ops_per_sec": 1349491.8488443177,
+      "bandwidth_mb_s": 5527.518612866325
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 4096,
+      "concurrency": 4,
+      "ops_per_sec": 2532329.4054090558,
+      "bandwidth_mb_s": 10372.421244555493
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 4096,
+      "concurrency": 8,
+      "ops_per_sec": 4050135.274518169,
+      "bandwidth_mb_s": 16589.35408442642
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 4096,
+      "concurrency": 16,
+      "ops_per_sec": 4515059.982571868,
+      "bandwidth_mb_s": 18493.685688614372
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 4096,
+      "concurrency": 32,
+      "ops_per_sec": 4439084.660742955,
+      "bandwidth_mb_s": 18182.490770403147
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 4096,
+      "concurrency": 64,
+      "ops_per_sec": 4006067.8574480815,
+      "bandwidth_mb_s": 16408.85394410734
+    },
+    {
+      "benchmark": "copy_crc",
+      "size": 4096,
+      "concurrency": 128,
+      "ops_per_sec": 3586127.4246704048,
+      "bandwidth_mb_s": 14688.777931449978
+    },
+    {
+      "benchmark": "memmove_mt_t4",
+      "size": 128,
+      "concurrency": 4,
+      "ops_per_sec": 3767906.9779125294,
+      "bandwidth_mb_s": 482.29209317280373
+    },
+    {
+      "benchmark": "memmove_mt_t4",
+      "size": 128,
+      "concurrency": 8,
+      "ops_per_sec": 5529818.8569587935,
+      "bandwidth_mb_s": 707.8168136907256
+    },
+    {
+      "benchmark": "memmove_mt_t4",
+      "size": 128,
+      "concurrency": 16,
+      "ops_per_sec": 12050031.731750228,
+      "bandwidth_mb_s": 1542.404061664029
+    },
+    {
+      "benchmark": "memmove_mt_t4",
+      "size": 128,
+      "concurrency": 32,
+      "ops_per_sec": 7722440.059385563,
+      "bandwidth_mb_s": 988.472327601352
+    },
+    {
+      "benchmark": "memmove_mt_t4",
+      "size": 128,
+      "concurrency": 64,
+      "ops_per_sec": 12716484.909241388,
+      "bandwidth_mb_s": 1627.7100683828976
+    },
+    {
+      "benchmark": "memmove_mt_t4",
+      "size": 128,
+      "concurrency": 128,
+      "ops_per_sec": 15819885.332197817,
+      "bandwidth_mb_s": 2024.9453225213206
+    },
+    {
+      "benchmark": "memmove_mt_t4",
+      "size": 256,
+      "concurrency": 4,
+      "ops_per_sec": 3735699.276208265,
+      "bandwidth_mb_s": 956.3390147093158
+    },
+    {
+      "benchmark": "memmove_mt_t4",
+      "size": 256,
+      "concurrency": 8,
+      "ops_per_sec": 7360807.1370386,
+      "bandwidth_mb_s": 1884.3666270818815
+    },
+    {
+      "benchmark": "memmove_mt_t4",
+      "size": 256,
+      "concurrency": 16,
+      "ops_per_sec": 8629256.920304498,
+      "bandwidth_mb_s": 2209.0897715979513
+    },
+    {
+      "benchmark": "memmove_mt_t4",
+      "size": 256,
+      "concurrency": 32,
+      "ops_per_sec": 16529312.669855906,
+      "bandwidth_mb_s": 4231.504043483112
+    },
+    {
+      "benchmark": "memmove_mt_t4",
+      "size": 256,
+      "concurrency": 64,
+      "ops_per_sec": 16245721.959883898,
+      "bandwidth_mb_s": 4158.904821730278
+    },
+    {
+      "benchmark": "memmove_mt_t4",
+      "size": 256,
+      "concurrency": 128,
+      "ops_per_sec": 10578894.752339257,
+      "bandwidth_mb_s": 2708.19705659885
+    },
+    {
+      "benchmark": "memmove_mt_t4",
+      "size": 1024,
+      "concurrency": 4,
+      "ops_per_sec": 3071576.9578487496,
+      "bandwidth_mb_s": 3145.2948048371195
+    },
+    {
+      "benchmark": "memmove_mt_t4",
+      "size": 1024,
+      "concurrency": 8,
+      "ops_per_sec": 6713805.037815507,
+      "bandwidth_mb_s": 6874.936358723079
+    },
+    {
+      "benchmark": "memmove_mt_t4",
+      "size": 1024,
+      "concurrency": 16,
+      "ops_per_sec": 9177700.940026019,
+      "bandwidth_mb_s": 9397.965762586644
+    },
+    {
+      "benchmark": "memmove_mt_t4",
+      "size": 1024,
+      "concurrency": 32,
+      "ops_per_sec": 11122831.279626124,
+      "bandwidth_mb_s": 11389.77923033715
+    },
+    {
+      "benchmark": "memmove_mt_t4",
+      "size": 1024,
+      "concurrency": 64,
+      "ops_per_sec": 12851763.476144984,
+      "bandwidth_mb_s": 13160.205799572464
+    },
+    {
+      "benchmark": "memmove_mt_t4",
+      "size": 1024,
+      "concurrency": 128,
+      "ops_per_sec": 13026331.643890487,
+      "bandwidth_mb_s": 13338.963603343858
+    },
+    {
+      "benchmark": "memmove_mt_t4",
+      "size": 4096,
+      "concurrency": 4,
+      "ops_per_sec": 2942336.8186130268,
+      "bandwidth_mb_s": 12051.811609038958
+    },
+    {
+      "benchmark": "memmove_mt_t4",
+      "size": 4096,
+      "concurrency": 8,
+      "ops_per_sec": 4768893.461727842,
+      "bandwidth_mb_s": 19533.38761923724
+    },
+    {
+      "benchmark": "memmove_mt_t4",
+      "size": 4096,
+      "concurrency": 16,
+      "ops_per_sec": 7015714.030141846,
+      "bandwidth_mb_s": 28736.364667461003
+    },
+    {
+      "benchmark": "memmove_mt_t4",
+      "size": 4096,
+      "concurrency": 32,
+      "ops_per_sec": 7092378.825230192,
+      "bandwidth_mb_s": 29050.38366814287
+    },
+    {
+      "benchmark": "memmove_mt_t4",
+      "size": 4096,
+      "concurrency": 64,
+      "ops_per_sec": 6990750.072529033,
+      "bandwidth_mb_s": 28634.11229707892
+    },
+    {
+      "benchmark": "memmove_mt_t4",
+      "size": 4096,
+      "concurrency": 128,
+      "ops_per_sec": 6882620.351220117,
+      "bandwidth_mb_s": 28191.2129585976
+    }
+  ]
+}
