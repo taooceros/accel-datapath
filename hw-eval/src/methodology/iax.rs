@@ -95,13 +95,7 @@ fn bench_noop_latency_iax(
         );
     }
 
-    results.push(LatencyResult {
-        benchmark: "noop".into(),
-        size: None,
-        batch_size: None,
-        cycles: cyc,
-        ns,
-    });
+    results.push(LatencyResult::basic("noop", None, None, cyc, ns));
 }
 
 fn panic_iax_failure(
@@ -198,13 +192,7 @@ fn bench_single_op_latency_iax_crc64(
             );
         }
 
-        results.push(LatencyResult {
-            benchmark: "crc64".into(),
-            size: Some(size),
-            batch_size: None,
-            cycles: cyc,
-            ns,
-        });
+        results.push(LatencyResult::basic("crc64", Some(size), None, cyc, ns));
     }
 }
 

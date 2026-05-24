@@ -147,6 +147,13 @@ pub fn lfence() {
     }
 }
 
+#[inline(always)]
+pub fn mfence() {
+    unsafe {
+        core::arch::asm!("mfence", options(nostack, nomem, preserves_flags));
+    }
+}
+
 pub fn tsc_frequency_hz() -> u64 {
     if let Ok(cpuinfo) = std::fs::read_to_string("/proc/cpuinfo") {
         for line in cpuinfo.lines() {

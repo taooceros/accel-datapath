@@ -11,9 +11,12 @@
 mod config;
 mod methodology;
 mod report;
+mod timing;
 
 use clap::Parser;
-use config::{AccelKind, Args, BenchmarkConfig, BenchmarkConfigError};
+use config::{
+    AccelKind, Args, BenchmarkConfig, BenchmarkConfigError, BenchmarkKind, SubmitOnlyMode,
+};
 use hw_eval::submit::*;
 use methodology::dsa::run_dsa_benchmarks;
 use methodology::iax::run_iax_benchmarks;
@@ -161,6 +164,9 @@ fn run() -> Result<(), HwEvalError> {
         println!("Accelerator: {}", config.accel.as_str());
         println!("Sizes: {:?}", config.sizes);
         println!("Iterations: {}", config.iterations);
+        if config.benchmark == BenchmarkKind::SubmitOnly {
+            println!("Submit mode: {:?}", config.submit_mode);
+        }
         println!("Submit threads: {}", config.threads);
         if config.cold {
             println!("Mode: cold-cache (clflush between iterations)");
@@ -174,12 +180,14 @@ fn run() -> Result<(), HwEvalError> {
     let mut throughput_results: Vec<ThroughputResult> = Vec::new();
 
     // Software baselines
-    bench_software_baselines(
-        &config.sizes,
-        config.iterations,
-        config.json,
-        &mut latency_results,
-    );
+    if config.sw_only || config.benchmark == BenchmarkKind::All {
+        bench_software_baselines(
+            &config.sizes,
+            config.iterations,
+            config.json,
+            &mut latency_results,
+        );
+    }
 
     if config.sw_only {
         if config.json {
@@ -224,6 +232,12 @@ fn run() -> Result<(), HwEvalError> {
                 &wq,
                 &config.sizes,
                 config.iterations,
+                config.benchmark,
+                if config.benchmark == BenchmarkKind::SubmitOnly {
+                    config.submit_mode
+                } else {
+                    SubmitOnlyMode::Unloaded
+                },
                 config.max_concurrency,
                 config.threads,
                 tsc_freq,

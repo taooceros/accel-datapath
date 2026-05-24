@@ -38,6 +38,13 @@ pub(crate) struct Args {
     #[arg(long, default_value_t = DEFAULT_SUBMIT_THREADS)]
     threads: usize,
 
+    /// Benchmark subset to run
+    #[arg(long, value_enum, default_value = "all")]
+    benchmark: BenchmarkKind,
+    /// Submit-only workload variant to run when --benchmark submit-only is selected
+    #[arg(long, value_enum, default_value = "all")]
+    submit_mode: SubmitOnlyMode,
+
     /// Run software baselines only (no hardware required)
     #[arg(long)]
     sw_only: bool,
@@ -68,6 +75,29 @@ impl AccelKind {
             Self::Iax => "iax",
         }
     }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
+pub(crate) enum BenchmarkKind {
+    All,
+    SubmitOnly,
+}
+
+impl BenchmarkKind {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::All => "all",
+            Self::SubmitOnly => "submit-only",
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
+pub(crate) enum SubmitOnlyMode {
+    All,
+    Unloaded,
+    Sustained,
+    Mfence,
 }
 
 pub(crate) fn default_device(accel: AccelKind) -> PathBuf {
@@ -118,6 +148,9 @@ pub(crate) struct BenchmarkConfig {
     pub(crate) iterations: usize,
     pub(crate) max_concurrency: usize,
     pub(crate) threads: usize,
+    pub(crate) benchmark: BenchmarkKind,
+    pub(crate) submit_mode: SubmitOnlyMode,
+
     pub(crate) sw_only: bool,
     pub(crate) pin_core: Option<usize>,
     pub(crate) cold: bool,
@@ -141,6 +174,8 @@ impl BenchmarkConfig {
         #[builder(default = DEFAULT_ITERATIONS)] iterations: usize,
         #[builder(default = DEFAULT_MAX_CONCURRENCY)] max_concurrency: usize,
         #[builder(default = DEFAULT_SUBMIT_THREADS)] threads: usize,
+        #[builder(default = BenchmarkKind::All)] benchmark: BenchmarkKind,
+        #[builder(default = SubmitOnlyMode::All)] submit_mode: SubmitOnlyMode,
         #[builder(default)] sw_only: bool,
         pin_core: Option<usize>,
         #[builder(default)] cold: bool,
@@ -151,6 +186,12 @@ impl BenchmarkConfig {
         if threads == 0 {
             return Err(BenchmarkConfigError::ZeroThreads);
         }
+        if benchmark == BenchmarkKind::SubmitOnly && accel != AccelKind::Dsa {
+            return Err(BenchmarkConfigError::UnsupportedBenchmark {
+                benchmark: benchmark.as_str(),
+                accel: accel.as_str(),
+            });
+        }
 
         Ok(Self {
             accel,
@@ -159,6 +200,8 @@ impl BenchmarkConfig {
             iterations,
             max_concurrency,
             threads,
+            benchmark,
+            submit_mode,
             sw_only,
             pin_core,
             cold,
@@ -174,6 +217,8 @@ impl BenchmarkConfig {
             iterations,
             max_concurrency,
             threads,
+            benchmark,
+            submit_mode,
             sw_only,
             pin_core,
             cold,
@@ -187,6 +232,8 @@ impl BenchmarkConfig {
             iterations,
             max_concurrency,
             threads,
+            benchmark,
+            submit_mode,
             sw_only,
             pin_core,
             cold,
@@ -213,6 +260,11 @@ pub(crate) enum BenchmarkConfigError {
     ZeroSize { raw: String },
     #[snafu(display("--threads must be greater than zero"))]
     ZeroThreads,
+    #[snafu(display("--benchmark {benchmark} is not supported for --accel {accel}"))]
+    UnsupportedBenchmark {
+        benchmark: &'static str,
+        accel: &'static str,
+    },
 }
 
 #[cfg(test)]
@@ -232,6 +284,8 @@ mod tests {
         );
         assert_eq!(config.iterations, DEFAULT_ITERATIONS);
         assert_eq!(config.max_concurrency, DEFAULT_MAX_CONCURRENCY);
+        assert_eq!(config.benchmark, BenchmarkKind::All);
+        assert_eq!(config.submit_mode, SubmitOnlyMode::All);
         assert_eq!(config.threads, DEFAULT_SUBMIT_THREADS);
         assert!(!config.sw_only);
         assert_eq!(config.pin_core, None);
@@ -253,12 +307,14 @@ mod tests {
     #[test]
     fn benchmark_config_builder_preserves_explicit_device_and_runtime_knobs() {
         let config = BenchmarkConfig::builder()
-            .accel(AccelKind::Iax)
+            .accel(AccelKind::Dsa)
             .device(PathBuf::from("/tmp/custom-wq"))
             .sizes("64, 128,256".to_string())
             .iterations(7)
             .max_concurrency(4)
             .threads(5)
+            .benchmark(BenchmarkKind::SubmitOnly)
+            .submit_mode(SubmitOnlyMode::Mfence)
             .sw_only(true)
             .pin_core(3)
             .cold(true)
@@ -271,6 +327,8 @@ mod tests {
         assert_eq!(config.iterations, 7);
         assert_eq!(config.max_concurrency, 4);
         assert_eq!(config.threads, 5);
+        assert_eq!(config.benchmark, BenchmarkKind::SubmitOnly);
+        assert_eq!(config.submit_mode, SubmitOnlyMode::Mfence);
         assert!(config.sw_only);
         assert_eq!(config.pin_core, Some(3));
         assert!(config.cold);
@@ -318,5 +376,23 @@ mod tests {
         let error = BenchmarkConfig::builder().threads(0).build().unwrap_err();
         assert!(matches!(error, BenchmarkConfigError::ZeroThreads));
         assert_eq!(error.to_string(), "--threads must be greater than zero");
+    }
+
+    #[test]
+    fn submit_only_benchmark_is_dsa_only() {
+        let error = BenchmarkConfig::builder()
+            .accel(AccelKind::Iax)
+            .benchmark(BenchmarkKind::SubmitOnly)
+            .build()
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            BenchmarkConfigError::UnsupportedBenchmark { .. }
+        ));
+        assert_eq!(
+            error.to_string(),
+            "--benchmark submit-only is not supported for --accel iax"
+        );
     }
 }

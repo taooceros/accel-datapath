@@ -45,13 +45,13 @@ pub(crate) fn bench_software_baselines(
             );
         }
 
-        results.push(LatencyResult {
-            benchmark: "sw_memcpy".into(),
-            size: Some(size),
-            batch_size: None,
-            cycles: stats.clone(), // SW uses ns directly, cycles field holds ns
-            ns: stats,
-        });
+        results.push(LatencyResult::basic(
+            "sw_memcpy",
+            Some(size),
+            None,
+            stats.clone(),
+            stats,
+        ));
     }
 
     // CRC-32C (SSE4.2)
@@ -84,12 +84,12 @@ pub(crate) fn bench_software_baselines(
             );
         }
 
-        results.push(LatencyResult {
-            benchmark: "sw_crc32c".into(),
-            size: Some(size),
-            batch_size: None,
-            cycles: stats.clone(),
-            ns: stats,
-        });
+        results.push(LatencyResult::basic(
+            "sw_crc32c",
+            Some(size),
+            None,
+            stats.clone(),
+            stats,
+        ));
     }
 }

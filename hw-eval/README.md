@@ -24,6 +24,10 @@ cargo bench
 --sizes, -s <LIST>       Message sizes in bytes, comma-separated
 --iterations, -i <N>     Iterations per measurement (default: 10000)
 --max-concurrency, -m <N> Max sliding window concurrency (default: 128)
+--benchmark <all|submit-only>
+                         Benchmark subset to run (default: all)
+--submit-mode <all|unloaded|sustained|mfence>
+                         Submit-only workload variant (default: all)
 --sw-only                Software baselines only (no hardware)
 --pin-core <N>           Pin benchmark thread to CPU core
 --cold                   Flush caches between iterations (cold-cache DMA)
@@ -35,6 +39,9 @@ cargo bench
 | Benchmark | What it measures |
 |-----------|-----------------|
 | **noop** | Pure submission + completion overhead (no data movement) |
+| **submit_only_unloaded** | DSA NOOP submit burst only; drains with an out-of-region sentinel between samples |
+| **submit_only_sustained** | DSA NOOP submit burst without per-sample draining; exposes submission-path backpressure |
+| **submit_only_mfence** | DSA NOOP submit burst with `mfence` between submissions; probes posted-write serialization |
 | **memmove** | Single-op DMA copy latency (rdtscp, per size) |
 | **crc_gen** | Single-op CRC-32C generation latency |
 | **copy_crc** | Single-op fused copy+CRC latency |
@@ -56,7 +63,10 @@ Backend notes:
 
 ## Timing
 
-- Latency benchmarks use **rdtscp** for cycle-accurate measurement (~7ns overhead vs ~30ns for Instant::now)
+- Latency benchmarks use **rdtscp** by default for low-overhead TSC timing.
+- Submit-only runs measure each workload three independent ways: TSC ticks,
+  wall-clock nanoseconds, and PMU core cycles. Each timer source wraps a separate
+  run of the same burst so the timers do not interfere with each other.
 - Throughput benchmarks use **Instant::now** (amortized over many ops)
 - TSC frequency auto-detected from /proc/cpuinfo
 

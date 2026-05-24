@@ -3,14 +3,18 @@ use std::thread;
 use std::time::Instant;
 
 use hw_eval::dsa::*;
-use hw_eval::submit::{cycles_to_ns, flush_range, lfence, rdtscp, WqPortal};
+use hw_eval::submit::{cycles_to_ns, flush_range, lfence, mfence, rdtscp, WqPortal};
 
+use crate::config::{BenchmarkKind, SubmitOnlyMode};
 use crate::report::{compute_stats, LatencyResult, ThroughputResult};
+use crate::timing::MeasurementTimers;
 
 pub(crate) fn run_dsa_benchmarks(
     wq: &WqPortal,
     sizes: &[usize],
     iterations: usize,
+    benchmark: BenchmarkKind,
+    submit_mode: SubmitOnlyMode,
     max_concurrency: usize,
     submit_threads: usize,
     tsc_freq: u64,
@@ -19,7 +23,20 @@ pub(crate) fn run_dsa_benchmarks(
     latency_results: &mut Vec<LatencyResult>,
     throughput_results: &mut Vec<ThroughputResult>,
 ) {
+    if benchmark == BenchmarkKind::SubmitOnly {
+        bench_submit_only_same_desc(wq, iterations, submit_mode, tsc_freq, json, latency_results);
+        return;
+    }
+
     bench_noop_latency(wq, iterations, tsc_freq, json, latency_results);
+    bench_submit_only_same_desc(
+        wq,
+        iterations,
+        SubmitOnlyMode::Unloaded,
+        tsc_freq,
+        json,
+        latency_results,
+    );
 
     bench_single_op_latency(
         wq,
@@ -142,6 +159,278 @@ pub(crate) fn run_dsa_benchmarks(
 }
 
 // ============================================================================
+// Submit-only burst benchmark
+// ============================================================================
+
+fn bench_submit_only_same_desc(
+    wq: &WqPortal,
+    iterations: usize,
+    submit_mode: SubmitOnlyMode,
+    tsc_freq: u64,
+    json: bool,
+    results: &mut Vec<LatencyResult>,
+) {
+    for workload in submit_workloads(submit_mode) {
+        bench_submit_only_workload::<TscTimer>(wq, iterations, *workload, tsc_freq, json, results);
+        bench_submit_only_workload::<WallTimer>(wq, iterations, *workload, tsc_freq, json, results);
+        bench_submit_only_workload::<PmuTimer>(wq, iterations, *workload, tsc_freq, json, results);
+    }
+}
+
+#[derive(Copy, Clone)]
+struct SubmitOnlyWorkload {
+    name: &'static str,
+    mode: SubmitOnlyMeasureMode,
+}
+
+#[derive(Copy, Clone)]
+enum SubmitOnlyMeasureMode {
+    Drained,
+    Sustained,
+    MfenceBetweenSubmits,
+}
+
+fn submit_workloads(submit_mode: SubmitOnlyMode) -> &'static [SubmitOnlyWorkload] {
+    const UNLOADED: SubmitOnlyWorkload = SubmitOnlyWorkload {
+        name: "submit_only_unloaded",
+        mode: SubmitOnlyMeasureMode::Drained,
+    };
+    const SUSTAINED: SubmitOnlyWorkload = SubmitOnlyWorkload {
+        name: "submit_only_sustained",
+        mode: SubmitOnlyMeasureMode::Sustained,
+    };
+    const MFENCE: SubmitOnlyWorkload = SubmitOnlyWorkload {
+        name: "submit_only_mfence",
+        mode: SubmitOnlyMeasureMode::MfenceBetweenSubmits,
+    };
+    const ALL: &[SubmitOnlyWorkload] = &[UNLOADED, MFENCE, SUSTAINED];
+    const UNLOADED_ONLY: &[SubmitOnlyWorkload] = &[UNLOADED];
+    const SUSTAINED_ONLY: &[SubmitOnlyWorkload] = &[SUSTAINED];
+    const MFENCE_ONLY: &[SubmitOnlyWorkload] = &[MFENCE];
+
+    match submit_mode {
+        SubmitOnlyMode::All => ALL,
+        SubmitOnlyMode::Unloaded => UNLOADED_ONLY,
+        SubmitOnlyMode::Sustained => SUSTAINED_ONLY,
+        SubmitOnlyMode::Mfence => MFENCE_ONLY,
+    }
+}
+
+fn bench_submit_only_workload<T: SubmitTimer>(
+    wq: &WqPortal,
+    iterations: usize,
+    workload: SubmitOnlyWorkload,
+    tsc_freq: u64,
+    json: bool,
+    results: &mut Vec<LatencyResult>,
+) {
+    const BURSTS: [usize; 10] = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512];
+
+    let mut desc = DsaHwDesc::default();
+    let mut sentinel_desc = DsaHwDesc::default();
+    let mut sentinel_comp = DsaCompletionRecord::default();
+
+    desc.fill_noop(DsaFlags::empty());
+    sentinel_desc.fill_noop(completion_flags_no_cache_control());
+    sentinel_desc.set_completion(&mut sentinel_comp);
+
+    let mut timers = MeasurementTimers::new();
+    T::warn_if_unavailable(&mut timers, json);
+
+    if !json {
+        println!("\n=== {} ({}) ===", workload.name, T::NAME);
+        println!(
+            "{:>8} {:>14} {:>14}",
+            "burst",
+            T::BATCH_LABEL,
+            T::SUBMIT_LABEL
+        );
+    }
+
+    for burst in BURSTS {
+        let mut measurements = Vec::with_capacity(iterations);
+
+        for _ in 0..iterations {
+            if workload.needs_sample_drain() {
+                reset_completion(&mut sentinel_comp);
+            }
+
+            let value = T::measure(&mut timers, || workload.submit_burst(wq, &desc, burst));
+
+            if workload.needs_sample_drain() {
+                drain_submit_only_queue(
+                    wq,
+                    &sentinel_desc,
+                    &mut sentinel_comp,
+                    workload.name,
+                    burst,
+                );
+            }
+
+            measurements.push(value);
+        }
+
+        measurements.sort_unstable();
+        let stats = compute_stats(&measurements);
+
+        if !json {
+            println!(
+                "{:>8} {:>14} {:>14.1}",
+                burst,
+                stats.median,
+                stats.median as f64 / burst as f64
+            );
+        }
+
+        results.push(T::latency_result(
+            workload.name,
+            burst,
+            stats,
+            tsc_freq,
+            &measurements,
+        ));
+    }
+
+    if !workload.needs_sample_drain() {
+        reset_completion(&mut sentinel_comp);
+        drain_submit_only_queue(wq, &sentinel_desc, &mut sentinel_comp, workload.name, 0);
+    }
+}
+
+fn drain_submit_only_queue(
+    wq: &WqPortal,
+    sentinel_desc: &DsaHwDesc,
+    sentinel_comp: &mut DsaCompletionRecord,
+    benchmark: &str,
+    burst: usize,
+) {
+    unsafe { wq.submit(sentinel_desc) };
+    let status = poll_completion(sentinel_comp);
+    if status != DSA_COMP_SUCCESS {
+        panic!(
+            "DSA submit-only drain sentinel failed: status {:#x} (benchmark={}, burst={})",
+            status, benchmark, burst
+        );
+    }
+}
+
+trait SubmitTimer {
+    const NAME: &'static str;
+    const BATCH_LABEL: &'static str;
+    const SUBMIT_LABEL: &'static str;
+
+    fn warn_if_unavailable(_timers: &mut MeasurementTimers, _json: bool) {}
+
+    fn measure(submit_timers: &mut MeasurementTimers, submit: impl FnOnce()) -> u64;
+
+    fn latency_result(
+        benchmark: &'static str,
+        burst: usize,
+        stats: crate::report::LatencyStats,
+        tsc_freq: u64,
+        measurements: &[u64],
+    ) -> LatencyResult;
+}
+
+struct TscTimer;
+struct WallTimer;
+struct PmuTimer;
+
+impl SubmitTimer for TscTimer {
+    const NAME: &'static str = "tsc";
+    const BATCH_LABEL: &'static str = "tsc/batch";
+    const SUBMIT_LABEL: &'static str = "tsc/submit";
+
+    fn measure(timers: &mut MeasurementTimers, submit: impl FnOnce()) -> u64 {
+        timers.measure_tsc(submit)
+    }
+
+    fn latency_result(
+        benchmark: &'static str,
+        burst: usize,
+        stats: crate::report::LatencyStats,
+        tsc_freq: u64,
+        measurements: &[u64],
+    ) -> LatencyResult {
+        let ns_vec: Vec<u64> = measurements
+            .iter()
+            .map(|&ticks| cycles_to_ns(ticks, tsc_freq))
+            .collect();
+        LatencyResult::with_tsc_ticks(benchmark, burst, stats, compute_stats(&ns_vec))
+    }
+}
+
+impl SubmitTimer for WallTimer {
+    const NAME: &'static str = "wall";
+    const BATCH_LABEL: &'static str = "ns/batch";
+    const SUBMIT_LABEL: &'static str = "ns/submit";
+
+    fn measure(timers: &mut MeasurementTimers, submit: impl FnOnce()) -> u64 {
+        timers.measure_wall(submit)
+    }
+
+    fn latency_result(
+        benchmark: &'static str,
+        burst: usize,
+        stats: crate::report::LatencyStats,
+        _tsc_freq: u64,
+        _measurements: &[u64],
+    ) -> LatencyResult {
+        LatencyResult::with_wall_ns(benchmark, burst, stats)
+    }
+}
+
+impl SubmitTimer for PmuTimer {
+    const NAME: &'static str = "pmu";
+    const BATCH_LABEL: &'static str = "core/batch";
+    const SUBMIT_LABEL: &'static str = "core/submit";
+
+    fn warn_if_unavailable(timers: &mut MeasurementTimers, json: bool) {
+        timers.warn_if_pmu_unavailable(json);
+    }
+
+    fn measure(timers: &mut MeasurementTimers, submit: impl FnOnce()) -> u64 {
+        timers
+            .measure_pmu(submit)
+            .unwrap_or_else(|| panic!("PMU core-cycle counter unavailable"))
+    }
+
+    fn latency_result(
+        benchmark: &'static str,
+        burst: usize,
+        stats: crate::report::LatencyStats,
+        _tsc_freq: u64,
+        _measurements: &[u64],
+    ) -> LatencyResult {
+        LatencyResult::with_core_cycles(benchmark, burst, stats)
+    }
+}
+
+impl SubmitOnlyWorkload {
+    fn needs_sample_drain(self) -> bool {
+        !matches!(self.mode, SubmitOnlyMeasureMode::Sustained)
+    }
+
+    fn submit_burst(self, wq: &WqPortal, desc: &DsaHwDesc, burst: usize) {
+        match self.mode {
+            SubmitOnlyMeasureMode::Drained | SubmitOnlyMeasureMode::Sustained => {
+                for _ in 0..burst {
+                    unsafe { wq.submit(desc) };
+                }
+            }
+            SubmitOnlyMeasureMode::MfenceBetweenSubmits => {
+                for index in 0..burst {
+                    unsafe { wq.submit(desc) };
+                    if index + 1 != burst {
+                        mfence();
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ============================================================================
 // NOOP latency benchmark
 // ============================================================================
 
@@ -159,7 +448,7 @@ fn bench_noop_latency(
     // Warmup
     for _ in 0..100 {
         reset_completion(&mut comp);
-        desc.fill_noop(default_completion_flags());
+        desc.fill_noop(completion_flags_no_cache_control());
         desc.set_completion(&mut comp);
         unsafe { wq.submit(&desc) };
         poll_completion(&comp);
@@ -168,7 +457,7 @@ fn bench_noop_latency(
     // Measure
     for _ in 0..iterations {
         reset_completion(&mut comp);
-        desc.fill_noop(default_completion_flags());
+        desc.fill_noop(completion_flags_no_cache_control());
         desc.set_completion(&mut comp);
 
         lfence();
@@ -201,13 +490,7 @@ fn bench_noop_latency(
         );
     }
 
-    results.push(LatencyResult {
-        benchmark: "noop".into(),
-        size: None,
-        batch_size: None,
-        cycles: cyc,
-        ns,
-    });
+    results.push(LatencyResult::basic("noop", None, None, cyc, ns));
 }
 
 // ============================================================================
@@ -286,13 +569,7 @@ fn bench_single_op_latency(
             );
         }
 
-        results.push(LatencyResult {
-            benchmark: op_name.into(),
-            size: Some(size),
-            batch_size: None,
-            cycles: cyc,
-            ns,
-        });
+        results.push(LatencyResult::basic(op_name, Some(size), None, cyc, ns));
     }
 }
 
@@ -392,13 +669,13 @@ fn bench_batch_latency(
             );
         }
 
-        results.push(LatencyResult {
-            benchmark: "batch_memmove".into(),
-            size: Some(size),
-            batch_size: Some(batch_n),
-            cycles: cyc,
+        results.push(LatencyResult::basic(
+            "batch_memmove",
+            Some(size),
+            Some(batch_n),
+            cyc,
             ns,
-        });
+        ));
     }
 }
 
