@@ -3,11 +3,11 @@
     "devenv": {
       "locked": {
         "dir": "src/modules",
-        "lastModified": 1776968239,
-        "narHash": "sha256-4kuGE6iwtCrd6BsGMvLBis8Bbn04c0V5T1Yt6Tmmtyc=",
+        "lastModified": 1779566536,
+        "narHash": "sha256-KlMZMcgyU0BFUW2JCrCb9IHJMgCdG0eyhukpu9pwXLs=",
         "owner": "cachix",
         "repo": "devenv",
-        "rev": "c873d21f80b6b43f121258f5e6fd3b34afa7b930",
+        "rev": "6715fab7a826d108278fbfd6ef35a61f49ab7ac9",
         "type": "github"
       },
       "original": {
@@ -38,11 +38,11 @@
         "nixpkgs-src": "nixpkgs-src"
       },
       "locked": {
-        "lastModified": 1776852779,
-        "narHash": "sha256-WwO/ITisCXwyiRgtktZgv3iGhAGO+IB5Av4kKCwezR0=",
+        "lastModified": 1778507786,
+        "narHash": "sha256-HzSQCKMsMr8r55LwM1JuzIOB+8bzk0FEv6sItKvsfoY=",
         "owner": "cachix",
         "repo": "devenv-nixpkgs",
-        "rev": "ec3063523dcd911aeadb50faa589f237cdab5853",
+        "rev": "8f24a228a782e24576b155d1e39f0d914b380691",
         "type": "github"
       },
       "original": {
@@ -55,11 +55,11 @@
     "nixpkgs-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1776329215,
-        "narHash": "sha256-a8BYi3mzoJ/AcJP8UldOx8emoPRLeWqALZWu4ZvjPXw=",
+        "lastModified": 1778274207,
+        "narHash": "sha256-I4puXmX1iovcCHZlRmztO3vW0mAbbRvq4F8wgIMQ1MM=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "b86751bc4085f48661017fa226dee99fab6c651b",
+        "rev": "b3da656039dc7a6240f27b2ef8cc6a3ef3bccae7",
         "type": "github"
       },
       "original": {
@@ -71,11 +71,11 @@
     },
     "nixpkgs-stable": {
       "locked": {
-        "lastModified": 1776734388,
-        "narHash": "sha256-vl3dkhlE5gzsItuHoEMVe+DlonsK+0836LIRDnm6MXQ=",
+        "lastModified": 1779102034,
+        "narHash": "sha256-vZJZjLo513IeI8hjzHFc6TDezUd4uCE2Eq4SNO3DNNg=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "10e7ad5bbcb421fe07e3a4ad53a634b0cd57ffac",
+        "rev": "687f05a9184cad4eaf905c48b63649e3a86f5433",
         "type": "github"
       },
       "original": {
@@ -133,11 +133,11 @@
     "stdexec": {
       "flake": false,
       "locked": {
-        "lastModified": 1776718810,
-        "narHash": "sha256-f8HYvFrs/ypEgbkBTHs1WQ+8bI4fFsN0rSatRcXy7lg=",
+        "lastModified": 1779407230,
+        "narHash": "sha256-g4KJxKWOrPC2RoIwFHUimZ7OJPxP63Oa8nLoWTwvVT8=",
         "owner": "nvidia",
         "repo": "stdexec",
-        "rev": "931f256c3af0cdd2a3b49c04892c82d7945dc5a7",
+        "rev": "feff2aacf1d1f8470bce31442487fa557d7fdd76",
         "type": "github"
       },
       "original": {
@@ -149,11 +149,11 @@
     "tomlplusplus": {
       "flake": false,
       "locked": {
-        "lastModified": 1776413822,
-        "narHash": "sha256-xHJh+UlyqXJGIM3XvHLFRcoISaoWufMxXlTGJAVZNi8=",
+        "lastModified": 1778570198,
+        "narHash": "sha256-Y4VfrgoF3RCvKYCk5OXkN9M0uHCseChNlcIK4gy47bQ=",
         "owner": "marzer",
         "repo": "tomlplusplus",
-        "rev": "e79458781e821720ff362a432bf9ae5b20cc95bd",
+        "rev": "f22f035fe2d63e2be3d266d8f100e7812a9ab9bd",
         "type": "github"
       },
       "original": {

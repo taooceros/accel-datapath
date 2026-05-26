@@ -21,11 +21,6 @@ in
     javascript = {
       enable = true;
       directory = "./tools/mosaic-tonic-report";
-      bun = {
-        enable = true;
-        package = pkgs.bun;
-        install.enable = true;
-      };
       npm = {
         enable = true;
         package = pkgs.nodejs;
@@ -40,10 +35,55 @@ in
       package = pkgs.python3;
       libraries = with pkgs; [
         zlib
+        # libraries needed by pg0 / bundled postgres
+        zstd
+        lz4
+        openssl
+        krb5
+        xz
         stdenv.cc.cc.lib
       ];
+      uv = {
+        enable = true;
+        sync.enable = true;
+      };
     };
   };
+
+  env.HINDSIGHT_API_LLM_PROVIDER = "openai-codex";
+
+  services.postgres = {
+    enable = true;
+    package = pkgs.postgresql_16;
+
+    listen_addresses = "127.0.0.1";
+    port = 5432;
+
+    initialDatabases = [
+      {
+        name = "hindsight";
+        user = "hindsight";
+        pass = "hindsight";
+      }
+    ];
+
+    extensions = extensions: [
+      extensions.pgvector
+    ];
+
+    initialScript = ''
+      ALTER USER hindsight WITH SUPERUSER;
+      \connect hindsight
+      CREATE EXTENSION IF NOT EXISTS vector;
+    '';
+  };
+
+  env.HINDSIGHT_API_DATABASE_URL = "postgresql://hindsight:hindsight@127.0.0.1:5432/hindsight";
+
+  # Some Hindsight docs also mention DATABASE_URL; setting both is harmless.
+  env.DATABASE_URL = "postgresql://hindsight:hindsight@127.0.0.1:5432/hindsight";
+
+  env.HINDSIGHT_API_VECTOR_EXTENSION = "pgvector";
 
   # 3. Environment Variables (The Fix)
   # This ensures build systems use GCC 15 instead of the default stdenv compiler.
@@ -96,6 +136,7 @@ in
     pkgs-stable.python3Packages.plotly
     pkgs-stable.python3Packages.pdfplumber
   ];
+
   # 1. Force C/C++ Compiler Flags
   # -g: Generate debug info
   # -fno-omit-frame-pointer: Crucial for 'perf' to unwind stacks correctly
