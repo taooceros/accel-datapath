@@ -1,0 +1,10 @@
+{
+  "servers": {
+    "tinymist": {
+      "command": "tinymist",
+      "args": ["lsp"],
+      "fileTypes": [".typ"],
+      "rootMarkers": [".git", "typst.toml"]
+    }
+  }
+}
