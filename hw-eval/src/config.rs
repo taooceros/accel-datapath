@@ -7,6 +7,7 @@ pub(crate) const DEFAULT_SIZES: &str = "64,256,1024,4096,16384,65536,262144,1048
 pub(crate) const DEFAULT_ITERATIONS: usize = 10_000;
 pub(crate) const DEFAULT_MAX_CONCURRENCY: usize = 128;
 pub(crate) const DEFAULT_SUBMIT_THREADS: usize = 1;
+pub(crate) const DEFAULT_SUBMIT_BURSTS: &str = "1,2,4,8,16,32,64,128,256,512";
 
 #[derive(Parser)]
 #[command(
@@ -44,6 +45,9 @@ pub(crate) struct Args {
     /// Submit-only workload variant to run when --benchmark submit-only is selected
     #[arg(long, value_enum, default_value = "all")]
     submit_mode: SubmitOnlyMode,
+    /// Submit burst sizes for submit-only benchmarks (comma-separated)
+    #[arg(long, default_value = DEFAULT_SUBMIT_BURSTS)]
+    submit_bursts: String,
 
     /// Run software baselines only (no hardware required)
     #[arg(long)]
@@ -81,6 +85,7 @@ impl AccelKind {
 pub(crate) enum BenchmarkKind {
     All,
     SubmitOnly,
+    SubmitAdmission,
 }
 
 impl BenchmarkKind {
@@ -88,6 +93,7 @@ impl BenchmarkKind {
         match self {
             Self::All => "all",
             Self::SubmitOnly => "submit-only",
+            Self::SubmitAdmission => "submit-admission",
         }
     }
 }
@@ -108,36 +114,48 @@ pub(crate) fn default_device(accel: AccelKind) -> PathBuf {
 }
 
 pub(crate) fn parse_sizes(s: &str) -> Result<Vec<usize>, BenchmarkConfigError> {
+    parse_positive_usize_list(s, "--sizes")
+}
+
+pub(crate) fn parse_submit_bursts(s: &str) -> Result<Vec<usize>, BenchmarkConfigError> {
+    parse_positive_usize_list(s, "--submit-bursts")
+}
+
+fn parse_positive_usize_list(
+    s: &str,
+    flag: &'static str,
+) -> Result<Vec<usize>, BenchmarkConfigError> {
     let raw = s.to_string();
-    let mut sizes = Vec::new();
+    let mut values = Vec::new();
 
     for token in s.split(',') {
         let trimmed = token.trim();
         if trimmed.is_empty() {
-            return Err(BenchmarkConfigError::EmptySizeToken { raw });
+            return Err(BenchmarkConfigError::EmptyListToken { flag, raw });
         }
 
-        let size =
+        let value =
             trimmed
                 .parse::<usize>()
-                .map_err(|source| BenchmarkConfigError::InvalidSize {
+                .map_err(|source| BenchmarkConfigError::InvalidListEntry {
+                    flag,
                     raw: raw.clone(),
                     token: trimmed.to_string(),
                     source,
                 })?;
 
-        if size == 0 {
-            return Err(BenchmarkConfigError::ZeroSize { raw });
+        if value == 0 {
+            return Err(BenchmarkConfigError::ZeroListEntry { flag, raw });
         }
 
-        sizes.push(size);
+        values.push(value);
     }
 
-    if sizes.is_empty() {
-        return Err(BenchmarkConfigError::EmptySizes { raw });
+    if values.is_empty() {
+        return Err(BenchmarkConfigError::EmptyList { flag, raw });
     }
 
-    Ok(sizes)
+    Ok(values)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -151,6 +169,7 @@ pub(crate) struct BenchmarkConfig {
     pub(crate) benchmark: BenchmarkKind,
     pub(crate) submit_mode: SubmitOnlyMode,
 
+    pub(crate) submit_bursts: Vec<usize>,
     pub(crate) sw_only: bool,
     pub(crate) pin_core: Option<usize>,
     pub(crate) cold: bool,
@@ -176,6 +195,7 @@ impl BenchmarkConfig {
         #[builder(default = DEFAULT_SUBMIT_THREADS)] threads: usize,
         #[builder(default = BenchmarkKind::All)] benchmark: BenchmarkKind,
         #[builder(default = SubmitOnlyMode::All)] submit_mode: SubmitOnlyMode,
+        #[builder(default = DEFAULT_SUBMIT_BURSTS.to_string(), into)] submit_bursts: String,
         #[builder(default)] sw_only: bool,
         pin_core: Option<usize>,
         #[builder(default)] cold: bool,
@@ -183,10 +203,15 @@ impl BenchmarkConfig {
     ) -> Result<Self, BenchmarkConfigError> {
         let device = device.unwrap_or_else(|| default_device(accel));
         let sizes = parse_sizes(&sizes)?;
+        let submit_bursts = parse_submit_bursts(&submit_bursts)?;
         if threads == 0 {
             return Err(BenchmarkConfigError::ZeroThreads);
         }
-        if benchmark == BenchmarkKind::SubmitOnly && accel != AccelKind::Dsa {
+        if matches!(
+            benchmark,
+            BenchmarkKind::SubmitOnly | BenchmarkKind::SubmitAdmission
+        ) && accel != AccelKind::Dsa
+        {
             return Err(BenchmarkConfigError::UnsupportedBenchmark {
                 benchmark: benchmark.as_str(),
                 accel: accel.as_str(),
@@ -202,6 +227,7 @@ impl BenchmarkConfig {
             threads,
             benchmark,
             submit_mode,
+            submit_bursts,
             sw_only,
             pin_core,
             cold,
@@ -219,6 +245,7 @@ impl BenchmarkConfig {
             threads,
             benchmark,
             submit_mode,
+            submit_bursts,
             sw_only,
             pin_core,
             cold,
@@ -234,6 +261,7 @@ impl BenchmarkConfig {
             threads,
             benchmark,
             submit_mode,
+            submit_bursts,
             sw_only,
             pin_core,
             cold,
@@ -244,20 +272,19 @@ impl BenchmarkConfig {
 
 #[derive(Debug, Snafu)]
 pub(crate) enum BenchmarkConfigError {
-    #[snafu(display("--sizes must contain at least one size (got {raw:?})"))]
-    EmptySizes { raw: String },
-    #[snafu(display("--sizes must not contain empty entries (got {raw:?})"))]
-    EmptySizeToken { raw: String },
-    #[snafu(display("invalid --sizes entry {token:?} in {raw:?}; expected positive byte counts"))]
-    InvalidSize {
+    #[snafu(display("{flag} must contain at least one positive integer (got {raw:?})"))]
+    EmptyList { flag: &'static str, raw: String },
+    #[snafu(display("{flag} must not contain empty entries (got {raw:?})"))]
+    EmptyListToken { flag: &'static str, raw: String },
+    #[snafu(display("invalid {flag} entry {token:?} in {raw:?}; expected positive integers"))]
+    InvalidListEntry {
+        flag: &'static str,
         raw: String,
         token: String,
         source: ParseIntError,
     },
-    #[snafu(display(
-        "--sizes entries must be positive byte counts greater than zero (got {raw:?})"
-    ))]
-    ZeroSize { raw: String },
+    #[snafu(display("{flag} entries must be positive integers greater than zero (got {raw:?})"))]
+    ZeroListEntry { flag: &'static str, raw: String },
     #[snafu(display("--threads must be greater than zero"))]
     ZeroThreads,
     #[snafu(display("--benchmark {benchmark} is not supported for --accel {accel}"))]
@@ -286,6 +313,10 @@ mod tests {
         assert_eq!(config.max_concurrency, DEFAULT_MAX_CONCURRENCY);
         assert_eq!(config.benchmark, BenchmarkKind::All);
         assert_eq!(config.submit_mode, SubmitOnlyMode::All);
+        assert_eq!(
+            config.submit_bursts,
+            vec![1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+        );
         assert_eq!(config.threads, DEFAULT_SUBMIT_THREADS);
         assert!(!config.sw_only);
         assert_eq!(config.pin_core, None);
@@ -315,6 +346,7 @@ mod tests {
             .threads(5)
             .benchmark(BenchmarkKind::SubmitOnly)
             .submit_mode(SubmitOnlyMode::Mfence)
+            .submit_bursts("2, 64".to_string())
             .sw_only(true)
             .pin_core(3)
             .cold(true)
@@ -329,10 +361,19 @@ mod tests {
         assert_eq!(config.threads, 5);
         assert_eq!(config.benchmark, BenchmarkKind::SubmitOnly);
         assert_eq!(config.submit_mode, SubmitOnlyMode::Mfence);
+        assert_eq!(config.submit_bursts, vec![2, 64]);
         assert!(config.sw_only);
         assert_eq!(config.pin_core, Some(3));
         assert!(config.cold);
         assert!(config.json);
+
+        let admission = BenchmarkConfig::builder()
+            .benchmark(BenchmarkKind::SubmitAdmission)
+            .submit_bursts("64,128".to_string())
+            .build()
+            .unwrap();
+        assert_eq!(admission.benchmark, BenchmarkKind::SubmitAdmission);
+        assert_eq!(admission.submit_bursts, vec![64, 128]);
     }
 
     #[test]
@@ -340,7 +381,13 @@ mod tests {
         let error = parse_sizes("64,abc,128").unwrap_err();
 
         match &error {
-            BenchmarkConfigError::InvalidSize { raw, token, source } => {
+            BenchmarkConfigError::InvalidListEntry {
+                flag,
+                raw,
+                token,
+                source,
+            } => {
+                assert_eq!(*flag, "--sizes");
                 assert_eq!(raw, "64,abc,128");
                 assert_eq!(token, "abc");
                 assert_eq!(source.to_string(), "invalid digit found in string");
@@ -363,12 +410,32 @@ mod tests {
     fn parse_sizes_rejects_empty_entries_and_zero_sizes() {
         assert!(matches!(
             parse_sizes("64,,128"),
-            Err(BenchmarkConfigError::EmptySizeToken { .. })
+            Err(BenchmarkConfigError::EmptyListToken { .. })
         ));
         assert!(matches!(
             parse_sizes("64,0,128"),
-            Err(BenchmarkConfigError::ZeroSize { .. })
+            Err(BenchmarkConfigError::ZeroListEntry { .. })
         ));
+    }
+
+    #[test]
+    fn parse_submit_bursts_rejects_malformed_tokens_without_panicking() {
+        let error = parse_submit_bursts("1,nope,64").unwrap_err();
+
+        match &error {
+            BenchmarkConfigError::InvalidListEntry {
+                flag,
+                raw,
+                token,
+                source,
+            } => {
+                assert_eq!(*flag, "--submit-bursts");
+                assert_eq!(raw, "1,nope,64");
+                assert_eq!(token, "nope");
+                assert_eq!(source.to_string(), "invalid digit found in string");
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
     }
 
     #[test]
@@ -393,6 +460,24 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "--benchmark submit-only is not supported for --accel iax"
+        );
+    }
+
+    #[test]
+    fn submit_admission_benchmark_is_dsa_only() {
+        let error = BenchmarkConfig::builder()
+            .accel(AccelKind::Iax)
+            .benchmark(BenchmarkKind::SubmitAdmission)
+            .build()
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            BenchmarkConfigError::UnsupportedBenchmark { .. }
+        ));
+        assert_eq!(
+            error.to_string(),
+            "--benchmark submit-admission is not supported for --accel iax"
         );
     }
 }

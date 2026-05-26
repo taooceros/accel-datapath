@@ -49,6 +49,8 @@ pub(crate) struct FullReport {
     pub(crate) metadata: Metadata,
     pub(crate) latency: Vec<LatencyResult>,
     pub(crate) throughput: Vec<ThroughputResult>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) admission: Vec<AdmissionResult>,
 }
 
 #[derive(Serialize)]
@@ -73,6 +75,8 @@ pub(crate) struct LatencyResult {
     pub(crate) cycles: LatencyStats,
     pub(crate) ns: LatencyStats,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) timer: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) tsc_ticks: Option<LatencyStats>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) wall_ns: Option<LatencyStats>,
@@ -94,6 +98,7 @@ impl LatencyResult {
             batch_size,
             cycles,
             ns,
+            timer: None,
             tsc_ticks: None,
             wall_ns: None,
             core_cycles: None,
@@ -102,6 +107,7 @@ impl LatencyResult {
 
     pub(crate) fn with_tsc_ticks(
         benchmark: impl Into<String>,
+        timer: &'static str,
         batch_size: usize,
         tsc_ticks: LatencyStats,
         ns: LatencyStats,
@@ -112,6 +118,7 @@ impl LatencyResult {
             batch_size: Some(batch_size),
             cycles: tsc_ticks.clone(),
             ns,
+            timer: Some(timer),
             tsc_ticks: Some(tsc_ticks),
             wall_ns: None,
             core_cycles: None,
@@ -120,6 +127,7 @@ impl LatencyResult {
 
     pub(crate) fn with_wall_ns(
         benchmark: impl Into<String>,
+        timer: &'static str,
         batch_size: usize,
         wall_ns: LatencyStats,
     ) -> Self {
@@ -129,6 +137,7 @@ impl LatencyResult {
             batch_size: Some(batch_size),
             cycles: wall_ns.clone(),
             ns: wall_ns.clone(),
+            timer: Some(timer),
             tsc_ticks: None,
             wall_ns: Some(wall_ns),
             core_cycles: None,
@@ -137,6 +146,7 @@ impl LatencyResult {
 
     pub(crate) fn with_core_cycles(
         benchmark: impl Into<String>,
+        timer: &'static str,
         batch_size: usize,
         core_cycles: LatencyStats,
     ) -> Self {
@@ -146,11 +156,24 @@ impl LatencyResult {
             batch_size: Some(batch_size),
             cycles: core_cycles.clone(),
             ns: core_cycles.clone(),
+            timer: Some(timer),
             tsc_ticks: None,
             wall_ns: None,
             core_cycles: Some(core_cycles),
         }
     }
+}
+
+#[derive(Serialize)]
+pub(crate) struct AdmissionResult {
+    pub(crate) benchmark: String,
+    pub(crate) burst_size: usize,
+    pub(crate) submitted: usize,
+    pub(crate) completed: LatencyStats,
+    pub(crate) missing: LatencyStats,
+    pub(crate) errors: LatencyStats,
+    pub(crate) submit_tsc_ticks: LatencyStats,
+    pub(crate) submit_ns: LatencyStats,
 }
 
 #[derive(Serialize)]

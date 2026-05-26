@@ -21,7 +21,9 @@ use hw_eval::submit::*;
 use methodology::dsa::run_dsa_benchmarks;
 use methodology::iax::run_iax_benchmarks;
 use methodology::software::bench_software_baselines;
-use report::{print_json_report, FullReport, LatencyResult, Metadata, ThroughputResult};
+use report::{
+    print_json_report, AdmissionResult, FullReport, LatencyResult, Metadata, ThroughputResult,
+};
 use snafu::{ResultExt, Snafu};
 
 #[derive(Debug, Snafu)]
@@ -76,6 +78,7 @@ fn build_report(
     wq: Option<&WqPortal>,
     latency_results: Vec<LatencyResult>,
     throughput_results: Vec<ThroughputResult>,
+    admission_results: Vec<AdmissionResult>,
 ) -> FullReport {
     FullReport {
         metadata: Metadata {
@@ -92,6 +95,7 @@ fn build_report(
         },
         latency: latency_results,
         throughput: throughput_results,
+        admission: admission_results,
     }
 }
 
@@ -164,8 +168,14 @@ fn run() -> Result<(), HwEvalError> {
         println!("Accelerator: {}", config.accel.as_str());
         println!("Sizes: {:?}", config.sizes);
         println!("Iterations: {}", config.iterations);
-        if config.benchmark == BenchmarkKind::SubmitOnly {
-            println!("Submit mode: {:?}", config.submit_mode);
+        if matches!(
+            config.benchmark,
+            BenchmarkKind::SubmitOnly | BenchmarkKind::SubmitAdmission
+        ) {
+            println!("Submit bursts: {:?}", config.submit_bursts);
+            if config.benchmark == BenchmarkKind::SubmitOnly {
+                println!("Submit mode: {:?}", config.submit_mode);
+            }
         }
         println!("Submit threads: {}", config.threads);
         if config.cold {
@@ -178,6 +188,7 @@ fn run() -> Result<(), HwEvalError> {
 
     let mut latency_results: Vec<LatencyResult> = Vec::new();
     let mut throughput_results: Vec<ThroughputResult> = Vec::new();
+    let mut admission_results: Vec<AdmissionResult> = Vec::new();
 
     // Software baselines
     if config.sw_only || config.benchmark == BenchmarkKind::All {
@@ -198,6 +209,7 @@ fn run() -> Result<(), HwEvalError> {
                 None,
                 latency_results,
                 throughput_results,
+                admission_results,
             );
             print_json_report(&report)?;
         }
@@ -238,6 +250,7 @@ fn run() -> Result<(), HwEvalError> {
                 } else {
                     SubmitOnlyMode::Unloaded
                 },
+                &config.submit_bursts,
                 config.max_concurrency,
                 config.threads,
                 tsc_freq,
@@ -245,6 +258,7 @@ fn run() -> Result<(), HwEvalError> {
                 config.json,
                 &mut latency_results,
                 &mut throughput_results,
+                &mut admission_results,
             );
         }
         AccelKind::Iax => {
@@ -270,6 +284,7 @@ fn run() -> Result<(), HwEvalError> {
             Some(&wq),
             latency_results,
             throughput_results,
+            admission_results,
         );
         print_json_report(&report)?;
     } else {

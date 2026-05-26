@@ -6,7 +6,7 @@ use hw_eval::dsa::*;
 use hw_eval::submit::{cycles_to_ns, flush_range, lfence, mfence, rdtscp, WqPortal};
 
 use crate::config::{BenchmarkKind, SubmitOnlyMode};
-use crate::report::{compute_stats, LatencyResult, ThroughputResult};
+use crate::report::{compute_stats, AdmissionResult, LatencyResult, ThroughputResult};
 use crate::timing::MeasurementTimers;
 
 pub(crate) fn run_dsa_benchmarks(
@@ -15,6 +15,7 @@ pub(crate) fn run_dsa_benchmarks(
     iterations: usize,
     benchmark: BenchmarkKind,
     submit_mode: SubmitOnlyMode,
+    submit_bursts: &[usize],
     max_concurrency: usize,
     submit_threads: usize,
     tsc_freq: u64,
@@ -22,9 +23,30 @@ pub(crate) fn run_dsa_benchmarks(
     json: bool,
     latency_results: &mut Vec<LatencyResult>,
     throughput_results: &mut Vec<ThroughputResult>,
+    admission_results: &mut Vec<AdmissionResult>,
 ) {
     if benchmark == BenchmarkKind::SubmitOnly {
-        bench_submit_only_same_desc(wq, iterations, submit_mode, tsc_freq, json, latency_results);
+        bench_submit_only_same_desc(
+            wq,
+            iterations,
+            submit_mode,
+            submit_bursts,
+            tsc_freq,
+            json,
+            latency_results,
+        );
+        return;
+    }
+
+    if benchmark == BenchmarkKind::SubmitAdmission {
+        bench_submit_admission_probe(
+            wq,
+            iterations,
+            submit_bursts,
+            tsc_freq,
+            json,
+            admission_results,
+        );
         return;
     }
 
@@ -33,6 +55,7 @@ pub(crate) fn run_dsa_benchmarks(
         wq,
         iterations,
         SubmitOnlyMode::Unloaded,
+        submit_bursts,
         tsc_freq,
         json,
         latency_results,
@@ -166,15 +189,84 @@ fn bench_submit_only_same_desc(
     wq: &WqPortal,
     iterations: usize,
     submit_mode: SubmitOnlyMode,
+    submit_bursts: &[usize],
     tsc_freq: u64,
     json: bool,
     results: &mut Vec<LatencyResult>,
 ) {
+    const EMPTY: SubmitOnlyWorkload = SubmitOnlyWorkload {
+        name: "submit_only_empty",
+        mode: SubmitOnlyMeasureMode::Empty,
+    };
+
+    bench_submit_only_all_timers(
+        wq,
+        iterations,
+        EMPTY,
+        submit_bursts,
+        tsc_freq,
+        json,
+        results,
+    );
+
     for workload in submit_workloads(submit_mode) {
-        bench_submit_only_workload::<TscTimer>(wq, iterations, *workload, tsc_freq, json, results);
-        bench_submit_only_workload::<WallTimer>(wq, iterations, *workload, tsc_freq, json, results);
-        bench_submit_only_workload::<PmuTimer>(wq, iterations, *workload, tsc_freq, json, results);
+        bench_submit_only_all_timers(
+            wq,
+            iterations,
+            *workload,
+            submit_bursts,
+            tsc_freq,
+            json,
+            results,
+        );
     }
+}
+
+fn bench_submit_only_all_timers(
+    wq: &WqPortal,
+    iterations: usize,
+    workload: SubmitOnlyWorkload,
+    submit_bursts: &[usize],
+    tsc_freq: u64,
+    json: bool,
+    results: &mut Vec<LatencyResult>,
+) {
+    bench_submit_only_workload::<TscTimer>(
+        wq,
+        iterations,
+        workload,
+        submit_bursts,
+        tsc_freq,
+        json,
+        results,
+    );
+    bench_submit_only_workload::<WallTimer>(
+        wq,
+        iterations,
+        workload,
+        submit_bursts,
+        tsc_freq,
+        json,
+        results,
+    );
+    bench_submit_only_workload::<PmuTimer>(
+        wq,
+        iterations,
+        workload,
+        submit_bursts,
+        tsc_freq,
+        json,
+        results,
+    );
+    bench_submit_only_workload::<RdpmcTimer>(
+        wq,
+        iterations,
+        workload,
+        submit_bursts,
+        tsc_freq,
+        json,
+        results,
+    );
 }
 
 #[derive(Copy, Clone)]
@@ -185,6 +277,7 @@ struct SubmitOnlyWorkload {
 
 #[derive(Copy, Clone)]
 enum SubmitOnlyMeasureMode {
+    Empty,
     Drained,
     Sustained,
     MfenceBetweenSubmits,
@@ -196,7 +289,7 @@ fn submit_workloads(submit_mode: SubmitOnlyMode) -> &'static [SubmitOnlyWorkload
         mode: SubmitOnlyMeasureMode::Drained,
     };
     const SUSTAINED: SubmitOnlyWorkload = SubmitOnlyWorkload {
-        name: "submit_only_sustained",
+        name: "submit_only_pressure_ramp",
         mode: SubmitOnlyMeasureMode::Sustained,
     };
     const MFENCE: SubmitOnlyWorkload = SubmitOnlyWorkload {
@@ -220,12 +313,11 @@ fn bench_submit_only_workload<T: SubmitTimer>(
     wq: &WqPortal,
     iterations: usize,
     workload: SubmitOnlyWorkload,
+    submit_bursts: &[usize],
     tsc_freq: u64,
     json: bool,
     results: &mut Vec<LatencyResult>,
 ) {
-    const BURSTS: [usize; 10] = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512];
-
     let mut desc = DsaHwDesc::default();
     let mut sentinel_desc = DsaHwDesc::default();
     let mut sentinel_comp = DsaCompletionRecord::default();
@@ -236,6 +328,9 @@ fn bench_submit_only_workload<T: SubmitTimer>(
 
     let mut timers = MeasurementTimers::new();
     T::warn_if_unavailable(&mut timers, json);
+    if !T::is_available(&timers) {
+        return;
+    }
 
     if !json {
         println!("\n=== {} ({}) ===", workload.name, T::NAME);
@@ -247,7 +342,7 @@ fn bench_submit_only_workload<T: SubmitTimer>(
         );
     }
 
-    for burst in BURSTS {
+    for &burst in submit_bursts {
         let mut measurements = Vec::with_capacity(iterations);
 
         for _ in 0..iterations {
@@ -291,10 +386,191 @@ fn bench_submit_only_workload<T: SubmitTimer>(
         ));
     }
 
-    if !workload.needs_sample_drain() {
+    if workload.needs_final_drain() {
         reset_completion(&mut sentinel_comp);
         drain_submit_only_queue(wq, &sentinel_desc, &mut sentinel_comp, workload.name, 0);
     }
+}
+
+// ============================================================================
+// Submit-admission probe
+// ============================================================================
+
+const ADMISSION_COMPLETION_TIMEOUT_NS: u128 = 50_000;
+
+fn bench_submit_admission_probe(
+    wq: &WqPortal,
+    iterations: usize,
+    submit_bursts: &[usize],
+    tsc_freq: u64,
+    json: bool,
+    results: &mut Vec<AdmissionResult>,
+) {
+    let Some(&max_burst) = submit_bursts.iter().max() else {
+        return;
+    };
+
+    let (descs, mut comps) = prepare_admission_descriptors(max_burst);
+    let mut seen = vec![false; max_burst];
+    let mut sentinel_desc = DsaHwDesc::default();
+    let mut sentinel_comp = DsaCompletionRecord::default();
+
+    sentinel_desc.fill_noop(completion_flags_no_cache_control());
+    sentinel_desc.set_completion(&mut sentinel_comp);
+
+    if !json {
+        println!("\n=== submit_admission_distinct ===");
+        println!(
+            "{:>8} {:>14} {:>14} {:>14} {:>14}",
+            "burst", "completed", "missing", "tsc/batch", "ns/batch"
+        );
+    }
+
+    for &burst in submit_bursts {
+        let mut completed_counts = Vec::with_capacity(iterations);
+        let mut missing_counts = Vec::with_capacity(iterations);
+        let mut error_counts = Vec::with_capacity(iterations);
+        let mut submit_tsc = Vec::with_capacity(iterations);
+        let mut submit_ns = Vec::with_capacity(iterations);
+
+        for _ in 0..iterations {
+            for comp in &mut comps[..burst] {
+                reset_completion(comp);
+            }
+
+            lfence();
+            let tsc_start = rdtscp().0;
+            for desc in &descs[..burst] {
+                unsafe { wq.submit(desc) };
+            }
+            let tsc_ticks = rdtscp().0 - tsc_start;
+            let submit_tsc_ns = cycles_to_ns(tsc_ticks, tsc_freq);
+
+            let outcome = count_admission_completions(&comps[..burst], &mut seen[..burst]);
+            reset_completion(&mut sentinel_comp);
+            drain_submit_only_queue(
+                wq,
+                &sentinel_desc,
+                &mut sentinel_comp,
+                "submit_admission_distinct",
+                burst,
+            );
+
+            let outcome = if outcome.completed == burst {
+                outcome
+            } else {
+                scan_admission_completions(&comps[..burst])
+            };
+
+            completed_counts.push(outcome.completed as u64);
+            missing_counts.push((burst - outcome.completed) as u64);
+            error_counts.push(outcome.errors as u64);
+            submit_tsc.push(tsc_ticks);
+            submit_ns.push(submit_tsc_ns);
+        }
+
+        let completed = stats_from(completed_counts);
+        let missing = stats_from(missing_counts);
+        let errors = stats_from(error_counts);
+        let submit_tsc_ticks = stats_from(submit_tsc);
+        let submit_ns = stats_from(submit_ns);
+
+        if !json {
+            println!(
+                "{:>8} {:>14} {:>14} {:>14} {:>14}",
+                burst, completed.median, missing.median, submit_tsc_ticks.median, submit_ns.median
+            );
+        }
+
+        results.push(AdmissionResult {
+            benchmark: "submit_admission_distinct".to_string(),
+            burst_size: burst,
+            submitted: burst,
+            completed,
+            missing,
+            errors,
+            submit_tsc_ticks,
+            submit_ns,
+        });
+    }
+}
+
+fn prepare_admission_descriptors(count: usize) -> (Vec<DsaHwDesc>, Vec<DsaCompletionRecord>) {
+    let mut comps: Vec<DsaCompletionRecord> =
+        (0..count).map(|_| DsaCompletionRecord::default()).collect();
+    let mut descs: Vec<DsaHwDesc> = (0..count).map(|_| DsaHwDesc::default()).collect();
+
+    for (desc, comp) in descs.iter_mut().zip(comps.iter_mut()) {
+        desc.fill_noop(completion_flags_no_cache_control());
+        desc.set_completion(comp);
+    }
+
+    (descs, comps)
+}
+
+#[derive(Default)]
+struct AdmissionCompletionOutcome {
+    completed: usize,
+    errors: usize,
+}
+
+fn count_admission_completions(
+    comps: &[DsaCompletionRecord],
+    seen: &mut [bool],
+) -> AdmissionCompletionOutcome {
+    seen.fill(false);
+    let mut outcome = AdmissionCompletionOutcome::default();
+    let start = Instant::now();
+
+    loop {
+        for (index, comp) in comps.iter().enumerate() {
+            if seen[index] {
+                continue;
+            }
+
+            let status = comp.status();
+            if status == DSA_COMP_NONE {
+                continue;
+            }
+
+            seen[index] = true;
+            outcome.completed += 1;
+            if DsaCompletionStatus::mask(status) != DSA_COMP_SUCCESS {
+                outcome.errors += 1;
+            }
+        }
+
+        if outcome.completed == comps.len()
+            || start.elapsed().as_nanos() >= ADMISSION_COMPLETION_TIMEOUT_NS
+        {
+            return outcome;
+        }
+
+        core::hint::spin_loop();
+    }
+}
+
+fn scan_admission_completions(comps: &[DsaCompletionRecord]) -> AdmissionCompletionOutcome {
+    let mut outcome = AdmissionCompletionOutcome::default();
+
+    for comp in comps {
+        let status = comp.status();
+        if status == DSA_COMP_NONE {
+            continue;
+        }
+
+        outcome.completed += 1;
+        if DsaCompletionStatus::mask(status) != DSA_COMP_SUCCESS {
+            outcome.errors += 1;
+        }
+    }
+
+    outcome
+}
+
+fn stats_from(mut values: Vec<u64>) -> crate::report::LatencyStats {
+    values.sort_unstable();
+    compute_stats(&values)
 }
 
 fn drain_submit_only_queue(
@@ -321,6 +597,10 @@ trait SubmitTimer {
 
     fn warn_if_unavailable(_timers: &mut MeasurementTimers, _json: bool) {}
 
+    fn is_available(_timers: &MeasurementTimers) -> bool {
+        true
+    }
+
     fn measure(submit_timers: &mut MeasurementTimers, submit: impl FnOnce()) -> u64;
 
     fn latency_result(
@@ -335,6 +615,7 @@ trait SubmitTimer {
 struct TscTimer;
 struct WallTimer;
 struct PmuTimer;
+struct RdpmcTimer;
 
 impl SubmitTimer for TscTimer {
     const NAME: &'static str = "tsc";
@@ -356,7 +637,7 @@ impl SubmitTimer for TscTimer {
             .iter()
             .map(|&ticks| cycles_to_ns(ticks, tsc_freq))
             .collect();
-        LatencyResult::with_tsc_ticks(benchmark, burst, stats, compute_stats(&ns_vec))
+        LatencyResult::with_tsc_ticks(benchmark, Self::NAME, burst, stats, compute_stats(&ns_vec))
     }
 }
 
@@ -376,7 +657,7 @@ impl SubmitTimer for WallTimer {
         _tsc_freq: u64,
         _measurements: &[u64],
     ) -> LatencyResult {
-        LatencyResult::with_wall_ns(benchmark, burst, stats)
+        LatencyResult::with_wall_ns(benchmark, Self::NAME, burst, stats)
     }
 }
 
@@ -387,6 +668,10 @@ impl SubmitTimer for PmuTimer {
 
     fn warn_if_unavailable(timers: &mut MeasurementTimers, json: bool) {
         timers.warn_if_pmu_unavailable(json);
+    }
+
+    fn is_available(timers: &MeasurementTimers) -> bool {
+        timers.pmu_available()
     }
 
     fn measure(timers: &mut MeasurementTimers, submit: impl FnOnce()) -> u64 {
@@ -402,17 +687,55 @@ impl SubmitTimer for PmuTimer {
         _tsc_freq: u64,
         _measurements: &[u64],
     ) -> LatencyResult {
-        LatencyResult::with_core_cycles(benchmark, burst, stats)
+        LatencyResult::with_core_cycles(benchmark, Self::NAME, burst, stats)
+    }
+}
+
+impl SubmitTimer for RdpmcTimer {
+    const NAME: &'static str = "rdpmc";
+    const BATCH_LABEL: &'static str = "rdpmc/batch";
+    const SUBMIT_LABEL: &'static str = "rdpmc/submit";
+
+    fn warn_if_unavailable(timers: &mut MeasurementTimers, json: bool) {
+        timers.warn_if_rdpmc_unavailable(json);
+    }
+
+    fn is_available(timers: &MeasurementTimers) -> bool {
+        timers.rdpmc_available()
+    }
+
+    fn measure(timers: &mut MeasurementTimers, submit: impl FnOnce()) -> u64 {
+        timers
+            .measure_rdpmc(submit)
+            .unwrap_or_else(|| panic!("RDPMC core-cycle counter unavailable"))
+    }
+
+    fn latency_result(
+        benchmark: &'static str,
+        burst: usize,
+        stats: crate::report::LatencyStats,
+        _tsc_freq: u64,
+        _measurements: &[u64],
+    ) -> LatencyResult {
+        LatencyResult::with_core_cycles(benchmark, Self::NAME, burst, stats)
     }
 }
 
 impl SubmitOnlyWorkload {
     fn needs_sample_drain(self) -> bool {
-        !matches!(self.mode, SubmitOnlyMeasureMode::Sustained)
+        matches!(
+            self.mode,
+            SubmitOnlyMeasureMode::Drained | SubmitOnlyMeasureMode::MfenceBetweenSubmits
+        )
+    }
+
+    fn needs_final_drain(self) -> bool {
+        matches!(self.mode, SubmitOnlyMeasureMode::Sustained)
     }
 
     fn submit_burst(self, wq: &WqPortal, desc: &DsaHwDesc, burst: usize) {
         match self.mode {
+            SubmitOnlyMeasureMode::Empty => {}
             SubmitOnlyMeasureMode::Drained | SubmitOnlyMeasureMode::Sustained => {
                 for _ in 0..burst {
                     unsafe { wq.submit(desc) };
