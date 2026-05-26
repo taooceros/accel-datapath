@@ -112,17 +112,16 @@ impl LatencyResult {
         tsc_ticks: LatencyStats,
         ns: LatencyStats,
     ) -> Self {
-        Self {
-            benchmark: benchmark.into(),
-            size: None,
-            batch_size: Some(batch_size),
-            cycles: tsc_ticks.clone(),
+        Self::submit_timer_row(
+            benchmark,
+            timer,
+            batch_size,
+            tsc_ticks.clone(),
             ns,
-            timer: Some(timer),
-            tsc_ticks: Some(tsc_ticks),
-            wall_ns: None,
-            core_cycles: None,
-        }
+            Some(tsc_ticks),
+            None,
+            None,
+        )
     }
 
     pub(crate) fn with_wall_ns(
@@ -131,17 +130,16 @@ impl LatencyResult {
         batch_size: usize,
         wall_ns: LatencyStats,
     ) -> Self {
-        Self {
-            benchmark: benchmark.into(),
-            size: None,
-            batch_size: Some(batch_size),
-            cycles: wall_ns.clone(),
-            ns: wall_ns.clone(),
-            timer: Some(timer),
-            tsc_ticks: None,
-            wall_ns: Some(wall_ns),
-            core_cycles: None,
-        }
+        Self::submit_timer_row(
+            benchmark,
+            timer,
+            batch_size,
+            wall_ns.clone(),
+            wall_ns.clone(),
+            None,
+            Some(wall_ns),
+            None,
+        )
     }
 
     pub(crate) fn with_core_cycles(
@@ -150,17 +148,80 @@ impl LatencyResult {
         batch_size: usize,
         core_cycles: LatencyStats,
     ) -> Self {
+        Self::submit_timer_row(
+            benchmark,
+            timer,
+            batch_size,
+            core_cycles.clone(),
+            core_cycles.clone(),
+            None,
+            None,
+            Some(core_cycles),
+        )
+    }
+
+    fn submit_timer_row(
+        benchmark: impl Into<String>,
+        timer: &'static str,
+        batch_size: usize,
+        cycles: LatencyStats,
+        ns: LatencyStats,
+        tsc_ticks: Option<LatencyStats>,
+        wall_ns: Option<LatencyStats>,
+        core_cycles: Option<LatencyStats>,
+    ) -> Self {
         Self {
             benchmark: benchmark.into(),
             size: None,
             batch_size: Some(batch_size),
-            cycles: core_cycles.clone(),
-            ns: core_cycles.clone(),
+            cycles,
+            ns,
             timer: Some(timer),
-            tsc_ticks: None,
-            wall_ns: None,
-            core_cycles: Some(core_cycles),
+            tsc_ticks,
+            wall_ns,
+            core_cycles,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn stats(value: u64) -> LatencyStats {
+        LatencyStats {
+            min: value,
+            median: value,
+            mean: value,
+            p99: value,
+            p999: value,
+            cv: 0.0,
+        }
+    }
+
+    #[test]
+    fn submit_timer_rows_preserve_legacy_alias_fields() {
+        let tsc =
+            LatencyResult::with_tsc_ticks("submit_only_unloaded", "tsc", 64, stats(10), stats(20));
+        assert_eq!(tsc.cycles.median, 10);
+        assert_eq!(tsc.ns.median, 20);
+        assert_eq!(tsc.tsc_ticks.as_ref().map(|s| s.median), Some(10));
+        assert!(tsc.wall_ns.is_none());
+        assert!(tsc.core_cycles.is_none());
+
+        let wall = LatencyResult::with_wall_ns("submit_only_unloaded", "wall", 64, stats(30));
+        assert_eq!(wall.cycles.median, 30);
+        assert_eq!(wall.ns.median, 30);
+        assert_eq!(wall.wall_ns.as_ref().map(|s| s.median), Some(30));
+        assert!(wall.tsc_ticks.is_none());
+        assert!(wall.core_cycles.is_none());
+
+        let core = LatencyResult::with_core_cycles("submit_only_unloaded", "rdpmc", 64, stats(40));
+        assert_eq!(core.cycles.median, 40);
+        assert_eq!(core.ns.median, 40);
+        assert_eq!(core.core_cycles.as_ref().map(|s| s.median), Some(40));
+        assert!(core.tsc_ticks.is_none());
+        assert!(core.wall_ns.is_none());
     }
 }
 

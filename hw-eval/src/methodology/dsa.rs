@@ -26,7 +26,7 @@ pub(crate) fn run_dsa_benchmarks(
     admission_results: &mut Vec<AdmissionResult>,
 ) {
     if benchmark == BenchmarkKind::SubmitOnly {
-        bench_submit_only_same_desc(
+        bench_submit_only_workloads(
             wq,
             iterations,
             submit_mode,
@@ -51,7 +51,7 @@ pub(crate) fn run_dsa_benchmarks(
     }
 
     bench_noop_latency(wq, iterations, tsc_freq, json, latency_results);
-    bench_submit_only_same_desc(
+    bench_submit_only_workloads(
         wq,
         iterations,
         SubmitOnlyMode::Unloaded,
@@ -185,7 +185,7 @@ pub(crate) fn run_dsa_benchmarks(
 // Submit-only burst benchmark
 // ============================================================================
 
-fn bench_submit_only_same_desc(
+fn bench_submit_only_workloads(
     wq: &WqPortal,
     iterations: usize,
     submit_mode: SubmitOnlyMode,
@@ -194,15 +194,10 @@ fn bench_submit_only_same_desc(
     json: bool,
     results: &mut Vec<LatencyResult>,
 ) {
-    const EMPTY: SubmitOnlyWorkload = SubmitOnlyWorkload {
-        name: "submit_only_empty",
-        mode: SubmitOnlyMeasureMode::Empty,
-    };
-
     bench_submit_only_all_timers(
         wq,
         iterations,
-        EMPTY,
+        SUBMIT_ONLY_EMPTY,
         submit_bursts,
         tsc_freq,
         json,
@@ -283,29 +278,41 @@ enum SubmitOnlyMeasureMode {
     MfenceBetweenSubmits,
 }
 
-fn submit_workloads(submit_mode: SubmitOnlyMode) -> &'static [SubmitOnlyWorkload] {
-    const UNLOADED: SubmitOnlyWorkload = SubmitOnlyWorkload {
-        name: "submit_only_unloaded",
-        mode: SubmitOnlyMeasureMode::Drained,
-    };
-    const SUSTAINED: SubmitOnlyWorkload = SubmitOnlyWorkload {
-        name: "submit_only_pressure_ramp",
-        mode: SubmitOnlyMeasureMode::Sustained,
-    };
-    const MFENCE: SubmitOnlyWorkload = SubmitOnlyWorkload {
-        name: "submit_only_mfence",
-        mode: SubmitOnlyMeasureMode::MfenceBetweenSubmits,
-    };
-    const ALL: &[SubmitOnlyWorkload] = &[UNLOADED, MFENCE, SUSTAINED];
-    const UNLOADED_ONLY: &[SubmitOnlyWorkload] = &[UNLOADED];
-    const SUSTAINED_ONLY: &[SubmitOnlyWorkload] = &[SUSTAINED];
-    const MFENCE_ONLY: &[SubmitOnlyWorkload] = &[MFENCE];
+const SUBMIT_ONLY_EMPTY: SubmitOnlyWorkload = SubmitOnlyWorkload {
+    name: "submit_only_empty",
+    mode: SubmitOnlyMeasureMode::Empty,
+};
 
+const SUBMIT_ONLY_UNLOADED: SubmitOnlyWorkload = SubmitOnlyWorkload {
+    name: "submit_only_unloaded",
+    mode: SubmitOnlyMeasureMode::Drained,
+};
+
+const SUBMIT_ONLY_PRESSURE_RAMP: SubmitOnlyWorkload = SubmitOnlyWorkload {
+    name: "submit_only_pressure_ramp",
+    mode: SubmitOnlyMeasureMode::Sustained,
+};
+
+const SUBMIT_ONLY_MFENCE: SubmitOnlyWorkload = SubmitOnlyWorkload {
+    name: "submit_only_mfence",
+    mode: SubmitOnlyMeasureMode::MfenceBetweenSubmits,
+};
+
+const SUBMIT_ONLY_ALL: &[SubmitOnlyWorkload] = &[
+    SUBMIT_ONLY_UNLOADED,
+    SUBMIT_ONLY_MFENCE,
+    SUBMIT_ONLY_PRESSURE_RAMP,
+];
+const SUBMIT_ONLY_UNLOADED_ONLY: &[SubmitOnlyWorkload] = &[SUBMIT_ONLY_UNLOADED];
+const SUBMIT_ONLY_PRESSURE_RAMP_ONLY: &[SubmitOnlyWorkload] = &[SUBMIT_ONLY_PRESSURE_RAMP];
+const SUBMIT_ONLY_MFENCE_ONLY: &[SubmitOnlyWorkload] = &[SUBMIT_ONLY_MFENCE];
+
+fn submit_workloads(submit_mode: SubmitOnlyMode) -> &'static [SubmitOnlyWorkload] {
     match submit_mode {
-        SubmitOnlyMode::All => ALL,
-        SubmitOnlyMode::Unloaded => UNLOADED_ONLY,
-        SubmitOnlyMode::Sustained => SUSTAINED_ONLY,
-        SubmitOnlyMode::Mfence => MFENCE_ONLY,
+        SubmitOnlyMode::All => SUBMIT_ONLY_ALL,
+        SubmitOnlyMode::Unloaded => SUBMIT_ONLY_UNLOADED_ONLY,
+        SubmitOnlyMode::Sustained => SUBMIT_ONLY_PRESSURE_RAMP_ONLY,
+        SubmitOnlyMode::Mfence => SUBMIT_ONLY_MFENCE_ONLY,
     }
 }
 
@@ -446,7 +453,7 @@ fn bench_submit_admission_probe(
             let tsc_ticks = rdtscp().0 - tsc_start;
             let submit_tsc_ns = cycles_to_ns(tsc_ticks, tsc_freq);
 
-            let outcome = count_admission_completions(&comps[..burst], &mut seen[..burst]);
+            let bounded_outcome = count_admission_completions(&comps[..burst], &mut seen[..burst]);
             reset_completion(&mut sentinel_comp);
             drain_submit_only_queue(
                 wq,
@@ -456,8 +463,8 @@ fn bench_submit_admission_probe(
                 burst,
             );
 
-            let outcome = if outcome.completed == burst {
-                outcome
+            let outcome = if bounded_outcome.completed == burst {
+                bounded_outcome
             } else {
                 scan_admission_completions(&comps[..burst])
             };
@@ -514,6 +521,20 @@ struct AdmissionCompletionOutcome {
     errors: usize,
 }
 
+impl AdmissionCompletionOutcome {
+    fn record_status(&mut self, status: u8) -> bool {
+        if status == DSA_COMP_NONE {
+            return false;
+        }
+
+        self.completed += 1;
+        if DsaCompletionStatus::mask(status) != DSA_COMP_SUCCESS {
+            self.errors += 1;
+        }
+        true
+    }
+}
+
 fn count_admission_completions(
     comps: &[DsaCompletionRecord],
     seen: &mut [bool],
@@ -528,15 +549,8 @@ fn count_admission_completions(
                 continue;
             }
 
-            let status = comp.status();
-            if status == DSA_COMP_NONE {
-                continue;
-            }
-
-            seen[index] = true;
-            outcome.completed += 1;
-            if DsaCompletionStatus::mask(status) != DSA_COMP_SUCCESS {
-                outcome.errors += 1;
+            if outcome.record_status(comp.status()) {
+                seen[index] = true;
             }
         }
 
@@ -554,15 +568,7 @@ fn scan_admission_completions(comps: &[DsaCompletionRecord]) -> AdmissionComplet
     let mut outcome = AdmissionCompletionOutcome::default();
 
     for comp in comps {
-        let status = comp.status();
-        if status == DSA_COMP_NONE {
-            continue;
-        }
-
-        outcome.completed += 1;
-        if DsaCompletionStatus::mask(status) != DSA_COMP_SUCCESS {
-            outcome.errors += 1;
-        }
+        outcome.record_status(comp.status());
     }
 
     outcome

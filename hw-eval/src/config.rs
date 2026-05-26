@@ -125,13 +125,15 @@ fn parse_positive_usize_list(
     s: &str,
     flag: &'static str,
 ) -> Result<Vec<usize>, BenchmarkConfigError> {
-    let raw = s.to_string();
     let mut values = Vec::new();
 
     for token in s.split(',') {
         let trimmed = token.trim();
         if trimmed.is_empty() {
-            return Err(BenchmarkConfigError::EmptyListToken { flag, raw });
+            return Err(BenchmarkConfigError::EmptyListToken {
+                flag,
+                raw: s.to_owned(),
+            });
         }
 
         let value =
@@ -139,20 +141,26 @@ fn parse_positive_usize_list(
                 .parse::<usize>()
                 .map_err(|source| BenchmarkConfigError::InvalidListEntry {
                     flag,
-                    raw: raw.clone(),
-                    token: trimmed.to_string(),
+                    raw: s.to_owned(),
+                    token: trimmed.to_owned(),
                     source,
                 })?;
 
         if value == 0 {
-            return Err(BenchmarkConfigError::ZeroListEntry { flag, raw });
+            return Err(BenchmarkConfigError::ZeroListEntry {
+                flag,
+                raw: s.to_owned(),
+            });
         }
 
         values.push(value);
     }
 
     if values.is_empty() {
-        return Err(BenchmarkConfigError::EmptyList { flag, raw });
+        return Err(BenchmarkConfigError::EmptyList {
+            flag,
+            raw: s.to_owned(),
+        });
     }
 
     Ok(values)
@@ -185,6 +193,7 @@ impl BenchmarkConfig {
     /// enters through `from_args`. This constructor resolves defaults that
     /// depend on other fields and validates the comma-separated size list before
     /// any benchmark loop or hardware queue-open path runs.
+
     #[builder(start_fn = builder, finish_fn = build)]
     pub(crate) fn from_parts(
         #[builder(default = AccelKind::Dsa)] accel: AccelKind,
@@ -252,21 +261,21 @@ impl BenchmarkConfig {
             json,
         } = args;
 
-        Self::from_parts(
-            accel,
-            device,
-            sizes,
-            iterations,
-            max_concurrency,
-            threads,
-            benchmark,
-            submit_mode,
-            submit_bursts,
-            sw_only,
-            pin_core,
-            cold,
-            json,
-        )
+        Self::builder()
+            .accel(accel)
+            .maybe_device(device)
+            .sizes(sizes)
+            .iterations(iterations)
+            .max_concurrency(max_concurrency)
+            .threads(threads)
+            .benchmark(benchmark)
+            .submit_mode(submit_mode)
+            .submit_bursts(submit_bursts)
+            .sw_only(sw_only)
+            .maybe_pin_core(pin_core)
+            .cold(cold)
+            .json(json)
+            .build()
     }
 }
 
