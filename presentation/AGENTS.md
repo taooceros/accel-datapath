@@ -19,6 +19,8 @@ Typst slide decks and presentation-only artifacts live here. This subtree is for
 - Keep claims in slides traceable to repo sources; if a finding matters for later reuse, write it in `docs/report/` or `remark/` as well.
 - When editing a deck, preserve readability on a 16:9 presentation page and favor concise speaker-facing structure over dense prose.
 - Compile the deck after non-trivial changes to catch Typst errors.
+- During slide iteration, export Typst decks to PNG for agent visual inspection instead of producing PDFs. Use deterministic per-page output names, for example `typst compile --format png --ppi 144 --root presentation presentation/YYYY-MM-DD/deck.typ presentation/YYYY-MM-DD/preview-slide-{p}.png`.
+- Inspect the generated PNG pages when making layout/readability claims. PDFs are the final deliverable artifact: export the PDF only at the final stage, or when explicitly requested for PDF-specific checks such as text extraction, metadata, or archival output.
 
 ## DESIGN PRINCIPLES
 - Prefer one main idea per slide. If a slide has multiple independent takeaways, split it.
