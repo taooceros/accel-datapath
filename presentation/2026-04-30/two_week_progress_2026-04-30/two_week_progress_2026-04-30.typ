@@ -20,7 +20,7 @@
 // - dsa-stdexec/benchmark/dsa/README.md
 // - dsa-stdexec/benchmark/dsa/strategies/README.md
 
-#import "../template.typ": callout, card, deck, note, palette, panel, stage-card
+#import "../../template.typ": callout, card, deck, note, palette, panel, stage-card
 
 #show: deck.with(
   margin: (x: 42pt, y: 30pt),

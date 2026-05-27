@@ -1,6 +1,6 @@
 // Tonic offloadability presentation
 
-#import "../template.typ": callout, card, deck, fit-badge, palette, stage-card
+#import "../../template.typ": callout, card, deck, fit-badge, palette, stage-card
 
 #show: deck.with(
   leading: 0.9em,

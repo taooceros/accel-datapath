@@ -16,7 +16,7 @@
 // - presentation/2026-04-08/tonic_research_story.typ
 // - presentation/2026-04-08/tonic_flamegraph_analysis.typ
 
-#import "../template.typ": callout, card, deck, fit-badge, note, palette, panel, stage-card
+#import "../../template.typ": callout, card, deck, fit-badge, note, palette, panel, stage-card
 
 #show: deck.with(
   margin: (x: 52pt, y: 42pt),

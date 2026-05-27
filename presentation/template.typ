@@ -14,6 +14,21 @@
   muted: luma(120),
 )
 
+#let slide-title(body) = [
+  #text(size: 24pt, weight: "bold", fill: palette.title)[#body]
+  #v(0.55em)
+]
+
+#let zebra-fill = (x, y) => {
+  if y == 0 {
+    palette.head
+  } else if calc.even(y) {
+    white
+  } else {
+    palette.row
+  }
+}
+
 #let deck(
   body,
   margin: (x: 52pt, y: 42pt),

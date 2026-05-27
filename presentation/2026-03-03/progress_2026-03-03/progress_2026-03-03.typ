@@ -1,7 +1,7 @@
 // Progress presentation 2026-03-03
 // Plain Typst with manual page breaks (no slide framework)
 
-#import "../template.typ": deck, palette, slide-title, zebra-fill, callout, note, panel
+#import "../../template.typ": deck, palette, slide-title, zebra-fill, callout, note, panel
 
 #show: deck.with(
   margin: (x: 52pt, y: 44pt),

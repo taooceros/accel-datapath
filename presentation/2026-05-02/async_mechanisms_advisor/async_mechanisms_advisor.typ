@@ -5,7 +5,7 @@
 // - docs/plan/2026-05-02/05.async-mechanism-advisor-slide.plan.md
 // - docs/report/research/002.async_mechanism_description_sources.md
 
-#import "../template.typ": callout, card, deck, note, palette, panel
+#import "../../template.typ": callout, card, deck, note, palette, panel
 
 #show: deck.with(
   margin: (x: 40pt, y: 30pt),

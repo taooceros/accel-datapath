@@ -1,6 +1,6 @@
 // Progress presentation 2026-02-23
 
-#import "../template.typ": callout, card, deck, note, palette, panel
+#import "../../template.typ": callout, card, deck, note, palette, panel
 
 #show: deck.with(
   margin: (x: 44pt, y: 38pt),

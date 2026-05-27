@@ -7,7 +7,7 @@
 // - docs/report/benchmarking/shared_thread_sweep_numa0/tokio_wq0_1_numa0_threads{1,2,4,8,16,32,64}.jsonl
 // - docs/report/benchmarking/shared_thread_sweep_numa0/hw_eval_wq0_1_numa0_threads{1,2,4,8,16,32,64}.json
 
-#import "../template.typ": callout, deck, palette, panel
+#import "../../template.typ": callout, deck, palette, panel
 #import "@preview/lilaq:0.6.0" as lq
 
 #show: deck.with(

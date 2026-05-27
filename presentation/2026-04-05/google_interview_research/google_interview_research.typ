@@ -1,6 +1,6 @@
 // Google research presentation
 
-#import "../template.typ": callout, card, deck, fit-badge, note, palette, panel, stage-card
+#import "../../template.typ": callout, card, deck, fit-badge, note, palette, panel, stage-card
 
 #show: deck.with(
   margin: (x: 52pt, y: 42pt),

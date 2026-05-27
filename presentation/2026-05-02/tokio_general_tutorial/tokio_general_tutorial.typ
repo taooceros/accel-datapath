@@ -6,7 +6,7 @@
 // - docs/report/research/002.async_mechanism_description_sources.md
 // - Eric Niebler, "What are senders good for anyway?", 2024
 
-#import "../template.typ": callout, card, deck, note, palette, panel
+#import "../../template.typ": callout, card, deck, note, palette, panel
 #import "@preview/mmdr:0.2.2": mermaid
 #import "@preview/zebraw:0.6.3": *
 

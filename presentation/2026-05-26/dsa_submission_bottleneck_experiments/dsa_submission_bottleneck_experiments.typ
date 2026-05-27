@@ -9,7 +9,7 @@
 // - docs/report/literature/005.accelerator_hostpath_2026-03-28.md
 // - Direct latency measurement in the 2026-05-26 working session.
 
-#import "../template.typ": callout, deck, palette, panel
+#import "../../template.typ": callout, deck, palette, panel
 #import "@preview/chronos:0.3.0" as chronos
 #import "@preview/zebraw:0.6.3": *
 

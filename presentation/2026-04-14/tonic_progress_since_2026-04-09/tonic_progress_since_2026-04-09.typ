@@ -8,7 +8,7 @@
 // - docs/report/literature/010.expanded_paper_folder_index_2026-04-13.md
 // - .agents/state/threads/thr-20260414-tonic-literature-deck.md
 
-#import "../template.typ": callout, card, deck, palette, panel
+#import "../../template.typ": callout, card, deck, palette, panel
 
 #show: deck.with(
   margin: (x: 38pt, y: 24pt),

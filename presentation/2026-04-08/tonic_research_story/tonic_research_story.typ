@@ -8,7 +8,7 @@
 // - docs/report/architecture/002.tonic_component_analysis.md
 // - docs/report/architecture/003.tonic_interception_points.md
 
-#import "../template.typ": callout, card, deck, fit-badge, note, palette, panel, stage-card
+#import "../../template.typ": callout, card, deck, fit-badge, note, palette, panel, stage-card
 
 #show: deck.with(
   margin: (x: 52pt, y: 42pt),
