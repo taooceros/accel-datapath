@@ -49,6 +49,15 @@ pub(crate) fn stats_from_values(mut values: Vec<u64>) -> LatencyStats {
     compute_stats(&values)
 }
 
+#[derive(Default)]
+pub(crate) struct SubmissionBottleneckResults {
+    pub(crate) admission: Vec<AdmissionResult>,
+    pub(crate) submit_occupancy: Vec<SubmitOccupancyResult>,
+    pub(crate) submit_marker_overlap: Vec<SubmitMarkerOverlapResult>,
+    pub(crate) traffic_class_ladder: Vec<TrafficClassLadderResult>,
+    pub(crate) completion_reuse_policy: Vec<CompletionReusePolicyResult>,
+}
+
 #[derive(Serialize)]
 pub(crate) struct FullReport {
     pub(crate) metadata: Metadata,

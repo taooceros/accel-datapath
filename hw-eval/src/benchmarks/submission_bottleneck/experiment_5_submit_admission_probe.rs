@@ -1,7 +1,8 @@
-// Experiment 5: blind-push loss and correctness gate.
+// Experiment 5: submit-admission probe.
 //
 // Push N unique completion-bearing descriptors without software in-flight
-// accounting, then count whether every logical operation completes.
+// accounting, then count whether every logical operation completes. This is
+// the blind-push correctness gate behind the `submit-admission` selector.
 //
 //   blind push phase:       post-submit accounting:
 //   [1][2][3] ... [N]  ->   completed / missing / errors
@@ -9,7 +10,6 @@
 //
 // Question: does pushing past the nominal WQ depth lose descriptors, report
 // descriptor errors, or simply backpressure the submit loop?
-//
 
 use std::time::Instant;
 

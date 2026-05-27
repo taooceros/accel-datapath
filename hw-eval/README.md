@@ -100,7 +100,7 @@ Backend notes:
 
 ## DSA submission bottleneck experiments
 
-DSA bottleneck runners are selected explicitly so their JSON rows are easy to find:
+DSA submission bottleneck runners are selected explicitly so their JSON rows are easy to find:
 
 ```bash
 launch ./target/release/hw-eval \
@@ -115,6 +115,7 @@ launch ./target/release/hw-eval \
 ```
 
 JSON reports include skipped-when-empty arrays for these modes:
+- `admission`: rows use `benchmark: "submit_admission_distinct"` and record burst size, submitted operations, completion counts, missing counts, descriptor errors, and submit timing for the Experiment 5 correctness gate.
 - `submit_occupancy`: rows use `benchmark: "submit_occupancy_one_extra"` and record `operation_class`, `k_prefill`, `submitted`, completion counts, `extra_submit_tsc_ticks`, `extra_submit_ns`, and first-old-completion timing when `k_prefill > 0`.
 - `submit_marker_overlap`: rows use `benchmark: "submit_marker_overlap"` and record `n`, numeric marker position, poll cadence, submit-tail timing, marker-visible timing when observed, overlap count/fraction, and completion counts.
 - `traffic_class_ladder`: rows use `benchmark: "traffic_class_ladder"` and record traffic class, operation size, window, submit timing, completion-visible timing where applicable, completion counts where applicable, and ops/sec.
@@ -149,9 +150,16 @@ src/submit.rs                     Shared WQ submission and low-level polling/tim
 src/dsa.rs                        DSA helper façade over root-level idxd-sys descriptor/completion ABI
 src/iax.rs                        IAX helper façade over root-level idxd-sys descriptor/completion ABI
 src/sw.rs                         Software memcpy/CRC baselines
-src/methodology/submission_bottleneck.rs  Submission bottleneck experiment module root
-src/methodology/submission_bottleneck/    One numbered module per experiment plus shared helpers
-src/main.rs                       All benchmarks, CLI, JSON output
+src/benchmarks.rs                 Benchmark implementation module root
+src/benchmarks/dsa.rs             DSA hardware benchmark suite and dispatcher
+src/benchmarks/iax.rs             IAX hardware benchmark suite
+src/benchmarks/software.rs        Software baseline benchmark suite
+src/benchmarks/submission_bottleneck.rs  Submission bottleneck experiment module root
+src/benchmarks/submission_bottleneck/experiment_N_*.rs
+                                  Numbered submission bottleneck experiment modules
+src/benchmarks/submission_bottleneck/common.rs
+                                  Shared submission bottleneck helpers
+src/main.rs                       CLI parsing and top-level benchmark orchestration
 benches/dsa_raw.rs                Criterion benchmarks (SW baselines only)
 plot_results.py                   Matplotlib graphing script
 Cargo.toml

@@ -27,8 +27,8 @@ use crate::config::{DsaOperationClass, TrafficClass};
 use crate::report::{stats_from_values, TrafficClassLadderResult};
 
 use super::common::{
-    count_visible_completions, fill_descriptor, ops_per_second, optional_stats,
-    reset_sample_completions, OperationSlots,
+    count_visible_completions, dsa_operation_payload_size, fill_descriptor, ops_per_second,
+    optional_stats, reset_sample_completions, traffic_class_operation_size, OperationSlots,
 };
 
 const TRAFFIC_CLASS_LADDER_BENCHMARK: &str = "traffic_class_ladder";
@@ -148,7 +148,7 @@ pub(crate) fn bench_traffic_class_ladder(
             results.push(TrafficClassLadderResult {
                 benchmark: TRAFFIC_CLASS_LADDER_BENCHMARK.to_string(),
                 traffic_class: traffic_class.as_str().to_string(),
-                operation_size: traffic_class.operation_size(),
+                operation_size: traffic_class_operation_size(traffic_class),
                 window,
                 submit_tsc_ticks: stats_from_values(submit_tsc),
                 submit_ns: submit_ns_stats,
@@ -169,7 +169,7 @@ fn fill_traffic_descriptors(slots: &mut OperationSlots, traffic_class: TrafficCl
         TrafficClass::Memmove64 => DsaOperationClass::Memmove64,
         TrafficClass::Memmove4k => DsaOperationClass::Memmove4k,
     };
-    let payload_size = operation.payload_size();
+    let payload_size = dsa_operation_payload_size(operation);
 
     for slot in 0..slots.descriptors.len() {
         fill_descriptor(

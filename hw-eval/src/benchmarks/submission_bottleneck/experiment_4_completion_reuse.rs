@@ -24,7 +24,9 @@ use hw_eval::submit::{cycles_to_ns, rdtscp, WqPortal};
 use crate::config::{CompletionReusePolicy, DsaOperationClass};
 use crate::report::{stats_from_values, CompletionReusePolicyResult};
 
-use super::common::{ops_per_second, optional_stats, TIMEOUT_CHECK_STRIDE};
+use super::common::{
+    dsa_operation_payload_size, ops_per_second, optional_stats, TIMEOUT_CHECK_STRIDE,
+};
 
 const COMPLETION_REUSE_POLICY_BENCHMARK: &str = "completion_reuse_policy";
 const COMPLETION_REUSE_TIMEOUT_NS: u128 = 1_000_000_000;
@@ -116,7 +118,7 @@ impl CompletionReuseSlots {
         let descriptors = vec![DsaHwDesc::default(); count];
         let completions = vec![DsaCompletionRecord::default(); count];
         let padded_completions = vec![PaddedCompletion::default(); count];
-        let payload_size = operation.payload_size();
+        let payload_size = dsa_operation_payload_size(operation);
         let sources = vec![0xa5; count * payload_size];
         let destinations = vec![0; count * payload_size];
         let padded = policy == CompletionReusePolicy::PaddedRoundRobin;
@@ -143,7 +145,7 @@ impl CompletionReuseSlots {
                 self.descriptors[slot].fill_noop(completion_flags_no_cache_control())
             }
             DsaOperationClass::Memmove64 | DsaOperationClass::Memmove4k => {
-                let payload_size = operation.payload_size();
+                let payload_size = dsa_operation_payload_size(operation);
                 let offset = slot * payload_size;
                 self.descriptors[slot].fill_memmove(
                     self.sources.as_ptr().wrapping_add(offset),
@@ -202,185 +204,45 @@ fn run_completion_reuse_sample(
         unsafe { wq.submit(&slots.descriptors[slot]) };
     }
 
-    let mut completed = 0_u64;
-    let mut errors = 0_u64;
-    let mut polls = 0_u64;
-    let mut harvest_tsc = Vec::with_capacity(target);
-    let mut harvest_ns = Vec::with_capacity(target);
-    let mut reset_to_submit_tsc = Vec::new();
-    let mut reset_to_submit_ns = Vec::new();
+    let mut acc = CompletionReuseAccumulator::new(target, tsc_freq);
     let start = rdtscp().0;
     let timeout_start = Instant::now();
 
     match policy {
         CompletionReusePolicy::PollOnly => {
-            let mut seen = vec![false; window];
-            let mut outstanding = window;
-
-            while completed < target as u64 && !completion_reuse_timed_out(timeout_start) {
-                let mut observed_completion = false;
-
-                for slot in 0..window {
-                    if seen[slot] {
-                        continue;
-                    }
-
-                    polls += 1;
-                    let t0 = rdtscp().0;
-                    let status = slots.status(slot);
-                    if status == DSA_COMP_NONE {
-                        continue;
-                    }
-
-                    let harvest_ticks = rdtscp().0 - t0;
-                    harvest_tsc.push(harvest_ticks);
-                    harvest_ns.push(cycles_to_ns(harvest_ticks, tsc_freq));
-                    completed += 1;
-                    observed_completion = true;
-                    outstanding -= 1;
-
-                    if DsaCompletionStatus::mask(status) != DSA_COMP_SUCCESS {
-                        errors += 1;
-                    }
-
-                    seen[slot] = true;
-                    if completed == target as u64 {
-                        break;
-                    }
-                }
-
-                if outstanding == 0 && completed < target as u64 {
-                    for slot in 0..window {
-                        slots.reset(slot);
-                        unsafe { wq.submit(&slots.descriptors[slot]) };
-                        seen[slot] = false;
-                    }
-                    outstanding = window;
-                }
-
-                if !observed_completion {
-                    core::hint::spin_loop();
-                }
-            }
+            run_poll_only_policy(wq, slots, target, timeout_start, &mut acc);
         }
         CompletionReusePolicy::PaddedRoundRobin => {
-            let mut slot = 0;
-            while completed < target as u64 && !completion_reuse_timed_out(timeout_start) {
-                polls += 1;
-                let t0 = rdtscp().0;
-                let status = slots.status(slot);
-                if status != DSA_COMP_NONE {
-                    let harvest_ticks = rdtscp().0 - t0;
-                    harvest_tsc.push(harvest_ticks);
-                    harvest_ns.push(cycles_to_ns(harvest_ticks, tsc_freq));
-                    completed += 1;
-                    if DsaCompletionStatus::mask(status) != DSA_COMP_SUCCESS {
-                        errors += 1;
-                    }
-
-                    let reset_t0 = rdtscp().0;
-                    slots.reset(slot);
-                    unsafe { wq.submit(&slots.descriptors[slot]) };
-                    let reset_ticks = rdtscp().0 - reset_t0;
-                    reset_to_submit_tsc.push(reset_ticks);
-                    reset_to_submit_ns.push(cycles_to_ns(reset_ticks, tsc_freq));
-                }
-                slot += 1;
-                if slot == window {
-                    slot = 0;
-                }
-                core::hint::spin_loop();
-            }
+            run_padded_round_robin_policy(wq, slots, target, timeout_start, &mut acc);
         }
         CompletionReusePolicy::PackedScan => {
-            while completed < target as u64 && !completion_reuse_timed_out(timeout_start) {
-                for slot in 0..window {
-                    polls += 1;
-                    let t0 = rdtscp().0;
-                    let status = slots.status(slot);
-                    if status == DSA_COMP_NONE {
-                        continue;
-                    }
-                    let harvest_ticks = rdtscp().0 - t0;
-                    harvest_tsc.push(harvest_ticks);
-                    harvest_ns.push(cycles_to_ns(harvest_ticks, tsc_freq));
-                    completed += 1;
-                    if DsaCompletionStatus::mask(status) != DSA_COMP_SUCCESS {
-                        errors += 1;
-                    }
-
-                    let reset_t0 = rdtscp().0;
-                    slots.reset(slot);
-                    unsafe { wq.submit(&slots.descriptors[slot]) };
-                    let reset_ticks = rdtscp().0 - reset_t0;
-                    reset_to_submit_tsc.push(reset_ticks);
-                    reset_to_submit_ns.push(cycles_to_ns(reset_ticks, tsc_freq));
-
-                    if completed == target as u64 {
-                        break;
-                    }
-                }
-                core::hint::spin_loop();
-            }
+            run_packed_scan_policy(wq, slots, target, timeout_start, &mut acc);
         }
-        CompletionReusePolicy::DelayedReset | CompletionReusePolicy::BatchHarvest => {
-            let batch = if policy == CompletionReusePolicy::BatchHarvest {
-                16.min(window)
-            } else {
-                window
-            };
-            let mut ready = Vec::with_capacity(batch);
-
-            while completed < target as u64 && !completion_reuse_timed_out(timeout_start) {
-                ready.clear();
-
-                for slot in 0..window {
-                    polls += 1;
-                    let t0 = rdtscp().0;
-                    let status = slots.status(slot);
-                    if status == DSA_COMP_NONE {
-                        continue;
-                    }
-                    let harvest_ticks = rdtscp().0 - t0;
-                    harvest_tsc.push(harvest_ticks);
-                    harvest_ns.push(cycles_to_ns(harvest_ticks, tsc_freq));
-                    completed += 1;
-                    if DsaCompletionStatus::mask(status) != DSA_COMP_SUCCESS {
-                        errors += 1;
-                    }
-                    ready.push(slot);
-
-                    if ready.len() == batch || completed == target as u64 {
-                        break;
-                    }
-                }
-
-                if !ready.is_empty() {
-                    let reset_t0 = rdtscp().0;
-                    for &slot in &ready {
-                        slots.reset(slot);
-                    }
-                    for &slot in &ready {
-                        unsafe { wq.submit(&slots.descriptors[slot]) };
-                    }
-                    let reset_ticks = rdtscp().0 - reset_t0;
-                    let reset_ticks_per_completion = reset_ticks / ready.len() as u64;
-                    reset_to_submit_tsc.push(reset_ticks_per_completion);
-                    reset_to_submit_ns.push(cycles_to_ns(reset_ticks_per_completion, tsc_freq));
-                }
-
-                core::hint::spin_loop();
-            }
+        CompletionReusePolicy::DelayedReset => {
+            run_delayed_reset_or_batch_harvest_policy(
+                wq,
+                slots,
+                target,
+                timeout_start,
+                window,
+                &mut acc,
+            );
+        }
+        CompletionReusePolicy::BatchHarvest => {
+            run_delayed_reset_or_batch_harvest_policy(
+                wq,
+                slots,
+                target,
+                timeout_start,
+                16.min(window),
+                &mut acc,
+            );
         }
     }
 
     let elapsed = rdtscp().0 - start;
-    let ops_per_sec = ops_per_second(completed, elapsed, tsc_freq) as f64;
-    let polls_per_completion = if completed == 0 {
-        0.0
-    } else {
-        polls as f64 / completed as f64
-    };
+    let ops_per_sec = ops_per_second(acc.completed, elapsed, tsc_freq) as f64;
+    let polls_per_completion = acc.polls_per_completion();
 
     let mut drain_errors = 0_u64;
     for slot in 0..window {
@@ -396,15 +258,237 @@ fn run_completion_reuse_sample(
     }
 
     CompletionReuseMeasurement {
-        completed,
-        missing: (target as u64).saturating_sub(completed),
-        errors: errors + drain_errors,
+        completed: acc.completed,
+        missing: (target as u64).saturating_sub(acc.completed),
+        errors: acc.errors + drain_errors,
         ops_per_sec,
         polls_per_completion,
-        harvest_tsc,
-        harvest_ns,
-        reset_to_submit_tsc,
-        reset_to_submit_ns,
+        harvest_tsc: acc.harvest_tsc,
+        harvest_ns: acc.harvest_ns,
+        reset_to_submit_tsc: acc.reset_to_submit_tsc,
+        reset_to_submit_ns: acc.reset_to_submit_ns,
+    }
+}
+
+struct CompletionReuseAccumulator {
+    completed: u64,
+    errors: u64,
+    polls: u64,
+    tsc_freq: u64,
+    harvest_tsc: Vec<u64>,
+    harvest_ns: Vec<u64>,
+    reset_to_submit_tsc: Vec<u64>,
+    reset_to_submit_ns: Vec<u64>,
+}
+
+impl CompletionReuseAccumulator {
+    fn new(target: usize, tsc_freq: u64) -> Self {
+        Self {
+            completed: 0,
+            errors: 0,
+            polls: 0,
+            tsc_freq,
+            harvest_tsc: Vec::with_capacity(target),
+            harvest_ns: Vec::with_capacity(target),
+            reset_to_submit_tsc: Vec::new(),
+            reset_to_submit_ns: Vec::new(),
+        }
+    }
+
+    fn target_reached(&self, target: usize) -> bool {
+        self.completed >= target as u64
+    }
+
+    fn record_harvest(&mut self, status: u8, harvest_ticks: u64) {
+        self.harvest_tsc.push(harvest_ticks);
+        self.harvest_ns
+            .push(cycles_to_ns(harvest_ticks, self.tsc_freq));
+        self.completed += 1;
+        if DsaCompletionStatus::mask(status) != DSA_COMP_SUCCESS {
+            self.errors += 1;
+        }
+    }
+
+    fn record_reset_to_submit(&mut self, reset_ticks: u64) {
+        self.reset_to_submit_tsc.push(reset_ticks);
+        self.reset_to_submit_ns
+            .push(cycles_to_ns(reset_ticks, self.tsc_freq));
+    }
+
+    fn polls_per_completion(&self) -> f64 {
+        if self.completed == 0 {
+            0.0
+        } else {
+            self.polls as f64 / self.completed as f64
+        }
+    }
+}
+
+fn poll_completion_slot(
+    slots: &CompletionReuseSlots,
+    slot: usize,
+    acc: &mut CompletionReuseAccumulator,
+) -> Option<u8> {
+    acc.polls += 1;
+    let t0 = rdtscp().0;
+    let status = slots.status(slot);
+    if status == DSA_COMP_NONE {
+        None
+    } else {
+        acc.record_harvest(status, rdtscp().0 - t0);
+        Some(status)
+    }
+}
+
+fn reset_and_submit_slot(
+    wq: &WqPortal,
+    slots: &mut CompletionReuseSlots,
+    slot: usize,
+    acc: &mut CompletionReuseAccumulator,
+) {
+    let reset_t0 = rdtscp().0;
+    slots.reset(slot);
+    unsafe { wq.submit(&slots.descriptors[slot]) };
+    acc.record_reset_to_submit(rdtscp().0 - reset_t0);
+}
+
+fn reset_and_submit_ready_slots(
+    wq: &WqPortal,
+    slots: &mut CompletionReuseSlots,
+    ready: &[usize],
+    acc: &mut CompletionReuseAccumulator,
+) {
+    let reset_t0 = rdtscp().0;
+    for &slot in ready {
+        slots.reset(slot);
+    }
+    for &slot in ready {
+        unsafe { wq.submit(&slots.descriptors[slot]) };
+    }
+    let reset_ticks_per_completion = (rdtscp().0 - reset_t0) / ready.len() as u64;
+    acc.record_reset_to_submit(reset_ticks_per_completion);
+}
+
+fn run_poll_only_policy(
+    wq: &WqPortal,
+    slots: &mut CompletionReuseSlots,
+    target: usize,
+    timeout_start: Instant,
+    acc: &mut CompletionReuseAccumulator,
+) {
+    let window = slots.descriptors.len();
+    let mut seen = vec![false; window];
+    let mut outstanding = window;
+
+    while !acc.target_reached(target) && !completion_reuse_timed_out(timeout_start) {
+        let mut observed_completion = false;
+
+        for (slot, slot_seen) in seen.iter_mut().enumerate() {
+            if *slot_seen {
+                continue;
+            }
+
+            let Some(_) = poll_completion_slot(slots, slot, acc) else {
+                continue;
+            };
+
+            observed_completion = true;
+            outstanding -= 1;
+            *slot_seen = true;
+            if acc.target_reached(target) {
+                break;
+            }
+        }
+
+        if outstanding == 0 && !acc.target_reached(target) {
+            for (slot, slot_seen) in seen.iter_mut().enumerate() {
+                slots.reset(slot);
+                unsafe { wq.submit(&slots.descriptors[slot]) };
+                *slot_seen = false;
+            }
+            outstanding = window;
+        }
+
+        if !observed_completion {
+            core::hint::spin_loop();
+        }
+    }
+}
+
+fn run_padded_round_robin_policy(
+    wq: &WqPortal,
+    slots: &mut CompletionReuseSlots,
+    target: usize,
+    timeout_start: Instant,
+    acc: &mut CompletionReuseAccumulator,
+) {
+    let window = slots.descriptors.len();
+    let mut slot = 0;
+    while !acc.target_reached(target) && !completion_reuse_timed_out(timeout_start) {
+        if poll_completion_slot(slots, slot, acc).is_some() {
+            reset_and_submit_slot(wq, slots, slot, acc);
+        }
+        slot += 1;
+        if slot == window {
+            slot = 0;
+        }
+        core::hint::spin_loop();
+    }
+}
+
+fn run_packed_scan_policy(
+    wq: &WqPortal,
+    slots: &mut CompletionReuseSlots,
+    target: usize,
+    timeout_start: Instant,
+    acc: &mut CompletionReuseAccumulator,
+) {
+    let window = slots.descriptors.len();
+    while !acc.target_reached(target) && !completion_reuse_timed_out(timeout_start) {
+        for slot in 0..window {
+            if poll_completion_slot(slots, slot, acc).is_none() {
+                continue;
+            }
+
+            reset_and_submit_slot(wq, slots, slot, acc);
+            if acc.target_reached(target) {
+                break;
+            }
+        }
+        core::hint::spin_loop();
+    }
+}
+
+fn run_delayed_reset_or_batch_harvest_policy(
+    wq: &WqPortal,
+    slots: &mut CompletionReuseSlots,
+    target: usize,
+    timeout_start: Instant,
+    batch: usize,
+    acc: &mut CompletionReuseAccumulator,
+) {
+    let window = slots.descriptors.len();
+    let mut ready = Vec::with_capacity(batch);
+
+    while !acc.target_reached(target) && !completion_reuse_timed_out(timeout_start) {
+        ready.clear();
+
+        for slot in 0..window {
+            if poll_completion_slot(slots, slot, acc).is_none() {
+                continue;
+            }
+
+            ready.push(slot);
+            if ready.len() == batch || acc.target_reached(target) {
+                break;
+            }
+        }
+
+        if !ready.is_empty() {
+            reset_and_submit_ready_slots(wq, slots, &ready, acc);
+        }
+
+        core::hint::spin_loop();
     }
 }
 

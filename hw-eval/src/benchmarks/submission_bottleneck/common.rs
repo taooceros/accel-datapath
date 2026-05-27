@@ -5,11 +5,28 @@ use hw_eval::dsa::{
     DsaHwDesc, DSA_COMP_NONE, DSA_COMP_SUCCESS,
 };
 
-use crate::config::DsaOperationClass;
+use crate::config::{DsaOperationClass, TrafficClass};
 use crate::report::{stats_from_values, LatencyStats};
 
 pub(super) const COMPLETION_TIMEOUT_NS: u128 = 1_000_000;
 pub(super) const TIMEOUT_CHECK_STRIDE: u64 = 256;
+
+pub(super) fn dsa_operation_payload_size(operation: DsaOperationClass) -> usize {
+    match operation {
+        DsaOperationClass::Noop => 0,
+        DsaOperationClass::Memmove64 => 64,
+        DsaOperationClass::Memmove4k => 4096,
+    }
+}
+
+pub(super) fn traffic_class_operation_size(traffic_class: TrafficClass) -> Option<usize> {
+    match traffic_class {
+        TrafficClass::SubmitOnly => None,
+        TrafficClass::NoopCompletion => Some(0),
+        TrafficClass::Memmove64 => Some(64),
+        TrafficClass::Memmove4k => Some(4096),
+    }
+}
 
 pub(super) struct OperationSlots {
     pub(super) descriptors: Vec<DsaHwDesc>,
@@ -23,7 +40,7 @@ impl OperationSlots {
         let mut descriptors = vec![DsaHwDesc::default(); count];
         let mut completions = vec![DsaCompletionRecord::default(); count];
 
-        let payload_size = operation.payload_size();
+        let payload_size = dsa_operation_payload_size(operation);
         let mut sources = vec![0xa5; count * payload_size];
         let mut destinations = vec![0; count * payload_size];
 

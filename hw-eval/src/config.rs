@@ -175,14 +175,6 @@ impl DsaOperationClass {
             Self::Memmove4k => "memmove4k",
         }
     }
-
-    pub(crate) fn payload_size(self) -> usize {
-        match self {
-            Self::Noop => 0,
-            Self::Memmove64 => 64,
-            Self::Memmove4k => 4096,
-        }
-    }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
@@ -240,15 +232,6 @@ impl TrafficClass {
             Self::NoopCompletion => "noop-completion",
             Self::Memmove64 => "memmove64",
             Self::Memmove4k => "memmove4k",
-        }
-    }
-
-    pub(crate) fn operation_size(self) -> Option<usize> {
-        match self {
-            Self::SubmitOnly => None,
-            Self::NoopCompletion => Some(0),
-            Self::Memmove64 => Some(64),
-            Self::Memmove4k => Some(4096),
         }
     }
 }
@@ -418,6 +401,19 @@ fn parse_usize_list(
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SubmissionBottleneckConfig {
+    pub(crate) submit_occupancies: Vec<usize>,
+    pub(crate) marker_bursts: Vec<usize>,
+    pub(crate) marker_positions: Vec<MarkerPosition>,
+    pub(crate) marker_poll_cadences: Vec<MarkerPollCadence>,
+    pub(crate) traffic_windows: Vec<usize>,
+    pub(crate) traffic_classes: Vec<TrafficClass>,
+    pub(crate) completion_reuse_policies: Vec<CompletionReusePolicy>,
+    pub(crate) completion_reuse_window: usize,
+    pub(crate) dsa_operation: DsaOperationClass,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BenchmarkConfig {
     pub(crate) accel: AccelKind,
     pub(crate) device: PathBuf,
@@ -429,19 +425,11 @@ pub(crate) struct BenchmarkConfig {
     pub(crate) submit_mode: SubmitOnlyMode,
 
     pub(crate) submit_bursts: Vec<usize>,
-    pub(crate) submit_occupancies: Vec<usize>,
+    pub(crate) submission_bottleneck: SubmissionBottleneckConfig,
     pub(crate) sw_only: bool,
-    pub(crate) dsa_op: DsaOperationClass,
     pub(crate) pin_core: Option<usize>,
     pub(crate) cold: bool,
     pub(crate) json: bool,
-    pub(crate) marker_bursts: Vec<usize>,
-    pub(crate) marker_positions: Vec<MarkerPosition>,
-    pub(crate) marker_poll_cadences: Vec<MarkerPollCadence>,
-    pub(crate) traffic_windows: Vec<usize>,
-    pub(crate) traffic_classes: Vec<TrafficClass>,
-    pub(crate) completion_reuse_policies: Vec<CompletionReusePolicy>,
-    pub(crate) completion_reuse_window: usize,
 }
 
 #[bon::bon]
@@ -485,14 +473,17 @@ impl BenchmarkConfig {
         let device = device.unwrap_or_else(|| default_device(accel));
         let sizes = parse_sizes(&sizes)?;
         let submit_bursts = parse_submit_bursts(&submit_bursts)?;
-        let submit_occupancies = parse_submit_occupancies(&submit_occupancies)?;
-        let marker_bursts = parse_marker_bursts(&marker_bursts)?;
-        let marker_positions = parse_marker_positions(&marker_positions)?;
-        let marker_poll_cadences = parse_marker_poll_cadences(&marker_poll_cadences)?;
-        let traffic_windows = parse_traffic_windows(&traffic_windows)?;
-        let traffic_classes = parse_traffic_classes(&traffic_classes)?;
-        let completion_reuse_policies =
-            parse_completion_reuse_policies(&completion_reuse_policies)?;
+        let submission_bottleneck = SubmissionBottleneckConfig {
+            submit_occupancies: parse_submit_occupancies(&submit_occupancies)?,
+            marker_bursts: parse_marker_bursts(&marker_bursts)?,
+            marker_positions: parse_marker_positions(&marker_positions)?,
+            marker_poll_cadences: parse_marker_poll_cadences(&marker_poll_cadences)?,
+            traffic_windows: parse_traffic_windows(&traffic_windows)?,
+            traffic_classes: parse_traffic_classes(&traffic_classes)?,
+            completion_reuse_policies: parse_completion_reuse_policies(&completion_reuse_policies)?,
+            completion_reuse_window,
+            dsa_operation: dsa_op,
+        };
         if threads == 0 {
             return Err(BenchmarkConfigError::ZeroThreads);
         }
@@ -522,16 +513,8 @@ impl BenchmarkConfig {
             benchmark,
             submit_mode,
             submit_bursts,
-            submit_occupancies,
+            submission_bottleneck,
             sw_only,
-            dsa_op,
-            marker_bursts,
-            marker_positions,
-            marker_poll_cadences,
-            traffic_windows,
-            traffic_classes,
-            completion_reuse_policies,
-            completion_reuse_window,
             pin_core,
             cold,
             json,
@@ -679,12 +662,15 @@ mod tests {
             vec![1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
         );
         assert_eq!(
-            config.submit_occupancies,
+            config.submission_bottleneck.submit_occupancies,
             vec![0, 32, 64, 96, 112, 120, 124, 126, 127, 128, 129, 132, 136, 144, 160]
         );
-        assert_eq!(config.marker_bursts, vec![64, 96, 128, 160, 256]);
         assert_eq!(
-            config.marker_positions,
+            config.submission_bottleneck.marker_bursts,
+            vec![64, 96, 128, 160, 256]
+        );
+        assert_eq!(
+            config.submission_bottleneck.marker_positions,
             vec![
                 MarkerPosition::First,
                 MarkerPosition::Half,
@@ -692,7 +678,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            config.marker_poll_cadences,
+            config.submission_bottleneck.marker_poll_cadences,
             vec![
                 MarkerPollCadence::Every(1),
                 MarkerPollCadence::Every(4),
@@ -702,11 +688,11 @@ mod tests {
             ]
         );
         assert_eq!(
-            config.traffic_windows,
+            config.submission_bottleneck.traffic_windows,
             vec![1, 8, 32, 64, 96, 112, 120, 124, 128, 160, 256]
         );
         assert_eq!(
-            config.traffic_classes,
+            config.submission_bottleneck.traffic_classes,
             vec![
                 TrafficClass::SubmitOnly,
                 TrafficClass::NoopCompletion,
@@ -715,7 +701,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            config.completion_reuse_policies,
+            config.submission_bottleneck.completion_reuse_policies,
             vec![
                 CompletionReusePolicy::PackedScan,
                 CompletionReusePolicy::PaddedRoundRobin,
@@ -725,11 +711,14 @@ mod tests {
             ]
         );
         assert_eq!(
-            config.completion_reuse_window,
+            config.submission_bottleneck.completion_reuse_window,
             DEFAULT_COMPLETION_REUSE_WINDOW
         );
         assert_eq!(config.threads, DEFAULT_SUBMIT_THREADS);
-        assert_eq!(config.dsa_op, DsaOperationClass::Noop);
+        assert_eq!(
+            config.submission_bottleneck.dsa_operation,
+            DsaOperationClass::Noop
+        );
         assert!(!config.sw_only);
         assert_eq!(config.pin_core, None);
         assert!(!config.cold);
@@ -783,31 +772,37 @@ mod tests {
         assert_eq!(config.benchmark, BenchmarkKind::SubmitOnly);
         assert_eq!(config.submit_mode, SubmitOnlyMode::Mfence);
         assert_eq!(config.submit_bursts, vec![2, 64]);
-        assert_eq!(config.submit_occupancies, vec![0, 32, 128]);
-        assert_eq!(config.marker_bursts, vec![64, 160]);
         assert_eq!(
-            config.marker_positions,
+            config.submission_bottleneck.submit_occupancies,
+            vec![0, 32, 128]
+        );
+        assert_eq!(config.submission_bottleneck.marker_bursts, vec![64, 160]);
+        assert_eq!(
+            config.submission_bottleneck.marker_positions,
             vec![MarkerPosition::First, MarkerPosition::Last]
         );
         assert_eq!(
-            config.marker_poll_cadences,
+            config.submission_bottleneck.marker_poll_cadences,
             vec![MarkerPollCadence::Every(4), MarkerPollCadence::Never]
         );
-        assert_eq!(config.traffic_windows, vec![1, 128]);
+        assert_eq!(config.submission_bottleneck.traffic_windows, vec![1, 128]);
         assert_eq!(
-            config.traffic_classes,
+            config.submission_bottleneck.traffic_classes,
             vec![TrafficClass::SubmitOnly, TrafficClass::Memmove64]
         );
         assert_eq!(
-            config.completion_reuse_policies,
+            config.submission_bottleneck.completion_reuse_policies,
             vec![
                 CompletionReusePolicy::PackedScan,
                 CompletionReusePolicy::BatchHarvest,
             ]
         );
-        assert_eq!(config.completion_reuse_window, 64);
+        assert_eq!(config.submission_bottleneck.completion_reuse_window, 64);
         assert!(config.sw_only);
-        assert_eq!(config.dsa_op, DsaOperationClass::Memmove64);
+        assert_eq!(
+            config.submission_bottleneck.dsa_operation,
+            DsaOperationClass::Memmove64
+        );
         assert_eq!(config.pin_core, Some(3));
         assert!(config.cold);
         assert!(config.json);

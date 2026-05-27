@@ -9,10 +9,11 @@ Raw DSA/IAX benchmark crate. Measures hardware submission/completion costs with 
 | Task | Location | Notes |
 |------|----------|-------|
 | CLI and benchmark matrix | `README.md`, `src/main.rs` | Entry point for modes and output. |
+| Benchmark implementations | `src/benchmarks/` | DSA/IAX/software suites plus submission-bottleneck experiments. |
 | Shared submission helpers | `src/submit.rs` | Portal, polling, timing, topology. |
-| DSA path | `src/dsa.rs` | DSA descriptors and helpers. |
-| IAX path | `src/iax.rs` | IAX descriptors, completions, CRC64 flow. |
-| Software baselines | `src/sw.rs` | Non-hardware fallback path. |
+| DSA helper façade | `src/dsa.rs` | DSA descriptors and helpers. |
+| IAX helper façade | `src/iax.rs` | IAX descriptors, completions, CRC64 flow. |
+| Software baselines helper | `src/sw.rs` | Non-hardware fallback path. |
 | Criterion bench | `benches/dsa_raw.rs` | Software-only bench target. |
 | Bindings dependency | `../idxd-sys/Cargo.toml` | Root-level canonical raw IDXD/UAPI/MMIO crate shared with `idxd-rust`. |
 

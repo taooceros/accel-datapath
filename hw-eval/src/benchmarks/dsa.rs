@@ -5,49 +5,56 @@ use std::time::Instant;
 use hw_eval::dsa::*;
 use hw_eval::submit::{cycles_to_ns, flush_range, lfence, mfence, rdtscp, WqPortal};
 
-use crate::config::{
-    BenchmarkKind, CompletionReusePolicy, DsaOperationClass, MarkerPollCadence, MarkerPosition,
-    SubmitOnlyMode, TrafficClass,
-};
-use crate::methodology::submission_bottleneck::{
-    bench_completion_reuse_policy, bench_submit_admission_probe, bench_submit_marker_overlap,
-    bench_submit_occupancy_one_extra, bench_traffic_class_ladder,
-};
-use crate::report::{
-    compute_stats, AdmissionResult, CompletionReusePolicyResult, LatencyResult,
-    SubmitMarkerOverlapResult, SubmitOccupancyResult, ThroughputResult, TrafficClassLadderResult,
-};
+use super::submission_bottleneck::{self, BottleneckRequest};
+use crate::config::{BenchmarkKind, SubmissionBottleneckConfig, SubmitOnlyMode};
+use crate::report::{compute_stats, LatencyResult, SubmissionBottleneckResults, ThroughputResult};
 use crate::timing::MeasurementTimers;
 
+pub(crate) struct DsaBenchmarkRequest<'a> {
+    pub(crate) wq: &'a WqPortal,
+    pub(crate) sizes: &'a [usize],
+    pub(crate) iterations: usize,
+    pub(crate) benchmark: BenchmarkKind,
+    pub(crate) submit_mode: SubmitOnlyMode,
+    pub(crate) submit_bursts: &'a [usize],
+    pub(crate) submission_bottleneck: &'a SubmissionBottleneckConfig,
+    pub(crate) max_concurrency: usize,
+    pub(crate) submit_threads: usize,
+    pub(crate) tsc_freq: u64,
+    pub(crate) cold: bool,
+    pub(crate) json: bool,
+}
+
+pub(crate) struct DsaBenchmarkResults<'a> {
+    pub(crate) latency: &'a mut Vec<LatencyResult>,
+    pub(crate) throughput: &'a mut Vec<ThroughputResult>,
+    pub(crate) submission_bottleneck: &'a mut SubmissionBottleneckResults,
+}
+
 pub(crate) fn run_dsa_benchmarks(
-    wq: &WqPortal,
-    sizes: &[usize],
-    iterations: usize,
-    benchmark: BenchmarkKind,
-    submit_mode: SubmitOnlyMode,
-    submit_bursts: &[usize],
-    submit_occupancies: &[usize],
-    marker_bursts: &[usize],
-    marker_positions: &[MarkerPosition],
-    marker_poll_cadences: &[MarkerPollCadence],
-    traffic_windows: &[usize],
-    traffic_classes: &[TrafficClass],
-    completion_reuse_policies: &[CompletionReusePolicy],
-    completion_reuse_window: usize,
-    max_concurrency: usize,
-    submit_threads: usize,
-    dsa_operation: DsaOperationClass,
-    tsc_freq: u64,
-    cold: bool,
-    json: bool,
-    latency_results: &mut Vec<LatencyResult>,
-    throughput_results: &mut Vec<ThroughputResult>,
-    admission_results: &mut Vec<AdmissionResult>,
-    submit_occupancy_results: &mut Vec<SubmitOccupancyResult>,
-    submit_marker_overlap_results: &mut Vec<SubmitMarkerOverlapResult>,
-    traffic_class_ladder_results: &mut Vec<TrafficClassLadderResult>,
-    completion_reuse_policy_results: &mut Vec<CompletionReusePolicyResult>,
+    request: DsaBenchmarkRequest<'_>,
+    results: DsaBenchmarkResults<'_>,
 ) {
+    let DsaBenchmarkRequest {
+        wq,
+        sizes,
+        iterations,
+        benchmark,
+        submit_mode,
+        submit_bursts,
+        submission_bottleneck: bottleneck_config,
+        max_concurrency,
+        submit_threads,
+        tsc_freq,
+        cold,
+        json,
+    } = request;
+
+    let DsaBenchmarkResults {
+        latency: latency_results,
+        throughput: throughput_results,
+        submission_bottleneck: submission_bottleneck_results,
+    } = results;
     if benchmark == BenchmarkKind::SubmitOnly {
         bench_submit_only_workloads(
             wq,
@@ -61,70 +68,18 @@ pub(crate) fn run_dsa_benchmarks(
         return;
     }
 
-    if benchmark == BenchmarkKind::SubmitAdmission {
-        bench_submit_admission_probe(
+    if submission_bottleneck::run(
+        BottleneckRequest {
             wq,
-            iterations,
+            benchmark,
+            config: bottleneck_config,
             submit_bursts,
-            tsc_freq,
-            json,
-            admission_results,
-        );
-        return;
-    }
-
-    if benchmark == BenchmarkKind::SubmitOccupancy {
-        bench_submit_occupancy_one_extra(
-            wq,
-            submit_occupancies,
-            dsa_operation,
             iterations,
             tsc_freq,
             json,
-            submit_occupancy_results,
-        );
-        return;
-    }
-
-    if benchmark == BenchmarkKind::SubmitMarkerOverlap {
-        bench_submit_marker_overlap(
-            wq,
-            marker_bursts,
-            marker_positions,
-            marker_poll_cadences,
-            dsa_operation,
-            iterations,
-            tsc_freq,
-            json,
-            submit_marker_overlap_results,
-        );
-        return;
-    }
-
-    if benchmark == BenchmarkKind::TrafficClassLadder {
-        bench_traffic_class_ladder(
-            wq,
-            traffic_windows,
-            traffic_classes,
-            iterations,
-            tsc_freq,
-            json,
-            traffic_class_ladder_results,
-        );
-        return;
-    }
-
-    if benchmark == BenchmarkKind::CompletionReusePolicy {
-        bench_completion_reuse_policy(
-            wq,
-            completion_reuse_policies,
-            completion_reuse_window,
-            dsa_operation,
-            iterations,
-            tsc_freq,
-            json,
-            completion_reuse_policy_results,
-        );
+        },
+        submission_bottleneck_results,
+    ) {
         return;
     }
 
