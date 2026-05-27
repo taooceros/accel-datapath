@@ -1,0 +1,824 @@
+{
+  "metadata": {
+    "accelerator": "dsa",
+    "tsc_freq_hz": 2202102321,
+    "pinned_core": 0,
+    "cpu_numa_node": 0,
+    "device_numa_node": null,
+    "device": "/dev/dsa/wq0.0",
+    "wq_dedicated": true,
+    "iterations": 3000,
+    "threads": 1,
+    "cold_cache": false
+  },
+  "latency": [],
+  "throughput": [],
+  "submit_occupancy": [
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 112,
+      "submitted": 113,
+      "completed": {
+        "min": 113,
+        "median": 113,
+        "mean": 113,
+        "p99": 113,
+        "p999": 113,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 20,
+        "median": 24,
+        "mean": 23,
+        "p99": 26,
+        "p999": 46,
+        "cv": 0.1006052043354559
+      },
+      "extra_submit_ns": {
+        "min": 9,
+        "median": 10,
+        "mean": 9,
+        "p99": 11,
+        "p999": 20,
+        "cv": 0.11305673690847494
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 140,
+        "median": 4002,
+        "mean": 4017,
+        "p99": 4062,
+        "p999": 29640,
+        "cv": 0.23735555606384232
+      },
+      "first_old_completion_ns": {
+        "min": 63,
+        "median": 1817,
+        "mean": 1824,
+        "p99": 1844,
+        "p999": 13459,
+        "cv": 0.23741699513173078
+      }
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 113,
+      "submitted": 114,
+      "completed": {
+        "min": 114,
+        "median": 114,
+        "mean": 114,
+        "p99": 114,
+        "p999": 114,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 20,
+        "median": 24,
+        "mean": 26,
+        "p99": 34,
+        "p999": 36,
+        "cv": 0.17402480717114904
+      },
+      "extra_submit_ns": {
+        "min": 9,
+        "median": 10,
+        "mean": 11,
+        "p99": 15,
+        "p999": 16,
+        "cv": 0.20388581596933789
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 1206,
+        "median": 4230,
+        "mean": 4255,
+        "p99": 4286,
+        "p999": 31024,
+        "cv": 0.2808845284973186
+      },
+      "first_old_completion_ns": {
+        "min": 547,
+        "median": 1920,
+        "mean": 1932,
+        "p99": 1946,
+        "p999": 14088,
+        "cv": 0.280964466719238
+      }
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 114,
+      "submitted": 115,
+      "completed": {
+        "min": 115,
+        "median": 115,
+        "mean": 115,
+        "p99": 115,
+        "p999": 115,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 28,
+        "median": 32,
+        "mean": 31,
+        "p99": 34,
+        "p999": 36,
+        "cv": 0.03629579182888617
+      },
+      "extra_submit_ns": {
+        "min": 12,
+        "median": 14,
+        "mean": 13,
+        "p99": 15,
+        "p999": 16,
+        "cv": 0.0415462861021778
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 384,
+        "median": 4462,
+        "mean": 4437,
+        "p99": 4508,
+        "p999": 4528,
+        "cv": 0.12685780993378237
+      },
+      "first_old_completion_ns": {
+        "min": 174,
+        "median": 2026,
+        "mean": 2014,
+        "p99": 2047,
+        "p999": 2056,
+        "cv": 0.12689265530439303
+      }
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 115,
+      "submitted": 116,
+      "completed": {
+        "min": 116,
+        "median": 116,
+        "mean": 116,
+        "p99": 116,
+        "p999": 116,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 28,
+        "median": 86,
+        "mean": 81,
+        "p99": 110,
+        "p999": 140,
+        "cv": 0.23280735073969946
+      },
+      "extra_submit_ns": {
+        "min": 12,
+        "median": 39,
+        "mean": 36,
+        "p99": 49,
+        "p999": 63,
+        "cv": 0.2358541788265971
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 490,
+        "median": 4692,
+        "mean": 4685,
+        "p99": 4742,
+        "p999": 4766,
+        "cv": 0.17629754877987672
+      },
+      "first_old_completion_ns": {
+        "min": 222,
+        "median": 2130,
+        "mean": 2127,
+        "p99": 2153,
+        "p999": 2164,
+        "cv": 0.17633943763415935
+      }
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 116,
+      "submitted": 117,
+      "completed": {
+        "min": 117,
+        "median": 117,
+        "mean": 117,
+        "p99": 117,
+        "p999": 117,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 28,
+        "median": 226,
+        "mean": 233,
+        "p99": 240,
+        "p999": 264,
+        "cv": 2.5282224311605503
+      },
+      "extra_submit_ns": {
+        "min": 12,
+        "median": 102,
+        "mean": 105,
+        "p99": 108,
+        "p999": 119,
+        "cv": 2.5414912370356366
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 1866,
+        "median": 4778,
+        "mean": 4799,
+        "p99": 4862,
+        "p999": 30230,
+        "cv": 0.18618702274504964
+      },
+      "first_old_completion_ns": {
+        "min": 847,
+        "median": 2169,
+        "mean": 2178,
+        "p99": 2207,
+        "p999": 13727,
+        "cv": 0.1862263233995031
+      }
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 117,
+      "submitted": 118,
+      "completed": {
+        "min": 118,
+        "median": 118,
+        "mean": 118,
+        "p99": 118,
+        "p999": 118,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 22,
+        "median": 224,
+        "mean": 226,
+        "p99": 238,
+        "p999": 240,
+        "cv": 0.05489151757936954
+      },
+      "extra_submit_ns": {
+        "min": 9,
+        "median": 101,
+        "mean": 102,
+        "p99": 108,
+        "p999": 108,
+        "cv": 0.056788439896267605
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 2134,
+        "median": 4730,
+        "mean": 4722,
+        "p99": 4790,
+        "p999": 4808,
+        "cv": 0.028551892524905698
+      },
+      "first_old_completion_ns": {
+        "min": 969,
+        "median": 2147,
+        "mean": 2144,
+        "p99": 2175,
+        "p999": 2183,
+        "cv": 0.028557169105244504
+      }
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 118,
+      "submitted": 119,
+      "completed": {
+        "min": 119,
+        "median": 119,
+        "mean": 119,
+        "p99": 119,
+        "p999": 119,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 22,
+        "median": 224,
+        "mean": 225,
+        "p99": 238,
+        "p999": 240,
+        "cv": 0.05741363468403761
+      },
+      "extra_submit_ns": {
+        "min": 9,
+        "median": 101,
+        "mean": 101,
+        "p99": 108,
+        "p999": 108,
+        "cv": 0.05937143835338916
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 264,
+        "median": 4726,
+        "mean": 4728,
+        "p99": 4784,
+        "p999": 4804,
+        "cv": 0.10837830317183741
+      },
+      "first_old_completion_ns": {
+        "min": 119,
+        "median": 2146,
+        "mean": 2146,
+        "p99": 2172,
+        "p999": 2181,
+        "cv": 0.10840659940807418
+      }
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 119,
+      "submitted": 120,
+      "completed": {
+        "min": 120,
+        "median": 120,
+        "mean": 120,
+        "p99": 120,
+        "p999": 120,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 22,
+        "median": 224,
+        "mean": 225,
+        "p99": 238,
+        "p999": 240,
+        "cv": 0.05750572749823882
+      },
+      "extra_submit_ns": {
+        "min": 9,
+        "median": 101,
+        "mean": 101,
+        "p99": 108,
+        "p999": 108,
+        "cv": 0.0591433361577441
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 352,
+        "median": 4726,
+        "mean": 4738,
+        "p99": 4786,
+        "p999": 4816,
+        "cv": 0.16309489511123107
+      },
+      "first_old_completion_ns": {
+        "min": 159,
+        "median": 2146,
+        "mean": 2151,
+        "p99": 2173,
+        "p999": 2187,
+        "cv": 0.16313085942848027
+      }
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 120,
+      "submitted": 121,
+      "completed": {
+        "min": 121,
+        "median": 121,
+        "mean": 121,
+        "p99": 121,
+        "p999": 121,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 22,
+        "median": 224,
+        "mean": 225,
+        "p99": 238,
+        "p999": 240,
+        "cv": 0.05449833998704049
+      },
+      "extra_submit_ns": {
+        "min": 9,
+        "median": 101,
+        "mean": 102,
+        "p99": 108,
+        "p999": 108,
+        "cv": 0.056445103231977316
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 2802,
+        "median": 4728,
+        "mean": 4731,
+        "p99": 4780,
+        "p999": 4816,
+        "cv": 0.10281437173429687
+      },
+      "first_old_completion_ns": {
+        "min": 1272,
+        "median": 2147,
+        "mean": 2148,
+        "p99": 2170,
+        "p999": 2187,
+        "cv": 0.10283851894264652
+      }
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 121,
+      "submitted": 122,
+      "completed": {
+        "min": 122,
+        "median": 122,
+        "mean": 122,
+        "p99": 122,
+        "p999": 122,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 20,
+        "median": 224,
+        "mean": 225,
+        "p99": 238,
+        "p999": 240,
+        "cv": 0.05545332201311788
+      },
+      "extra_submit_ns": {
+        "min": 9,
+        "median": 101,
+        "mean": 102,
+        "p99": 108,
+        "p999": 108,
+        "cv": 0.05709193598001993
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 3046,
+        "median": 4732,
+        "mean": 4738,
+        "p99": 4804,
+        "p999": 4830,
+        "cv": 0.10286868181163296
+      },
+      "first_old_completion_ns": {
+        "min": 1383,
+        "median": 2148,
+        "mean": 2151,
+        "p99": 2181,
+        "p999": 2193,
+        "cv": 0.1028916020635104
+      }
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 122,
+      "submitted": 123,
+      "completed": {
+        "min": 123,
+        "median": 123,
+        "mean": 123,
+        "p99": 123,
+        "p999": 123,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 20,
+        "median": 224,
+        "mean": 225,
+        "p99": 238,
+        "p999": 240,
+        "cv": 0.0572047646231456
+      },
+      "extra_submit_ns": {
+        "min": 9,
+        "median": 101,
+        "mean": 101,
+        "p99": 108,
+        "p999": 108,
+        "cv": 0.05907531659664815
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 586,
+        "median": 4728,
+        "mean": 4722,
+        "p99": 4782,
+        "p999": 4796,
+        "cv": 0.02282228391104706
+      },
+      "first_old_completion_ns": {
+        "min": 266,
+        "median": 2147,
+        "mean": 2144,
+        "p99": 2171,
+        "p999": 2177,
+        "cv": 0.022826142119180794
+      }
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 123,
+      "submitted": 124,
+      "completed": {
+        "min": 124,
+        "median": 124,
+        "mean": 124,
+        "p99": 124,
+        "p999": 124,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 22,
+        "median": 224,
+        "mean": 225,
+        "p99": 238,
+        "p999": 240,
+        "cv": 0.05455363884660174
+      },
+      "extra_submit_ns": {
+        "min": 9,
+        "median": 101,
+        "mean": 101,
+        "p99": 108,
+        "p999": 108,
+        "cv": 0.056489010872577565
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 3494,
+        "median": 4726,
+        "mean": 4741,
+        "p99": 4784,
+        "p999": 4830,
+        "cv": 0.1449692962246828
+      },
+      "first_old_completion_ns": {
+        "min": 1586,
+        "median": 2146,
+        "mean": 2152,
+        "p99": 2172,
+        "p999": 2193,
+        "cv": 0.14500406302803934
+      }
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 124,
+      "submitted": 125,
+      "completed": {
+        "min": 125,
+        "median": 125,
+        "mean": 125,
+        "p99": 125,
+        "p999": 125,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 20,
+        "median": 224,
+        "mean": 225,
+        "p99": 238,
+        "p999": 240,
+        "cv": 0.061502894574637326
+      },
+      "extra_submit_ns": {
+        "min": 9,
+        "median": 101,
+        "mean": 101,
+        "p99": 108,
+        "p999": 108,
+        "cv": 0.0632786924395899
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 308,
+        "median": 4728,
+        "mean": 4721,
+        "p99": 4786,
+        "p999": 4800,
+        "cv": 0.03129927594153876
+      },
+      "first_old_completion_ns": {
+        "min": 139,
+        "median": 2147,
+        "mean": 2143,
+        "p99": 2173,
+        "p999": 2179,
+        "cv": 0.03130814503907073
+      }
+    }
+  ]
+}

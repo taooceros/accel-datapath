@@ -24,12 +24,30 @@ cargo bench
 --sizes, -s <LIST>       Message sizes in bytes, comma-separated
 --iterations, -i <N>     Iterations per measurement (default: 10000)
 --max-concurrency, -m <N> Max sliding window concurrency (default: 128)
---benchmark <all|submit-only|submit-admission>
+--benchmark <all|submit-only|submit-admission|submit-occupancy|submit-marker-overlap|traffic-class-ladder|completion-reuse-policy>
                          Benchmark subset to run (default: all)
 --submit-mode <all|unloaded|sustained|mfence>
                          Submit-only workload variant (default: all)
 --submit-bursts <LIST>     Submit-only burst sizes (default:
                          1,2,4,8,16,32,64,128,256,512)
+--submit-occupancies <LIST>
+                         Prefill occupancies for submit-occupancy, zero allowed
+                         (default: 0,32,64,96,112,120,124,126,127,128,129,132,136,144,160)
+--marker-bursts <LIST>  Burst lengths for submit-marker-overlap
+--marker-positions <LIST>
+                         Marker positions: first,half,last
+--marker-poll-cadences <LIST>
+                         Marker poll cadences: positive integers or never
+--traffic-windows <LIST>
+                         Windows for traffic-class-ladder
+--traffic-classes <LIST>
+                         Traffic classes: submit-only,noop-completion,memmove64,memmove4k
+--completion-reuse-policies <LIST>
+                         Completion policies: packed-scan,padded-round-robin,poll-only,delayed-reset,batch-harvest
+--completion-reuse-window <N>
+                         Fixed logical window for completion-reuse-policy
+--dsa-op <noop|memmove64|memmove4k>
+                         DSA operation class for bottleneck experiments
 --sw-only                Software baselines only (no hardware)
 --pin-core <N>           Pin benchmark thread to CPU core
 --cold                   Flush caches between iterations (cold-cache DMA)
@@ -47,6 +65,10 @@ cargo bench
 | **submit_only_mfence** | DSA NOOP submit burst with `mfence` between submissions; probes posted-write serialization |
 | **submit_admission_distinct** | Distinct completion-bearing NOOP burst with no software inflight gate; counts missing completions to test dedicated-WQ admission behavior |
 | **memmove** | Single-op DMA copy latency (rdtscp, per size) |
+| **submit_occupancy_one_extra** | Prefill K completion-bearing descriptors, time one extra submit, then record first-old completion visibility and drain counts |
+| **submit_marker_overlap** | Submit N completion-bearing descriptors, poll a marker at a chosen cadence, and record whether marker completion overlaps the submit tail |
+| **traffic_class_ladder** | Compare submit-only, NOOP+completion, 64 B memmove, and 4 KiB memmove at identical windows |
+| **completion_reuse_policy** | Compare packed scan, padded round-robin, poll-only, delayed reset, and batch-harvest completion reuse policies |
 | **crc_gen** | Single-op CRC-32C generation latency |
 | **copy_crc** | Single-op fused copy+CRC latency |
 | **batch** | Batch descriptor latency (sweep batch_n=1..1024) |
@@ -75,6 +97,28 @@ Backend notes:
   each other. JSON rows include an explicit `timer` field.
 - Throughput benchmarks use **Instant::now** (amortized over many ops)
 - TSC frequency auto-detected from /proc/cpuinfo
+
+## DSA submission bottleneck experiments
+
+DSA bottleneck runners are selected explicitly so their JSON rows are easy to find:
+
+```bash
+launch ./target/release/hw-eval \
+  --accel dsa \
+  --benchmark submit-occupancy \
+  --device /dev/dsa/wq0.0 \
+  --json \
+  --iterations 1000 \
+  --submit-occupancies 0,32,64,96,112,120,124,126,127,128,129,132,136,144,160 \
+  --dsa-op noop \
+  --pin-core 0
+```
+
+JSON reports include skipped-when-empty arrays for these modes:
+- `submit_occupancy`: rows use `benchmark: "submit_occupancy_one_extra"` and record `operation_class`, `k_prefill`, `submitted`, completion counts, `extra_submit_tsc_ticks`, `extra_submit_ns`, and first-old-completion timing when `k_prefill > 0`.
+- `submit_marker_overlap`: rows use `benchmark: "submit_marker_overlap"` and record `n`, numeric marker position, poll cadence, submit-tail timing, marker-visible timing when observed, overlap count/fraction, and completion counts.
+- `traffic_class_ladder`: rows use `benchmark: "traffic_class_ladder"` and record traffic class, operation size, window, submit timing, completion-visible timing where applicable, completion counts where applicable, and ops/sec.
+- `completion_reuse_policy`: rows use `benchmark: "completion_reuse_policy"` and record operation class, window, policy, operations completed, ops/sec, polls/completion, harvest timing, reset-to-submit timing where applicable, and completion counts.
 
 ## Graphing
 
@@ -105,6 +149,8 @@ src/submit.rs                     Shared WQ submission and low-level polling/tim
 src/dsa.rs                        DSA helper façade over root-level idxd-sys descriptor/completion ABI
 src/iax.rs                        IAX helper façade over root-level idxd-sys descriptor/completion ABI
 src/sw.rs                         Software memcpy/CRC baselines
+src/methodology/submission_bottleneck.rs  Submission bottleneck experiment module root
+src/methodology/submission_bottleneck/    One numbered module per experiment plus shared helpers
 src/main.rs                       All benchmarks, CLI, JSON output
 benches/dsa_raw.rs                Criterion benchmarks (SW baselines only)
 plot_results.py                   Matplotlib graphing script

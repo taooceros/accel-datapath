@@ -1,0 +1,1008 @@
+{
+  "metadata": {
+    "accelerator": "dsa",
+    "tsc_freq_hz": 2202658570,
+    "pinned_core": 0,
+    "cpu_numa_node": 0,
+    "device_numa_node": null,
+    "device": "/dev/dsa/wq0.0",
+    "wq_dedicated": true,
+    "iterations": 100,
+    "threads": 1,
+    "cold_cache": false
+  },
+  "latency": [],
+  "throughput": [],
+  "admission": [
+    {
+      "benchmark": "submit_admission_distinct",
+      "burst_size": 1,
+      "submitted": 1,
+      "completed": {
+        "min": 1,
+        "median": 1,
+        "mean": 1,
+        "p99": 1,
+        "p999": 1,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "submit_tsc_ticks": {
+        "min": 26,
+        "median": 30,
+        "mean": 36,
+        "p99": 660,
+        "p999": 660,
+        "cv": 1.728205486545161
+      },
+      "submit_ns": {
+        "min": 11,
+        "median": 13,
+        "mean": 15,
+        "p99": 299,
+        "p999": 299,
+        "cv": 1.795889384302834
+      }
+    },
+    {
+      "benchmark": "submit_admission_distinct",
+      "burst_size": 2,
+      "submitted": 2,
+      "completed": {
+        "min": 2,
+        "median": 2,
+        "mean": 2,
+        "p99": 2,
+        "p999": 2,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "submit_tsc_ticks": {
+        "min": 28,
+        "median": 32,
+        "mean": 31,
+        "p99": 42,
+        "p999": 42,
+        "cv": 0.06821089586174256
+      },
+      "submit_ns": {
+        "min": 12,
+        "median": 14,
+        "mean": 13,
+        "p99": 19,
+        "p999": 19,
+        "cv": 0.07811807027884388
+      }
+    },
+    {
+      "benchmark": "submit_admission_distinct",
+      "burst_size": 4,
+      "submitted": 4,
+      "completed": {
+        "min": 4,
+        "median": 4,
+        "mean": 4,
+        "p99": 4,
+        "p999": 4,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "submit_tsc_ticks": {
+        "min": 32,
+        "median": 36,
+        "mean": 35,
+        "p99": 60,
+        "p999": 60,
+        "cv": 0.08534765330908742
+      },
+      "submit_ns": {
+        "min": 14,
+        "median": 16,
+        "mean": 15,
+        "p99": 27,
+        "p999": 27,
+        "cv": 0.08909486717563155
+      }
+    },
+    {
+      "benchmark": "submit_admission_distinct",
+      "burst_size": 8,
+      "submitted": 8,
+      "completed": {
+        "min": 8,
+        "median": 8,
+        "mean": 8,
+        "p99": 8,
+        "p999": 8,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "submit_tsc_ticks": {
+        "min": 36,
+        "median": 42,
+        "mean": 49,
+        "p99": 100,
+        "p999": 100,
+        "cv": 0.24105523099177448
+      },
+      "submit_ns": {
+        "min": 16,
+        "median": 19,
+        "mean": 22,
+        "p99": 45,
+        "p999": 45,
+        "cv": 0.24162908407188252
+      }
+    },
+    {
+      "benchmark": "submit_admission_distinct",
+      "burst_size": 16,
+      "submitted": 16,
+      "completed": {
+        "min": 16,
+        "median": 16,
+        "mean": 16,
+        "p99": 16,
+        "p999": 16,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "submit_tsc_ticks": {
+        "min": 82,
+        "median": 94,
+        "mean": 91,
+        "p99": 124,
+        "p999": 124,
+        "cv": 0.10605311580122409
+      },
+      "submit_ns": {
+        "min": 37,
+        "median": 42,
+        "mean": 41,
+        "p99": 56,
+        "p999": 56,
+        "cv": 0.10387074477632041
+      }
+    },
+    {
+      "benchmark": "submit_admission_distinct",
+      "burst_size": 32,
+      "submitted": 32,
+      "completed": {
+        "min": 32,
+        "median": 32,
+        "mean": 32,
+        "p99": 32,
+        "p999": 32,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "submit_tsc_ticks": {
+        "min": 178,
+        "median": 184,
+        "mean": 189,
+        "p99": 220,
+        "p999": 220,
+        "cv": 0.05691351716063157
+      },
+      "submit_ns": {
+        "min": 80,
+        "median": 83,
+        "mean": 85,
+        "p99": 99,
+        "p999": 99,
+        "cv": 0.0571358106203935
+      }
+    },
+    {
+      "benchmark": "submit_admission_distinct",
+      "burst_size": 64,
+      "submitted": 64,
+      "completed": {
+        "min": 64,
+        "median": 64,
+        "mean": 64,
+        "p99": 64,
+        "p999": 64,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "submit_tsc_ticks": {
+        "min": 366,
+        "median": 374,
+        "mean": 375,
+        "p99": 418,
+        "p999": 418,
+        "cv": 0.022894646031591987
+      },
+      "submit_ns": {
+        "min": 166,
+        "median": 169,
+        "mean": 169,
+        "p99": 189,
+        "p999": 189,
+        "cv": 0.022658301727728248
+      }
+    },
+    {
+      "benchmark": "submit_admission_distinct",
+      "burst_size": 96,
+      "submitted": 96,
+      "completed": {
+        "min": 96,
+        "median": 96,
+        "mean": 96,
+        "p99": 96,
+        "p999": 96,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "submit_tsc_ticks": {
+        "min": 524,
+        "median": 584,
+        "mean": 581,
+        "p99": 602,
+        "p999": 602,
+        "cv": 0.022545282529324858
+      },
+      "submit_ns": {
+        "min": 237,
+        "median": 265,
+        "mean": 263,
+        "p99": 273,
+        "p999": 273,
+        "cv": 0.02306799042757789
+      }
+    },
+    {
+      "benchmark": "submit_admission_distinct",
+      "burst_size": 112,
+      "submitted": 112,
+      "completed": {
+        "min": 112,
+        "median": 112,
+        "mean": 112,
+        "p99": 112,
+        "p999": 112,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "submit_tsc_ticks": {
+        "min": 616,
+        "median": 668,
+        "mean": 671,
+        "p99": 704,
+        "p999": 704,
+        "cv": 0.019413944029787536
+      },
+      "submit_ns": {
+        "min": 279,
+        "median": 303,
+        "mean": 304,
+        "p99": 319,
+        "p999": 319,
+        "cv": 0.019510329181016233
+      }
+    },
+    {
+      "benchmark": "submit_admission_distinct",
+      "burst_size": 120,
+      "submitted": 120,
+      "completed": {
+        "min": 120,
+        "median": 120,
+        "mean": 120,
+        "p99": 120,
+        "p999": 120,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "submit_tsc_ticks": {
+        "min": 1522,
+        "median": 1564,
+        "mean": 1561,
+        "p99": 1586,
+        "p999": 1586,
+        "cv": 0.007723123979960137
+      },
+      "submit_ns": {
+        "min": 690,
+        "median": 710,
+        "mean": 708,
+        "p99": 720,
+        "p999": 720,
+        "cv": 0.007794471234952143
+      }
+    },
+    {
+      "benchmark": "submit_admission_distinct",
+      "burst_size": 124,
+      "submitted": 124,
+      "completed": {
+        "min": 124,
+        "median": 124,
+        "mean": 124,
+        "p99": 124,
+        "p999": 124,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "submit_tsc_ticks": {
+        "min": 2468,
+        "median": 2524,
+        "mean": 2521,
+        "p99": 2554,
+        "p999": 2554,
+        "cv": 0.005425113485414657
+      },
+      "submit_ns": {
+        "min": 1120,
+        "median": 1145,
+        "mean": 1144,
+        "p99": 1159,
+        "p999": 1159,
+        "cv": 0.0053857670990757065
+      }
+    },
+    {
+      "benchmark": "submit_admission_distinct",
+      "burst_size": 126,
+      "submitted": 126,
+      "completed": {
+        "min": 126,
+        "median": 126,
+        "mean": 126,
+        "p99": 126,
+        "p999": 126,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "submit_tsc_ticks": {
+        "min": 2948,
+        "median": 3000,
+        "mean": 2995,
+        "p99": 3028,
+        "p999": 3028,
+        "cv": 0.005525098145827681
+      },
+      "submit_ns": {
+        "min": 1338,
+        "median": 1361,
+        "mean": 1359,
+        "p99": 1374,
+        "p999": 1374,
+        "cv": 0.005486594233292269
+      }
+    },
+    {
+      "benchmark": "submit_admission_distinct",
+      "burst_size": 127,
+      "submitted": 127,
+      "completed": {
+        "min": 127,
+        "median": 127,
+        "mean": 127,
+        "p99": 127,
+        "p999": 127,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "submit_tsc_ticks": {
+        "min": 3178,
+        "median": 3236,
+        "mean": 3383,
+        "p99": 17874,
+        "p999": 17874,
+        "cv": 0.43054085176647844
+      },
+      "submit_ns": {
+        "min": 1442,
+        "median": 1469,
+        "mean": 1535,
+        "p99": 8114,
+        "p999": 8114,
+        "cv": 0.43066398832051483
+      }
+    },
+    {
+      "benchmark": "submit_admission_distinct",
+      "burst_size": 128,
+      "submitted": 128,
+      "completed": {
+        "min": 128,
+        "median": 128,
+        "mean": 128,
+        "p99": 128,
+        "p999": 128,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "submit_tsc_ticks": {
+        "min": 3424,
+        "median": 3474,
+        "mean": 3472,
+        "p99": 3498,
+        "p999": 3498,
+        "cv": 0.004987126983010596
+      },
+      "submit_ns": {
+        "min": 1554,
+        "median": 1577,
+        "mean": 1575,
+        "p99": 1588,
+        "p999": 1588,
+        "cv": 0.0050234988687662945
+      }
+    },
+    {
+      "benchmark": "submit_admission_distinct",
+      "burst_size": 129,
+      "submitted": 129,
+      "completed": {
+        "min": 129,
+        "median": 129,
+        "mean": 129,
+        "p99": 129,
+        "p999": 129,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "submit_tsc_ticks": {
+        "min": 3656,
+        "median": 3706,
+        "mean": 3707,
+        "p99": 3754,
+        "p999": 3754,
+        "cv": 0.005696753073348776
+      },
+      "submit_ns": {
+        "min": 1659,
+        "median": 1682,
+        "mean": 1682,
+        "p99": 1704,
+        "p999": 1704,
+        "cv": 0.00570687311439549
+      }
+    },
+    {
+      "benchmark": "submit_admission_distinct",
+      "burst_size": 130,
+      "submitted": 130,
+      "completed": {
+        "min": 130,
+        "median": 130,
+        "mean": 130,
+        "p99": 130,
+        "p999": 130,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "submit_tsc_ticks": {
+        "min": 3908,
+        "median": 3954,
+        "mean": 9434,
+        "p99": 551926,
+        "p999": 551926,
+        "cv": 5.779274617435634
+      },
+      "submit_ns": {
+        "min": 1774,
+        "median": 1795,
+        "mean": 4282,
+        "p99": 250572,
+        "p999": 250572,
+        "cv": 5.77987660732196
+      }
+    },
+    {
+      "benchmark": "submit_admission_distinct",
+      "burst_size": 132,
+      "submitted": 132,
+      "completed": {
+        "min": 132,
+        "median": 132,
+        "mean": 132,
+        "p99": 132,
+        "p999": 132,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "submit_tsc_ticks": {
+        "min": 4348,
+        "median": 4428,
+        "mean": 4424,
+        "p99": 4478,
+        "p999": 4478,
+        "cv": 0.005929677213423499
+      },
+      "submit_ns": {
+        "min": 1973,
+        "median": 2010,
+        "mean": 2008,
+        "p99": 2032,
+        "p999": 2032,
+        "cv": 0.005938058223902826
+      }
+    },
+    {
+      "benchmark": "submit_admission_distinct",
+      "burst_size": 136,
+      "submitted": 136,
+      "completed": {
+        "min": 136,
+        "median": 136,
+        "mean": 136,
+        "p99": 136,
+        "p999": 136,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "submit_tsc_ticks": {
+        "min": 5316,
+        "median": 5390,
+        "mean": 5388,
+        "p99": 5438,
+        "p999": 5438,
+        "cv": 0.003795571542228192
+      },
+      "submit_ns": {
+        "min": 2413,
+        "median": 2447,
+        "mean": 2445,
+        "p99": 2468,
+        "p999": 2468,
+        "cv": 0.0037744836387658865
+      }
+    },
+    {
+      "benchmark": "submit_admission_distinct",
+      "burst_size": 144,
+      "submitted": 144,
+      "completed": {
+        "min": 144,
+        "median": 144,
+        "mean": 144,
+        "p99": 144,
+        "p999": 144,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "submit_tsc_ticks": {
+        "min": 7270,
+        "median": 7324,
+        "mean": 8028,
+        "p99": 43386,
+        "p999": 43386,
+        "cv": 0.5400263706392084
+      },
+      "submit_ns": {
+        "min": 3300,
+        "median": 3325,
+        "mean": 3644,
+        "p99": 19697,
+        "p999": 19697,
+        "cv": 0.5401228980427027
+      }
+    },
+    {
+      "benchmark": "submit_admission_distinct",
+      "burst_size": 160,
+      "submitted": 160,
+      "completed": {
+        "min": 160,
+        "median": 160,
+        "mean": 160,
+        "p99": 160,
+        "p999": 160,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "submit_tsc_ticks": {
+        "min": 11080,
+        "median": 11152,
+        "mean": 11149,
+        "p99": 11240,
+        "p999": 11240,
+        "cv": 0.002548605277432837
+      },
+      "submit_ns": {
+        "min": 5030,
+        "median": 5062,
+        "mean": 5061,
+        "p99": 5102,
+        "p999": 5102,
+        "cv": 0.0025495483486998914
+      }
+    },
+    {
+      "benchmark": "submit_admission_distinct",
+      "burst_size": 192,
+      "submitted": 192,
+      "completed": {
+        "min": 192,
+        "median": 192,
+        "mean": 192,
+        "p99": 192,
+        "p999": 192,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "submit_tsc_ticks": {
+        "min": 18686,
+        "median": 18774,
+        "mean": 19006,
+        "p99": 41978,
+        "p999": 41978,
+        "cv": 0.12148535848126324
+      },
+      "submit_ns": {
+        "min": 8483,
+        "median": 8523,
+        "mean": 8628,
+        "p99": 19057,
+        "p999": 19057,
+        "cv": 0.12148794072564606
+      }
+    },
+    {
+      "benchmark": "submit_admission_distinct",
+      "burst_size": 256,
+      "submitted": 256,
+      "completed": {
+        "min": 256,
+        "median": 256,
+        "mean": 256,
+        "p99": 256,
+        "p999": 256,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "submit_tsc_ticks": {
+        "min": 33962,
+        "median": 34094,
+        "mean": 34093,
+        "p99": 34238,
+        "p999": 34238,
+        "cv": 0.0014824472351527079
+      },
+      "submit_ns": {
+        "min": 15418,
+        "median": 15478,
+        "mean": 15477,
+        "p99": 15543,
+        "p999": 15543,
+        "cv": 0.001483844386110747
+      }
+    }
+  ]
+}

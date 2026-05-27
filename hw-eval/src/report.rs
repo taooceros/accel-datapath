@@ -44,6 +44,11 @@ pub(crate) fn compute_stats(sorted: &[u64]) -> LatencyStats {
     }
 }
 
+pub(crate) fn stats_from_values(mut values: Vec<u64>) -> LatencyStats {
+    values.sort_unstable();
+    compute_stats(&values)
+}
+
 #[derive(Serialize)]
 pub(crate) struct FullReport {
     pub(crate) metadata: Metadata,
@@ -51,6 +56,14 @@ pub(crate) struct FullReport {
     pub(crate) throughput: Vec<ThroughputResult>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) admission: Vec<AdmissionResult>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) submit_occupancy: Vec<SubmitOccupancyResult>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) submit_marker_overlap: Vec<SubmitMarkerOverlapResult>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) traffic_class_ladder: Vec<TrafficClassLadderResult>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) completion_reuse_policy: Vec<CompletionReusePolicyResult>,
 }
 
 #[derive(Serialize)]
@@ -235,6 +248,74 @@ pub(crate) struct AdmissionResult {
     pub(crate) errors: LatencyStats,
     pub(crate) submit_tsc_ticks: LatencyStats,
     pub(crate) submit_ns: LatencyStats,
+}
+
+#[derive(Serialize)]
+pub(crate) struct SubmitOccupancyResult {
+    pub(crate) benchmark: String,
+    pub(crate) operation_class: String,
+    pub(crate) k_prefill: usize,
+    pub(crate) submitted: usize,
+    pub(crate) completed: LatencyStats,
+    pub(crate) missing: LatencyStats,
+    pub(crate) errors: LatencyStats,
+    pub(crate) extra_submit_tsc_ticks: LatencyStats,
+    pub(crate) extra_submit_ns: LatencyStats,
+    pub(crate) first_old_completion_tsc_ticks: Option<LatencyStats>,
+    pub(crate) first_old_completion_ns: Option<LatencyStats>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct SubmitMarkerOverlapResult {
+    pub(crate) benchmark: String,
+    pub(crate) operation_class: String,
+    pub(crate) n: usize,
+    pub(crate) marker_position: usize,
+    pub(crate) marker_position_label: String,
+    pub(crate) poll_cadence: String,
+    pub(crate) submit_tail_tsc_ticks: LatencyStats,
+    pub(crate) submit_tail_ns: LatencyStats,
+    pub(crate) marker_visible_tsc_ticks: Option<LatencyStats>,
+    pub(crate) marker_visible_ns: Option<LatencyStats>,
+    pub(crate) marker_observed_before_final_submit_count: u64,
+    pub(crate) marker_observed_before_final_submit_fraction: f64,
+    pub(crate) completed: LatencyStats,
+    pub(crate) missing: LatencyStats,
+    pub(crate) errors: LatencyStats,
+}
+
+#[derive(Serialize)]
+pub(crate) struct TrafficClassLadderResult {
+    pub(crate) benchmark: String,
+    pub(crate) traffic_class: String,
+    pub(crate) operation_size: Option<usize>,
+    pub(crate) window: usize,
+    pub(crate) submit_tsc_ticks: LatencyStats,
+    pub(crate) submit_ns: LatencyStats,
+    pub(crate) completion_visible_tsc_ticks: Option<LatencyStats>,
+    pub(crate) completion_visible_ns: Option<LatencyStats>,
+    pub(crate) completed: Option<LatencyStats>,
+    pub(crate) missing: Option<LatencyStats>,
+    pub(crate) errors: Option<LatencyStats>,
+    pub(crate) ops_per_sec: LatencyStats,
+}
+
+#[derive(Serialize)]
+pub(crate) struct CompletionReusePolicyResult {
+    pub(crate) benchmark: String,
+    pub(crate) operation_class: String,
+    pub(crate) window: usize,
+    pub(crate) policy: String,
+    pub(crate) operations_completed: u64,
+    pub(crate) ops_per_sec: f64,
+    pub(crate) polls_per_completion: f64,
+    pub(crate) completion_harvest_tsc_ticks: LatencyStats,
+    pub(crate) completion_harvest_ns: LatencyStats,
+    pub(crate) reset_to_submit_tsc_ticks: Option<LatencyStats>,
+    pub(crate) reset_to_submit_ns: Option<LatencyStats>,
+    pub(crate) completed: u64,
+    pub(crate) missing: u64,
+    pub(crate) errors: u64,
 }
 
 #[derive(Serialize)]

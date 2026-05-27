@@ -22,7 +22,9 @@ use methodology::dsa::run_dsa_benchmarks;
 use methodology::iax::run_iax_benchmarks;
 use methodology::software::bench_software_baselines;
 use report::{
-    print_json_report, AdmissionResult, FullReport, LatencyResult, Metadata, ThroughputResult,
+    print_json_report, AdmissionResult, CompletionReusePolicyResult, FullReport, LatencyResult,
+    Metadata, SubmitMarkerOverlapResult, SubmitOccupancyResult, ThroughputResult,
+    TrafficClassLadderResult,
 };
 use snafu::{ResultExt, Snafu};
 
@@ -79,6 +81,10 @@ fn build_report(
     latency_results: Vec<LatencyResult>,
     throughput_results: Vec<ThroughputResult>,
     admission_results: Vec<AdmissionResult>,
+    submit_occupancy_results: Vec<SubmitOccupancyResult>,
+    submit_marker_overlap_results: Vec<SubmitMarkerOverlapResult>,
+    traffic_class_ladder_results: Vec<TrafficClassLadderResult>,
+    completion_reuse_policy_results: Vec<CompletionReusePolicyResult>,
 ) -> FullReport {
     FullReport {
         metadata: Metadata {
@@ -96,6 +102,10 @@ fn build_report(
         latency: latency_results,
         throughput: throughput_results,
         admission: admission_results,
+        submit_occupancy: submit_occupancy_results,
+        submit_marker_overlap: submit_marker_overlap_results,
+        traffic_class_ladder: traffic_class_ladder_results,
+        completion_reuse_policy: completion_reuse_policy_results,
     }
 }
 
@@ -176,6 +186,41 @@ fn run() -> Result<(), HwEvalError> {
             if config.benchmark == BenchmarkKind::SubmitOnly {
                 println!("Submit mode: {:?}", config.submit_mode);
             }
+        } else if matches!(
+            config.benchmark,
+            BenchmarkKind::SubmitOccupancy
+                | BenchmarkKind::SubmitMarkerOverlap
+                | BenchmarkKind::TrafficClassLadder
+                | BenchmarkKind::CompletionReusePolicy
+        ) {
+            match config.benchmark {
+                BenchmarkKind::SubmitOccupancy => {
+                    println!("Submit occupancies: {:?}", config.submit_occupancies);
+                    println!("DSA operation: {}", config.dsa_op.as_str());
+                }
+                BenchmarkKind::SubmitMarkerOverlap => {
+                    println!("Marker bursts: {:?}", config.marker_bursts);
+                    println!("Marker positions: {:?}", config.marker_positions);
+                    println!("Marker poll cadences: {:?}", config.marker_poll_cadences);
+                    println!("DSA operation: {}", config.dsa_op.as_str());
+                }
+                BenchmarkKind::TrafficClassLadder => {
+                    println!("Traffic windows: {:?}", config.traffic_windows);
+                    println!("Traffic classes: {:?}", config.traffic_classes);
+                }
+                BenchmarkKind::CompletionReusePolicy => {
+                    println!(
+                        "Completion reuse policies: {:?}",
+                        config.completion_reuse_policies
+                    );
+                    println!(
+                        "Completion reuse window: {}",
+                        config.completion_reuse_window
+                    );
+                    println!("DSA operation: {}", config.dsa_op.as_str());
+                }
+                _ => {}
+            }
         }
         println!("Submit threads: {}", config.threads);
         if config.cold {
@@ -190,6 +235,10 @@ fn run() -> Result<(), HwEvalError> {
     let mut throughput_results: Vec<ThroughputResult> = Vec::new();
     let mut admission_results: Vec<AdmissionResult> = Vec::new();
 
+    let mut submit_occupancy_results: Vec<SubmitOccupancyResult> = Vec::new();
+    let mut submit_marker_overlap_results: Vec<SubmitMarkerOverlapResult> = Vec::new();
+    let mut traffic_class_ladder_results: Vec<TrafficClassLadderResult> = Vec::new();
+    let mut completion_reuse_policy_results: Vec<CompletionReusePolicyResult> = Vec::new();
     // Software baselines
     if config.sw_only || config.benchmark == BenchmarkKind::All {
         bench_software_baselines(
@@ -210,6 +259,10 @@ fn run() -> Result<(), HwEvalError> {
                 latency_results,
                 throughput_results,
                 admission_results,
+                submit_occupancy_results,
+                submit_marker_overlap_results,
+                traffic_class_ladder_results,
+                completion_reuse_policy_results,
             );
             print_json_report(&report)?;
         }
@@ -251,14 +304,27 @@ fn run() -> Result<(), HwEvalError> {
                     SubmitOnlyMode::Unloaded
                 },
                 &config.submit_bursts,
+                &config.submit_occupancies,
+                &config.marker_bursts,
+                &config.marker_positions,
+                &config.marker_poll_cadences,
+                &config.traffic_windows,
+                &config.traffic_classes,
+                &config.completion_reuse_policies,
+                config.completion_reuse_window,
                 config.max_concurrency,
                 config.threads,
+                config.dsa_op,
                 tsc_freq,
                 config.cold,
                 config.json,
                 &mut latency_results,
                 &mut throughput_results,
                 &mut admission_results,
+                &mut submit_occupancy_results,
+                &mut submit_marker_overlap_results,
+                &mut traffic_class_ladder_results,
+                &mut completion_reuse_policy_results,
             );
         }
         AccelKind::Iax => {
@@ -285,6 +351,10 @@ fn run() -> Result<(), HwEvalError> {
             latency_results,
             throughput_results,
             admission_results,
+            submit_occupancy_results,
+            submit_marker_overlap_results,
+            traffic_class_ladder_results,
+            completion_reuse_policy_results,
         );
         print_json_report(&report)?;
     } else {

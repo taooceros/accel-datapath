@@ -258,6 +258,215 @@ fn missing_hardware_device_is_structured_nonzero_error() {
 }
 
 #[test]
+fn submit_occupancy_selector_reaches_hardware_open_with_structured_error() {
+    let missing_device = std::env::temp_dir().join(format!(
+        "hw-eval-submit-occupancy-missing-wq-{}",
+        std::process::id()
+    ));
+    let missing_device = missing_device
+        .to_str()
+        .expect("temp path should be valid UTF-8 for CLI test");
+    let output = hw_eval(&[
+        "--benchmark",
+        "submit-occupancy",
+        "--submit-occupancies",
+        "0,32",
+        "--dsa-op",
+        "memmove64",
+        "--device",
+        missing_device,
+        "--sizes",
+        "64",
+        "--iterations",
+        "1",
+    ]);
+
+    assert!(
+        !output.status.success(),
+        "missing hardware WQ should fail after parsing submit-occupancy; stdout:\n{}\nstderr:\n{}",
+        stdout(&output),
+        stderr(&output)
+    );
+
+    let stderr = stderr(&output);
+    assert!(stderr.contains("open_wq"), "missing operation: {stderr}");
+    assert!(
+        stderr.contains(missing_device),
+        "missing device path: {stderr}"
+    );
+    assert!(
+        !stderr.contains("invalid hw-eval configuration"),
+        "selector should parse before hardware open fails: {stderr}"
+    );
+    assert_no_payload_bytes(&stderr);
+}
+
+fn assert_dsa_selector_reaches_hardware_open(benchmark: &str, extra_args: &[&str]) {
+    let missing_device = std::env::temp_dir().join(format!(
+        "hw-eval-{benchmark}-missing-wq-{}",
+        std::process::id()
+    ));
+    let missing_device = missing_device
+        .to_str()
+        .expect("temp path should be valid UTF-8 for CLI test");
+
+    let mut args = vec![
+        "--benchmark",
+        benchmark,
+        "--device",
+        missing_device,
+        "--sizes",
+        "64",
+        "--iterations",
+        "1",
+    ];
+    args.extend_from_slice(extra_args);
+
+    let output = hw_eval(&args);
+
+    assert!(
+        !output.status.success(),
+        "missing hardware WQ should fail after parsing {benchmark}; stdout:\n{}\nstderr:\n{}",
+        stdout(&output),
+        stderr(&output)
+    );
+
+    let stderr = stderr(&output);
+    assert!(stderr.contains("open_wq"), "missing operation: {stderr}");
+    assert!(
+        stderr.contains(missing_device),
+        "missing device path: {stderr}"
+    );
+    assert!(
+        !stderr.contains("invalid hw-eval configuration"),
+        "selector should parse before hardware open fails: {stderr}"
+    );
+    assert_no_payload_bytes(&stderr);
+}
+
+#[test]
+fn remaining_bottleneck_selectors_reach_hardware_open_with_structured_error() {
+    for (benchmark, extra_args) in [
+        (
+            "submit-marker-overlap",
+            &[
+                "--marker-bursts",
+                "64",
+                "--marker-positions",
+                "first",
+                "--marker-poll-cadences",
+                "never",
+                "--dsa-op",
+                "noop",
+            ][..],
+        ),
+        (
+            "traffic-class-ladder",
+            &["--traffic-windows", "1", "--traffic-classes", "submit-only"][..],
+        ),
+        (
+            "completion-reuse-policy",
+            &[
+                "--completion-reuse-window",
+                "1",
+                "--completion-reuse-policies",
+                "poll-only",
+                "--dsa-op",
+                "noop",
+            ][..],
+        ),
+    ] {
+        assert_dsa_selector_reaches_hardware_open(benchmark, extra_args);
+    }
+}
+
+#[test]
+fn submit_occupancy_rejects_iax_before_opening_hardware() {
+    let missing_device = std::env::temp_dir().join(format!(
+        "hw-eval-submit-occupancy-iax-missing-wq-{}",
+        std::process::id()
+    ));
+    let missing_device = missing_device
+        .to_str()
+        .expect("temp path should be valid UTF-8 for CLI test");
+    let output = hw_eval(&[
+        "--accel",
+        "iax",
+        "--benchmark",
+        "submit-occupancy",
+        "--device",
+        missing_device,
+        "--iterations",
+        "1",
+    ]);
+
+    assert!(
+        !output.status.success(),
+        "unsupported submit-occupancy/IAX combination should fail; stdout:\n{}\nstderr:\n{}",
+        stdout(&output),
+        stderr(&output)
+    );
+
+    let stderr = stderr(&output);
+    assert!(
+        stderr.contains("--benchmark submit-occupancy is not supported for --accel iax"),
+        "missing unsupported-combination error: {stderr}"
+    );
+    assert!(
+        !stderr.contains("open_wq"),
+        "configuration failure should happen before hardware open: {stderr}"
+    );
+    assert_no_payload_bytes(&stderr);
+}
+
+#[test]
+fn remaining_bottleneck_selectors_reject_iax_before_opening_hardware() {
+    for benchmark in [
+        "submit-marker-overlap",
+        "traffic-class-ladder",
+        "completion-reuse-policy",
+    ] {
+        let missing_device = std::env::temp_dir().join(format!(
+            "hw-eval-{benchmark}-iax-missing-wq-{}",
+            std::process::id()
+        ));
+        let missing_device = missing_device
+            .to_str()
+            .expect("temp path should be valid UTF-8 for CLI test");
+        let output = hw_eval(&[
+            "--accel",
+            "iax",
+            "--benchmark",
+            benchmark,
+            "--device",
+            missing_device,
+            "--iterations",
+            "1",
+        ]);
+
+        assert!(
+            !output.status.success(),
+            "unsupported {benchmark}/IAX combination should fail; stdout:\n{}\nstderr:\n{}",
+            stdout(&output),
+            stderr(&output)
+        );
+
+        let stderr = stderr(&output);
+        assert!(
+            stderr.contains(&format!(
+                "--benchmark {benchmark} is not supported for --accel iax"
+            )),
+            "missing unsupported-combination error: {stderr}"
+        );
+        assert!(
+            !stderr.contains("open_wq"),
+            "configuration failure should happen before hardware open: {stderr}"
+        );
+        assert_no_payload_bytes(&stderr);
+    }
+}
+
+#[test]
 fn invalid_pin_core_warns_without_breaking_json_report() {
     let output = hw_eval(&[
         "--sw-only",

@@ -1,0 +1,934 @@
+{
+  "metadata": {
+    "accelerator": "dsa",
+    "tsc_freq_hz": 2202644182,
+    "pinned_core": 0,
+    "cpu_numa_node": 0,
+    "device_numa_node": null,
+    "device": "/dev/dsa/wq0.0",
+    "wq_dedicated": true,
+    "iterations": 1000,
+    "threads": 1,
+    "cold_cache": false
+  },
+  "latency": [],
+  "throughput": [],
+  "submit_occupancy": [
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 0,
+      "submitted": 1,
+      "completed": {
+        "min": 1,
+        "median": 1,
+        "mean": 1,
+        "p99": 1,
+        "p999": 1,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 24,
+        "median": 28,
+        "mean": 28,
+        "p99": 30,
+        "p999": 498,
+        "cv": 0.6838718691007195
+      },
+      "extra_submit_ns": {
+        "min": 10,
+        "median": 12,
+        "mean": 12,
+        "p99": 13,
+        "p999": 226,
+        "cv": 0.7283693760356876
+      },
+      "first_old_completion_tsc_ticks": null,
+      "first_old_completion_ns": null
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 32,
+      "submitted": 33,
+      "completed": {
+        "min": 33,
+        "median": 33,
+        "mean": 33,
+        "p99": 33,
+        "p999": 33,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 24,
+        "median": 28,
+        "mean": 28,
+        "p99": 32,
+        "p999": 98,
+        "cv": 0.10524946402985995
+      },
+      "extra_submit_ns": {
+        "min": 10,
+        "median": 12,
+        "mean": 12,
+        "p99": 14,
+        "p999": 44,
+        "cv": 0.11686388404704022
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 618,
+        "median": 770,
+        "mean": 742,
+        "p99": 824,
+        "p999": 1234,
+        "cv": 0.09237808977610691
+      },
+      "first_old_completion_ns": {
+        "min": 280,
+        "median": 349,
+        "mean": 336,
+        "p99": 374,
+        "p999": 560,
+        "cv": 0.09263373299100672
+      }
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 64,
+      "submitted": 65,
+      "completed": {
+        "min": 65,
+        "median": 65,
+        "mean": 65,
+        "p99": 65,
+        "p999": 65,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 22,
+        "median": 30,
+        "mean": 28,
+        "p99": 32,
+        "p999": 228,
+        "cv": 0.2389560088752507
+      },
+      "extra_submit_ns": {
+        "min": 9,
+        "median": 13,
+        "mean": 12,
+        "p99": 14,
+        "p999": 103,
+        "cv": 0.25683442905885717
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 820,
+        "median": 1406,
+        "mean": 1373,
+        "p99": 1758,
+        "p999": 14506,
+        "cv": 0.3164125980030257
+      },
+      "first_old_completion_ns": {
+        "min": 372,
+        "median": 638,
+        "mean": 623,
+        "p99": 798,
+        "p999": 6585,
+        "cv": 0.31666980719835014
+      }
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 96,
+      "submitted": 97,
+      "completed": {
+        "min": 97,
+        "median": 97,
+        "mean": 97,
+        "p99": 97,
+        "p999": 97,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 20,
+        "median": 24,
+        "mean": 24,
+        "p99": 26,
+        "p999": 28,
+        "cv": 0.06538207945717507
+      },
+      "extra_submit_ns": {
+        "min": 9,
+        "median": 10,
+        "mean": 10,
+        "p99": 11,
+        "p999": 12,
+        "cv": 0.07455943060626272
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 1094,
+        "median": 1284,
+        "mean": 1272,
+        "p99": 1706,
+        "p999": 1726,
+        "cv": 0.08813882740693944
+      },
+      "first_old_completion_ns": {
+        "min": 496,
+        "median": 582,
+        "mean": 577,
+        "p99": 774,
+        "p999": 783,
+        "cv": 0.08819665476570634
+      }
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 112,
+      "submitted": 113,
+      "completed": {
+        "min": 113,
+        "median": 113,
+        "mean": 113,
+        "p99": 113,
+        "p999": 113,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 20,
+        "median": 22,
+        "mean": 23,
+        "p99": 26,
+        "p999": 28,
+        "cv": 0.05752677470323175
+      },
+      "extra_submit_ns": {
+        "min": 9,
+        "median": 9,
+        "mean": 9,
+        "p99": 11,
+        "p999": 12,
+        "cv": 0.06587483486200539
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 3952,
+        "median": 4172,
+        "mean": 4140,
+        "p99": 4230,
+        "p999": 5218,
+        "cv": 0.019607698142268405
+      },
+      "first_old_completion_ns": {
+        "min": 1794,
+        "median": 1894,
+        "mean": 1879,
+        "p99": 1920,
+        "p999": 2368,
+        "cv": 0.019610067566371108
+      }
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 120,
+      "submitted": 121,
+      "completed": {
+        "min": 121,
+        "median": 121,
+        "mean": 121,
+        "p99": 121,
+        "p999": 121,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 210,
+        "median": 222,
+        "mean": 225,
+        "p99": 238,
+        "p999": 240,
+        "cv": 0.029082053631621328
+      },
+      "extra_submit_ns": {
+        "min": 95,
+        "median": 100,
+        "mean": 101,
+        "p99": 108,
+        "p999": 108,
+        "cv": 0.03173373377040982
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 4824,
+        "median": 4902,
+        "mean": 4902,
+        "p99": 4960,
+        "p999": 4978,
+        "cv": 0.004823207367487521
+      },
+      "first_old_completion_ns": {
+        "min": 2190,
+        "median": 2225,
+        "mean": 2225,
+        "p99": 2251,
+        "p999": 2260,
+        "cv": 0.004835919546709543
+      }
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 124,
+      "submitted": 125,
+      "completed": {
+        "min": 125,
+        "median": 125,
+        "mean": 125,
+        "p99": 125,
+        "p999": 125,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 210,
+        "median": 224,
+        "mean": 226,
+        "p99": 238,
+        "p999": 240,
+        "cv": 0.029389668734823092
+      },
+      "extra_submit_ns": {
+        "min": 95,
+        "median": 101,
+        "mean": 102,
+        "p99": 108,
+        "p999": 108,
+        "cv": 0.03184355514046779
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 4840,
+        "median": 4904,
+        "mean": 4904,
+        "p99": 4978,
+        "p999": 5044,
+        "cv": 0.0053281677721093166
+      },
+      "first_old_completion_ns": {
+        "min": 2197,
+        "median": 2226,
+        "mean": 2226,
+        "p99": 2260,
+        "p999": 2289,
+        "cv": 0.005335285678696386
+      }
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 126,
+      "submitted": 127,
+      "completed": {
+        "min": 127,
+        "median": 127,
+        "mean": 127,
+        "p99": 127,
+        "p999": 127,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 202,
+        "median": 224,
+        "mean": 226,
+        "p99": 238,
+        "p999": 240,
+        "cv": 0.029545700750821798
+      },
+      "extra_submit_ns": {
+        "min": 91,
+        "median": 101,
+        "mean": 102,
+        "p99": 108,
+        "p999": 108,
+        "cv": 0.032285968674719445
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 4834,
+        "median": 4900,
+        "mean": 4925,
+        "p99": 4954,
+        "p999": 30466,
+        "cv": 0.16411751679550934
+      },
+      "first_old_completion_ns": {
+        "min": 2194,
+        "median": 2224,
+        "mean": 2235,
+        "p99": 2249,
+        "p999": 13831,
+        "cv": 0.16415429844122334
+      }
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 127,
+      "submitted": 128,
+      "completed": {
+        "min": 128,
+        "median": 128,
+        "mean": 128,
+        "p99": 128,
+        "p999": 128,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 210,
+        "median": 224,
+        "mean": 226,
+        "p99": 238,
+        "p999": 242,
+        "cv": 0.029599057309318465
+      },
+      "extra_submit_ns": {
+        "min": 95,
+        "median": 101,
+        "mean": 102,
+        "p99": 108,
+        "p999": 109,
+        "cv": 0.03209890884663349
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 4832,
+        "median": 4900,
+        "mean": 4940,
+        "p99": 4954,
+        "p999": 44922,
+        "cv": 0.25609004054445184
+      },
+      "first_old_completion_ns": {
+        "min": 2193,
+        "median": 2224,
+        "mean": 2242,
+        "p99": 2249,
+        "p999": 20394,
+        "cv": 0.2561457606422478
+      }
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 128,
+      "submitted": 129,
+      "completed": {
+        "min": 129,
+        "median": 129,
+        "mean": 129,
+        "p99": 129,
+        "p999": 129,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 206,
+        "median": 224,
+        "mean": 226,
+        "p99": 238,
+        "p999": 242,
+        "cv": 0.028743000802585003
+      },
+      "extra_submit_ns": {
+        "min": 93,
+        "median": 101,
+        "mean": 102,
+        "p99": 108,
+        "p999": 109,
+        "cv": 0.031166112726374734
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 4834,
+        "median": 4924,
+        "mean": 4950,
+        "p99": 4996,
+        "p999": 30980,
+        "cv": 0.1664601954150549
+      },
+      "first_old_completion_ns": {
+        "min": 2194,
+        "median": 2235,
+        "mean": 2247,
+        "p99": 2268,
+        "p999": 14064,
+        "cv": 0.16649020204300763
+      }
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 129,
+      "submitted": 130,
+      "completed": {
+        "min": 130,
+        "median": 130,
+        "mean": 130,
+        "p99": 130,
+        "p999": 130,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 212,
+        "median": 222,
+        "mean": 225,
+        "p99": 236,
+        "p999": 240,
+        "cv": 0.029115554493282743
+      },
+      "extra_submit_ns": {
+        "min": 96,
+        "median": 100,
+        "mean": 101,
+        "p99": 107,
+        "p999": 108,
+        "cv": 0.031791793179595726
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 4838,
+        "median": 4904,
+        "mean": 4931,
+        "p99": 4960,
+        "p999": 34136,
+        "cv": 0.18742049988545148
+      },
+      "first_old_completion_ns": {
+        "min": 2196,
+        "median": 2226,
+        "mean": 2238,
+        "p99": 2251,
+        "p999": 15497,
+        "cv": 0.18746140866286834
+      }
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 132,
+      "submitted": 133,
+      "completed": {
+        "min": 133,
+        "median": 133,
+        "mean": 133,
+        "p99": 133,
+        "p999": 133,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 206,
+        "median": 224,
+        "mean": 226,
+        "p99": 238,
+        "p999": 240,
+        "cv": 0.029441112016420065
+      },
+      "extra_submit_ns": {
+        "min": 93,
+        "median": 101,
+        "mean": 102,
+        "p99": 108,
+        "p999": 108,
+        "cv": 0.031972608462022316
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 4796,
+        "median": 4902,
+        "mean": 4926,
+        "p99": 4962,
+        "p999": 30536,
+        "cv": 0.16455305642786258
+      },
+      "first_old_completion_ns": {
+        "min": 2177,
+        "median": 2225,
+        "mean": 2235,
+        "p99": 2252,
+        "p999": 13863,
+        "cv": 0.16459286882418717
+      }
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 136,
+      "submitted": 137,
+      "completed": {
+        "min": 137,
+        "median": 137,
+        "mean": 137,
+        "p99": 137,
+        "p999": 137,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 22,
+        "median": 216,
+        "mean": 218,
+        "p99": 228,
+        "p999": 232,
+        "cv": 0.04946306087478644
+      },
+      "extra_submit_ns": {
+        "min": 9,
+        "median": 98,
+        "mean": 98,
+        "p99": 103,
+        "p999": 105,
+        "cv": 0.048926924506559485
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 460,
+        "median": 4890,
+        "mean": 4881,
+        "p99": 4944,
+        "p999": 4992,
+        "cv": 0.03958743539786688
+      },
+      "first_old_completion_ns": {
+        "min": 208,
+        "median": 2220,
+        "mean": 2215,
+        "p99": 2244,
+        "p999": 2266,
+        "cv": 0.039597499859896385
+      }
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 144,
+      "submitted": 145,
+      "completed": {
+        "min": 145,
+        "median": 145,
+        "mean": 145,
+        "p99": 145,
+        "p999": 145,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 22,
+        "median": 216,
+        "mean": 218,
+        "p99": 228,
+        "p999": 230,
+        "cv": 0.04998922962024077
+      },
+      "extra_submit_ns": {
+        "min": 9,
+        "median": 98,
+        "mean": 98,
+        "p99": 103,
+        "p999": 104,
+        "cv": 0.049446169249774
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 344,
+        "median": 4892,
+        "mean": 4887,
+        "p99": 4950,
+        "p999": 8218,
+        "cv": 0.04679338851081265
+      },
+      "first_old_completion_ns": {
+        "min": 156,
+        "median": 2220,
+        "mean": 2218,
+        "p99": 2247,
+        "p999": 3730,
+        "cv": 0.046800252827667824
+      }
+    },
+    {
+      "benchmark": "submit_occupancy_one_extra",
+      "operation_class": "noop",
+      "k_prefill": 160,
+      "submitted": 161,
+      "completed": {
+        "min": 161,
+        "median": 161,
+        "mean": 161,
+        "p99": 161,
+        "p999": 161,
+        "cv": 0.0
+      },
+      "missing": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "errors": {
+        "min": 0,
+        "median": 0,
+        "mean": 0,
+        "p99": 0,
+        "p999": 0,
+        "cv": 0.0
+      },
+      "extra_submit_tsc_ticks": {
+        "min": 22,
+        "median": 216,
+        "mean": 218,
+        "p99": 230,
+        "p999": 232,
+        "cv": 0.05643848461134972
+      },
+      "extra_submit_ns": {
+        "min": 9,
+        "median": 98,
+        "mean": 98,
+        "p99": 104,
+        "p999": 105,
+        "cv": 0.05597867232140129
+      },
+      "first_old_completion_tsc_ticks": {
+        "min": 348,
+        "median": 4896,
+        "mean": 4906,
+        "p99": 4948,
+        "p999": 29676,
+        "cv": 0.1674203692470862
+      },
+      "first_old_completion_ns": {
+        "min": 157,
+        "median": 2222,
+        "mean": 2227,
+        "p99": 2246,
+        "p999": 13472,
+        "cv": 0.16745332199573146
+      }
+    }
+  ]
+}
