@@ -24,7 +24,7 @@ cargo bench
 --sizes, -s <LIST>       Message sizes in bytes, comma-separated
 --iterations, -i <N>     Iterations per measurement (default: 10000)
 --max-concurrency, -m <N> Max sliding window concurrency (default: 128)
---benchmark <all|submit-only|submit-admission|submit-occupancy|submit-marker-overlap|traffic-class-ladder|completion-reuse-policy>
+--benchmark <all|submit-only|submit-admission|submit-occupancy|submit-marker-overlap|submit-marker-mechanism|traffic-class-ladder|completion-reuse-policy>
                          Benchmark subset to run (default: all)
 --submit-mode <all|unloaded|sustained|mfence>
                          Submit-only workload variant (default: all)
@@ -33,11 +33,13 @@ cargo bench
 --submit-occupancies <LIST>
                          Prefill occupancies for submit-occupancy, zero allowed
                          (default: 0,32,64,96,112,120,124,126,127,128,129,132,136,144,160)
---marker-bursts <LIST>  Burst lengths for submit-marker-overlap
+--marker-bursts <LIST>  Burst lengths for submit-marker-overlap and submit-marker-mechanism
 --marker-positions <LIST>
                          Marker positions: first,half,last
 --marker-poll-cadences <LIST>
-                         Marker poll cadences: positive integers or never
+                         Legacy compatibility option; traced mode uses poll step 1
+--marker-poll-offsets <LIST>
+                         First zero-based submit indexes where Experiment 2 tracing/probes start polling
 --traffic-windows <LIST>
                          Windows for traffic-class-ladder
 --traffic-classes <LIST>
@@ -66,7 +68,8 @@ cargo bench
 | **submit_admission_distinct** | Distinct completion-bearing NOOP burst with no software inflight gate; counts missing completions to test dedicated-WQ admission behavior |
 | **memmove** | Single-op DMA copy latency (rdtscp, per size) |
 | **submit_occupancy_one_extra** | Prefill K completion-bearing descriptors, time one extra submit, then record first-old completion visibility and drain counts |
-| **submit_marker_overlap** | Submit N completion-bearing descriptors, poll a marker at a chosen cadence, and record whether marker completion overlaps the submit tail |
+| **submit_marker_overlap** | Submit N completion-bearing descriptors, then from each configured zero-based poll offset record per-submit latency plus timed polls of the next-unfinished completion frontier |
+| **submit_marker_mechanism** | Experiment 2 sub-experiments for completion-record layout, cacheline-pair, prefetch, measurement-method, and cache-state probes |
 | **traffic_class_ladder** | Compare submit-only, NOOP+completion, 64 B memmove, and 4 KiB memmove at identical windows |
 | **completion_reuse_policy** | Compare packed scan, padded round-robin, poll-only, delayed reset, and batch-harvest completion reuse policies |
 | **crc_gen** | Single-op CRC-32C generation latency |
@@ -117,7 +120,7 @@ launch ./target/release/hw-eval \
 JSON reports include skipped-when-empty arrays for these modes:
 - `admission`: rows use `benchmark: "submit_admission_distinct"` and record burst size, submitted operations, completion counts, missing counts, descriptor errors, and submit timing for the Experiment 5 correctness gate.
 - `submit_occupancy`: rows use `benchmark: "submit_occupancy_one_extra"` and record `operation_class`, `k_prefill`, `submitted`, completion counts, `extra_submit_tsc_ticks`, `extra_submit_ns`, and first-old-completion timing when `k_prefill > 0`.
-- `submit_marker_overlap`: rows use `benchmark: "submit_marker_overlap"` and record `n`, numeric marker position, poll cadence, submit-tail timing, marker-visible timing when observed, overlap count/fraction, and completion counts.
+- `submit_marker_overlap`: rows use `benchmark: "submit_marker_overlap"` and record `n`, zero-based marker position, fixed poll step, zero-based poll offset, submit-tail timing, marker-visible timing when observed, completion counts, and a `trace` list keyed by zero-based `submit_index`. Each trace point records submit latency, visible prefix/count, and per-read poll latency/status stats for plotting.
 - `traffic_class_ladder`: rows use `benchmark: "traffic_class_ladder"` and record traffic class, operation size, window, submit timing, completion-visible timing where applicable, completion counts where applicable, and ops/sec.
 - `completion_reuse_policy`: rows use `benchmark: "completion_reuse_policy"` and record operation class, window, policy, operations completed, ops/sec, polls/completion, harvest timing, reset-to-submit timing where applicable, and completion counts.
 

@@ -1,0 +1,836 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 5K of event 'cpu/cycles/Pu'
+# Event count (approx.): 1488699269
+#
+# Overhead  Symbol                                                                                                                        IPC   [IPC Coverage]
+# ........  ............................................................................................................................  ....................
+#
+    49.67%  [.] hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap                      -      -
+            |
+            |--25.44%--mask (inlined)
+            |          {closure#0} (inlined)
+            |          measured_call<u8, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::poll_to_next_unfinished::{closure_env#0}> (inlined)
+            |          poll_to_next_unfinished (inlined)
+            |          {closure#1} (inlined)
+            |          then<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::CompletionPollResult, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#1}> (inlined)
+            |          bench_submit_marker_overlap (inlined)
+            |          run (inlined)
+            |          run_dsa_benchmarks (inlined)
+            |          run (inlined)
+            |          main (inlined)
+            |          __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |          {closure#0}<()> (inlined)
+            |          std::rt::lang_start_internal
+            |          main
+            |          __libc_start_call_main
+            |          __libc_start_main@@GLIBC_2.34
+            |          _start
+            |
+            |--8.65%--rdtscp (inlined)
+            |          |
+            |          |--6.79%--measured_call<u8, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::poll_to_next_unfinished::{closure_env#0}> (inlined)
+            |          |          poll_to_next_unfinished (inlined)
+            |          |          {closure#1} (inlined)
+            |          |          then<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::CompletionPollResult, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#1}> (inlined)
+            |          |          bench_submit_marker_overlap (inlined)
+            |          |          run (inlined)
+            |          |          run_dsa_benchmarks (inlined)
+            |          |          run (inlined)
+            |          |          main (inlined)
+            |          |          __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |          |          {closure#0}<()> (inlined)
+            |          |          std::rt::lang_start_internal
+            |          |          main
+            |          |          __libc_start_call_main
+            |          |          __libc_start_main@@GLIBC_2.34
+            |          |          _start
+            |          |
+            |           --1.85%--measured_call<(), hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#0}> (inlined)
+            |                     bench_submit_marker_overlap (inlined)
+            |                     run (inlined)
+            |                     run_dsa_benchmarks (inlined)
+            |                     run (inlined)
+            |                     main (inlined)
+            |                     __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |                     {closure#0}<()> (inlined)
+            |                     std::rt::lang_start_internal
+            |                     main
+            |                     __libc_start_call_main
+            |                     __libc_start_main@@GLIBC_2.34
+            |                     _start
+            |
+            |--1.84%--push_mut<u64, alloc::alloc::Global> (inlined)
+            |          push<u64, alloc::alloc::Global> (inlined)
+            |          |
+            |           --1.75%--record (inlined)
+            |                     |
+            |                     |--0.98%--record_request_completion (inlined)
+            |                     |          poll_to_next_unfinished (inlined)
+            |                     |          {closure#1} (inlined)
+            |                     |          then<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::CompletionPollResult, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#1}> (inlined)
+            |                     |          bench_submit_marker_overlap (inlined)
+            |                     |          run (inlined)
+            |                     |          run_dsa_benchmarks (inlined)
+            |                     |          run (inlined)
+            |                     |          main (inlined)
+            |                     |          __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |                     |          {closure#0}<()> (inlined)
+            |                     |          std::rt::lang_start_internal
+            |                     |          main
+            |                     |          __libc_start_call_main
+            |                     |          __libc_start_main@@GLIBC_2.34
+            |                     |          _start
+            |                     |
+            |                      --0.77%--bench_submit_marker_overlap (inlined)
+            |                                run (inlined)
+            |                                run_dsa_benchmarks (inlined)
+            |                                run (inlined)
+            |                                main (inlined)
+            |                                __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |                                {closure#0}<()> (inlined)
+            |                                std::rt::lang_start_internal
+            |                                main
+            |                                __libc_start_call_main
+            |                                __libc_start_main@@GLIBC_2.34
+            |                                _start
+            |
+            |--1.69%--index<idxd_rust::raw::dsa::DsaHwDesc> (inlined)
+            |          index<idxd_rust::raw::dsa::DsaHwDesc, usize> (inlined)
+            |          index<idxd_rust::raw::dsa::DsaHwDesc, usize, alloc::alloc::Global> (inlined)
+            |          {closure#0} (inlined)
+            |          measured_call<(), hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#0}> (inlined)
+            |          bench_submit_marker_overlap (inlined)
+            |          run (inlined)
+            |          run_dsa_benchmarks (inlined)
+            |          run (inlined)
+            |          main (inlined)
+            |          __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |          {closure#0}<()> (inlined)
+            |          std::rt::lang_start_internal
+            |          main
+            |          __libc_start_call_main
+            |          __libc_start_main@@GLIBC_2.34
+            |          _start
+            |
+            |--1.57%--write<hw_eval::report::SubmitMarkerSampleTracePoint> (inlined)
+            |          push_mut<hw_eval::report::SubmitMarkerSampleTracePoint, alloc::alloc::Global> (inlined)
+            |          push<hw_eval::report::SubmitMarkerSampleTracePoint, alloc::alloc::Global> (inlined)
+            |          bench_submit_marker_overlap (inlined)
+            |          run (inlined)
+            |          run_dsa_benchmarks (inlined)
+            |          run (inlined)
+            |          main (inlined)
+            |          __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |          {closure#0}<()> (inlined)
+            |          std::rt::lang_start_internal
+            |          main
+            |          __libc_start_call_main
+            |          __libc_start_main@@GLIBC_2.34
+            |          _start
+            |
+            |--1.42%--read_volatile<u8> (inlined)
+            |          status (inlined)
+            |          poll_completion (inlined)
+            |          drain_with_drain_descriptor (inlined)
+            |          bench_submit_marker_overlap (inlined)
+            |          run (inlined)
+            |          run_dsa_benchmarks (inlined)
+            |          run (inlined)
+            |          main (inlined)
+            |          __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |          {closure#0}<()> (inlined)
+            |          std::rt::lang_start_internal
+            |          main
+            |          __libc_start_call_main
+            |          __libc_start_main@@GLIBC_2.34
+            |          _start
+            |
+            |--1.41%--0xffffffff9f201320
+            |          |
+            |          |--0.75%--write<hw_eval::report::SubmitMarkerSampleTracePoint> (inlined)
+            |          |          push_mut<hw_eval::report::SubmitMarkerSampleTracePoint, alloc::alloc::Global> (inlined)
+            |          |          push<hw_eval::report::SubmitMarkerSampleTracePoint, alloc::alloc::Global> (inlined)
+            |          |          bench_submit_marker_overlap (inlined)
+            |          |          run (inlined)
+            |          |          run_dsa_benchmarks (inlined)
+            |          |          run (inlined)
+            |          |          main (inlined)
+            |          |          __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |          |          {closure#0}<()> (inlined)
+            |          |          std::rt::lang_start_internal
+            |          |          main
+            |          |          __libc_start_call_main
+            |          |          __libc_start_main@@GLIBC_2.34
+            |          |          _start
+            |          |
+            |           --0.52%--_int_malloc
+            |
+            |--1.32%--poll_to_next_unfinished (inlined)
+            |          {closure#1} (inlined)
+            |          then<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::CompletionPollResult, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#1}> (inlined)
+            |          bench_submit_marker_overlap (inlined)
+            |          run (inlined)
+            |          run_dsa_benchmarks (inlined)
+            |          run (inlined)
+            |          main (inlined)
+            |          __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |          {closure#0}<()> (inlined)
+            |          std::rt::lang_start_internal
+            |          main
+            |          __libc_start_call_main
+            |          __libc_start_main@@GLIBC_2.34
+            |          _start
+            |
+            |--0.54%--bench_submit_marker_overlap (inlined)
+            |          run (inlined)
+            |          run_dsa_benchmarks (inlined)
+            |          run (inlined)
+            |          main (inlined)
+            |          __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |          {closure#0}<()> (inlined)
+            |          std::rt::lang_start_internal
+            |          main
+            |          __libc_start_call_main
+            |          __libc_start_main@@GLIBC_2.34
+            |          _start
+            |
+            |--0.52%--sample_trace_point (inlined)
+            |          bench_submit_marker_overlap (inlined)
+            |          run (inlined)
+            |          run_dsa_benchmarks (inlined)
+            |          run (inlined)
+            |          main (inlined)
+            |          __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |          {closure#0}<()> (inlined)
+            |          std::rt::lang_start_internal
+            |          main
+            |          __libc_start_call_main
+            |          __libc_start_main@@GLIBC_2.34
+            |          _start
+            |
+             --0.50%--submit_movdir64b_raw (inlined)
+                       submit_desc64 (inlined)
+                       submit (inlined)
+                       {closure#0} (inlined)
+                       measured_call<(), hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#0}> (inlined)
+                       bench_submit_marker_overlap (inlined)
+                       run (inlined)
+                       run_dsa_benchmarks (inlined)
+                       run (inlined)
+                       main (inlined)
+                       __rust_begin_short_backtrace<fn(), ()> (inlined)
+                       {closure#0}<()> (inlined)
+                       std::rt::lang_start_internal
+                       main
+                       __libc_start_call_main
+                       __libc_start_main@@GLIBC_2.34
+                       _start
+
+    10.24%  [.] core::slice::sort::unstable::quicksort::quicksort                                                                         -      -
+            |
+            |--3.88%--{closure#0}<u64, fn(&u64, &u64) -> bool> (inlined)
+            |          partition_lomuto_branchless_cyclic<u64, fn(&u64, &u64) -> bool> (inlined)
+            |          partition<u64, fn(&u64, &u64) -> bool> (inlined)
+            |          quicksort<u64, fn(&u64, &u64) -> bool> (inlined)
+            |          |
+            |          |--2.25%--quicksort<u64, fn(&u64, &u64) -> bool> (inlined)
+            |          |          |
+            |          |          |--1.38%--quicksort<u64, fn(&u64, &u64) -> bool> (inlined)
+            |          |          |          |
+            |          |          |          |--0.70%--quicksort<u64, fn(&u64, &u64) -> bool> (inlined)
+            |          |          |          |          |
+            |          |          |          |           --0.51%--sort<u64, fn(&u64, &u64) -> bool> (inlined)
+            |          |          |          |                     sort_unstable<u64> (inlined)
+            |          |          |          |                     stats_from_values (inlined)
+            |          |          |          |
+            |          |          |           --0.68%--sort<u64, fn(&u64, &u64) -> bool> (inlined)
+            |          |          |                     sort_unstable<u64> (inlined)
+            |          |          |                     stats_from_values (inlined)
+            |          |          |
+            |          |           --0.88%--sort<u64, fn(&u64, &u64) -> bool> (inlined)
+            |          |                     sort_unstable<u64> (inlined)
+            |          |                     stats_from_values (inlined)
+            |          |                     |
+            |          |                      --0.55%--optional_stats (inlined)
+            |          |
+            |           --1.62%--sort<u64, fn(&u64, &u64) -> bool> (inlined)
+            |                     sort_unstable<u64> (inlined)
+            |                     stats_from_values (inlined)
+            |                     |
+            |                      --0.97%--optional_stats (inlined)
+            |                                |
+            |                                 --0.70%--into_point (inlined)
+            |                                           fold<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::TraceAccumulator, alloc::alloc::Global, (), core::iter::adapters::map::map_fold::{closure_env#0}<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::TraceAccumulator, hw_eval::report::SubmitMarkerTracePoint, (), hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#5}, core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<hw_eval::report::SubmitMarkerTracePoint, alloc::vec::{impl#21}::extend_trusted::{closure_env#0}<hw_eval::report::SubmitMarkerTracePoint, alloc::alloc::Global, core::iter::adapters::map::Map<alloc::vec::into_iter::IntoIter<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::TraceAccumulator, alloc::alloc::Global>, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#5}>>>>> (inlined)
+            |                                           fold<hw_eval::report::SubmitMarkerTracePoint, alloc::vec::into_iter::IntoIter<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::TraceAccumulator, alloc::alloc::Global>, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#5}, (), core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<hw_eval::report::SubmitMarkerTracePoint, alloc::vec::{impl#21}::extend_trusted::{closure_env#0}<hw_eval::report::SubmitMarkerTracePoint, alloc::alloc::Global, core::iter::adapters::map::Map<alloc::vec::into_iter::IntoIter<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::TraceAccumulator, alloc::alloc::Global>, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#5}>>>> (inlined)
+            |                                           for_each<core::iter::adapters::map::Map<alloc::vec::into_iter::IntoIter<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::TraceAccumulator, alloc::alloc::Global>, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#5}>, alloc::vec::{impl#21}::extend_trusted::{closure_env#0}<hw_eval::report::SubmitMarkerTracePoint, alloc::alloc::Global, core::iter::adapters::map::Map<alloc::vec::into_iter::IntoIter<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::TraceAccumulator, alloc::alloc::Global>, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#5}>>> (inlined)
+            |                                           extend_trusted<hw_eval::report::SubmitMarkerTracePoint, alloc::alloc::Global, core::iter::adapters::map::Map<alloc::vec::into_iter::IntoIter<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::TraceAccumulator, alloc::alloc::Global>, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#5}>> (inlined)
+            |                                           spec_extend<hw_eval::report::SubmitMarkerTracePoint, core::iter::adapters::map::Map<alloc::vec::into_iter::IntoIter<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::TraceAccumulator, alloc::alloc::Global>, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#5}>, alloc::alloc::Global> (inlined)
+            |                                           from_iter<hw_eval::report::SubmitMarkerTracePoint, core::iter::adapters::map::Map<alloc::vec::into_iter::IntoIter<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::TraceAccumulator, alloc::alloc::Global>, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#5}>> (inlined)
+            |                                           bench_submit_marker_overlap (inlined)
+            |                                           run (inlined)
+            |                                           run_dsa_benchmarks (inlined)
+            |                                           run (inlined)
+            |                                           main (inlined)
+            |                                           __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |                                           {closure#0}<()> (inlined)
+            |                                           std::rt::lang_start_internal
+            |                                           main
+            |                                           __libc_start_call_main
+            |                                           __libc_start_main@@GLIBC_2.34
+            |                                           _start
+            |
+            |--2.42%--copy<u64> (inlined)
+            |          |
+            |           --2.14%--{closure#0}<u64, fn(&u64, &u64) -> bool> (inlined)
+            |                     partition_lomuto_branchless_cyclic<u64, fn(&u64, &u64) -> bool> (inlined)
+            |                     partition<u64, fn(&u64, &u64) -> bool> (inlined)
+            |                     quicksort<u64, fn(&u64, &u64) -> bool> (inlined)
+            |                     |
+            |                     |--1.14%--quicksort<u64, fn(&u64, &u64) -> bool> (inlined)
+            |                     |          |
+            |                     |          |--0.64%--quicksort<u64, fn(&u64, &u64) -> bool> (inlined)
+            |                     |          |
+            |                     |           --0.50%--sort<u64, fn(&u64, &u64) -> bool> (inlined)
+            |                     |                     sort_unstable<u64> (inlined)
+            |                     |                     stats_from_values (inlined)
+            |                     |
+            |                      --1.00%--sort<u64, fn(&u64, &u64) -> bool> (inlined)
+            |                                sort_unstable<u64> (inlined)
+            |                                stats_from_values (inlined)
+            |                                |
+            |                                 --0.58%--optional_stats (inlined)
+            |
+            |--2.01%--copy_nonoverlapping<u64> (inlined)
+            |          |
+            |           --1.95%--{closure#0}<u64, fn(&u64, &u64) -> bool> (inlined)
+            |                     partition_lomuto_branchless_cyclic<u64, fn(&u64, &u64) -> bool> (inlined)
+            |                     partition<u64, fn(&u64, &u64) -> bool> (inlined)
+            |                     quicksort<u64, fn(&u64, &u64) -> bool> (inlined)
+            |                     |
+            |                     |--1.14%--quicksort<u64, fn(&u64, &u64) -> bool> (inlined)
+            |                     |          |
+            |                     |          |--0.60%--quicksort<u64, fn(&u64, &u64) -> bool> (inlined)
+            |                     |          |
+            |                     |           --0.54%--sort<u64, fn(&u64, &u64) -> bool> (inlined)
+            |                     |                     sort_unstable<u64> (inlined)
+            |                     |                     stats_from_values (inlined)
+            |                     |
+            |                      --0.81%--sort<u64, fn(&u64, &u64) -> bool> (inlined)
+            |                                sort_unstable<u64> (inlined)
+            |                                stats_from_values (inlined)
+            |
+             --1.00%--lt (inlined)
+                       call_mut<fn(&u64, &u64) -> bool, (&u64, &u64)> (inlined)
+                       |
+                        --0.98%--{closure#0}<u64, fn(&u64, &u64) -> bool> (inlined)
+                                  |
+                                   --0.74%--partition_lomuto_branchless_cyclic<u64, fn(&u64, &u64) -> bool> (inlined)
+                                             partition<u64, fn(&u64, &u64) -> bool> (inlined)
+                                             quicksort<u64, fn(&u64, &u64) -> bool> (inlined)
+                                             |
+                                              --0.62%--sort<u64, fn(&u64, &u64) -> bool> (inlined)
+                                                        sort_unstable<u64> (inlined)
+                                                        stats_from_values (inlined)
+                                                        |
+                                                         --0.55%--optional_stats (inlined)
+
+     5.02%  [.] _int_malloc                                                                                                               -      -
+            |
+            |--3.71%--_int_malloc
+            |          |
+            |           --3.24%--__libc_malloc2
+            |                     |
+            |                      --3.18%--alloc (inlined)
+            |                                alloc_impl_runtime (inlined)
+            |                                alloc_impl (inlined)
+            |                                allocate (inlined)
+            |                                try_allocate_in<alloc::alloc::Global> (inlined)
+            |                                with_capacity_in<alloc::alloc::Global> (inlined)
+            |                                |
+            |                                |--1.29%--with_capacity_in<usize, alloc::alloc::Global> (inlined)
+            |                                |          with_capacity_in<usize, alloc::alloc::Global> (inlined)
+            |                                |          to_vec<usize, alloc::alloc::Global> (inlined)
+            |                                |          to_vec_in<usize, alloc::alloc::Global> (inlined)
+            |                                |          clone<usize, alloc::alloc::Global> (inlined)
+            |                                |          {closure#2} (inlined)
+            |                                |          map<&hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::CompletionPollResult, alloc::vec::Vec<usize, alloc::alloc::Global>, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::sample_trace_point::{closure_env#2}> (inlined)
+            |                                |          sample_trace_point (inlined)
+            |                                |          bench_submit_marker_overlap (inlined)
+            |                                |          run (inlined)
+            |                                |          run_dsa_benchmarks (inlined)
+            |                                |          run (inlined)
+            |                                |          main (inlined)
+            |                                |          __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |                                |          {closure#0}<()> (inlined)
+            |                                |          std::rt::lang_start_internal
+            |                                |          main
+            |                                |          __libc_start_call_main
+            |                                |          __libc_start_main@@GLIBC_2.34
+            |                                |          _start
+            |                                |
+            |                                |--1.04%--with_capacity_in<u64, alloc::alloc::Global> (inlined)
+            |                                |          with_capacity_in<u64, alloc::alloc::Global> (inlined)
+            |                                |          to_vec<u64, alloc::alloc::Global> (inlined)
+            |                                |          to_vec_in<u64, alloc::alloc::Global> (inlined)
+            |                                |          clone<u64, alloc::alloc::Global> (inlined)
+            |                                |          {closure#3} (inlined)
+            |                                |          map<&hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::CompletionPollResult, alloc::vec::Vec<u64, alloc::alloc::Global>, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::sample_trace_point::{closure_env#3}> (inlined)
+            |                                |          sample_trace_point (inlined)
+            |                                |          bench_submit_marker_overlap (inlined)
+            |                                |          run (inlined)
+            |                                |          run_dsa_benchmarks (inlined)
+            |                                |          run (inlined)
+            |                                |          main (inlined)
+            |                                |          __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |                                |          {closure#0}<()> (inlined)
+            |                                |          std::rt::lang_start_internal
+            |                                |          main
+            |                                |          __libc_start_call_main
+            |                                |          __libc_start_main@@GLIBC_2.34
+            |                                |          _start
+            |                                |
+            |                                 --0.84%--with_capacity_in<u8, alloc::alloc::Global> (inlined)
+            |                                           with_capacity_in<u8, alloc::alloc::Global> (inlined)
+            |                                           to_vec<u8, alloc::alloc::Global> (inlined)
+            |                                           to_vec_in<u8, alloc::alloc::Global> (inlined)
+            |                                           clone<u8, alloc::alloc::Global> (inlined)
+            |                                           {closure#5} (inlined)
+            |                                           map<&hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::CompletionPollResult, alloc::vec::Vec<u8, alloc::alloc::Global>, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::sample_trace_point::{closure_env#5}> (inlined)
+            |                                           sample_trace_point (inlined)
+            |                                           bench_submit_marker_overlap (inlined)
+            |                                           run (inlined)
+            |                                           run_dsa_benchmarks (inlined)
+            |                                           run (inlined)
+            |                                           main (inlined)
+            |                                           __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |                                           {closure#0}<()> (inlined)
+            |                                           std::rt::lang_start_internal
+            |                                           main
+            |                                           __libc_start_call_main
+            |                                           __libc_start_main@@GLIBC_2.34
+            |                                           _start
+            |
+             --0.91%--0xffffffff9f201320
+                       |
+                        --0.51%--write<hw_eval::report::SubmitMarkerSampleTracePoint> (inlined)
+                                  push_mut<hw_eval::report::SubmitMarkerSampleTracePoint, alloc::alloc::Global> (inlined)
+                                  push<hw_eval::report::SubmitMarkerSampleTracePoint, alloc::alloc::Global> (inlined)
+                                  bench_submit_marker_overlap (inlined)
+                                  run (inlined)
+                                  run_dsa_benchmarks (inlined)
+                                  run (inlined)
+                                  main (inlined)
+                                  __rust_begin_short_backtrace<fn(), ()> (inlined)
+                                  {closure#0}<()> (inlined)
+                                  std::rt::lang_start_internal
+                                  main
+                                  __libc_start_call_main
+                                  __libc_start_main@@GLIBC_2.34
+                                  _start
+
+     4.26%  [.] core::slice::sort::shared::smallsort::small_sort_network                                                                  -      -
+            |
+            |--0.70%--small_sort_network<u64, fn(&u64, &u64) -> bool> (inlined)
+            |          quicksort<u64, fn(&u64, &u64) -> bool> (inlined)
+            |          quicksort<u64, fn(&u64, &u64) -> bool> (inlined)
+            |          |
+            |           --0.56%--quicksort<u64, fn(&u64, &u64) -> bool> (inlined)
+            |
+            |--0.64%--copy_nonoverlapping<u64> (inlined)
+            |
+            |--0.64%--read<u64> (inlined)
+            |          swap_if_less<u64, fn(&u64, &u64) -> bool> (inlined)
+            |
+             --0.62%--copy<u64> (inlined)
+                       swap_if_less<u64, fn(&u64, &u64) -> bool> (inlined)
+
+     3.61%  [.] malloc_consolidate                                                                                                        -      -
+            |
+             --3.45%--malloc_consolidate
+                       |
+                        --3.32%--_int_free_maybe_consolidate.part.0
+                                  _int_free_chunk
+                                  |
+                                   --3.24%--dealloc (inlined)
+                                             deallocate_impl_runtime (inlined)
+                                             deallocate_impl (inlined)
+                                             deallocate (inlined)
+                                             deallocate<alloc::alloc::Global> (inlined)
+                                             drop<hw_eval::report::SubmitMarkerSampleTracePoint, alloc::alloc::Global> (inlined)
+                                             drop_in_place<alloc::raw_vec::RawVec<hw_eval::report::SubmitMarkerSampleTracePoint, alloc::alloc::Global>> (inlined)
+                                             drop_in_place<alloc::vec::Vec<hw_eval::report::SubmitMarkerSampleTracePoint, alloc::alloc::Global>> (inlined)
+                                             drop_in_place<hw_eval::report::SubmitMarkerSampleTrace> (inlined)
+                                             drop_in_place<[hw_eval::report::SubmitMarkerSampleTrace]> (inlined)
+                                             drop<hw_eval::report::SubmitMarkerSampleTrace, alloc::alloc::Global> (inlined)
+                                             drop_in_place<alloc::vec::Vec<hw_eval::report::SubmitMarkerSampleTrace, alloc::alloc::Global>> (inlined)
+                                             drop_in_place<hw_eval::report::SubmitMarkerOverlapResult> (inlined)
+                                             drop_in_place<[hw_eval::report::SubmitMarkerOverlapResult]> (inlined)
+                                             drop<hw_eval::report::SubmitMarkerOverlapResult, alloc::alloc::Global> (inlined)
+                                             drop_in_place<alloc::vec::Vec<hw_eval::report::SubmitMarkerOverlapResult, alloc::alloc::Global>> (inlined)
+                                             drop_in_place<hw_eval::report::SubmissionBottleneckResults> (inlined)
+                                             drop<hw_eval::report::ThroughputResult, alloc::alloc::Global> (inlined)
+                                             drop_in_place<alloc::vec::Vec<hw_eval::report::ThroughputResult, alloc::alloc::Global>> (inlined)
+                                             run (inlined)
+                                             main (inlined)
+                                             __rust_begin_short_backtrace<fn(), ()> (inlined)
+                                             {closure#0}<()> (inlined)
+                                             std::rt::lang_start_internal
+                                             main
+                                             __libc_start_call_main
+                                             __libc_start_main@@GLIBC_2.34
+                                             _start
+
+     3.27%  [.] __memmove_avx512_unaligned_erms                                                                                           -      -
+            |
+            |--1.67%--0xffffffff9f201320
+            |          |
+            |           --1.24%--__memmove_avx512_unaligned_erms
+            |                     realloc
+            |                     alloc::raw_vec::RawVecInner<A>::finish_grow
+            |                     <core::result::Result<T,E> as core::ops::try_trait::Try>::branch (inlined)
+            |                     alloc::raw_vec::RawVecInner<A>::grow_amortized (inlined)
+            |                     |
+            |                     |--0.65%--alloc::raw_vec::RawVecInner<A>::grow_one (inlined)
+            |                     |          alloc::raw_vec::RawVec<T,A>::grow_one
+            |                     |          non_null<alloc::alloc::Global, u64> (inlined)
+            |                     |          ptr<alloc::alloc::Global, u64> (inlined)
+            |                     |          ptr<u64, alloc::alloc::Global> (inlined)
+            |                     |          as_mut_ptr<u64, alloc::alloc::Global> (inlined)
+            |                     |          push_mut<u64, alloc::alloc::Global> (inlined)
+            |                     |          push<u64, alloc::alloc::Global> (inlined)
+            |                     |          record (inlined)
+            |                     |          bench_submit_marker_overlap (inlined)
+            |                     |          run (inlined)
+            |                     |          run_dsa_benchmarks (inlined)
+            |                     |          run (inlined)
+            |                     |          main (inlined)
+            |                     |          __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |                     |          {closure#0}<()> (inlined)
+            |                     |          std::rt::lang_start_internal
+            |                     |          main
+            |                     |          __libc_start_call_main
+            |                     |          __libc_start_main@@GLIBC_2.34
+            |                     |          _start
+            |                     |
+            |                      --0.59%--alloc::raw_vec::RawVecInner<A>::reserve::do_reserve_and_handle
+            |                                append_elements<u64, alloc::alloc::Global> (inlined)
+            |                                spec_extend<u64, alloc::alloc::Global> (inlined)
+            |                                extend_from_slice<u64, alloc::alloc::Global> (inlined)
+            |                                record (inlined)
+            |                                bench_submit_marker_overlap (inlined)
+            |                                run (inlined)
+            |                                run_dsa_benchmarks (inlined)
+            |                                run (inlined)
+            |                                main (inlined)
+            |                                __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |                                {closure#0}<()> (inlined)
+            |                                std::rt::lang_start_internal
+            |                                main
+            |                                __libc_start_call_main
+            |                                __libc_start_main@@GLIBC_2.34
+            |                                _start
+            |
+             --1.37%--__memmove_avx512_unaligned_erms
+                       |
+                        --0.82%--run (inlined)
+                                  run_dsa_benchmarks (inlined)
+                                  run (inlined)
+                                  main (inlined)
+                                  __rust_begin_short_backtrace<fn(), ()> (inlined)
+                                  {closure#0}<()> (inlined)
+                                  std::rt::lang_start_internal
+                                  main
+                                  __libc_start_call_main
+                                  __libc_start_main@@GLIBC_2.34
+                                  _start
+
+     2.73%  [.] malloc                                                                                                                    -      -
+            |
+             --2.42%--malloc
+                       |
+                       |--0.93%--<core::result::Result<T,E> as core::ops::try_trait::Try>::branch (inlined)
+                       |          alloc::raw_vec::RawVecInner<A>::grow_amortized (inlined)
+                       |          alloc::raw_vec::RawVecInner<A>::grow_one (inlined)
+                       |          |
+                       |           --0.60%--alloc::raw_vec::RawVec<T,A>::grow_one
+                       |                     non_null<alloc::alloc::Global, u64> (inlined)
+                       |                     ptr<alloc::alloc::Global, u64> (inlined)
+                       |                     ptr<u64, alloc::alloc::Global> (inlined)
+                       |                     as_mut_ptr<u64, alloc::alloc::Global> (inlined)
+                       |                     push_mut<u64, alloc::alloc::Global> (inlined)
+                       |                     push<u64, alloc::alloc::Global> (inlined)
+                       |                     record_read (inlined)
+                       |                     poll_to_next_unfinished (inlined)
+                       |                     {closure#1} (inlined)
+                       |                     then<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::CompletionPollResult, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#1}> (inlined)
+                       |                     bench_submit_marker_overlap (inlined)
+                       |                     run (inlined)
+                       |                     run_dsa_benchmarks (inlined)
+                       |                     run (inlined)
+                       |                     main (inlined)
+                       |                     __rust_begin_short_backtrace<fn(), ()> (inlined)
+                       |                     {closure#0}<()> (inlined)
+                       |                     std::rt::lang_start_internal
+                       |                     main
+                       |                     __libc_start_call_main
+                       |                     __libc_start_main@@GLIBC_2.34
+                       |                     _start
+                       |
+                       |--0.86%--run (inlined)
+                       |          run_dsa_benchmarks (inlined)
+                       |          run (inlined)
+                       |          main (inlined)
+                       |          __rust_begin_short_backtrace<fn(), ()> (inlined)
+                       |          {closure#0}<()> (inlined)
+                       |          std::rt::lang_start_internal
+                       |          main
+                       |          __libc_start_call_main
+                       |          __libc_start_main@@GLIBC_2.34
+                       |          _start
+                       |
+                        --0.63%--alloc::raw_vec::RawVec<T,A>::grow_one
+                                  non_null<alloc::alloc::Global, u8> (inlined)
+                                  ptr<alloc::alloc::Global, u8> (inlined)
+                                  ptr<u8, alloc::alloc::Global> (inlined)
+                                  as_mut_ptr<u8, alloc::alloc::Global> (inlined)
+                                  push_mut<u8, alloc::alloc::Global> (inlined)
+                                  push<u8, alloc::alloc::Global> (inlined)
+                                  record_read (inlined)
+                                  poll_to_next_unfinished (inlined)
+                                  {closure#1} (inlined)
+                                  then<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::CompletionPollResult, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#1}> (inlined)
+                                  bench_submit_marker_overlap (inlined)
+                                  run (inlined)
+                                  run_dsa_benchmarks (inlined)
+                                  run (inlined)
+                                  main (inlined)
+                                  __rust_begin_short_backtrace<fn(), ()> (inlined)
+                                  {closure#0}<()> (inlined)
+                                  std::rt::lang_start_internal
+                                  main
+                                  __libc_start_call_main
+                                  __libc_start_main@@GLIBC_2.34
+                                  _start
+
+     2.57%  [.] cfree@GLIBC_2.2.5                                                                                                         -      -
+            |
+             --2.35%--cfree@GLIBC_2.2.5
+                       |
+                       |--1.44%--drop_in_place<[hw_eval::report::SubmitMarkerOverlapResult]> (inlined)
+                       |          drop<hw_eval::report::SubmitMarkerOverlapResult, alloc::alloc::Global> (inlined)
+                       |          drop_in_place<alloc::vec::Vec<hw_eval::report::SubmitMarkerOverlapResult, alloc::alloc::Global>> (inlined)
+                       |          drop_in_place<hw_eval::report::SubmissionBottleneckResults> (inlined)
+                       |          drop<hw_eval::report::ThroughputResult, alloc::alloc::Global> (inlined)
+                       |          drop_in_place<alloc::vec::Vec<hw_eval::report::ThroughputResult, alloc::alloc::Global>> (inlined)
+                       |          run (inlined)
+                       |          main (inlined)
+                       |          __rust_begin_short_backtrace<fn(), ()> (inlined)
+                       |          {closure#0}<()> (inlined)
+                       |          std::rt::lang_start_internal
+                       |          main
+                       |          __libc_start_call_main
+                       |          __libc_start_main@@GLIBC_2.34
+                       |          _start
+                       |
+                        --0.90%--run (inlined)
+                                  run_dsa_benchmarks (inlined)
+                                  run (inlined)
+                                  main (inlined)
+                                  __rust_begin_short_backtrace<fn(), ()> (inlined)
+                                  {closure#0}<()> (inlined)
+                                  std::rt::lang_start_internal
+                                  main
+                                  __libc_start_call_main
+                                  __libc_start_main@@GLIBC_2.34
+                                  _start
+
+     2.50%  [.] core::ptr::drop_in_place<hw_eval::report::SubmitMarkerOverlapResult>                                                      -      -
+            |
+             --1.96%--current_memory<alloc::alloc::Global> (inlined)
+                       deallocate<alloc::alloc::Global> (inlined)
+                       |
+                        --1.51%--drop<usize, alloc::alloc::Global> (inlined)
+                                  drop_in_place<alloc::raw_vec::RawVec<usize, alloc::alloc::Global>> (inlined)
+                                  drop_in_place<alloc::vec::Vec<usize, alloc::alloc::Global>> (inlined)
+                                  drop_in_place<hw_eval::report::SubmitMarkerSampleTracePoint> (inlined)
+                                  drop_in_place<[hw_eval::report::SubmitMarkerSampleTracePoint]> (inlined)
+                                  drop<hw_eval::report::SubmitMarkerSampleTracePoint, alloc::alloc::Global> (inlined)
+                                  drop_in_place<alloc::vec::Vec<hw_eval::report::SubmitMarkerSampleTracePoint, alloc::alloc::Global>> (inlined)
+                                  drop_in_place<hw_eval::report::SubmitMarkerSampleTrace> (inlined)
+                                  drop_in_place<[hw_eval::report::SubmitMarkerSampleTrace]> (inlined)
+                                  drop<hw_eval::report::SubmitMarkerSampleTrace, alloc::alloc::Global> (inlined)
+                                  drop_in_place<alloc::vec::Vec<hw_eval::report::SubmitMarkerSampleTrace, alloc::alloc::Global>> (inlined)
+                                  drop_in_place<hw_eval::report::SubmitMarkerOverlapResult> (inlined)
+                                  drop_in_place<[hw_eval::report::SubmitMarkerOverlapResult]> (inlined)
+                                  drop<hw_eval::report::SubmitMarkerOverlapResult, alloc::alloc::Global> (inlined)
+                                  drop_in_place<alloc::vec::Vec<hw_eval::report::SubmitMarkerOverlapResult, alloc::alloc::Global>> (inlined)
+                                  drop_in_place<hw_eval::report::SubmissionBottleneckResults> (inlined)
+                                  drop<hw_eval::report::ThroughputResult, alloc::alloc::Global> (inlined)
+                                  drop_in_place<alloc::vec::Vec<hw_eval::report::ThroughputResult, alloc::alloc::Global>> (inlined)
+                                  run (inlined)
+                                  main (inlined)
+                                  __rust_begin_short_backtrace<fn(), ()> (inlined)
+                                  {closure#0}<()> (inlined)
+                                  std::rt::lang_start_internal
+                                  main
+                                  __libc_start_call_main
+                                  __libc_start_main@@GLIBC_2.34
+                                  _start
+
+     1.93%  [.] _int_free_chunk                                                                                                           -      -
+            |
+             --1.75%--_int_free_chunk
+                       |
+                        --0.52%--drop<u8, alloc::alloc::Global> (inlined)
+                                  drop_in_place<alloc::raw_vec::RawVec<u8, alloc::alloc::Global>> (inlined)
+                                  drop_in_place<alloc::vec::Vec<u8, alloc::alloc::Global>> (inlined)
+                                  drop_in_place<hw_eval::report::SubmitMarkerSampleTracePoint> (inlined)
+                                  drop_in_place<[hw_eval::report::SubmitMarkerSampleTracePoint]> (inlined)
+                                  drop<hw_eval::report::SubmitMarkerSampleTracePoint, alloc::alloc::Global> (inlined)
+                                  drop_in_place<alloc::vec::Vec<hw_eval::report::SubmitMarkerSampleTracePoint, alloc::alloc::Global>> (inlined)
+                                  drop_in_place<hw_eval::report::SubmitMarkerSampleTrace> (inlined)
+                                  drop_in_place<[hw_eval::report::SubmitMarkerSampleTrace]> (inlined)
+                                  drop<hw_eval::report::SubmitMarkerSampleTrace, alloc::alloc::Global> (inlined)
+                                  drop_in_place<alloc::vec::Vec<hw_eval::report::SubmitMarkerSampleTrace, alloc::alloc::Global>> (inlined)
+                                  drop_in_place<hw_eval::report::SubmitMarkerOverlapResult> (inlined)
+                                  drop_in_place<[hw_eval::report::SubmitMarkerOverlapResult]> (inlined)
+                                  drop<hw_eval::report::SubmitMarkerOverlapResult, alloc::alloc::Global> (inlined)
+                                  drop_in_place<alloc::vec::Vec<hw_eval::report::SubmitMarkerOverlapResult, alloc::alloc::Global>> (inlined)
+                                  drop_in_place<hw_eval::report::SubmissionBottleneckResults> (inlined)
+                                  drop<hw_eval::report::ThroughputResult, alloc::alloc::Global> (inlined)
+                                  drop_in_place<alloc::vec::Vec<hw_eval::report::ThroughputResult, alloc::alloc::Global>> (inlined)
+                                  run (inlined)
+                                  main (inlined)
+                                  __rust_begin_short_backtrace<fn(), ()> (inlined)
+                                  {closure#0}<()> (inlined)
+                                  std::rt::lang_start_internal
+                                  main
+                                  __libc_start_call_main
+                                  __libc_start_main@@GLIBC_2.34
+                                  _start
+
+     1.70%  [.] hw_eval::report::compute_stats                                                                                            -      -
+            |
+             --1.07%--{closure#0} (inlined)
+                       {closure#0}<&u64, f64, f64, hw_eval::report::compute_stats::{closure_env#0}, core::iter::traits::accum::{impl#132}::sum::{closure_env#0}<core::iter::adapters::map::Map<core::slice::iter::Iter<u64>, hw_eval::report::compute_stats::{closure_env#0}>>> (inlined)
+                       fold<u64, f64, core::iter::adapters::map::map_fold::{closure_env#0}<&u64, f64, f64, hw_eval::report::compute_stats::{closure_env#0}, core::iter::traits::accum::{impl#132}::sum::{closure_env#0}<core::iter::adapters::map::Map<core::slice::iter::Iter<u64>, hw_eval::report::compute_stats::{closure_env#0}>>>> (inlined)
+                       fold<f64, core::slice::iter::Iter<u64>, hw_eval::report::compute_stats::{closure_env#0}, f64, core::iter::traits::accum::{impl#132}::sum::{closure_env#0}<core::iter::adapters::map::Map<core::slice::iter::Iter<u64>, hw_eval::report::compute_stats::{closure_env#0}>>> (inlined)
+                       sum<core::iter::adapters::map::Map<core::slice::iter::Iter<u64>, hw_eval::report::compute_stats::{closure_env#0}>> (inlined)
+                       sum<core::iter::adapters::map::Map<core::slice::iter::Iter<u64>, hw_eval::report::compute_stats::{closure_env#0}>, f64> (inlined)
+                       compute_stats (inlined)
+                       drop<u64, alloc::alloc::Global> (inlined)
+                       drop_in_place<alloc::raw_vec::RawVec<u64, alloc::alloc::Global>> (inlined)
+                       drop_in_place<alloc::vec::Vec<u64, alloc::alloc::Global>> (inlined)
+                       stats_from_values (inlined)
+                       |
+                        --0.65%--optional_stats (inlined)
+
+     1.53%  [.] __udivti3                                                                                                                 -      -
+            |
+             --1.25%--__udivti3
+                       |
+                        --0.83%--optional_stats_from_tsc_slice (inlined)
+                                  |
+                                   --0.56%--into_point (inlined)
+                                             fold<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::TraceAccumulator, alloc::alloc::Global, (), core::iter::adapters::map::map_fold::{closure_env#0}<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::TraceAccumulator, hw_eval::report::SubmitMarkerTracePoint, (), hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#5}, core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<hw_eval::report::SubmitMarkerTracePoint, alloc::vec::{impl#21}::extend_trusted::{closure_env#0}<hw_eval::report::SubmitMarkerTracePoint, alloc::alloc::Global, core::iter::adapters::map::Map<alloc::vec::into_iter::IntoIter<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::TraceAccumulator, alloc::alloc::Global>, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#5}>>>>> (inlined)
+                                             fold<hw_eval::report::SubmitMarkerTracePoint, alloc::vec::into_iter::IntoIter<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::TraceAccumulator, alloc::alloc::Global>, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#5}, (), core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<hw_eval::report::SubmitMarkerTracePoint, alloc::vec::{impl#21}::extend_trusted::{closure_env#0}<hw_eval::report::SubmitMarkerTracePoint, alloc::alloc::Global, core::iter::adapters::map::Map<alloc::vec::into_iter::IntoIter<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::TraceAccumulator, alloc::alloc::Global>, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#5}>>>> (inlined)
+                                             for_each<core::iter::adapters::map::Map<alloc::vec::into_iter::IntoIter<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::TraceAccumulator, alloc::alloc::Global>, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#5}>, alloc::vec::{impl#21}::extend_trusted::{closure_env#0}<hw_eval::report::SubmitMarkerTracePoint, alloc::alloc::Global, core::iter::adapters::map::Map<alloc::vec::into_iter::IntoIter<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::TraceAccumulator, alloc::alloc::Global>, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#5}>>> (inlined)
+                                             extend_trusted<hw_eval::report::SubmitMarkerTracePoint, alloc::alloc::Global, core::iter::adapters::map::Map<alloc::vec::into_iter::IntoIter<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::TraceAccumulator, alloc::alloc::Global>, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#5}>> (inlined)
+                                             spec_extend<hw_eval::report::SubmitMarkerTracePoint, core::iter::adapters::map::Map<alloc::vec::into_iter::IntoIter<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::TraceAccumulator, alloc::alloc::Global>, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#5}>, alloc::alloc::Global> (inlined)
+                                             from_iter<hw_eval::report::SubmitMarkerTracePoint, core::iter::adapters::map::Map<alloc::vec::into_iter::IntoIter<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::TraceAccumulator, alloc::alloc::Global>, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#5}>> (inlined)
+                                             bench_submit_marker_overlap (inlined)
+                                             run (inlined)
+                                             run_dsa_benchmarks (inlined)
+                                             run (inlined)
+                                             main (inlined)
+                                             __rust_begin_short_backtrace<fn(), ()> (inlined)
+                                             {closure#0}<()> (inlined)
+                                             std::rt::lang_start_internal
+                                             main
+                                             __libc_start_call_main
+                                             __libc_start_main@@GLIBC_2.34
+                                             _start
+
+     1.36%  [.] unlink_chunk.isra.0                                                                                                       -      -
+            |
+             --1.25%--unlink_chunk.isra.0
+                       |
+                        --0.86%--malloc_consolidate
+                                  _int_free_maybe_consolidate.part.0
+                                  _int_free_chunk
+                                  |
+                                   --0.84%--dealloc (inlined)
+                                             deallocate_impl_runtime (inlined)
+                                             deallocate_impl (inlined)
+                                             deallocate (inlined)
+                                             deallocate<alloc::alloc::Global> (inlined)
+                                             drop<hw_eval::report::SubmitMarkerSampleTracePoint, alloc::alloc::Global> (inlined)
+                                             drop_in_place<alloc::raw_vec::RawVec<hw_eval::report::SubmitMarkerSampleTracePoint, alloc::alloc::Global>> (inlined)
+                                             drop_in_place<alloc::vec::Vec<hw_eval::report::SubmitMarkerSampleTracePoint, alloc::alloc::Global>> (inlined)
+                                             drop_in_place<hw_eval::report::SubmitMarkerSampleTrace> (inlined)
+                                             drop_in_place<[hw_eval::report::SubmitMarkerSampleTrace]> (inlined)
+                                             drop<hw_eval::report::SubmitMarkerSampleTrace, alloc::alloc::Global> (inlined)
+                                             drop_in_place<alloc::vec::Vec<hw_eval::report::SubmitMarkerSampleTrace, alloc::alloc::Global>> (inlined)
+                                             drop_in_place<hw_eval::report::SubmitMarkerOverlapResult> (inlined)
+                                             drop_in_place<[hw_eval::report::SubmitMarkerOverlapResult]> (inlined)
+                                             drop<hw_eval::report::SubmitMarkerOverlapResult, alloc::alloc::Global> (inlined)
+                                             drop_in_place<alloc::vec::Vec<hw_eval::report::SubmitMarkerOverlapResult, alloc::alloc::Global>> (inlined)
+                                             drop_in_place<hw_eval::report::SubmissionBottleneckResults> (inlined)
+                                             drop<hw_eval::report::ThroughputResult, alloc::alloc::Global> (inlined)
+                                             drop_in_place<alloc::vec::Vec<hw_eval::report::ThroughputResult, alloc::alloc::Global>> (inlined)
+                                             run (inlined)
+                                             main (inlined)
+                                             __rust_begin_short_backtrace<fn(), ()> (inlined)
+                                             {closure#0}<()> (inlined)
+                                             std::rt::lang_start_internal
+                                             main
+                                             __libc_start_call_main
+                                             __libc_start_main@@GLIBC_2.34
+                                             _start
+
+     0.96%  [.] __libc_malloc2                                                                                                            -      -
+            |
+             --0.65%--__libc_malloc2
+
+     0.86%  [k] 0xffffffff9f201b98                                                                                                        -      -
+     0.85%  [.] core::slice::sort::shared::pivot::median3_rec                                                                             -      -
+     0.79%  [.] alloc::raw_vec::RawVecInner<A>::finish_grow                                                                               -      -
+     0.78%  [.] <alloc::vec::Vec<T> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<T,I>>::from_iter                             -      -
+     0.78%  [.] alloc::raw_vec::RawVecInner<A>::finish_grow                                                                               -      -
+     0.76%  [.] __rustc::__rdl_alloc                                                                                                      -      -
+     0.66%  [.] alloc::raw_vec::RawVecInner<A>::finish_grow                                                                               -      -
+            |
+             --0.55%--alloc::raw_vec::RawVecInner<A>::finish_grow
+                       alloc::raw_vec::RawVec<T,A>::grow_one
+                       non_null<alloc::alloc::Global, u8> (inlined)
+                       ptr<alloc::alloc::Global, u8> (inlined)
+                       ptr<u8, alloc::alloc::Global> (inlined)
+                       as_mut_ptr<u8, alloc::alloc::Global> (inlined)
+                       push_mut<u8, alloc::alloc::Global> (inlined)
+                       push<u8, alloc::alloc::Global> (inlined)
+                       record_read (inlined)
+                       poll_to_next_unfinished (inlined)
+                       {closure#1} (inlined)
+                       then<hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::CompletionPollResult, hw_eval::benchmarks::submission_bottleneck::experiment_2_marker_overlap::bench_submit_marker_overlap::{closure_env#1}> (inlined)
+                       bench_submit_marker_overlap (inlined)
+                       run (inlined)
+                       run_dsa_benchmarks (inlined)
+                       run (inlined)
+                       main (inlined)
+                       __rust_begin_short_backtrace<fn(), ()> (inlined)
+                       {closure#0}<()> (inlined)
+                       std::rt::lang_start_internal
+                       main
+                       __libc_start_call_main
+                       __libc_start_main@@GLIBC_2.34
+                       _start
+
+
+
+#
+# (Tip: To compare hot regions in two workloads use perf record -b -o file ... ; perf diff --stream file1 file2)
+#

@@ -44,6 +44,9 @@ impl OperationSlots {
         let mut sources = vec![0xa5; count * payload_size];
         let mut destinations = vec![0; count * payload_size];
 
+        touch_pages(&mut sources);
+        touch_pages(&mut destinations);
+
         for slot in 0..count {
             fill_descriptor(
                 &mut descriptors[slot],
@@ -62,6 +65,28 @@ impl OperationSlots {
             sources,
             destinations,
         }
+    }
+}
+
+fn touch_pages(buf: &mut [u8]) {
+    for offset in (0..buf.len()).step_by(4096) {
+        touch_byte(buf, offset);
+    }
+
+    if !buf.is_empty() {
+        touch_byte(buf, buf.len() - 1);
+    }
+}
+
+fn touch_byte(buf: &mut [u8], offset: usize) {
+    // SAFETY: callers pass offsets inside `buf`, so the pointer is in-bounds for
+    // a one-byte volatile read/write. The read-then-write keeps the byte value
+    // unchanged while forcing the backing page to be faulted in before DSA, which
+    // cannot service ordinary CPU page faults for us.
+    unsafe {
+        let ptr = buf.as_mut_ptr().add(offset);
+        let value = ptr.read_volatile();
+        ptr.write_volatile(value);
     }
 }
 

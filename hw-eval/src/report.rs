@@ -54,6 +54,7 @@ pub(crate) struct SubmissionBottleneckResults {
     pub(crate) admission: Vec<AdmissionResult>,
     pub(crate) submit_occupancy: Vec<SubmitOccupancyResult>,
     pub(crate) submit_marker_overlap: Vec<SubmitMarkerOverlapResult>,
+    pub(crate) submit_marker_mechanism: Vec<SubmitMarkerMechanismResult>,
     pub(crate) traffic_class_ladder: Vec<TrafficClassLadderResult>,
     pub(crate) completion_reuse_policy: Vec<CompletionReusePolicyResult>,
 }
@@ -69,6 +70,8 @@ pub(crate) struct FullReport {
     pub(crate) submit_occupancy: Vec<SubmitOccupancyResult>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) submit_marker_overlap: Vec<SubmitMarkerOverlapResult>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) submit_marker_mechanism: Vec<SubmitMarkerMechanismResult>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) traffic_class_ladder: Vec<TrafficClassLadderResult>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -275,6 +278,81 @@ pub(crate) struct SubmitOccupancyResult {
 }
 
 #[derive(Serialize)]
+pub(crate) struct SubmitMarkerCompletionTrace {
+    pub(crate) completion_index: usize,
+    pub(crate) none_count: u64,
+    pub(crate) success_count: u64,
+    pub(crate) success_fraction: f64,
+    pub(crate) error_count: u64,
+    pub(crate) none_poll_tsc_ticks: Option<LatencyStats>,
+    pub(crate) none_poll_ns: Option<LatencyStats>,
+    pub(crate) success_poll_tsc_ticks: Option<LatencyStats>,
+    pub(crate) success_poll_ns: Option<LatencyStats>,
+    pub(crate) error_poll_tsc_ticks: Option<LatencyStats>,
+    pub(crate) error_poll_ns: Option<LatencyStats>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct SubmitMarkerRequestCompletionTrace {
+    pub(crate) request_index: usize,
+    pub(crate) observed_count: u64,
+    pub(crate) observed_fraction: f64,
+    pub(crate) success_count: u64,
+    pub(crate) error_count: u64,
+    pub(crate) observed_after_submit_index: Option<LatencyStats>,
+    pub(crate) completion_tsc_ticks: Option<LatencyStats>,
+    pub(crate) completion_ns: Option<LatencyStats>,
+    pub(crate) observed_from_marker_tsc: Option<LatencyStats>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct SubmitMarkerSampleTrace {
+    pub(crate) iteration_index: usize,
+    pub(crate) points: Vec<SubmitMarkerSampleTracePoint>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct SubmitMarkerSampleTracePoint {
+    pub(crate) submit_index: usize,
+    pub(crate) submit_tsc_ticks: u64,
+    pub(crate) submit_start_from_marker_tsc: Option<u64>,
+    pub(crate) submit_end_from_marker_tsc: Option<u64>,
+    pub(crate) poll_performed: bool,
+    pub(crate) poll_end_from_marker_tsc: Option<u64>,
+    pub(crate) poll_window_tsc_ticks: Option<u64>,
+    pub(crate) polled_request_indices: Vec<usize>,
+    pub(crate) poll_latency_tsc_ticks: Vec<u64>,
+    pub(crate) poll_count: u64,
+    pub(crate) first_polled_request_index: Option<u64>,
+    pub(crate) last_polled_request_index: Option<u64>,
+    pub(crate) visible_prefix_len: u64,
+    pub(crate) polled_statuses: Vec<u8>,
+    pub(crate) polled_status: u8,
+    pub(crate) marker_status: u8,
+}
+
+#[derive(Serialize)]
+pub(crate) struct SubmitMarkerTracePoint {
+    pub(crate) poll_performed: bool,
+    pub(crate) submit_index: usize,
+    pub(crate) submit_tsc_ticks: LatencyStats,
+    pub(crate) submit_ns: LatencyStats,
+    pub(crate) submit_start_from_marker_tsc: Option<LatencyStats>,
+    pub(crate) submit_end_from_marker_tsc: Option<LatencyStats>,
+    pub(crate) poll_end_from_marker_tsc: Option<LatencyStats>,
+    pub(crate) poll_window_tsc_ticks: Option<LatencyStats>,
+    pub(crate) poll_window_ns: Option<LatencyStats>,
+    pub(crate) poll_latency_tsc_ticks: Option<LatencyStats>,
+    pub(crate) poll_latency_ns: Option<LatencyStats>,
+    pub(crate) poll_count: Option<LatencyStats>,
+    pub(crate) first_polled_request_index: Option<LatencyStats>,
+    pub(crate) last_polled_request_index: Option<LatencyStats>,
+    pub(crate) visible_prefix_len: LatencyStats,
+    pub(crate) visible_count: LatencyStats,
+    pub(crate) completions: Vec<SubmitMarkerCompletionTrace>,
+}
+
+#[derive(Serialize)]
 pub(crate) struct SubmitMarkerOverlapResult {
     pub(crate) benchmark: String,
     pub(crate) operation_class: String,
@@ -283,6 +361,9 @@ pub(crate) struct SubmitMarkerOverlapResult {
     pub(crate) marker_position_label: String,
     pub(crate) poll_cadence: String,
     pub(crate) submit_tail_tsc_ticks: LatencyStats,
+    pub(crate) marker_poll_offset: usize,
+    pub(crate) poll_step: usize,
+    pub(crate) tracked_completions: usize,
     pub(crate) submit_tail_ns: LatencyStats,
     pub(crate) marker_visible_tsc_ticks: Option<LatencyStats>,
     pub(crate) marker_visible_ns: Option<LatencyStats>,
@@ -291,6 +372,67 @@ pub(crate) struct SubmitMarkerOverlapResult {
     pub(crate) completed: LatencyStats,
     pub(crate) missing: LatencyStats,
     pub(crate) errors: LatencyStats,
+    pub(crate) request_completions: Vec<SubmitMarkerRequestCompletionTrace>,
+    pub(crate) sample_trace: Vec<SubmitMarkerSampleTrace>,
+    pub(crate) trace: Vec<SubmitMarkerTracePoint>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct SubmitMarkerMechanismBaselineComparison {
+    pub(crate) baseline: String,
+    pub(crate) visible_poll_ns: Option<MedianGap>,
+    pub(crate) none_poll_ns: Option<MedianGap>,
+    pub(crate) line_position_0_visible_ns: Option<MedianGap>,
+    pub(crate) line_position_1_visible_ns: Option<MedianGap>,
+    pub(crate) same_line_first_visible_ns: Option<MedianGap>,
+    pub(crate) same_line_second_visible_ns: Option<MedianGap>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct MedianGap {
+    pub(crate) delta_ns: i64,
+    pub(crate) ratio_to_baseline: f64,
+}
+
+#[derive(Serialize)]
+pub(crate) struct SubmitMarkerMechanismResult {
+    pub(crate) benchmark: String,
+    pub(crate) sub_experiment: String,
+    pub(crate) variant: String,
+    pub(crate) operation_class: String,
+    pub(crate) n: usize,
+    pub(crate) marker_poll_offset: usize,
+    pub(crate) completion_layout: String,
+    pub(crate) completion_stride_bytes: usize,
+    pub(crate) completion_alignment_bytes: usize,
+    pub(crate) completion_base_mod_64: usize,
+    pub(crate) completion_base_mod_4096: usize,
+    pub(crate) prefetch_distance_lines: Option<usize>,
+    pub(crate) cache_state: String,
+    pub(crate) timing_mode: String,
+    pub(crate) submitted: u64,
+    pub(crate) completed: LatencyStats,
+    pub(crate) missing: LatencyStats,
+    pub(crate) errors: LatencyStats,
+    pub(crate) none_poll_tsc_ticks: Option<LatencyStats>,
+    pub(crate) none_poll_ns: Option<LatencyStats>,
+    pub(crate) visible_poll_tsc_ticks: Option<LatencyStats>,
+    pub(crate) visible_poll_ns: Option<LatencyStats>,
+    pub(crate) line_position_0_visible_tsc_ticks: Option<LatencyStats>,
+    pub(crate) line_position_0_visible_ns: Option<LatencyStats>,
+    pub(crate) line_position_1_visible_tsc_ticks: Option<LatencyStats>,
+    pub(crate) line_position_1_visible_ns: Option<LatencyStats>,
+    pub(crate) same_line_first_visible_tsc_ticks: Option<LatencyStats>,
+    pub(crate) same_line_first_visible_ns: Option<LatencyStats>,
+    pub(crate) same_line_second_visible_tsc_ticks: Option<LatencyStats>,
+    pub(crate) same_line_second_visible_ns: Option<LatencyStats>,
+    pub(crate) poll_window_tsc_ticks: Option<LatencyStats>,
+    pub(crate) poll_window_ns: Option<LatencyStats>,
+    pub(crate) poll_window_reads: Option<LatencyStats>,
+    pub(crate) poll_window_visible: Option<LatencyStats>,
+    pub(crate) sample_trace: Vec<SubmitMarkerSampleTrace>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) baseline_comparison: Option<SubmitMarkerMechanismBaselineComparison>,
 }
 
 #[derive(Serialize)]

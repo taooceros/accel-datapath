@@ -13,6 +13,7 @@ pub(crate) const DEFAULT_SUBMIT_OCCUPANCIES: &str =
 pub(crate) const DEFAULT_MARKER_BURSTS: &str = "64,96,128,160,256";
 pub(crate) const DEFAULT_MARKER_POSITIONS: &str = "first,half,last";
 pub(crate) const DEFAULT_MARKER_POLL_CADENCES: &str = "1,4,16,64,never";
+pub(crate) const DEFAULT_MARKER_POLL_OFFSETS: &str = "96";
 pub(crate) const DEFAULT_TRAFFIC_WINDOWS: &str = "1,8,32,64,96,112,120,124,128,160,256";
 pub(crate) const DEFAULT_TRAFFIC_CLASSES: &str = "submit-only,noop-completion,memmove64,memmove4k";
 pub(crate) const DEFAULT_COMPLETION_REUSE_POLICIES: &str =
@@ -75,6 +76,10 @@ pub(crate) struct Args {
     #[arg(long, default_value = DEFAULT_MARKER_POLL_CADENCES)]
     marker_poll_cadences: String,
 
+    /// First zero-based submit indexes for submit-marker-overlap tracing; poll step is fixed at 1
+    #[arg(long, default_value = DEFAULT_MARKER_POLL_OFFSETS)]
+    marker_poll_offsets: String,
+
     /// Windows for traffic-class-ladder benchmarks (comma-separated)
     #[arg(long, default_value = DEFAULT_TRAFFIC_WINDOWS)]
     traffic_windows: String,
@@ -134,6 +139,7 @@ pub(crate) enum BenchmarkKind {
     SubmitAdmission,
     SubmitOccupancy,
     SubmitMarkerOverlap,
+    SubmitMarkerMechanism,
     TrafficClassLadder,
     CompletionReusePolicy,
 }
@@ -146,6 +152,7 @@ impl BenchmarkKind {
             Self::SubmitAdmission => "submit-admission",
             Self::SubmitOccupancy => "submit-occupancy",
             Self::SubmitMarkerOverlap => "submit-marker-overlap",
+            Self::SubmitMarkerMechanism => "submit-marker-mechanism",
             Self::TrafficClassLadder => "traffic-class-ladder",
             Self::CompletionReusePolicy => "completion-reuse-policy",
         }
@@ -193,11 +200,11 @@ impl MarkerPosition {
         }
     }
 
-    pub(crate) fn to_one_based(self, n: usize) -> usize {
+    pub(crate) fn to_index(self, n: usize) -> usize {
         match self {
-            Self::First => 1,
-            Self::Half => (n / 2).max(1),
-            Self::Last => n,
+            Self::First => 0,
+            Self::Half => n / 2,
+            Self::Last => n.saturating_sub(1),
         }
     }
 }
@@ -206,15 +213,6 @@ impl MarkerPosition {
 pub(crate) enum MarkerPollCadence {
     Every(usize),
     Never,
-}
-
-impl MarkerPollCadence {
-    pub(crate) fn as_str(self) -> String {
-        match self {
-            Self::Every(value) => value.to_string(),
-            Self::Never => "never".to_string(),
-        }
-    }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
@@ -278,6 +276,10 @@ pub(crate) fn parse_submit_occupancies(s: &str) -> Result<Vec<usize>, BenchmarkC
 
 pub(crate) fn parse_marker_bursts(s: &str) -> Result<Vec<usize>, BenchmarkConfigError> {
     parse_positive_usize_list(s, "--marker-bursts")
+}
+
+pub(crate) fn parse_marker_poll_offsets(s: &str) -> Result<Vec<usize>, BenchmarkConfigError> {
+    parse_usize_list(s, "--marker-poll-offsets", false)
 }
 
 pub(crate) fn parse_marker_positions(s: &str) -> Result<Vec<MarkerPosition>, BenchmarkConfigError> {
@@ -406,6 +408,7 @@ pub(crate) struct SubmissionBottleneckConfig {
     pub(crate) marker_bursts: Vec<usize>,
     pub(crate) marker_positions: Vec<MarkerPosition>,
     pub(crate) marker_poll_cadences: Vec<MarkerPollCadence>,
+    pub(crate) marker_poll_offsets: Vec<usize>,
     pub(crate) traffic_windows: Vec<usize>,
     pub(crate) traffic_classes: Vec<TrafficClass>,
     pub(crate) completion_reuse_policies: Vec<CompletionReusePolicy>,
@@ -459,6 +462,8 @@ impl BenchmarkConfig {
         #[builder(default = DEFAULT_MARKER_POSITIONS.to_string(), into)] marker_positions: String,
         #[builder(default = DEFAULT_MARKER_POLL_CADENCES.to_string(), into)]
         marker_poll_cadences: String,
+        #[builder(default = DEFAULT_MARKER_POLL_OFFSETS.to_string(), into)]
+        marker_poll_offsets: String,
         #[builder(default = DEFAULT_TRAFFIC_WINDOWS.to_string(), into)] traffic_windows: String,
         #[builder(default = DEFAULT_TRAFFIC_CLASSES.to_string(), into)] traffic_classes: String,
         #[builder(default = DEFAULT_COMPLETION_REUSE_POLICIES.to_string(), into)]
@@ -478,6 +483,7 @@ impl BenchmarkConfig {
             marker_bursts: parse_marker_bursts(&marker_bursts)?,
             marker_positions: parse_marker_positions(&marker_positions)?,
             marker_poll_cadences: parse_marker_poll_cadences(&marker_poll_cadences)?,
+            marker_poll_offsets: parse_marker_poll_offsets(&marker_poll_offsets)?,
             traffic_windows: parse_traffic_windows(&traffic_windows)?,
             traffic_classes: parse_traffic_classes(&traffic_classes)?,
             completion_reuse_policies: parse_completion_reuse_policies(&completion_reuse_policies)?,
@@ -493,8 +499,9 @@ impl BenchmarkConfig {
                 | BenchmarkKind::SubmitAdmission
                 | BenchmarkKind::SubmitOccupancy
                 | BenchmarkKind::SubmitMarkerOverlap
+                | BenchmarkKind::SubmitMarkerMechanism
                 | BenchmarkKind::TrafficClassLadder
-                | BenchmarkKind::CompletionReusePolicy
+                | BenchmarkKind::CompletionReusePolicy,
         ) && accel != AccelKind::Dsa
         {
             return Err(BenchmarkConfigError::UnsupportedBenchmark {
@@ -538,6 +545,7 @@ impl BenchmarkConfig {
             marker_positions,
             marker_poll_cadences,
             traffic_windows,
+            marker_poll_offsets,
             traffic_classes,
             completion_reuse_policies,
             completion_reuse_window,
@@ -561,6 +569,7 @@ impl BenchmarkConfig {
             .marker_bursts(marker_bursts)
             .marker_positions(marker_positions)
             .marker_poll_cadences(marker_poll_cadences)
+            .marker_poll_offsets(marker_poll_offsets)
             .traffic_windows(traffic_windows)
             .traffic_classes(traffic_classes)
             .completion_reuse_policies(completion_reuse_policies)
@@ -687,6 +696,7 @@ mod tests {
                 MarkerPollCadence::Never,
             ]
         );
+        assert_eq!(config.submission_bottleneck.marker_poll_offsets, vec![96]);
         assert_eq!(
             config.submission_bottleneck.traffic_windows,
             vec![1, 8, 32, 64, 96, 112, 120, 124, 128, 160, 256]
@@ -752,6 +762,7 @@ mod tests {
             .marker_bursts("64,160".to_string())
             .marker_positions("first,last".to_string())
             .marker_poll_cadences("4,never".to_string())
+            .marker_poll_offsets("96,112".to_string())
             .traffic_windows("1,128".to_string())
             .traffic_classes("submit-only,memmove64".to_string())
             .completion_reuse_policies("packed-scan,batch-harvest".to_string())
@@ -784,6 +795,10 @@ mod tests {
         assert_eq!(
             config.submission_bottleneck.marker_poll_cadences,
             vec![MarkerPollCadence::Every(4), MarkerPollCadence::Never]
+        );
+        assert_eq!(
+            config.submission_bottleneck.marker_poll_offsets,
+            vec![96, 112]
         );
         assert_eq!(config.submission_bottleneck.traffic_windows, vec![1, 128]);
         assert_eq!(
@@ -918,6 +933,9 @@ mod tests {
                 MarkerPosition::Last
             ]
         );
+        assert_eq!(MarkerPosition::First.to_index(160), 0);
+        assert_eq!(MarkerPosition::Half.to_index(160), 80);
+        assert_eq!(MarkerPosition::Last.to_index(160), 159);
         assert_eq!(
             parse_marker_poll_cadences("1, 16, never").unwrap(),
             vec![
@@ -927,6 +945,10 @@ mod tests {
             ]
         );
         assert_eq!(parse_traffic_windows("1,128").unwrap(), vec![1, 128]);
+        assert_eq!(
+            parse_marker_poll_offsets("0,96,112").unwrap(),
+            vec![0, 96, 112]
+        );
         assert_eq!(
             parse_traffic_classes("submit-only,memmove4k").unwrap(),
             vec![TrafficClass::SubmitOnly, TrafficClass::Memmove4k]
@@ -1034,6 +1056,10 @@ mod tests {
     fn remaining_bottleneck_experiment_benchmarks_are_dsa_only() {
         for (benchmark, name) in [
             (BenchmarkKind::SubmitMarkerOverlap, "submit-marker-overlap"),
+            (
+                BenchmarkKind::SubmitMarkerMechanism,
+                "submit-marker-mechanism",
+            ),
             (BenchmarkKind::TrafficClassLadder, "traffic-class-ladder"),
             (
                 BenchmarkKind::CompletionReusePolicy,

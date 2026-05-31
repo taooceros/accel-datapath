@@ -153,81 +153,34 @@
     )
   ]
 
-  #v(0.45em)
+  #v(0.35em)
 
   #grid(
-    columns: (1fr, 1fr, 1fr),
-    gutter: 10pt,
-    [
-      #soft-box(fill: c-green, stroke: rgb("#16a34a"), inset: (x: 11pt, y: 7pt))[
-        #text(weight: "bold", fill: rgb("#15803d"))[cheap regime]
-        #v(0.12em)
-        `K ≤ 114`
-        #v(0.05em)
-        #text(size: 10pt)[24--32 TSC ticks]
-      ]
-    ],
-    [
-      #soft-box(fill: c-orange, stroke: rgb("#ea580c"), inset: (x: 11pt, y: 7pt))[
-        #text(weight: "bold", fill: rgb("#c2410c"))[transition]
-        #v(0.12em)
-        `K = 115`
-        #v(0.05em)
-        #text(size: 10pt)[NOOP 86; 64B 194 ticks]
-      ]
-    ],
-    [
-      #soft-box(fill: c-red, stroke: rgb("#dc2626"), inset: (x: 11pt, y: 7pt))[
-        #text(weight: "bold", fill: rgb("#b91c1c"))[backpressured plateau]
-        #v(0.12em)
-        `K ≥ 116`
-        #v(0.05em)
-        #text(size: 10pt)[~101 ns extra-submit]
-      ]
-    ],
-  )
-
-  #v(0.55em)
-
-  #grid(
-    columns: (0.57fr, 0.43fr),
+    columns: (0.62fr, 0.38fr),
     gutter: 16pt,
     [
-      #section-label[Evidence rows]
-      #v(0.2em)
-      #compact-table(
-        columns: (0.23fr, 0.13fr, 0.18fr, 0.21fr, 0.25fr),
-        table.header([op], [`K`], [submitted], [extra TSC], [status]),
-        [`NOOP`],
-        [`114`],
-        [`115`],
-        [`32`],
-        [`ok`],
-        [`NOOP`],
-        [`115`],
-        [`116`],
-        [`86`],
-        [`ok`],
-        [`NOOP`],
-        [`116`],
-        [`117`],
-        [`226`],
-        [`ok`],
-        [`64B`],
-        [`114`],
-        [`115`],
-        [`24`],
-        [`ok`],
-        [`64B`],
-        [`115`],
-        [`116`],
-        [`194`],
-        [`ok`],
-        [`64B`],
-        [`116`],
-        [`117`],
-        [`224`],
-        [`ok`],
+      #lq-diagram(
+        title: [Extra-submit latency vs occupancy],
+        xlabel: [`K` prefill],
+        ylabel: [median TSC],
+        xlim: (112, 124),
+        ylim: (0, 250),
+        xaxis: (ticks: (112, 114, 116, 118, 120, 122, 124), subticks: none),
+        yaxis: (ticks: (0, 50, 100, 150, 200, 250), subticks: none),
+        lq-plot(
+          (112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124),
+          (24, 24, 32, 86, 226, 224, 224, 224, 224, 224, 224, 224, 224),
+          stroke: 1.5pt + c-accent,
+          mark: "o",
+          label: [NOOP],
+        ),
+        lq-plot(
+          (112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124),
+          (32, 28, 24, 194, 224, 224, 224, 224, 224, 222, 222, 226, 228),
+          stroke: 1.5pt + rgb("#16a34a"),
+          mark: "s",
+          label: [64B],
+        ),
       )
     ],
     [
@@ -235,22 +188,20 @@
       #v(0.25em)
       #metric-pill(color: rgb("#dc2626"))[one-submit vs K bends early]
       #v(0.35em)
-      #soft-box(fill: white, stroke: c-title, inset: (x: 12pt, y: 8pt))[
-        64B follows NOOP → first bend is admission / credits, not payload DMA.
-      ]
-      #v(0.35em)
       #soft-box(fill: c-green, stroke: rgb("#16a34a"), inset: (x: 12pt, y: 7pt))[
-        completed == submitted; missing = 0; errors = 0
+        Cheap through `K≤114`: `24--32` TSC ticks.
+      ]
+      #v(0.3em)
+      #soft-box(fill: c-orange, stroke: rgb("#ea580c"), inset: (x: 12pt, y: 7pt))[
+        Transition at `K=115`: NOOP `86`, 64B `194` ticks.
+      ]
+      #v(0.3em)
+      #soft-box(fill: c-red, stroke: rgb("#dc2626"), inset: (x: 12pt, y: 7pt))[
+        Plateau begins at `K=116`; 64B follows NOOP, so payload is not the first bend.
       ]
     ],
   )
 
-  #v(0.35em)
-
-  #callout(fill: c-blue, stroke: c-accent, inset: (x: 14pt, y: 7pt))[
-    Next: marker overlap asks whether completions are visible during the submit tail.
-  ]
-
-  #v(0.2em)
+  #v(0.25em)
   #source-line[Source: docs/report/benchmarking/019.submit_occupancy_one_extra_2026-05-26.md]
 ]

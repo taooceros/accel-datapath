@@ -128,3 +128,80 @@
     ],
   )
 ]
+
+#let result() = [
+  = Experiment 4 result: reuse policy is not the first bend
+
+  #callout(fill: c-orange, stroke: rgb("#ea580c"), inset: (x: 16pt, y: 9pt))[
+    #grid(
+      columns: (0.34fr, 0.33fr, 0.33fr),
+      gutter: 12pt,
+      [
+        #text(size: 10pt, weight: "bold", fill: rgb("#c2410c"))[NOOP best]
+        #v(0.1em)
+        #text(size: 21pt, weight: "bold", fill: c-title)[8.51 Mops/s]
+      ],
+      [
+        #text(size: 10pt, weight: "bold", fill: rgb("#c2410c"))[memmove64 best]
+        #v(0.1em)
+        #text(size: 21pt, weight: "bold", fill: c-title)[8.53 Mops/s]
+      ],
+      [
+        #text(size: 10pt, weight: "bold", fill: rgb("#c2410c"))[correctness]
+        #v(0.1em)
+        #text(size: 21pt, weight: "bold", fill: c-title)[0 missing]
+      ],
+    )
+  ]
+
+  #v(0.35em)
+
+  #grid(
+    columns: (0.62fr, 0.38fr),
+    gutter: 16pt,
+    [
+      #lq-diagram(
+        title: [Sustained throughput by reuse policy],
+        xlabel: [policy],
+        ylabel: [Mops/s],
+        xlim: (-0.7, 4.7),
+        ylim: (0, 9.5),
+        xaxis: (
+          ticks: (0, 1, 2, 3, 4).zip(([pack], [pad], [poll], [delay], [batch])),
+          subticks: none,
+        ),
+        yaxis: (ticks: (0, 3, 6, 9), subticks: none),
+        lq-bar(
+          range(5),
+          (8.38, 8.51, 7.00, 7.47, 8.38),
+          offset: -0.18,
+          width: 0.34,
+          label: [NOOP],
+        ),
+        lq-bar(
+          range(5),
+          (8.47, 5.19, 7.33, 7.59, 8.53),
+          offset: 0.18,
+          width: 0.34,
+          label: [64B],
+        ),
+      )
+    ],
+    [
+      #section-label[Attribution]
+      #v(0.25em)
+      #metric-pill(color: rgb("#ea580c"))[policy moves throughput, not the admission knee]
+      #v(0.35em)
+      #soft-box(fill: white, stroke: c-title, inset: (x: 12pt, y: 8pt))[
+        Packed scan, padded round-robin, and batch harvest stay in the same rough band for NOOP.
+      ]
+      #v(0.3em)
+      #soft-box(fill: c-green, stroke: rgb("#16a34a"), inset: (x: 12pt, y: 7pt))[
+        Every policy completed `1,000,000` operations with missing = 0 and errors = 0.
+      ]
+    ],
+  )
+
+  #v(0.25em)
+  #source-line[Source: docs/report/benchmarking/020.submission_bottleneck_experiments_2026-05-27.md, Experiment 4.]
+]

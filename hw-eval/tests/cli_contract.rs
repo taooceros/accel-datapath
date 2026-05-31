@@ -358,6 +358,19 @@ fn remaining_bottleneck_selectors_reach_hardware_open_with_structured_error() {
                 "never",
                 "--dsa-op",
                 "noop",
+                "--marker-poll-offsets",
+                "96",
+            ][..],
+        ),
+        (
+            "submit-marker-mechanism",
+            &[
+                "--marker-bursts",
+                "64",
+                "--marker-poll-offsets",
+                "1",
+                "--dsa-op",
+                "noop",
             ][..],
         ),
         (
@@ -423,6 +436,7 @@ fn submit_occupancy_rejects_iax_before_opening_hardware() {
 fn remaining_bottleneck_selectors_reject_iax_before_opening_hardware() {
     for benchmark in [
         "submit-marker-overlap",
+        "submit-marker-mechanism",
         "traffic-class-ladder",
         "completion-reuse-policy",
     ] {

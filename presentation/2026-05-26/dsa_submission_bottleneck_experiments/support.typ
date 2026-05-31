@@ -3,6 +3,7 @@
 #import "../../template.typ": callout, deck, palette
 #import "@preview/chronos:0.3.0" as chronos
 #import "@preview/zebraw:0.6.3": *
+#import "@preview/lilaq:0.6.0" as lq
 
 #let c-title = palette.title
 #let c-accent = palette.accent
@@ -62,3 +63,16 @@
 #let seqbox(body) = scale(x: 74%, y: 74%)[#body]
 
 #let code-note(body) = text(size: 8.6pt, fill: luma(90))[#body]
+
+#let lq-diagram(..args) = lq.diagram(
+  width: 7.4cm,
+  height: 4.0cm,
+  margin: 6%,
+  legend: (position: left + top),
+  xaxis: (subticks: none),
+  yaxis: (subticks: none),
+  ..args,
+)
+
+#let lq-plot = lq.plot
+#let lq-bar = lq.bar

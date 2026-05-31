@@ -99,6 +99,7 @@ fn build_report(
         admission: submission_bottleneck_results.admission,
         submit_occupancy: submission_bottleneck_results.submit_occupancy,
         submit_marker_overlap: submission_bottleneck_results.submit_marker_overlap,
+        submit_marker_mechanism: submission_bottleneck_results.submit_marker_mechanism,
         traffic_class_ladder: submission_bottleneck_results.traffic_class_ladder,
         completion_reuse_policy: submission_bottleneck_results.completion_reuse_policy,
     }

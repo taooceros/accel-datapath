@@ -1,0 +1,22 @@
+Running: /home/hongtao/accel-datapath/async-binding-intel-idxd/tools/build/dsa_launcher perf record -F 9999 --call-graph fp -o docs/report/benchmarking/submission_bottleneck_2026-05-27/perf_experiment2_next_unfinished.data -- ./target/release/hw-eval --accel dsa --benchmark submit-marker-overlap --device /dev/dsa/wq0.0 --iterations 5000 --marker-bursts 160 --marker-positions first --marker-poll-offsets 0 --dsa-op noop --pin-core 0
+Pinned to core 0
+hw-eval: Raw DSA Hardware Performance Evaluation
+================================================
+TSC frequency: 2.204 GHz
+Accelerator: dsa
+Sizes: [64, 256, 1024, 4096, 16384, 65536, 262144, 1048576]
+Iterations: 5000
+Marker bursts: [160]
+Marker positions: [First]
+Marker poll cadences: [Every(1), Every(4), Every(16), Every(64), Never]
+DSA operation: noop
+Submit threads: 1
+CPU NUMA node: 0
+
+Opened WQ: /dev/dsa/wq0.0 (dedicated)
+
+=== submit_marker_overlap traced (noop) ===
+       n   marker   offset       points      submit_ns      marker_ns  completed
+     160        0        0          160          73278            923        160
+
+Done.

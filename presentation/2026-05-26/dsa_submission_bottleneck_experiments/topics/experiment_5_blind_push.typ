@@ -124,3 +124,77 @@
     ],
   )
 ]
+
+#let result() = [
+  = Experiment 5 result: blind push did not lose descriptors
+
+  #callout(fill: c-green, stroke: rgb("#16a34a"), inset: (x: 16pt, y: 9pt))[
+    #grid(
+      columns: (0.34fr, 0.33fr, 0.33fr),
+      gutter: 12pt,
+      [
+        #text(size: 10pt, weight: "bold", fill: rgb("#15803d"))[max burst]
+        #v(0.1em)
+        #text(size: 21pt, weight: "bold", fill: c-title)[1024]
+      ],
+      [
+        #text(size: 10pt, weight: "bold", fill: rgb("#15803d"))[completed]
+        #v(0.1em)
+        #text(size: 21pt, weight: "bold", fill: c-title)[all]
+      ],
+      [
+        #text(size: 10pt, weight: "bold", fill: rgb("#15803d"))[missing/errors]
+        #v(0.1em)
+        #text(size: 21pt, weight: "bold", fill: c-title)[0 / 0]
+      ],
+    )
+  ]
+
+  #v(0.35em)
+
+  #grid(
+    columns: (0.62fr, 0.38fr),
+    gutter: 16pt,
+    [
+      #lq-diagram(
+        title: [Completed descriptors vs pushed descriptors],
+        xlabel: [pushed burst],
+        ylabel: [completed descriptors],
+        xlim: (0, 1050),
+        ylim: (0, 1050),
+        xaxis: (ticks: (0, 256, 512, 768, 1024), subticks: none),
+        yaxis: (ticks: (0, 256, 512, 768, 1024), subticks: none),
+        lq-plot(
+          (0, 1024),
+          (0, 1024),
+          stroke: 1.1pt + rgb("#dc2626"),
+          mark: none,
+          label: [ideal],
+        ),
+        lq-plot(
+          (64, 128, 256, 512, 1024),
+          (64, 128, 256, 512, 1024),
+          stroke: 1.5pt + rgb("#16a34a"),
+          mark: "o",
+          label: [observed],
+        ),
+      )
+    ],
+    [
+      #section-label[What it rules out]
+      #v(0.25em)
+      #metric-pill(color: rgb("#16a34a"))[request disappearance is not the measured failure mode]
+      #v(0.35em)
+      #soft-box(fill: white, stroke: c-title, inset: (x: 12pt, y: 8pt))[
+        Over-depth submission still completes every distinct descriptor in this run.
+      ]
+      #v(0.3em)
+      #soft-box(fill: c-red, stroke: rgb("#dc2626"), inset: (x: 12pt, y: 7pt))[
+        Submit TSC still grows: `418` at burst 64, `217986` at burst 1024.
+      ]
+    ],
+  )
+
+  #v(0.25em)
+  #source-line[Source: docs/report/benchmarking/020.submission_bottleneck_experiments_2026-05-27.md, admission probe / Experiment 5.]
+]

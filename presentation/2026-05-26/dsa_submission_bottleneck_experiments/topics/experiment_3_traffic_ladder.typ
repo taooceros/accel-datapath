@@ -126,3 +126,97 @@
     ],
   )
 ]
+
+#let result() = [
+  = Experiment 3 result: payload does not move the knee
+
+  #callout(fill: c-blue, stroke: c-accent, inset: (x: 16pt, y: 9pt))[
+    #grid(
+      columns: (0.33fr, 0.34fr, 0.33fr),
+      gutter: 12pt,
+      [
+        #text(size: 10pt, weight: "bold", fill: c-accent)[first jump]
+        #v(0.1em)
+        #text(size: 21pt, weight: "bold", fill: c-title)[window 120]
+      ],
+      [
+        #text(size: 10pt, weight: "bold", fill: c-accent)[large by]
+        #v(0.1em)
+        #text(size: 21pt, weight: "bold", fill: c-title)[window 128]
+      ],
+      [
+        #text(size: 10pt, weight: "bold", fill: c-accent)[64B vs NOOP]
+        #v(0.1em)
+        #text(size: 21pt, weight: "bold", fill: c-title)[same knee]
+      ],
+    )
+  ]
+
+  #v(0.35em)
+
+  #grid(
+    columns: (0.62fr, 0.38fr),
+    gutter: 16pt,
+    [
+      #lq-diagram(
+        title: [Submit phase by traffic class],
+        xlabel: [window sweep],
+        ylabel: [median submit TSC],
+        yscale: "log",
+        xlim: (0, 10),
+        ylim: (20, 40000),
+        xaxis: (
+          ticks: (0, 2, 4, 6, 8, 10).zip(([1], [32], [96], [120], [128], [256])),
+          subticks: none,
+        ),
+        yaxis: (ticks: (30, 100, 1000, 10000), subticks: none),
+        lq-plot(
+          range(11),
+          (26, 36, 172, 342, 514, 614, 1532, 2486, 3418, 10974, 33644),
+          stroke: 1.4pt + c-accent,
+          mark: "o",
+          label: [submit-only],
+        ),
+        lq-plot(
+          range(11),
+          (26, 38, 184, 374, 534, 662, 1532, 2472, 3418, 10958, 34138),
+          stroke: 1.4pt + rgb("#16a34a"),
+          mark: "s",
+          label: [NOOP+done],
+        ),
+        lq-plot(
+          range(11),
+          (32, 46, 226, 440, 668, 782, 1568, 2508, 3436, 10978, 33654),
+          stroke: 1.4pt + rgb("#ea580c"),
+          mark: "^",
+          label: [64B],
+        ),
+        lq-plot(
+          range(11),
+          (30, 42, 184, 358, 644, 670, 1528, 2456, 3400, 10914, 33416),
+          stroke: 1.4pt + rgb("#dc2626"),
+          mark: "x",
+          label: [4KiB],
+        ),
+      )
+    ],
+    [
+      #section-label[Throughput readout]
+      #v(0.25em)
+      #soft-box(fill: c-green, stroke: rgb("#16a34a"), inset: (x: 12pt, y: 7pt))[
+        NOOP+completion holds around `9.1 Mops/s` at high windows.
+      ]
+      #v(0.3em)
+      #soft-box(fill: c-green, stroke: rgb("#16a34a"), inset: (x: 12pt, y: 7pt))[
+        64B memmove is close to NOOP at high window: `9.08 Mops/s` at 256.
+      ]
+      #v(0.3em)
+      #soft-box(fill: c-orange, stroke: rgb("#ea580c"), inset: (x: 12pt, y: 7pt))[
+        4KiB lowers throughput to `6.44 Mops/s`, but the submit knee stays put.
+      ]
+    ],
+  )
+
+  #v(0.25em)
+  #source-line[Source: docs/report/benchmarking/020.submission_bottleneck_experiments_2026-05-27.md, Experiment 3.]
+]
