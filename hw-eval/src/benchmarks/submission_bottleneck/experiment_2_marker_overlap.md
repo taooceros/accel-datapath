@@ -1,10 +1,10 @@
-# Experiment 2: marker overlap
+# Experiment 2: marker overlap suite
 
 ## Selector and module
 
-- CLI selector: `submit-marker-overlap`
-- Result row: `submit_marker_overlap`
-- Implementation: `experiment_2_marker_overlap.rs`
+- Default CLI selector: `submit-marker-overlap`
+- Result rows: `submit_marker_overlap` and `submit_marker_mechanism`
+- Module facade: `experiment_2_marker_overlap.rs`; private implementations: `experiment_2_marker_overlap/overlap.rs` and `experiment_2_marker_overlap/mechanism_probes.rs`
 
 ## Question
 
@@ -28,7 +28,7 @@ The benchmark submits `N` logical operations one per MMIO. After `poll_offset`, 
 - `--dsa-op <noop|memmove64|memmove4k>`: logical operation class.
 - `--iterations <N>`: repeated samples per configuration.
 
-Latest focused command:
+Latest focused default-suite command:
 
 ```text
 launch ./target/release/hw-eval \
@@ -44,8 +44,11 @@ launch ./target/release/hw-eval \
   --pin-core 0
 ```
 
+This default Experiment 2 command emits both the baseline overlap trace and all mechanism-probe rows for the configured burst and poll-offset values. Use `submit-marker-mechanism` only when rerunning the mechanism probes without the baseline overlap rows.
+
 ## Current artifacts
 
+- All-variant default-suite report: `docs/report/benchmarking/038.experiment2_all_variant_traces_2026-05-31.md`
 - No-`black_box` JSON: `docs/report/benchmarking/submission_bottleneck_2026-05-31/marker_trace_no_black_box_offset1_noop.json`
 - Nanosecond latency-order plot: `docs/report/benchmarking/submission_bottleneck_2026-05-31/submit_poll_trace_no_black_box_offset1_noop_latency_order_ns.png`
 - Interpretation report: `docs/report/benchmarking/033.experiment2_latency_ns_interpretation_2026-05-31.md`
@@ -104,9 +107,9 @@ A page-alignment issue is possible but does not explain the dominant pattern. Si
 
 ## Mechanism-probe implementation
 
-The follow-up checks are implemented as the `mechanism_probes` submodule of Experiment 2 (`experiment_2_marker_overlap/mechanism_probes.rs`) and documented in `experiment_2_marker_overlap/mechanism_probes.md`.
+The follow-up checks are implemented in the private `mechanism_probes` child module of Experiment 2 (`experiment_2_marker_overlap/mechanism_probes.rs`) and exported through the outer `experiment_2_marker_overlap.rs` facade. They run as part of the default `submit-marker-overlap` suite.
 
-Use:
+For a mechanism-only rerun, use:
 
 ```text
 launch ./target/release/hw-eval \

@@ -8,11 +8,11 @@ Primary design report: `docs/report/benchmarking/034.experiment2_mechanism_probe
 
 ## Selector and result row
 
-- CLI selector: `submit-marker-mechanism`
+- Mechanism-only CLI selector: `submit-marker-mechanism`
 - Result row: `submit_marker_mechanism`
-- Implementation: `experiment_2_marker_overlap::mechanism_probes` (`experiment_2_marker_overlap/mechanism_probes.rs`)
+- Implementation: private child module `experiment_2_marker_overlap::mechanism_probes` (`experiment_2_marker_overlap/mechanism_probes.rs`), exported through the outer Experiment 2 facade
 
-The existing `submit-marker-overlap` selector remains the baseline trace producer and keeps its JSON contract unchanged.
+The default Experiment 2 selector, `submit-marker-overlap`, also runs these mechanism rows after the baseline overlap rows. Use `submit-marker-mechanism` only for mechanism-only reruns.
 
 ## Sub-experiment matrix
 
@@ -35,4 +35,4 @@ For packed 32-byte completion storage, line position is computed from the actual
 - Batch size remains one logical operation per MMIO submission.
 - `n` remains the number of logical descriptors submitted in the burst.
 - The poll loop still follows the Experiment 2 next-unfinished frontier model.
-- Existing `submit_marker_overlap` output is not modified by this module.
+- Existing `submit_marker_overlap` row shape is not modified by this module; the default suite appends `submit_marker_mechanism` rows as a separate result family.

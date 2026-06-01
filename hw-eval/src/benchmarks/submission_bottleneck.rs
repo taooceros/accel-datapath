@@ -12,7 +12,7 @@ use crate::report::SubmissionBottleneckResults;
 
 use experiment_1_submit_occupancy::bench_submit_occupancy_one_extra;
 use experiment_2_marker_overlap::{
-    bench_submit_marker_overlap, mechanism_probes::bench_submit_marker_mechanism_probes,
+    bench_submit_marker_mechanism_probes, bench_submit_marker_overlap,
 };
 use experiment_3_traffic_ladder::bench_traffic_class_ladder;
 use experiment_4_completion_reuse::bench_completion_reuse_policy;
@@ -67,6 +67,16 @@ pub(crate) fn run(
                 request.tsc_freq,
                 request.json,
                 &mut results.submit_marker_overlap,
+            );
+            bench_submit_marker_mechanism_probes(
+                request.wq,
+                &request.config.marker_bursts,
+                &request.config.marker_poll_offsets,
+                request.config.dsa_operation,
+                request.iterations,
+                request.tsc_freq,
+                request.json,
+                &mut results.submit_marker_mechanism,
             );
             true
         }
