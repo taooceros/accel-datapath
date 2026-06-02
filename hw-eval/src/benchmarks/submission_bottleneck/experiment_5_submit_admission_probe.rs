@@ -17,9 +17,11 @@ use hw_eval::dsa::{
     completion_flags_no_cache_control, poll_completion, reset_completion, DsaCompletionRecord,
     DsaCompletionStatus, DsaHwDesc, DSA_COMP_NONE, DSA_COMP_SUCCESS,
 };
-use hw_eval::submit::{cycles_to_ns, lfence, rdtscp, WqPortal};
+use hw_eval::submit::{cycles_to_ns, lfence, WqPortal};
 
 use crate::report::{stats_from_values, AdmissionResult};
+
+use super::common::measured_call;
 
 const ADMISSION_COMPLETION_TIMEOUT_NS: u128 = 50_000;
 
@@ -64,11 +66,12 @@ pub(crate) fn bench_submit_admission_probe(
             }
 
             lfence();
-            let tsc_start = rdtscp().0;
-            for desc in &descs[..burst] {
-                unsafe { wq.submit(desc) };
-            }
-            let tsc_ticks = rdtscp().0 - tsc_start;
+            let submit = measured_call(|| {
+                for desc in &descs[..burst] {
+                    unsafe { wq.submit(desc) };
+                }
+            });
+            let tsc_ticks = submit.elapsed_tsc();
             let submit_tsc_ns = cycles_to_ns(tsc_ticks, tsc_freq);
 
             let bounded_outcome = count_admission_completions(&comps[..burst], &mut seen[..burst]);

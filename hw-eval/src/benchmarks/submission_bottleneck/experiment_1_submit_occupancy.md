@@ -18,7 +18,7 @@ WQ before measured submit:
      outstanding K              measured submit
 ```
 
-The benchmark pre-fills `K` completion-bearing logical operations, then times exactly one additional submit. Batch size is one logical operation per MMIO submission.
+The benchmark pre-fills `K` completion-bearing logical operations, then times exactly one additional submit. Batch size is one logical operation per MMIO submission. It also runs a separate prefill-only completion probe after the normal measured iteration so the primary occupancy signal is not changed.
 
 ## Main controls
 
@@ -42,9 +42,14 @@ launch ./target/release/hw-eval \
 
 ## Measured signal
 
-For each occupancy, the benchmark records the latency of the one measured submit and completion accounting after the burst drains.
+For each occupancy, the benchmark records:
 
-The primary signal is the submit-latency curve as `K` approaches and exceeds the practical admission/backpressure point.
+- the latency of the measured submit trace;
+- per-iteration prefill submit-loop time for the companion prefill-only probe;
+- per-iteration elapsed time from the first prefill submit until all `K` prefill completions are observed;
+- completion accounting after the burst drains.
+
+The primary signal is the submit-latency curve as `K` approaches and exceeds the practical admission/backpressure point. The prefill completion trace is the companion signal for whether `K` requests can complete on a timescale comparable to the prefill submission loop. A small `post_submit_completion_*` value means the hardware was already close to, or at, completion by the time software finished submitting the prefill.
 
 ## Notes
 

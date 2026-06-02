@@ -248,6 +248,49 @@ mod tests {
         assert!(core.tsc_ticks.is_none());
         assert!(core.wall_ns.is_none());
     }
+
+    #[test]
+    fn submit_occupancy_serializes_prefill_completion_trace() {
+        let result = SubmitOccupancyResult {
+            benchmark: "submit_occupancy_trace".to_string(),
+            operation_class: "noop".to_string(),
+            k_prefill: 4,
+            submitted: 5,
+            trace_until: 5,
+            prefill_completion_trace: vec![SubmitOccupancyPrefillCompletionTracePoint {
+                iteration_index: 0,
+                prefill_submit_tsc_ticks: 100,
+                prefill_submit_ns: 36,
+                prefill_completion_tsc_ticks: 123,
+                prefill_completion_ns: 45,
+                post_submit_completion_tsc_ticks: 23,
+                post_submit_completion_ns: 9,
+                completed: 4,
+                missing: 0,
+                errors: 0,
+            }],
+            extra_submit_trace: Vec::new(),
+            trace_outcomes: Vec::new(),
+        };
+
+        let json = serde_json::to_value(result).expect("submit occupancy result serializes");
+        let prefill_trace = json["prefill_completion_trace"]
+            .as_array()
+            .expect("prefill completion trace is an array");
+        assert_eq!(prefill_trace.len(), 1);
+        assert_eq!(
+            prefill_trace[0]["prefill_submit_tsc_ticks"],
+            serde_json::Value::from(100)
+        );
+        assert_eq!(
+            prefill_trace[0]["prefill_completion_tsc_ticks"],
+            serde_json::Value::from(123)
+        );
+        assert_eq!(
+            prefill_trace[0]["post_submit_completion_tsc_ticks"],
+            serde_json::Value::from(23)
+        );
+    }
 }
 
 #[derive(Serialize)]
@@ -270,9 +313,25 @@ pub(crate) struct SubmitOccupancyResult {
     pub(crate) submitted: usize,
     pub(crate) trace_until: usize,
     #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) prefill_completion_trace: Vec<SubmitOccupancyPrefillCompletionTracePoint>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) extra_submit_trace: Vec<SubmitOccupancyExtraTracePoint>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) trace_outcomes: Vec<SubmitOccupancyTraceOutcome>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct SubmitOccupancyPrefillCompletionTracePoint {
+    pub(crate) iteration_index: usize,
+    pub(crate) prefill_submit_tsc_ticks: u64,
+    pub(crate) prefill_submit_ns: u64,
+    pub(crate) prefill_completion_tsc_ticks: u64,
+    pub(crate) prefill_completion_ns: u64,
+    pub(crate) post_submit_completion_tsc_ticks: u64,
+    pub(crate) post_submit_completion_ns: u64,
+    pub(crate) completed: usize,
+    pub(crate) missing: usize,
+    pub(crate) errors: usize,
 }
 
 #[derive(Serialize)]

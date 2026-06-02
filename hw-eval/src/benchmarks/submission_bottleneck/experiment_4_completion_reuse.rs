@@ -19,13 +19,13 @@ use hw_eval::dsa::{
     completion_flags_no_cache_control, reset_completion, DsaCompletionRecord, DsaCompletionStatus,
     DsaHwDesc, DSA_COMP_NONE, DSA_COMP_SUCCESS,
 };
-use hw_eval::submit::{cycles_to_ns, rdtscp, WqPortal};
+use hw_eval::submit::{cycles_to_ns, WqPortal};
 
 use crate::config::{CompletionReusePolicy, DsaOperationClass};
 use crate::report::{stats_from_values, CompletionReusePolicyResult};
 
 use super::common::{
-    dsa_operation_payload_size, ops_per_second, optional_stats, TIMEOUT_CHECK_STRIDE,
+    dsa_operation_payload_size, measured_call, ops_per_second, optional_stats, TIMEOUT_CHECK_STRIDE,
 };
 
 const COMPLETION_REUSE_POLICY_BENCHMARK: &str = "completion_reuse_policy";
@@ -205,42 +205,43 @@ fn run_completion_reuse_sample(
     }
 
     let mut acc = CompletionReuseAccumulator::new(target, tsc_freq);
-    let start = rdtscp().0;
-    let timeout_start = Instant::now();
 
-    match policy {
-        CompletionReusePolicy::PollOnly => {
-            run_poll_only_policy(wq, slots, target, timeout_start, &mut acc);
+    let policy_run = measured_call(|| {
+        let timeout_start = Instant::now();
+        match policy {
+            CompletionReusePolicy::PollOnly => {
+                run_poll_only_policy(wq, slots, target, timeout_start, &mut acc);
+            }
+            CompletionReusePolicy::PaddedRoundRobin => {
+                run_padded_round_robin_policy(wq, slots, target, timeout_start, &mut acc);
+            }
+            CompletionReusePolicy::PackedScan => {
+                run_packed_scan_policy(wq, slots, target, timeout_start, &mut acc);
+            }
+            CompletionReusePolicy::DelayedReset => {
+                run_delayed_reset_or_batch_harvest_policy(
+                    wq,
+                    slots,
+                    target,
+                    timeout_start,
+                    window,
+                    &mut acc,
+                );
+            }
+            CompletionReusePolicy::BatchHarvest => {
+                run_delayed_reset_or_batch_harvest_policy(
+                    wq,
+                    slots,
+                    target,
+                    timeout_start,
+                    16.min(window),
+                    &mut acc,
+                );
+            }
         }
-        CompletionReusePolicy::PaddedRoundRobin => {
-            run_padded_round_robin_policy(wq, slots, target, timeout_start, &mut acc);
-        }
-        CompletionReusePolicy::PackedScan => {
-            run_packed_scan_policy(wq, slots, target, timeout_start, &mut acc);
-        }
-        CompletionReusePolicy::DelayedReset => {
-            run_delayed_reset_or_batch_harvest_policy(
-                wq,
-                slots,
-                target,
-                timeout_start,
-                window,
-                &mut acc,
-            );
-        }
-        CompletionReusePolicy::BatchHarvest => {
-            run_delayed_reset_or_batch_harvest_policy(
-                wq,
-                slots,
-                target,
-                timeout_start,
-                16.min(window),
-                &mut acc,
-            );
-        }
-    }
+    });
 
-    let elapsed = rdtscp().0 - start;
+    let elapsed = policy_run.elapsed_tsc();
     let ops_per_sec = ops_per_second(acc.completed, elapsed, tsc_freq) as f64;
     let polls_per_completion = acc.polls_per_completion();
 
@@ -330,13 +331,12 @@ fn poll_completion_slot(
     acc: &mut CompletionReuseAccumulator,
 ) -> Option<u8> {
     acc.polls += 1;
-    let t0 = rdtscp().0;
-    let status = slots.status(slot);
-    if status == DSA_COMP_NONE {
+    let status = measured_call(|| slots.status(slot));
+    if status.value == DSA_COMP_NONE {
         None
     } else {
-        acc.record_harvest(status, rdtscp().0 - t0);
-        Some(status)
+        acc.record_harvest(status.value, status.elapsed_tsc());
+        Some(status.value)
     }
 }
 
@@ -346,10 +346,11 @@ fn reset_and_submit_slot(
     slot: usize,
     acc: &mut CompletionReuseAccumulator,
 ) {
-    let reset_t0 = rdtscp().0;
-    slots.reset(slot);
-    unsafe { wq.submit(&slots.descriptors[slot]) };
-    acc.record_reset_to_submit(rdtscp().0 - reset_t0);
+    let reset = measured_call(|| {
+        slots.reset(slot);
+        unsafe { wq.submit(&slots.descriptors[slot]) };
+    });
+    acc.record_reset_to_submit(reset.elapsed_tsc());
 }
 
 fn reset_and_submit_ready_slots(
@@ -358,14 +359,15 @@ fn reset_and_submit_ready_slots(
     ready: &[usize],
     acc: &mut CompletionReuseAccumulator,
 ) {
-    let reset_t0 = rdtscp().0;
-    for &slot in ready {
-        slots.reset(slot);
-    }
-    for &slot in ready {
-        unsafe { wq.submit(&slots.descriptors[slot]) };
-    }
-    let reset_ticks_per_completion = (rdtscp().0 - reset_t0) / ready.len() as u64;
+    let reset = measured_call(|| {
+        for &slot in ready {
+            slots.reset(slot);
+        }
+        for &slot in ready {
+            unsafe { wq.submit(&slots.descriptors[slot]) };
+        }
+    });
+    let reset_ticks_per_completion = reset.elapsed_tsc() / ready.len() as u64;
     acc.record_reset_to_submit(reset_ticks_per_completion);
 }
 

@@ -17,15 +17,17 @@ use hw_eval::dsa::{
     completion_flags_no_cache_control, poll_completion, reset_completion, DsaCompletionRecord,
     DsaHwDesc, DSA_COMP_SUCCESS,
 };
-use hw_eval::submit::{cycles_to_ns, rdtscp, WqPortal};
+use hw_eval::submit::{cycles_to_ns, WqPortal};
 
 use crate::config::DsaOperationClass;
 use crate::report::{
-    SubmitOccupancyExtraTracePoint, SubmitOccupancyResult, SubmitOccupancyTraceOutcome,
+    SubmitOccupancyExtraTracePoint, SubmitOccupancyPrefillCompletionTracePoint,
+    SubmitOccupancyResult, SubmitOccupancyTraceOutcome,
 };
 
 use super::common::{
-    count_visible_completions, reset_sample_completions, scan_visible_completions, OperationSlots,
+    count_visible_completions, measured_call, reset_sample_completions, scan_visible_completions,
+    OperationSlots,
 };
 
 const SUBMIT_OCCUPANCY_BENCHMARK: &str = "submit_occupancy_trace";
@@ -49,10 +51,10 @@ pub(crate) fn bench_submit_occupancy_one_extra(
         return;
     };
 
+    let operation_class = operation.operation_class_label(payload_size);
     let mut slots = OperationSlots::new_with_payload(max_submitted, operation, payload_size);
     let mut seen = vec![false; max_submitted];
     let mut sentinel_comp = DsaCompletionRecord::default();
-    let operation_class = operation.operation_class_label(payload_size);
 
     if !json {
         print_trace_header(&operation_class);
@@ -60,45 +62,43 @@ pub(crate) fn bench_submit_occupancy_one_extra(
 
     for &k_prefill in occupancies {
         let submitted = submitted_count(k_prefill, trace_until);
-        let mut trace = Vec::with_capacity(iterations * (submitted - k_prefill));
-        let mut outcomes = Vec::with_capacity(iterations);
+        let mut prefill_completion_trace = Vec::with_capacity(iterations);
+        let mut extra_submit_trace = Vec::with_capacity(iterations * (submitted - k_prefill));
+        let mut trace_outcomes = Vec::with_capacity(iterations);
 
         for iteration_index in 0..iterations {
             reset_sample_completions(&mut slots.completions[..submitted]);
-
-            for desc in &slots.descriptors[..k_prefill] {
-                unsafe { wq.submit(desc) };
-            }
-
-            for submit_index in k_prefill..submitted {
-                let start_tsc = rdtscp().0;
-                unsafe { wq.submit(&slots.descriptors[submit_index]) };
-                let submit_tsc_ticks = rdtscp().0 - start_tsc;
-                trace.push(SubmitOccupancyExtraTracePoint {
-                    iteration_index,
-                    submit_index,
-                    submit_tsc_ticks,
-                    submit_ns: cycles_to_ns(submit_tsc_ticks, tsc_freq),
-                });
-            }
-
-            let bounded_outcome =
-                count_visible_completions(&slots.completions[..submitted], &mut seen[..submitted]);
-
-            drain_with_sentinel(wq, &mut sentinel_comp, operation, payload_size, k_prefill);
-
-            let outcome = if bounded_outcome.completed == submitted {
-                bounded_outcome
-            } else {
-                scan_visible_completions(&slots.completions[..submitted])
-            };
-
-            outcomes.push(SubmitOccupancyTraceOutcome {
+            submit_descriptors(wq, &slots.descriptors[..k_prefill]);
+            trace_measured_submits(
+                wq,
+                &slots.descriptors[k_prefill..submitted],
+                k_prefill,
                 iteration_index,
-                completed: outcome.completed,
-                missing: submitted - outcome.completed,
-                errors: outcome.errors,
-            });
+                tsc_freq,
+                &mut extra_submit_trace,
+            );
+
+            trace_outcomes.push(measure_trace_outcome(
+                wq,
+                &mut sentinel_comp,
+                &operation_class,
+                &slots.completions[..submitted],
+                &mut seen[..submitted],
+                k_prefill,
+                iteration_index,
+            ));
+
+            prefill_completion_trace.push(measure_prefill_completion_trace(
+                wq,
+                &slots.descriptors[..k_prefill],
+                &mut slots.completions[..k_prefill],
+                &mut seen[..k_prefill],
+                tsc_freq,
+                iteration_index,
+            ));
+            if k_prefill > 0 {
+                drain_with_sentinel(wq, &mut sentinel_comp, &operation_class, k_prefill);
+            }
         }
 
         let result = SubmitOccupancyResult {
@@ -107,8 +107,9 @@ pub(crate) fn bench_submit_occupancy_one_extra(
             k_prefill,
             submitted,
             trace_until: submitted,
-            extra_submit_trace: trace,
-            trace_outcomes: outcomes,
+            prefill_completion_trace,
+            extra_submit_trace,
+            trace_outcomes,
         };
 
         if !json {
@@ -122,11 +123,108 @@ fn submitted_count(k_prefill: usize, trace_until: Option<usize>) -> usize {
     trace_until.unwrap_or(k_prefill + 1).max(k_prefill + 1)
 }
 
+fn trace_measured_submits(
+    wq: &WqPortal,
+    descriptors: &[DsaHwDesc],
+    first_submit_index: usize,
+    iteration_index: usize,
+    tsc_freq: u64,
+    trace: &mut Vec<SubmitOccupancyExtraTracePoint>,
+) {
+    for (offset, desc) in descriptors.iter().enumerate() {
+        let submit = measured_call(|| unsafe { wq.submit(desc) });
+        trace.push(SubmitOccupancyExtraTracePoint {
+            iteration_index,
+            submit_index: first_submit_index + offset,
+            submit_tsc_ticks: submit.elapsed_tsc(),
+            submit_ns: cycles_to_ns(submit.elapsed_tsc(), tsc_freq),
+        });
+    }
+}
+
+fn measure_trace_outcome(
+    wq: &WqPortal,
+    sentinel_comp: &mut DsaCompletionRecord,
+    operation_class: &str,
+    completions: &[DsaCompletionRecord],
+    seen: &mut [bool],
+    k_prefill: usize,
+    iteration_index: usize,
+) -> SubmitOccupancyTraceOutcome {
+    let bounded_outcome = count_visible_completions(completions, seen);
+
+    drain_with_sentinel(wq, sentinel_comp, operation_class, k_prefill);
+
+    let outcome = if bounded_outcome.completed == completions.len() {
+        bounded_outcome
+    } else {
+        scan_visible_completions(completions)
+    };
+
+    SubmitOccupancyTraceOutcome {
+        iteration_index,
+        completed: outcome.completed,
+        missing: completions.len() - outcome.completed,
+        errors: outcome.errors,
+    }
+}
+
+fn submit_descriptors(wq: &WqPortal, descriptors: &[DsaHwDesc]) {
+    for desc in descriptors {
+        unsafe { wq.submit(desc) };
+    }
+}
+
+fn measure_prefill_completion_trace(
+    wq: &WqPortal,
+    descriptors: &[DsaHwDesc],
+    completions: &mut [DsaCompletionRecord],
+    seen: &mut [bool],
+    tsc_freq: u64,
+    iteration_index: usize,
+) -> SubmitOccupancyPrefillCompletionTracePoint {
+    reset_sample_completions(completions);
+
+    if descriptors.is_empty() {
+        return SubmitOccupancyPrefillCompletionTracePoint {
+            iteration_index,
+            prefill_submit_tsc_ticks: 0,
+            prefill_submit_ns: 0,
+            prefill_completion_tsc_ticks: 0,
+            prefill_completion_ns: 0,
+            post_submit_completion_tsc_ticks: 0,
+            post_submit_completion_ns: 0,
+            completed: 0,
+            missing: 0,
+            errors: 0,
+        };
+    }
+
+    let submit = measured_call(|| submit_descriptors(wq, descriptors));
+    let outcome = measured_call(|| count_visible_completions(completions, seen));
+    let prefill_submit_tsc_ticks = submit.elapsed_tsc();
+    let prefill_completion_tsc_ticks = outcome.end_tsc.saturating_sub(submit.start_tsc);
+    let post_submit_completion_tsc_ticks =
+        prefill_completion_tsc_ticks.saturating_sub(prefill_submit_tsc_ticks);
+
+    SubmitOccupancyPrefillCompletionTracePoint {
+        iteration_index,
+        prefill_submit_tsc_ticks,
+        prefill_submit_ns: cycles_to_ns(prefill_submit_tsc_ticks, tsc_freq),
+        prefill_completion_tsc_ticks,
+        prefill_completion_ns: cycles_to_ns(prefill_completion_tsc_ticks, tsc_freq),
+        post_submit_completion_tsc_ticks,
+        post_submit_completion_ns: cycles_to_ns(post_submit_completion_tsc_ticks, tsc_freq),
+        completed: outcome.value.completed,
+        missing: completions.len() - outcome.value.completed,
+        errors: outcome.value.errors,
+    }
+}
+
 fn drain_with_sentinel(
     wq: &WqPortal,
     sentinel_comp: &mut DsaCompletionRecord,
-    operation: DsaOperationClass,
-    payload_size: usize,
+    operation_class: &str,
     k_prefill: usize,
 ) {
     let mut sentinel_desc = DsaHwDesc::default();
@@ -139,8 +237,7 @@ fn drain_with_sentinel(
     if status != DSA_COMP_SUCCESS {
         panic!(
             "DSA submit-occupancy drain sentinel failed: status {status:#x} \
-             (operation={}, k_prefill={k_prefill})",
-            operation.operation_class_label(payload_size)
+             (operation={operation_class}, k_prefill={k_prefill})"
         );
     }
 }
@@ -148,16 +245,17 @@ fn drain_with_sentinel(
 fn print_trace_header(operation_class: &str) {
     println!("\n=== {SUBMIT_OCCUPANCY_BENCHMARK} ({operation_class}) ===");
     println!(
-        "{:>8} {:>10} {:>12} {:>12}",
-        "K", "submitted", "trace_points", "iterations"
+        "{:>8} {:>10} {:>15} {:>12} {:>12}",
+        "K", "submitted", "prefill_samples", "trace_points", "iterations"
     );
 }
 
 fn print_trace_row(result: &SubmitOccupancyResult) {
     println!(
-        "{:>8} {:>10} {:>12} {:>12}",
+        "{:>8} {:>10} {:>15} {:>12} {:>12}",
         result.k_prefill,
         result.submitted,
+        result.prefill_completion_trace.len(),
         result.extra_submit_trace.len(),
         result.trace_outcomes.len()
     );

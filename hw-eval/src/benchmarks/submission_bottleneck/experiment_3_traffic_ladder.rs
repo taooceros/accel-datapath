@@ -21,14 +21,15 @@ use hw_eval::dsa::{
     completion_flags_no_cache_control, poll_completion, reset_completion, DsaCompletionRecord,
     DsaFlags, DsaHwDesc, DSA_COMP_SUCCESS,
 };
-use hw_eval::submit::{cycles_to_ns, lfence, rdtscp, WqPortal};
+use hw_eval::submit::{cycles_to_ns, lfence, WqPortal};
 
 use crate::config::{DsaOperationClass, TrafficClass};
 use crate::report::{stats_from_values, TrafficClassLadderResult};
 
 use super::common::{
-    count_visible_completions, dsa_operation_payload_size, fill_descriptor, ops_per_second,
-    optional_stats, reset_sample_completions, traffic_class_operation_size, OperationSlots,
+    count_visible_completions, dsa_operation_payload_size, fill_descriptor, measured_call,
+    ops_per_second, optional_stats, reset_sample_completions, traffic_class_operation_size,
+    OperationSlots,
 };
 
 const TRAFFIC_CLASS_LADDER_BENCHMARK: &str = "traffic_class_ladder";
@@ -79,11 +80,12 @@ pub(crate) fn bench_traffic_class_ladder(
                     reset_completion(&mut sentinel_comp);
 
                     lfence();
-                    let t0 = rdtscp().0;
-                    for _ in 0..window {
-                        unsafe { wq.submit(&submit_only_desc) };
-                    }
-                    let submit_ticks = rdtscp().0 - t0;
+                    let submit = measured_call(|| {
+                        for _ in 0..window {
+                            unsafe { wq.submit(&submit_only_desc) };
+                        }
+                    });
+                    let submit_ticks = submit.elapsed_tsc();
 
                     unsafe { wq.submit(&sentinel_desc) };
                     let status = poll_completion(&sentinel_comp);
@@ -100,14 +102,14 @@ pub(crate) fn bench_traffic_class_ladder(
                 reset_sample_completions(&mut slots.completions[..window]);
 
                 lfence();
-                let t0 = rdtscp().0;
-                for index in 0..window {
-                    unsafe { wq.submit(&slots.descriptors[index]) };
-                }
-                let t1 = rdtscp().0;
-                let outcome =
-                    count_visible_completions(&slots.completions[..window], &mut seen[..window]);
-                let t2 = rdtscp().0;
+                let submit = measured_call(|| {
+                    for index in 0..window {
+                        unsafe { wq.submit(&slots.descriptors[index]) };
+                    }
+                });
+                let outcome = measured_call(|| {
+                    count_visible_completions(&slots.completions[..window], &mut seen[..window])
+                });
                 reset_completion(&mut sentinel_comp);
                 unsafe { wq.submit(&sentinel_desc) };
                 let status = poll_completion(&sentinel_comp);
@@ -115,16 +117,20 @@ pub(crate) fn bench_traffic_class_ladder(
                     panic!("traffic-class-ladder drain sentinel failed: {status:#x}");
                 }
 
-                let submit_ticks = t1 - t0;
-                let complete_ticks = t2 - t1;
+                let submit_ticks = submit.elapsed_tsc();
+                let complete_ticks = outcome.elapsed_tsc();
                 submit_tsc.push(submit_ticks);
                 submit_ns.push(cycles_to_ns(submit_ticks, tsc_freq));
                 completion_tsc.push(complete_ticks);
                 completion_ns.push(cycles_to_ns(complete_ticks, tsc_freq));
-                completed_counts.push(outcome.completed as u64);
-                missing_counts.push((window - outcome.completed) as u64);
-                error_counts.push(outcome.errors as u64);
-                ops_per_sec.push(ops_per_second(window as u64, t2 - t0, tsc_freq));
+                completed_counts.push(outcome.value.completed as u64);
+                missing_counts.push((window - outcome.value.completed) as u64);
+                error_counts.push(outcome.value.errors as u64);
+                ops_per_sec.push(ops_per_second(
+                    window as u64,
+                    outcome.end_tsc.saturating_sub(submit.start_tsc),
+                    tsc_freq,
+                ));
             }
 
             let submit_ns_stats = stats_from_values(submit_ns);
