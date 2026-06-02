@@ -3,7 +3,7 @@
   "checkpoint_id": "82a322473936",
   "strategy": "manual-commit",
   "branch": "async-binding-intel-idxd",
-  "checkpoints_count": 26,
+  "checkpoints_count": 64,
   "files_touched": [
     "AGENTS.md",
     "Cargo.toml",
@@ -11,16 +11,27 @@
     "agents/plan/2026-06-01/03.experiment2-ablation-study.plan.md",
     "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md",
     "agents/plan/2026-06-01/05.submit-occupancy-huge-memmove.plan.md",
+    "agents/plan/2026-06-01/06.experiment2-poll-submit-batch-experiment.plan.md",
+    "agents/plan/2026-06-01/07.experiment1-codepath-cleanup.plan.md",
     "devenv.nix",
     "docs/plan/2026-06-01/03.experiment2-ablation-study.plan.md",
     "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md",
     "docs/plan/2026-06-01/05.submit-occupancy-huge-memmove.plan.md",
+    "docs/plan/2026-06-01/06.experiment2-poll-submit-batch-experiment.plan.md",
+    "docs/plan/2026-06-01/07.experiment1-codepath-cleanup.plan.md",
     "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md",
     "docs/report/benchmarking/040.submit_occupancy_trace_until_128_2026-06-01.md",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_raw_trace_only_iter100_p95.py",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter100_memmove_1048576.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter100_memmove_262144.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter100_memmove_65536.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter100_noop.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter100_submit_ns_p95.pdf",
     "hw-eval/README.md",
     "hw-eval/src/benchmarks/submission_bottleneck.rs",
     "hw-eval/src/benchmarks/submission_bottleneck/common.rs",
     "hw-eval/src/benchmarks/submission_bottleneck/experiment_1_submit_occupancy.rs",
+    "hw-eval/src/benchmarks/submission_bottleneck/experiment_2_marker_overlap/mechanism_probes.md",
     "hw-eval/src/benchmarks/submission_bottleneck/experiment_2_marker_overlap/mechanism_probes.rs",
     "hw-eval/src/benchmarks/submission_bottleneck/experiment_2_marker_overlap/overlap.rs",
     "hw-eval/src/config.rs",
@@ -67,13 +78,19 @@
       "transcript": "/82/a322473936/5/full.jsonl",
       "content_hash": "/82/a322473936/5/content_hash.txt",
       "prompt": "/82/a322473936/5/prompt.txt"
+    },
+    {
+      "metadata": "/82/a322473936/6/metadata.json",
+      "transcript": "/82/a322473936/6/full.jsonl",
+      "content_hash": "/82/a322473936/6/content_hash.txt",
+      "prompt": "/82/a322473936/6/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 1035923,
+    "input_tokens": 3365243,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 25115904,
-    "output_tokens": 88896,
-    "api_call_count": 292
+    "cache_read_tokens": 61032192,
+    "output_tokens": 182002,
+    "api_call_count": 617
   }
 }

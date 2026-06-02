@@ -1,0 +1,157 @@
+run experiment 1 with one special configuration:
+
+a lot of super huge mommove requests and redo the experiment to test whether the bottleneck is on the consumer side or is on the pcie processing side
+
+check with me about whether you understand what we are about to do
+
+---
+
+I assume 16MiB is enough? but calculate based on the bandwidth dsa is able to provide with the submission latency
+
+---
+
+yes, let's try
+
+---
+
+compare the noop vs 1MiB memmove
+
+---
+
+why will 1MiB request slower than noop even for small K?
+
+---
+
+I mean this column 1MiB extra ns
+
+---
+
+test other size of submission, is the behavior the same?
+
+---
+
+show me earlier K
+
+---
+
+don't show median, pick one of the trace
+
+---
+
+do a warm up
+
+---
+
+what if, instead of only measure one more, let's measure more till 128
+
+---
+
+why do you show me 112 114 115?
+
+---
+
+is it true for multiple iterations?
+
+---
+
+draw a plot based on the trace
+
+---
+
+write a python script and execute python in bash instead of using the python tool
+
+---
+
+write a python script and execute python in bash instead of using the python tool, then use matplotlib to draw
+
+---
+
+do you make mistake?
+
+---
+
+remove any extra overhead
+
+---
+
+redo the experiment
+
+---
+
+revert to the previous experiment (measure only one more, as if we have the problem with index 112 114, then at 114, it must have the high latency with previous submission)
+
+---
+
+draw plot based on this data
+
+---
+
+instead of showing only the median, draw 4 distinct graphs per message size, and get a statistical range for the measured data
+
+---
+
+instead of showing only the median, draw 4 sub graphs per message size, and get a statistical range for the measured data
+
+---
+
+make the x axis starts earlier (like 80
+
+---
+
+rerun the experiment, I think it is getting interfered with others
+
+---
+
+ignore the p99, only keep p95
+
+---
+
+let's let the experiment runner only do the trace colleciton, and calculate all the statistical results in the post-processing plotting library
+
+---
+
+I think the submitoccupancyresult is already the trace?
+
+---
+
+I see, let's make it emit the trace; don't add more code, modify the existing code
+
+---
+
+like how we do in experiment 2, simplify the codepath of experiment 1
+
+---
+
+rerun and redraw the plot
+
+---
+
+give 100 iteration
+
+---
+
+what does the number mean
+
+---
+
+I don't understand the experiment code; rewrite it in a cleaner way
+
+---
+
+where is the k pre-submit?
+
+---
+
+change to a better name
+
+---
+
+remove the summary case, why do we need it
+
+---
+
+ok now re-run the experiment and plot the results
+
+---
+
+clean up older results

@@ -1,0 +1,1080 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "82a322473936",
+  "session_id": "019e851e-2268-7000-9f13-ca14ddb98a69",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-02T00:23:02.941625701Z",
+  "branch": "async-binding-intel-idxd",
+  "checkpoints_count": 38,
+  "files_touched": [
+    "AGENTS.md",
+    "Cargo.toml",
+    "agents/CODING_REQUIREMENTS.md",
+    "agents/plan/2026-06-01/05.submit-occupancy-huge-memmove.plan.md",
+    "agents/plan/2026-06-01/06.experiment2-poll-submit-batch-experiment.plan.md",
+    "agents/plan/2026-06-01/07.experiment1-codepath-cleanup.plan.md",
+    "devenv.nix",
+    "docs/plan/2026-06-01/05.submit-occupancy-huge-memmove.plan.md",
+    "docs/plan/2026-06-01/06.experiment2-poll-submit-batch-experiment.plan.md",
+    "docs/plan/2026-06-01/07.experiment1-codepath-cleanup.plan.md",
+    "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md",
+    "docs/report/benchmarking/040.submit_occupancy_trace_until_128_2026-06-01.md",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_raw_trace_only_iter100_p95.py",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter100_memmove_1048576.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter100_memmove_262144.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter100_memmove_65536.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter100_noop.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter100_submit_ns_p95.pdf",
+    "hw-eval/README.md",
+    "hw-eval/src/benchmarks/submission_bottleneck.rs",
+    "hw-eval/src/benchmarks/submission_bottleneck/common.rs",
+    "hw-eval/src/benchmarks/submission_bottleneck/experiment_1_submit_occupancy.rs",
+    "hw-eval/src/benchmarks/submission_bottleneck/experiment_2_marker_overlap/mechanism_probes.md",
+    "hw-eval/src/benchmarks/submission_bottleneck/experiment_2_marker_overlap/mechanism_probes.rs",
+    "hw-eval/src/benchmarks/submission_bottleneck/experiment_2_marker_overlap/overlap.rs",
+    "hw-eval/src/config.rs",
+    "hw-eval/src/main.rs",
+    "hw-eval/src/report.rs",
+    "hw-eval/tests/cli_contract.rs",
+    "presentation/2026-05-27/ai_coding_skill_formation_discussion/ai_coding_skill_formation_discussion.pdf",
+    "presentation/2026-05-27/ai_coding_skill_formation_discussion/ai_coding_skill_formation_discussion.typ",
+    "presentation/2026-05-27/ai_coding_skill_formation_discussion/ai_coding_skill_formation_discussion_notes.md"
+  ],
+  "agent": "Pi",
+  "model": "",
+  "turn_id": "5ef2bf961ef8",
+  "token_usage": {
+    "input_tokens": 2329320,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 35916288,
+    "output_tokens": 93106,
+    "api_call_count": 325
+  },
+  "session_metrics": {
+    "turn_count": 38
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-02T00:23:02.908075898Z",
+    "agent_lines": 11585,
+    "agent_removed": 0,
+    "human_added": 0,
+    "human_modified": 26536,
+    "human_removed": 2177,
+    "total_committed": 25787,
+    "total_lines_changed": 40298,
+    "agent_percentage": 28.748324978907142,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 17536,
+      "user_lines_removed": 3729,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".codex/agents/entire-search.toml": 23,
+        ".codex/config.toml": 3,
+        ".codex/hooks.json": 52,
+        ".omp/SYSTEM.md": 232,
+        ".omp/SYSTEM2.md": 260,
+        ".omp/SYSTEM_DEFAULT.md": 265,
+        ".omp/SYSTEM_DUMP.md": 1080,
+        ".omp/commands/generate-system-prompt.md": 26,
+        ".omp/extensions/btw.ts": 963,
+        ".omp/extensions/entire/index.ts": 73,
+        ".omp/extensions/hashline.ts": 1302,
+        ".opencode/plugins/entire.ts": 216,
+        ".pi/extensions/entire/index.ts": 73,
+        "AGENTS.md": 11,
+        "Cargo.toml": 3,
+        "agents/plan/2026-05-27/05.ai-coding-skill-formation-discussion.done.md": 33,
+        "agents/plan/2026-05-27/08.ai-coding-discussion-plan-rewrite.done.md": 30,
+        "agents/plan/2026-05-27/09.ai-coding-skill-deck-draft.done.md": 26,
+        "agents/plan/2026-05-27/10.ai-coding-deck-aesthetic-revision.done.md": 33,
+        "agents/plan/2026-05-27/11.ai-coding-deck-style-framework.done.md": 24,
+        "agents/plan/2026-05-27/12.ai-coding-deck-autonumbering.done.md": 22,
+        "agents/plan/2026-05-27/13.ai-coding-deck-personal-examples.done.md": 23,
+        "agents/plan/2026-05-27/14.ai-coding-deck-personal-debugging-examples.done.md": 28,
+        "agents/plan/2026-05-27/15.ai-coding-deck-coroutine-directed-debugging.done.md": 23,
+        "agents/plan/2026-05-27/15.ai-coding-deck-education-discussion-questions.done.md": 26,
+        "agents/plan/2026-05-27/16.ai-coding-deck-anthropic-paper-focus.done.md": 29,
+        "agents/plan/2026-05-28/04.tokio-shared-comparison-plot.done.md": 17,
+        "agents/plan/2026-05-31/04.experiment2-all-variant-traces.plan.md": 23,
+        "agents/plan/2026-06-01/01.experiment2-configuration-suite.plan.md": 22,
+        "agents/plan/2026-06-01/03.experiment2-ablation-study.plan.md": 23,
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 26,
+        "devenv.nix": 1,
+        "docs/plan/2026-05-27/04.ai-coding-skill-formation-discussion.done.md": 456,
+        "docs/plan/2026-05-27/07.ai-coding-deck-style-framework.done.md": 26,
+        "docs/plan/2026-05-27/08.ai-coding-deck-autonumbering.done.md": 19,
+        "docs/plan/2026-05-27/09.ai-coding-deck-personal-examples.done.md": 29,
+        "docs/plan/2026-05-27/10.ai-coding-deck-personal-debugging-examples.done.md": 66,
+        "docs/plan/2026-05-27/11.ai-coding-deck-coroutine-directed-debugging.done.md": 31,
+        "docs/plan/2026-05-27/11.ai-coding-deck-education-discussion-questions.done.md": 39,
+        "docs/plan/2026-05-27/12.ai-coding-deck-anthropic-paper-focus.done.md": 48,
+        "docs/plan/2026-05-28/04.tokio-shared-comparison-plot.done.md": 17,
+        "docs/plan/2026-05-31/05.experiment2-all-variant-traces.plan.md": 24,
+        "docs/plan/2026-06-01/01.experiment2-configuration-suite.plan.md": 44,
+        "docs/plan/2026-06-01/03.experiment2-ablation-study.plan.md": 331,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 26,
+        "docs/report/benchmarking/038.experiment2_all_variant_traces_2026-05-31.md": 79,
+        "docs/report/benchmarking/plot_tokio_async_shared_batch1.py": 145,
+        "docs/report/benchmarking/submission_bottleneck_2026-05-31/experiment2_all_variant_trace_summary_2026-05-31.json": 188,
+        "docs/report/benchmarking/submission_bottleneck_2026-05-31/marker_mechanism_baseline_packed_32b_iter804_latency_order_ns.csv": 161,
+        "docs/report/benchmarking/submission_bottleneck_2026-05-31/marker_mechanism_cache_state_clflush_iter804_latency_order_ns.csv": 161,
+        "docs/report/benchmarking/submission_bottleneck_2026-05-31/marker_mechanism_cache_state_pre_touch_iter804_latency_order_ns.csv": 161,
+        "docs/report/benchmarking/submission_bottleneck_2026-05-31/marker_mechanism_layout_padded_64b_iter804_latency_order_ns.csv": 161,
+        "docs/report/benchmarking/submission_bottleneck_2026-05-31/marker_mechanism_measurement_batch_scan_timing_iter804_latency_order_ns.csv": 161,
+        "docs/report/benchmarking/submission_bottleneck_2026-05-31/marker_mechanism_prefetch_prefetch_1_lines_iter804_latency_order_ns.csv": 161,
+        "docs/report/benchmarking/submission_bottleneck_2026-05-31/marker_mechanism_prefetch_prefetch_2_lines_iter804_latency_order_ns.csv": 161,
+        "docs/report/benchmarking/submission_bottleneck_2026-05-31/marker_mechanism_prefetch_prefetch_4_lines_iter804_latency_order_ns.csv": 161,
+        "docs/report/benchmarking/submission_bottleneck_2026-05-31/marker_overlap_baseline_all_variants_iter804_latency_order_ns.csv": 161,
+        "hw-eval/README.md": 3,
+        "hw-eval/src/benchmarks/submission_bottleneck/experiment_2_marker_overlap/overlap.rs": 475,
+        "hw-eval/src/config.rs": 4,
+        "hw-eval/src/main.rs": 9,
+        "hw-eval/tests/cli_contract.rs": 5,
+        "presentation/2026-05-27/ai_coding_skill_formation_discussion/ai_coding_skill_formation_discussion.pdf": 8573,
+        "presentation/2026-05-27/ai_coding_skill_formation_discussion/ai_coding_skill_formation_discussion.typ": 320,
+        "presentation/2026-05-27/ai_coding_skill_formation_discussion/ai_coding_skill_formation_discussion_notes.md": 139
+      },
+      "user_removed_per_file": {
+        "AGENTS.md": 40,
+        "agents/CODING_REQUIREMENTS.md": 6,
+        "devenv.nix": 1,
+        "hw-eval/README.md": 3,
+        "hw-eval/src/benchmarks/submission_bottleneck/experiment_2_marker_overlap/overlap.rs": 267,
+        "hw-eval/src/config.rs": 4,
+        "hw-eval/src/main.rs": 4,
+        "presentation/2026-05-27/ai_coding_skill_formation_discussion/ai_coding_skill_formation_discussion.pdf": 3101,
+        "presentation/2026-05-27/ai_coding_skill_formation_discussion/ai_coding_skill_formation_discussion.typ": 228,
+        "presentation/2026-05-27/ai_coding_skill_formation_discussion/ai_coding_skill_formation_discussion_notes.md": 75
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 17536,
+      "agent_lines_removed": 3887,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 17536,
+      "agent_lines_removed": 3887,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 4,
+      "user_lines_added": 160,
+      "user_lines_removed": 2,
+      "agent_lines_added": 21523,
+      "agent_lines_removed": 3955,
+      "user_added_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 5,
+      "user_lines_added": 160,
+      "user_lines_removed": 2,
+      "agent_lines_added": 22334,
+      "agent_lines_removed": 3955,
+      "user_added_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 6,
+      "user_lines_added": 160,
+      "user_lines_removed": 2,
+      "agent_lines_added": 22334,
+      "agent_lines_removed": 3955,
+      "user_added_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 7,
+      "user_lines_added": 160,
+      "user_lines_removed": 2,
+      "agent_lines_added": 22334,
+      "agent_lines_removed": 3955,
+      "user_added_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 8,
+      "user_lines_added": 201,
+      "user_lines_removed": 2,
+      "agent_lines_added": 25578,
+      "agent_lines_removed": 3955,
+      "user_added_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 9,
+      "user_lines_added": 201,
+      "user_lines_removed": 2,
+      "agent_lines_added": 30062,
+      "agent_lines_removed": 3955,
+      "user_added_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 10,
+      "user_lines_added": 348,
+      "user_lines_removed": 86,
+      "agent_lines_added": 34546,
+      "agent_lines_removed": 3955,
+      "user_added_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4,
+        "hw-eval/src/benchmarks/submission_bottleneck/experiment_2_marker_overlap/mechanism_probes.rs": 147
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "hw-eval/src/benchmarks/submission_bottleneck/experiment_2_marker_overlap/mechanism_probes.rs": 84
+      }
+    },
+    {
+      "checkpoint_number": 11,
+      "user_lines_added": 202,
+      "user_lines_removed": 3,
+      "agent_lines_added": 43638,
+      "agent_lines_removed": 4008,
+      "user_added_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4,
+        "hw-eval/src/benchmarks/submission_bottleneck/experiment_2_marker_overlap/mechanism_probes.rs": 1
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "hw-eval/src/benchmarks/submission_bottleneck/experiment_2_marker_overlap/mechanism_probes.rs": 1
+      }
+    },
+    {
+      "checkpoint_number": 12,
+      "user_lines_added": 319,
+      "user_lines_removed": 158,
+      "agent_lines_added": 52070,
+      "agent_lines_removed": 4018,
+      "user_added_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4,
+        "hw-eval/src/benchmarks/submission_bottleneck/experiment_2_marker_overlap/mechanism_probes.rs": 118
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "hw-eval/src/benchmarks/submission_bottleneck/experiment_2_marker_overlap/mechanism_probes.rs": 156
+      }
+    },
+    {
+      "checkpoint_number": 13,
+      "user_lines_added": 216,
+      "user_lines_removed": 2,
+      "agent_lines_added": 52029,
+      "agent_lines_removed": 4010,
+      "user_added_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4,
+        "hw-eval/src/benchmarks/submission_bottleneck/experiment_2_marker_overlap/mechanism_probes.rs": 15
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 14,
+      "user_lines_added": 201,
+      "user_lines_removed": 2,
+      "agent_lines_added": 60059,
+      "agent_lines_removed": 4011,
+      "user_added_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 15,
+      "user_lines_added": 201,
+      "user_lines_removed": 2,
+      "agent_lines_added": 60401,
+      "agent_lines_removed": 4011,
+      "user_added_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 16,
+      "user_lines_added": 201,
+      "user_lines_removed": 2,
+      "agent_lines_added": 60401,
+      "agent_lines_removed": 4011,
+      "user_added_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 17,
+      "user_lines_added": 201,
+      "user_lines_removed": 2,
+      "agent_lines_added": 60503,
+      "agent_lines_removed": 4011,
+      "user_added_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 18,
+      "user_lines_added": 201,
+      "user_lines_removed": 2,
+      "agent_lines_added": 60503,
+      "agent_lines_removed": 4011,
+      "user_added_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 19,
+      "user_lines_added": 209,
+      "user_lines_removed": 2,
+      "agent_lines_added": 64550,
+      "agent_lines_removed": 4011,
+      "user_added_per_file": {
+        ".omp/rules/no-hotpath-trace-vec-allocation.md": 8,
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 20,
+      "user_lines_added": 209,
+      "user_lines_removed": 2,
+      "agent_lines_added": 72661,
+      "agent_lines_removed": 4011,
+      "user_added_per_file": {
+        ".omp/rules/no-hotpath-trace-vec-allocation.md": 8,
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 21,
+      "user_lines_added": 209,
+      "user_lines_removed": 2,
+      "agent_lines_added": 76008,
+      "agent_lines_removed": 4011,
+      "user_added_per_file": {
+        ".omp/rules/no-hotpath-trace-vec-allocation.md": 8,
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 22,
+      "user_lines_added": 209,
+      "user_lines_removed": 2,
+      "agent_lines_added": 76072,
+      "agent_lines_removed": 4011,
+      "user_added_per_file": {
+        ".omp/rules/no-hotpath-trace-vec-allocation.md": 8,
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 23,
+      "user_lines_added": 209,
+      "user_lines_removed": 2,
+      "agent_lines_added": 76072,
+      "agent_lines_removed": 4011,
+      "user_added_per_file": {
+        ".omp/rules/no-hotpath-trace-vec-allocation.md": 8,
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 24,
+      "user_lines_added": 51733645,
+      "user_lines_removed": 6,
+      "agent_lines_added": 76249,
+      "agent_lines_removed": 4011,
+      "user_added_per_file": {
+        ".omp/rules/no-hotpath-trace-vec-allocation.md": 8,
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "docs/report/benchmarking/submission_bottleneck_2026-06-01/experiment2_poll_submit_batch_stdout.raw": 51729022,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_1048576.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_262144.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_65536.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_noop.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_one_extra_from80_ranges.py": 78,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4,
+        "hw-eval/README.md": 3,
+        "hw-eval/src/benchmarks/submission_bottleneck.rs": 2,
+        "hw-eval/src/benchmarks/submission_bottleneck/experiment_2_marker_overlap/mechanism_probes.md": 3,
+        "hw-eval/src/benchmarks/submission_bottleneck/experiment_2_marker_overlap/mechanism_probes.rs": 36
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "hw-eval/src/benchmarks/submission_bottleneck/experiment_2_marker_overlap/mechanism_probes.md": 1,
+        "hw-eval/src/benchmarks/submission_bottleneck/experiment_2_marker_overlap/mechanism_probes.rs": 3
+      }
+    },
+    {
+      "checkpoint_number": 25,
+      "user_lines_added": 51733601,
+      "user_lines_removed": 2,
+      "agent_lines_added": 84962,
+      "agent_lines_removed": 4015,
+      "user_added_per_file": {
+        ".omp/rules/no-hotpath-trace-vec-allocation.md": 8,
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "docs/report/benchmarking/submission_bottleneck_2026-06-01/experiment2_poll_submit_batch_stdout.raw": 51729022,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_1048576.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_262144.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_65536.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_noop.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_one_extra_from80_ranges.py": 78,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 26,
+      "user_lines_added": 51733601,
+      "user_lines_removed": 2,
+      "agent_lines_added": 84965,
+      "agent_lines_removed": 4015,
+      "user_added_per_file": {
+        ".omp/rules/no-hotpath-trace-vec-allocation.md": 8,
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "docs/report/benchmarking/submission_bottleneck_2026-06-01/experiment2_poll_submit_batch_stdout.raw": 51729022,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_1048576.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_262144.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_65536.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_noop.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_one_extra_from80_ranges.py": 78,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 27,
+      "user_lines_added": 51733601,
+      "user_lines_removed": 2,
+      "agent_lines_added": 93465,
+      "agent_lines_removed": 4007,
+      "user_added_per_file": {
+        ".omp/rules/no-hotpath-trace-vec-allocation.md": 8,
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "docs/report/benchmarking/submission_bottleneck_2026-06-01/experiment2_poll_submit_batch_stdout.raw": 51729022,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_1048576.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_262144.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_65536.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_noop.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_one_extra_from80_ranges.py": 78,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 28,
+      "user_lines_added": 51733601,
+      "user_lines_removed": 2,
+      "agent_lines_added": 93465,
+      "agent_lines_removed": 4007,
+      "user_added_per_file": {
+        ".omp/rules/no-hotpath-trace-vec-allocation.md": 8,
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "docs/report/benchmarking/submission_bottleneck_2026-06-01/experiment2_poll_submit_batch_stdout.raw": 51729022,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_1048576.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_262144.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_65536.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_noop.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_one_extra_from80_ranges.py": 78,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 29,
+      "user_lines_added": 51736037,
+      "user_lines_removed": 2434,
+      "agent_lines_added": 93817,
+      "agent_lines_removed": 4017,
+      "user_added_per_file": {
+        ".omp/rules/no-hotpath-trace-vec-allocation.md": 8,
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "docs/report/benchmarking/submission_bottleneck_2026-06-01/experiment2_poll_submit_batch_stdout.raw": 51729022,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_1048576.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_262144.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_65536.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_noop.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_one_extra_from80_ranges.py": 78,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_raw_trace_only_p95.py": 8,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_1048576.json": 630,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_262144.json": 613,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_65536.json": 601,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_noop.json": 584,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_raw_trace_only_p95.py": 4,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_1048576.json": 630,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_262144.json": 613,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_65536.json": 601,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_noop.json": 584
+      }
+    },
+    {
+      "checkpoint_number": 30,
+      "user_lines_added": 51736037,
+      "user_lines_removed": 2434,
+      "agent_lines_added": 94244,
+      "agent_lines_removed": 4099,
+      "user_added_per_file": {
+        ".omp/rules/no-hotpath-trace-vec-allocation.md": 8,
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "docs/report/benchmarking/submission_bottleneck_2026-06-01/experiment2_poll_submit_batch_stdout.raw": 51729022,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_1048576.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_262144.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_65536.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_noop.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_one_extra_from80_ranges.py": 78,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_raw_trace_only_p95.py": 8,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_1048576.json": 630,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_262144.json": 613,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_65536.json": 601,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_noop.json": 584,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_raw_trace_only_p95.py": 4,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_1048576.json": 630,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_262144.json": 613,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_65536.json": 601,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_noop.json": 584
+      }
+    },
+    {
+      "checkpoint_number": 31,
+      "user_lines_added": 51736023,
+      "user_lines_removed": 2420,
+      "agent_lines_added": 94244,
+      "agent_lines_removed": 4099,
+      "user_added_per_file": {
+        ".omp/rules/no-hotpath-trace-vec-allocation.md": 8,
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "docs/report/benchmarking/submission_bottleneck_2026-06-01/experiment2_poll_submit_batch_stdout.raw": 51729022,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_1048576.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_262144.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_65536.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_noop.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_one_extra_from80_ranges.py": 78,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_raw_trace_only_p95.py": 8,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_1048576.json": 605,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_262144.json": 602,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_65536.json": 604,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_noop.json": 603,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_raw_trace_only_p95.py": 4,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_1048576.json": 605,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_262144.json": 602,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_65536.json": 604,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_noop.json": 603
+      }
+    },
+    {
+      "checkpoint_number": 32,
+      "user_lines_added": 51736023,
+      "user_lines_removed": 2420,
+      "agent_lines_added": 135300,
+      "agent_lines_removed": 4099,
+      "user_added_per_file": {
+        ".omp/rules/no-hotpath-trace-vec-allocation.md": 8,
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "docs/report/benchmarking/submission_bottleneck_2026-06-01/experiment2_poll_submit_batch_stdout.raw": 51729022,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_1048576.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_262144.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_65536.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_noop.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_one_extra_from80_ranges.py": 78,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_raw_trace_only_p95.py": 8,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_1048576.json": 605,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_262144.json": 602,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_65536.json": 604,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_noop.json": 603,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_raw_trace_only_p95.py": 4,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_1048576.json": 605,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_262144.json": 602,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_65536.json": 604,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_noop.json": 603
+      }
+    },
+    {
+      "checkpoint_number": 33,
+      "user_lines_added": 51736023,
+      "user_lines_removed": 2420,
+      "agent_lines_added": 135300,
+      "agent_lines_removed": 4099,
+      "user_added_per_file": {
+        ".omp/rules/no-hotpath-trace-vec-allocation.md": 8,
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "docs/report/benchmarking/submission_bottleneck_2026-06-01/experiment2_poll_submit_batch_stdout.raw": 51729022,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_1048576.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_262144.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_65536.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_noop.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_one_extra_from80_ranges.py": 78,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_raw_trace_only_p95.py": 8,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_1048576.json": 605,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_262144.json": 602,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_65536.json": 604,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_noop.json": 603,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_raw_trace_only_p95.py": 4,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_1048576.json": 605,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_262144.json": 602,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_65536.json": 604,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_noop.json": 603
+      }
+    },
+    {
+      "checkpoint_number": 34,
+      "user_lines_added": 51736023,
+      "user_lines_removed": 2420,
+      "agent_lines_added": 136096,
+      "agent_lines_removed": 4120,
+      "user_added_per_file": {
+        ".omp/rules/no-hotpath-trace-vec-allocation.md": 8,
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "docs/report/benchmarking/submission_bottleneck_2026-06-01/experiment2_poll_submit_batch_stdout.raw": 51729022,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_1048576.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_262144.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_65536.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_noop.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_one_extra_from80_ranges.py": 78,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_raw_trace_only_p95.py": 8,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_1048576.json": 605,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_262144.json": 602,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_65536.json": 604,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_noop.json": 603,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_raw_trace_only_p95.py": 4,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_1048576.json": 605,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_262144.json": 602,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_65536.json": 604,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_noop.json": 603
+      }
+    },
+    {
+      "checkpoint_number": 35,
+      "user_lines_added": 51736023,
+      "user_lines_removed": 2420,
+      "agent_lines_added": 136096,
+      "agent_lines_removed": 4120,
+      "user_added_per_file": {
+        ".omp/rules/no-hotpath-trace-vec-allocation.md": 8,
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "docs/report/benchmarking/submission_bottleneck_2026-06-01/experiment2_poll_submit_batch_stdout.raw": 51729022,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_1048576.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_262144.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_65536.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_noop.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_one_extra_from80_ranges.py": 78,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_raw_trace_only_p95.py": 8,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_1048576.json": 605,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_262144.json": 602,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_65536.json": 604,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_noop.json": 603,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_raw_trace_only_p95.py": 4,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_1048576.json": 605,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_262144.json": 602,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_65536.json": 604,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_noop.json": 603
+      }
+    },
+    {
+      "checkpoint_number": 36,
+      "user_lines_added": 51736023,
+      "user_lines_removed": 2420,
+      "agent_lines_added": 136096,
+      "agent_lines_removed": 4120,
+      "user_added_per_file": {
+        ".omp/rules/no-hotpath-trace-vec-allocation.md": 8,
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "docs/report/benchmarking/submission_bottleneck_2026-06-01/experiment2_poll_submit_batch_stdout.raw": 51729022,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_1048576.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_262144.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_65536.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_noop.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_one_extra_from80_ranges.py": 78,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_raw_trace_only_p95.py": 8,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_1048576.json": 605,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_262144.json": 602,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_65536.json": 604,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_noop.json": 603,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_raw_trace_only_p95.py": 4,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_1048576.json": 605,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_262144.json": 602,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_65536.json": 604,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_noop.json": 603
+      }
+    },
+    {
+      "checkpoint_number": 37,
+      "user_lines_added": 51736025,
+      "user_lines_removed": 2422,
+      "agent_lines_added": 136108,
+      "agent_lines_removed": 4130,
+      "user_added_per_file": {
+        ".omp/rules/no-hotpath-trace-vec-allocation.md": 8,
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "agents/plan/2026-06-01/07.experiment1-codepath-cleanup.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/07.experiment1-codepath-cleanup.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "docs/report/benchmarking/submission_bottleneck_2026-06-01/experiment2_poll_submit_batch_stdout.raw": 51729022,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_1048576.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_262144.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_65536.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_noop.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_one_extra_from80_ranges.py": 78,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_raw_trace_only_p95.py": 8,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_1048576.json": 605,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_262144.json": 602,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_65536.json": 604,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_noop.json": 603,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "agents/plan/2026-06-01/07.experiment1-codepath-cleanup.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/07.experiment1-codepath-cleanup.plan.md": 1,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_raw_trace_only_p95.py": 4,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_1048576.json": 605,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_262144.json": 602,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_65536.json": 604,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_noop.json": 603
+      }
+    },
+    {
+      "checkpoint_number": 38,
+      "user_lines_added": 51748356,
+      "user_lines_removed": 14753,
+      "agent_lines_added": 136108,
+      "agent_lines_removed": 4130,
+      "user_added_per_file": {
+        ".omp/rules/no-hotpath-trace-vec-allocation.md": 8,
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "agents/plan/2026-06-01/07.experiment1-codepath-cleanup.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/07.experiment1-codepath-cleanup.plan.md": 1,
+        "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md": 41,
+        "docs/report/benchmarking/submission_bottleneck_2026-06-01/experiment2_poll_submit_batch_stdout.raw": 51729022,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_1048576.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_262144.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_memmove_65536.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/one_extra_from80_iter100_noop.json": 1073,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_one_extra_from80_ranges.py": 78,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_raw_trace_only_p95.py": 8,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter100_memmove_1048576.json": 3086,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter100_memmove_262144.json": 3169,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter100_memmove_65536.json": 2977,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter100_noop.json": 3099,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_1048576.json": 605,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_262144.json": 602,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_65536.json": 604,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_noop.json": 603,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "agents/plan/2026-06-01/07.experiment1-codepath-cleanup.plan.md": 1,
+        "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md": 1,
+        "docs/plan/2026-06-01/07.experiment1-codepath-cleanup.plan.md": 1,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/plot_raw_trace_only_p95.py": 4,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter100_memmove_1048576.json": 3086,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter100_memmove_262144.json": 3169,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter100_memmove_65536.json": 2977,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter100_noop.json": 3099,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_1048576.json": 605,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_262144.json": 602,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_memmove_65536.json": 604,
+        "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/raw_trace_only_k112_iter20_noop.json": 603
+      }
+    }
+  ]
+}
