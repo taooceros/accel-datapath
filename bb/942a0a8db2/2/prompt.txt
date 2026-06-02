@@ -1,0 +1,9 @@
+don't read other file, refactor @hw-eval/src/benchmarks/submission_bottleneck/experiment_1_submit_occupancy.rs
+
+---
+
+every abstraction should carry some value; it is important to keep things simple;
+
+---
+
+make the measured_call in experiment_2 a common help across all experiments

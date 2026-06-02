@@ -1,0 +1,107 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "bb942a0a8db2",
+  "session_id": "019e8642-2b86-7000-a6bf-0425b87f32c8",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-02T03:09:00.501050334Z",
+  "branch": "async-binding-intel-idxd",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "hw-eval/src/benchmarks/submission_bottleneck/experiment_1_submit_occupancy.md",
+    "hw-eval/src/benchmarks/submission_bottleneck/experiment_1_submit_occupancy.rs",
+    "hw-eval/src/benchmarks/submission_bottleneck/experiment_3_traffic_ladder.rs",
+    "hw-eval/src/benchmarks/submission_bottleneck/experiment_4_completion_reuse.rs",
+    "hw-eval/src/benchmarks/submission_bottleneck/experiment_5_submit_admission_probe.rs",
+    "hw-eval/src/report.rs"
+  ],
+  "agent": "Pi",
+  "model": "",
+  "turn_id": "dcfecc106d43",
+  "token_usage": {
+    "input_tokens": 277634,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 4918784,
+    "output_tokens": 26774,
+    "api_call_count": 70
+  },
+  "session_metrics": {
+    "turn_count": 3
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-02T03:09:00.487068116Z",
+    "agent_lines": 157,
+    "agent_removed": 122,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 7,
+    "total_committed": 157,
+    "total_lines_changed": 286,
+    "agent_percentage": 97.55244755244755,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 1600,
+      "user_lines_removed": 411,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".omp/SYSTEM.md": 71,
+        ".omp/SYSTEM_DUMP.md": 1077,
+        ".omp/commands/generate-system-prompt.md": 261,
+        "agents/plan/2026-06-02/01.submit-occupancy-prefill-completion.plan.md": 25,
+        "docs/plan/2026-06-02/01.submit-occupancy-prefill-completion.plan.md": 28,
+        "hw-eval/src/benchmarks/submission_bottleneck/experiment_1_submit_occupancy.md": 8,
+        "hw-eval/src/benchmarks/submission_bottleneck/experiment_1_submit_occupancy.rs": 71,
+        "hw-eval/src/report.rs": 59
+      },
+      "user_removed_per_file": {
+        ".omp/SYSTEM.md": 40,
+        ".omp/SYSTEM_DUMP.md": 341,
+        ".omp/commands/generate-system-prompt.md": 23,
+        "hw-eval/src/benchmarks/submission_bottleneck/experiment_1_submit_occupancy.md": 3,
+        "hw-eval/src/benchmarks/submission_bottleneck/experiment_1_submit_occupancy.rs": 4
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1753,
+      "agent_lines_removed": 618,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1674,
+      "agent_lines_removed": 609,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 4,
+      "user_lines_added": 158,
+      "user_lines_removed": 1,
+      "agent_lines_added": 1764,
+      "agent_lines_removed": 691,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        ".agents/skills/coding-guidelines/SKILL.md": 1
+      }
+    }
+  ]
+}
