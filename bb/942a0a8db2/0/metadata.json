@@ -1,0 +1,58 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "bb942a0a8db2",
+  "session_id": "019e85bc-d905-7000-ae71-ee46397e024c",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-02T03:08:59.263008975Z",
+  "branch": "async-binding-intel-idxd",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "hw-eval/src/benchmarks/submission_bottleneck/experiment_1_submit_occupancy.md",
+    "hw-eval/src/benchmarks/submission_bottleneck/experiment_1_submit_occupancy.rs",
+    "hw-eval/src/benchmarks/submission_bottleneck/experiment_3_traffic_ladder.rs",
+    "hw-eval/src/benchmarks/submission_bottleneck/experiment_4_completion_reuse.rs",
+    "hw-eval/src/benchmarks/submission_bottleneck/experiment_5_submit_admission_probe.rs",
+    "hw-eval/src/report.rs"
+  ],
+  "agent": "Pi",
+  "model": "",
+  "turn_id": "433cd2c5e344",
+  "token_usage": {
+    "input_tokens": 33141,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 58880,
+    "output_tokens": 2384,
+    "api_call_count": 3
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-02T03:08:59.255403751Z",
+    "agent_lines": 302,
+    "agent_removed": 129,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 302,
+    "total_lines_changed": 431,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 51730360,
+      "user_lines_removed": 547,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".omp/SYSTEM_DUMP.md": 1077,
+        ".omp/commands/generate-system-prompt.md": 261,
+        "docs/report/benchmarking/submission_bottleneck_2026-06-01/experiment2_poll_submit_batch_stdout.raw": 51729022
+      },
+      "user_removed_per_file": {
+        ".omp/SYSTEM.md": 183,
+        ".omp/SYSTEM_DUMP.md": 341,
+        ".omp/commands/generate-system-prompt.md": 23
+      }
+    }
+  ]
+}
