@@ -1,0 +1,200 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "82a322473936",
+  "session_id": "019e84fe-4951-7000-bc66-d89219586763",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-02T00:22:58.724765652Z",
+  "branch": "async-binding-intel-idxd",
+  "checkpoints_count": 6,
+  "files_touched": [
+    "AGENTS.md",
+    "Cargo.toml",
+    "agents/CODING_REQUIREMENTS.md",
+    "agents/plan/2026-06-01/03.experiment2-ablation-study.plan.md",
+    "devenv.nix",
+    "docs/plan/2026-06-01/03.experiment2-ablation-study.plan.md",
+    "hw-eval/README.md",
+    "hw-eval/src/config.rs",
+    "hw-eval/src/main.rs",
+    "hw-eval/tests/cli_contract.rs",
+    "presentation/2026-05-27/ai_coding_skill_formation_discussion/ai_coding_skill_formation_discussion.pdf",
+    "presentation/2026-05-27/ai_coding_skill_formation_discussion/ai_coding_skill_formation_discussion.typ",
+    "presentation/2026-05-27/ai_coding_skill_formation_discussion/ai_coding_skill_formation_discussion_notes.md"
+  ],
+  "agent": "Pi",
+  "model": "",
+  "turn_id": "cec0862e1ad3",
+  "token_usage": {
+    "input_tokens": 278194,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 3303936,
+    "output_tokens": 17651,
+    "api_call_count": 57
+  },
+  "session_metrics": {
+    "turn_count": 6
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-02T00:22:58.712812461Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 39054,
+    "human_modified": 3481,
+    "human_removed": 0,
+    "total_committed": 39296,
+    "total_lines_changed": 43044,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 16655,
+      "user_lines_removed": 3462,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".codex/agents/entire-search.toml": 23,
+        ".codex/config.toml": 3,
+        ".codex/hooks.json": 52,
+        ".omp/SYSTEM.md": 232,
+        ".omp/SYSTEM2.md": 260,
+        ".omp/SYSTEM_DEFAULT.md": 265,
+        ".omp/SYSTEM_DUMP.md": 1080,
+        ".omp/commands/generate-system-prompt.md": 26,
+        ".omp/extensions/btw.ts": 963,
+        ".omp/extensions/entire/index.ts": 73,
+        ".omp/extensions/hashline.ts": 1302,
+        ".opencode/plugins/entire.ts": 216,
+        ".pi/extensions/entire/index.ts": 73,
+        "AGENTS.md": 11,
+        "Cargo.toml": 3,
+        "agents/plan/2026-05-27/05.ai-coding-skill-formation-discussion.done.md": 33,
+        "agents/plan/2026-05-27/08.ai-coding-discussion-plan-rewrite.done.md": 30,
+        "agents/plan/2026-05-27/09.ai-coding-skill-deck-draft.done.md": 26,
+        "agents/plan/2026-05-27/10.ai-coding-deck-aesthetic-revision.done.md": 33,
+        "agents/plan/2026-05-27/11.ai-coding-deck-style-framework.done.md": 24,
+        "agents/plan/2026-05-27/12.ai-coding-deck-autonumbering.done.md": 22,
+        "agents/plan/2026-05-27/13.ai-coding-deck-personal-examples.done.md": 23,
+        "agents/plan/2026-05-27/14.ai-coding-deck-personal-debugging-examples.done.md": 28,
+        "agents/plan/2026-05-27/15.ai-coding-deck-coroutine-directed-debugging.done.md": 23,
+        "agents/plan/2026-05-27/15.ai-coding-deck-education-discussion-questions.done.md": 26,
+        "agents/plan/2026-05-27/16.ai-coding-deck-anthropic-paper-focus.done.md": 29,
+        "agents/plan/2026-05-28/04.tokio-shared-comparison-plot.done.md": 17,
+        "agents/plan/2026-05-31/04.experiment2-all-variant-traces.plan.md": 23,
+        "agents/plan/2026-06-01/01.experiment2-configuration-suite.plan.md": 22,
+        "devenv.nix": 1,
+        "docs/plan/2026-05-27/04.ai-coding-skill-formation-discussion.done.md": 456,
+        "docs/plan/2026-05-27/07.ai-coding-deck-style-framework.done.md": 26,
+        "docs/plan/2026-05-27/08.ai-coding-deck-autonumbering.done.md": 19,
+        "docs/plan/2026-05-27/09.ai-coding-deck-personal-examples.done.md": 29,
+        "docs/plan/2026-05-27/10.ai-coding-deck-personal-debugging-examples.done.md": 66,
+        "docs/plan/2026-05-27/11.ai-coding-deck-coroutine-directed-debugging.done.md": 31,
+        "docs/plan/2026-05-27/11.ai-coding-deck-education-discussion-questions.done.md": 39,
+        "docs/plan/2026-05-27/12.ai-coding-deck-anthropic-paper-focus.done.md": 48,
+        "docs/plan/2026-05-28/04.tokio-shared-comparison-plot.done.md": 17,
+        "docs/plan/2026-05-31/05.experiment2-all-variant-traces.plan.md": 24,
+        "docs/plan/2026-06-01/01.experiment2-configuration-suite.plan.md": 44,
+        "docs/report/benchmarking/038.experiment2_all_variant_traces_2026-05-31.md": 79,
+        "docs/report/benchmarking/plot_tokio_async_shared_batch1.py": 145,
+        "docs/report/benchmarking/submission_bottleneck_2026-05-31/experiment2_all_variant_trace_summary_2026-05-31.json": 188,
+        "docs/report/benchmarking/submission_bottleneck_2026-05-31/marker_mechanism_baseline_packed_32b_iter804_latency_order_ns.csv": 161,
+        "docs/report/benchmarking/submission_bottleneck_2026-05-31/marker_mechanism_cache_state_clflush_iter804_latency_order_ns.csv": 161,
+        "docs/report/benchmarking/submission_bottleneck_2026-05-31/marker_mechanism_cache_state_pre_touch_iter804_latency_order_ns.csv": 161,
+        "docs/report/benchmarking/submission_bottleneck_2026-05-31/marker_mechanism_layout_padded_64b_iter804_latency_order_ns.csv": 161,
+        "docs/report/benchmarking/submission_bottleneck_2026-05-31/marker_mechanism_measurement_batch_scan_timing_iter804_latency_order_ns.csv": 161,
+        "docs/report/benchmarking/submission_bottleneck_2026-05-31/marker_mechanism_prefetch_prefetch_1_lines_iter804_latency_order_ns.csv": 161,
+        "docs/report/benchmarking/submission_bottleneck_2026-05-31/marker_mechanism_prefetch_prefetch_2_lines_iter804_latency_order_ns.csv": 161,
+        "docs/report/benchmarking/submission_bottleneck_2026-05-31/marker_mechanism_prefetch_prefetch_4_lines_iter804_latency_order_ns.csv": 161,
+        "docs/report/benchmarking/submission_bottleneck_2026-05-31/marker_overlap_baseline_all_variants_iter804_latency_order_ns.csv": 161,
+        "hw-eval/README.md": 3,
+        "hw-eval/src/config.rs": 4,
+        "hw-eval/src/main.rs": 9,
+        "hw-eval/tests/cli_contract.rs": 5,
+        "presentation/2026-05-27/ai_coding_skill_formation_discussion/ai_coding_skill_formation_discussion.pdf": 8573,
+        "presentation/2026-05-27/ai_coding_skill_formation_discussion/ai_coding_skill_formation_discussion.typ": 320,
+        "presentation/2026-05-27/ai_coding_skill_formation_discussion/ai_coding_skill_formation_discussion_notes.md": 139
+      },
+      "user_removed_per_file": {
+        "AGENTS.md": 40,
+        "agents/CODING_REQUIREMENTS.md": 6,
+        "devenv.nix": 1,
+        "hw-eval/README.md": 3,
+        "hw-eval/src/config.rs": 4,
+        "hw-eval/src/main.rs": 4,
+        "presentation/2026-05-27/ai_coding_skill_formation_discussion/ai_coding_skill_formation_discussion.pdf": 3101,
+        "presentation/2026-05-27/ai_coding_skill_formation_discussion/ai_coding_skill_formation_discussion.typ": 228,
+        "presentation/2026-05-27/ai_coding_skill_formation_discussion/ai_coding_skill_formation_discussion_notes.md": 75
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 16899,
+      "agent_lines_removed": 3620,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 16922,
+      "agent_lines_removed": 3620,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 4,
+      "user_lines_added": 207,
+      "user_lines_removed": 0,
+      "agent_lines_added": 16922,
+      "agent_lines_removed": 3620,
+      "user_added_per_file": {
+        "docs/plan/2026-06-01/03.experiment2-ablation-study.plan.md": 49,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 5,
+      "user_lines_added": 254,
+      "user_lines_removed": 9,
+      "agent_lines_added": 16922,
+      "agent_lines_removed": 3620,
+      "user_added_per_file": {
+        "docs/plan/2026-06-01/03.experiment2-ablation-study.plan.md": 96,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "docs/plan/2026-06-01/03.experiment2-ablation-study.plan.md": 9
+      }
+    },
+    {
+      "checkpoint_number": 6,
+      "user_lines_added": 254,
+      "user_lines_removed": 9,
+      "agent_lines_added": 16922,
+      "agent_lines_removed": 3620,
+      "user_added_per_file": {
+        "docs/plan/2026-06-01/03.experiment2-ablation-study.plan.md": 96,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "docs/plan/2026-06-01/03.experiment2-ablation-study.plan.md": 9
+      }
+    }
+  ]
+}

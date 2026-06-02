@@ -1,0 +1,21 @@
+let's think about how shall we draft an experiment plan for the experiment 2 to mix-match the configuration to understand the behavior (I want to control the variable, so it is important to have abliation study on this)
+
+---
+
+let's write plan for the experiments
+
+---
+
+include ASCII graph to demonstrate what the experiment is doing
+
+---
+
+how do you design those offset? make it more standard (like 1 2 4 8 16 etc.)
+
+---
+
+what will rdtscp do to the instruction pipeline
+
+---
+
+what if we use rdtsc instead? will it changes the behavior; let's make the code accepting different timer mechanism

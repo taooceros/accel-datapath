@@ -3,12 +3,14 @@
   "checkpoint_id": "82a322473936",
   "strategy": "manual-commit",
   "branch": "async-binding-intel-idxd",
-  "checkpoints_count": 13,
+  "checkpoints_count": 19,
   "files_touched": [
     "AGENTS.md",
     "Cargo.toml",
     "agents/CODING_REQUIREMENTS.md",
+    "agents/plan/2026-06-01/03.experiment2-ablation-study.plan.md",
     "devenv.nix",
+    "docs/plan/2026-06-01/03.experiment2-ablation-study.plan.md",
     "hw-eval/README.md",
     "hw-eval/src/config.rs",
     "hw-eval/src/main.rs",
@@ -41,13 +43,19 @@
       "transcript": "/82/a322473936/3/full.jsonl",
       "content_hash": "/82/a322473936/3/content_hash.txt",
       "prompt": "/82/a322473936/3/prompt.txt"
+    },
+    {
+      "metadata": "/82/a322473936/4/metadata.json",
+      "transcript": "/82/a322473936/4/full.jsonl",
+      "content_hash": "/82/a322473936/4/content_hash.txt",
+      "prompt": "/82/a322473936/4/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 173465,
+    "input_tokens": 451659,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 976128,
-    "output_tokens": 8968,
-    "api_call_count": 34
+    "cache_read_tokens": 4280064,
+    "output_tokens": 26619,
+    "api_call_count": 91
   }
 }
