@@ -56,12 +56,6 @@ New abstractions MUST be:
 
 A limited first-version abstraction is acceptable. A broad, ugly, hard-to-narrow framework is not.
 
-## CR-007: Use helper crates only when they reduce complexity
-
-Macros, builders, and error frameworks such as `bon` and `snafu` SHOULD be used only where they improve readability, diagnostics, validation, or source-chain preservation.
-
-They MUST NOT be added merely for consistency or style if plain Rust is clearer.
-
 ## CR-008: Match evidence to claims
 
 Code claims MUST be backed by evidence of matching strength:

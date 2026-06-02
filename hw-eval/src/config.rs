@@ -14,6 +14,7 @@ pub(crate) const DEFAULT_MARKER_BURSTS: &str = "64,96,128,160,256";
 pub(crate) const DEFAULT_MARKER_POSITIONS: &str = "first,half,last";
 pub(crate) const DEFAULT_MARKER_POLL_CADENCES: &str = "1,4,16,64,never";
 pub(crate) const DEFAULT_MARKER_POLL_OFFSETS: &str = "96";
+pub(crate) const DEFAULT_MARKER_POLL_SUBMIT_BATCHES: &str = "1";
 pub(crate) const DEFAULT_TRAFFIC_WINDOWS: &str = "1,8,32,64,96,112,120,124,128,160,256";
 pub(crate) const DEFAULT_TRAFFIC_CLASSES: &str = "submit-only,noop-completion,memmove64,memmove4k";
 pub(crate) const DEFAULT_COMPLETION_REUSE_POLICIES: &str =
@@ -64,21 +65,28 @@ pub(crate) struct Args {
     #[arg(long, default_value = DEFAULT_SUBMIT_OCCUPANCIES)]
     submit_occupancies: String,
 
-    /// Burst lengths for submit-marker-overlap benchmarks (comma-separated)
+    /// Burst lengths for Experiment 2 overlap and mechanism probes (comma-separated)
     #[arg(long, default_value = DEFAULT_MARKER_BURSTS)]
     marker_bursts: String,
 
-    /// Marker positions for submit-marker-overlap benchmarks: first,half,last (comma-separated)
+    /// Marker positions for Experiment 2 overlap traces: first,half,last (comma-separated)
     #[arg(long, default_value = DEFAULT_MARKER_POSITIONS)]
     marker_positions: String,
 
-    /// Marker poll cadences for submit-marker-overlap benchmarks: integers or never (comma-separated)
+    /// Legacy marker poll cadences; traced Experiment 2 mode uses poll step 1
     #[arg(long, default_value = DEFAULT_MARKER_POLL_CADENCES)]
     marker_poll_cadences: String,
 
-    /// First zero-based submit indexes for submit-marker-overlap tracing; poll step is fixed at 1
+    /// Trace extra submit timings from each occupancy through this total submission count
+    #[arg(long)]
+    submit_occupancy_trace_until: Option<usize>,
+    /// First zero-based submit indexes where Experiment 2 tracing/probes start polling
     #[arg(long, default_value = DEFAULT_MARKER_POLL_OFFSETS)]
     marker_poll_offsets: String,
+
+    /// Submit-side poll batches for Experiment 2 mechanism probes: poll after every N submitted requests
+    #[arg(long, default_value = DEFAULT_MARKER_POLL_SUBMIT_BATCHES)]
+    marker_poll_submit_batches: String,
 
     /// Windows for traffic-class-ladder benchmarks (comma-separated)
     #[arg(long, default_value = DEFAULT_TRAFFIC_WINDOWS)]
@@ -99,6 +107,10 @@ pub(crate) struct Args {
     /// DSA operation class for bottleneck experiments
     #[arg(long, value_enum, default_value = "noop")]
     dsa_op: DsaOperationClass,
+
+    /// Override memmove byte count for bottleneck experiments
+    #[arg(long)]
+    dsa_memmove_bytes: Option<usize>,
 
     /// Run software baselines only (no hardware required)
     #[arg(long)]
@@ -181,6 +193,26 @@ impl DsaOperationClass {
             Self::Memmove64 => "memmove64",
             Self::Memmove4k => "memmove4k",
         }
+    }
+
+    pub(crate) fn default_payload_size(self) -> usize {
+        match self {
+            Self::Noop => 0,
+            Self::Memmove64 => 64,
+            Self::Memmove4k => 4096,
+        }
+    }
+
+    pub(crate) fn operation_class_label(self, payload_size: usize) -> String {
+        if payload_size == self.default_payload_size() {
+            self.as_str().to_string()
+        } else {
+            format!("memmove{payload_size}b")
+        }
+    }
+
+    pub(crate) fn is_memmove(self) -> bool {
+        matches!(self, Self::Memmove64 | Self::Memmove4k)
     }
 }
 
@@ -280,6 +312,12 @@ pub(crate) fn parse_marker_bursts(s: &str) -> Result<Vec<usize>, BenchmarkConfig
 
 pub(crate) fn parse_marker_poll_offsets(s: &str) -> Result<Vec<usize>, BenchmarkConfigError> {
     parse_usize_list(s, "--marker-poll-offsets", false)
+}
+
+pub(crate) fn parse_marker_poll_submit_batches(
+    s: &str,
+) -> Result<Vec<usize>, BenchmarkConfigError> {
+    parse_positive_usize_list(s, "--marker-poll-submit-batches")
 }
 
 pub(crate) fn parse_marker_positions(s: &str) -> Result<Vec<MarkerPosition>, BenchmarkConfigError> {
@@ -405,15 +443,18 @@ fn parse_usize_list(
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SubmissionBottleneckConfig {
     pub(crate) submit_occupancies: Vec<usize>,
+    pub(crate) submit_occupancy_trace_until: Option<usize>,
     pub(crate) marker_bursts: Vec<usize>,
     pub(crate) marker_positions: Vec<MarkerPosition>,
     pub(crate) marker_poll_cadences: Vec<MarkerPollCadence>,
     pub(crate) marker_poll_offsets: Vec<usize>,
+    pub(crate) marker_poll_submit_batches: Vec<usize>,
     pub(crate) traffic_windows: Vec<usize>,
     pub(crate) traffic_classes: Vec<TrafficClass>,
     pub(crate) completion_reuse_policies: Vec<CompletionReusePolicy>,
     pub(crate) completion_reuse_window: usize,
     pub(crate) dsa_operation: DsaOperationClass,
+    pub(crate) dsa_payload_size: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -458,12 +499,15 @@ impl BenchmarkConfig {
         #[builder(default = DEFAULT_SUBMIT_BURSTS.to_string(), into)] submit_bursts: String,
         #[builder(default = DEFAULT_SUBMIT_OCCUPANCIES.to_string(), into)]
         submit_occupancies: String,
+        submit_occupancy_trace_until: Option<usize>,
         #[builder(default = DEFAULT_MARKER_BURSTS.to_string(), into)] marker_bursts: String,
         #[builder(default = DEFAULT_MARKER_POSITIONS.to_string(), into)] marker_positions: String,
         #[builder(default = DEFAULT_MARKER_POLL_CADENCES.to_string(), into)]
         marker_poll_cadences: String,
         #[builder(default = DEFAULT_MARKER_POLL_OFFSETS.to_string(), into)]
         marker_poll_offsets: String,
+        #[builder(default = DEFAULT_MARKER_POLL_SUBMIT_BATCHES.to_string(), into)]
+        marker_poll_submit_batches: String,
         #[builder(default = DEFAULT_TRAFFIC_WINDOWS.to_string(), into)] traffic_windows: String,
         #[builder(default = DEFAULT_TRAFFIC_CLASSES.to_string(), into)] traffic_classes: String,
         #[builder(default = DEFAULT_COMPLETION_REUSE_POLICIES.to_string(), into)]
@@ -471,6 +515,7 @@ impl BenchmarkConfig {
         #[builder(default = DEFAULT_COMPLETION_REUSE_WINDOW)] completion_reuse_window: usize,
         #[builder(default)] sw_only: bool,
         #[builder(default = DsaOperationClass::Noop)] dsa_op: DsaOperationClass,
+        dsa_memmove_bytes: Option<usize>,
         pin_core: Option<usize>,
         #[builder(default)] cold: bool,
         #[builder(default)] json: bool,
@@ -478,17 +523,30 @@ impl BenchmarkConfig {
         let device = device.unwrap_or_else(|| default_device(accel));
         let sizes = parse_sizes(&sizes)?;
         let submit_bursts = parse_submit_bursts(&submit_bursts)?;
+        let dsa_payload_size = match dsa_memmove_bytes {
+            Some(0) => return Err(BenchmarkConfigError::ZeroDsaMemmoveBytes),
+            Some(_) if !dsa_op.is_memmove() => {
+                return Err(BenchmarkConfigError::DsaMemmoveBytesForNoop)
+            }
+            Some(bytes) => bytes,
+            None => dsa_op.default_payload_size(),
+        };
         let submission_bottleneck = SubmissionBottleneckConfig {
             submit_occupancies: parse_submit_occupancies(&submit_occupancies)?,
+            submit_occupancy_trace_until,
             marker_bursts: parse_marker_bursts(&marker_bursts)?,
             marker_positions: parse_marker_positions(&marker_positions)?,
             marker_poll_cadences: parse_marker_poll_cadences(&marker_poll_cadences)?,
             marker_poll_offsets: parse_marker_poll_offsets(&marker_poll_offsets)?,
+            marker_poll_submit_batches: parse_marker_poll_submit_batches(
+                &marker_poll_submit_batches,
+            )?,
             traffic_windows: parse_traffic_windows(&traffic_windows)?,
             traffic_classes: parse_traffic_classes(&traffic_classes)?,
             completion_reuse_policies: parse_completion_reuse_policies(&completion_reuse_policies)?,
             completion_reuse_window,
             dsa_operation: dsa_op,
+            dsa_payload_size,
         };
         if threads == 0 {
             return Err(BenchmarkConfigError::ZeroThreads);
@@ -539,6 +597,7 @@ impl BenchmarkConfig {
             benchmark,
             submit_mode,
             submit_bursts,
+            submit_occupancy_trace_until,
             sw_only,
             submit_occupancies,
             marker_bursts,
@@ -546,11 +605,13 @@ impl BenchmarkConfig {
             marker_poll_cadences,
             traffic_windows,
             marker_poll_offsets,
+            marker_poll_submit_batches,
             traffic_classes,
             completion_reuse_policies,
             completion_reuse_window,
             pin_core,
             dsa_op,
+            dsa_memmove_bytes,
             cold,
             json,
         } = args;
@@ -567,15 +628,18 @@ impl BenchmarkConfig {
             .submit_bursts(submit_bursts)
             .submit_occupancies(submit_occupancies)
             .marker_bursts(marker_bursts)
+            .maybe_submit_occupancy_trace_until(submit_occupancy_trace_until)
             .marker_positions(marker_positions)
             .marker_poll_cadences(marker_poll_cadences)
             .marker_poll_offsets(marker_poll_offsets)
+            .marker_poll_submit_batches(marker_poll_submit_batches)
             .traffic_windows(traffic_windows)
             .traffic_classes(traffic_classes)
             .completion_reuse_policies(completion_reuse_policies)
             .completion_reuse_window(completion_reuse_window)
             .sw_only(sw_only)
             .dsa_op(dsa_op)
+            .maybe_dsa_memmove_bytes(dsa_memmove_bytes)
             .maybe_pin_core(pin_core)
             .cold(cold)
             .json(json)
@@ -600,6 +664,10 @@ pub(crate) enum BenchmarkConfigError {
     ZeroListEntry { flag: &'static str, raw: String },
     #[snafu(display("--threads must be greater than zero"))]
     ZeroThreads,
+    #[snafu(display("--dsa-memmove-bytes must be greater than zero"))]
+    ZeroDsaMemmoveBytes,
+    #[snafu(display("--dsa-memmove-bytes requires --dsa-op memmove64 or --dsa-op memmove4k"))]
+    DsaMemmoveBytesForNoop,
     #[snafu(display("--benchmark {benchmark} is not supported for --accel {accel}"))]
     UnsupportedBenchmark {
         benchmark: &'static str,
@@ -698,6 +766,10 @@ mod tests {
         );
         assert_eq!(config.submission_bottleneck.marker_poll_offsets, vec![96]);
         assert_eq!(
+            config.submission_bottleneck.marker_poll_submit_batches,
+            vec![1]
+        );
+        assert_eq!(
             config.submission_bottleneck.traffic_windows,
             vec![1, 8, 32, 64, 96, 112, 120, 124, 128, 160, 256]
         );
@@ -729,6 +801,7 @@ mod tests {
             config.submission_bottleneck.dsa_operation,
             DsaOperationClass::Noop
         );
+        assert_eq!(config.submission_bottleneck.dsa_payload_size, 0);
         assert!(!config.sw_only);
         assert_eq!(config.pin_core, None);
         assert!(!config.cold);
@@ -763,12 +836,14 @@ mod tests {
             .marker_positions("first,last".to_string())
             .marker_poll_cadences("4,never".to_string())
             .marker_poll_offsets("96,112".to_string())
+            .marker_poll_submit_batches("1,4,16".to_string())
             .traffic_windows("1,128".to_string())
             .traffic_classes("submit-only,memmove64".to_string())
             .completion_reuse_policies("packed-scan,batch-harvest".to_string())
             .completion_reuse_window(64)
             .sw_only(true)
             .dsa_op(DsaOperationClass::Memmove64)
+            .dsa_memmove_bytes(16 * 1024 * 1024)
             .pin_core(3)
             .cold(true)
             .json(true)
@@ -800,6 +875,10 @@ mod tests {
             config.submission_bottleneck.marker_poll_offsets,
             vec![96, 112]
         );
+        assert_eq!(
+            config.submission_bottleneck.marker_poll_submit_batches,
+            vec![1, 4, 16]
+        );
         assert_eq!(config.submission_bottleneck.traffic_windows, vec![1, 128]);
         assert_eq!(
             config.submission_bottleneck.traffic_classes,
@@ -817,6 +896,10 @@ mod tests {
         assert_eq!(
             config.submission_bottleneck.dsa_operation,
             DsaOperationClass::Memmove64
+        );
+        assert_eq!(
+            config.submission_bottleneck.dsa_payload_size,
+            16 * 1024 * 1024
         );
         assert_eq!(config.pin_core, Some(3));
         assert!(config.cold);
@@ -870,6 +953,29 @@ mod tests {
         assert!(matches!(
             parse_sizes("64,0,128"),
             Err(BenchmarkConfigError::ZeroListEntry { .. })
+        ));
+    }
+
+    #[test]
+    fn dsa_memmove_bytes_requires_memmove_operation() {
+        let noop_error = BenchmarkConfig::builder()
+            .dsa_op(DsaOperationClass::Noop)
+            .dsa_memmove_bytes(4096)
+            .build()
+            .unwrap_err();
+        assert!(matches!(
+            noop_error,
+            BenchmarkConfigError::DsaMemmoveBytesForNoop
+        ));
+
+        let zero_error = BenchmarkConfig::builder()
+            .dsa_op(DsaOperationClass::Memmove64)
+            .dsa_memmove_bytes(0)
+            .build()
+            .unwrap_err();
+        assert!(matches!(
+            zero_error,
+            BenchmarkConfigError::ZeroDsaMemmoveBytes
         ));
     }
 
@@ -950,6 +1056,10 @@ mod tests {
             vec![0, 96, 112]
         );
         assert_eq!(
+            parse_marker_poll_submit_batches("1,4,16").unwrap(),
+            vec![1, 4, 16]
+        );
+        assert_eq!(
             parse_traffic_classes("submit-only,memmove4k").unwrap(),
             vec![TrafficClass::SubmitOnly, TrafficClass::Memmove4k]
         );
@@ -965,6 +1075,13 @@ mod tests {
             parse_marker_poll_cadences("0"),
             Err(BenchmarkConfigError::ZeroListEntry {
                 flag: "--marker-poll-cadences",
+                ..
+            })
+        ));
+        assert!(matches!(
+            parse_marker_poll_submit_batches("0"),
+            Err(BenchmarkConfigError::ZeroListEntry {
+                flag: "--marker-poll-submit-batches",
                 ..
             })
         ));

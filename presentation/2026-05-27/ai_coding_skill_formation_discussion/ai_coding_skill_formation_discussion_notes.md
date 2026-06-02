@@ -1,112 +1,176 @@
-# Presenter notes: The Illusion of Competence
+Here is the revised presentation script. It integrates the exact terminology, empirical findings, and data from the paper *“How AI Impacts Skill Formation”* by Shen & Tamkin (2026) to ground the script perfectly with your slides.
 
-## 1. The Illusion of Competence
+---
 
-- Open with the contrast between a completed artifact and retained skill.
-- Do not claim the paper proves that AI is harmful. The point is narrower: a passing AI-assisted task is not evidence that the human learned.
-- Ask the audience to remember their most recent AI-assisted coding session.
+# Presentation Script: The Illusion of Competence
 
-## 2. The visible win hides the invisible cost
+## Slide 1: Title Slide (CSE 599H Human-AI Interaction)
 
-- Let the discussion-starter question sit for a moment.
-- Frame this as a measurement problem: organizations can count tickets and drafts, but rarely measure retained skill.
-- Avoid guilt framing. The point is that normal incentives push people toward the artifact path.
+**Visual:** Slide showing the two paths: AI path vs. Human path.
 
-## 3. Oversight is not a job title. It is a skill.
+**Script:**
+"Welcome, everyone, to CSE 599H. Today, we are diving into a crucial dynamic in human-AI interaction: **The Illusion of Competence**. We are discussing the paper *'How AI Impacts Skill Formation'* by Shen & Tamkin (2026), originally released through the Anthropic Fellows program.
 
-- Connect this to HAI: as AI writes more code, humans are increasingly positioned as reviewers and supervisors.
-- Oversight depends on debugging, code reading, and conceptual understanding.
-- Transition: the paper asks whether AI-assisted learning strengthens or bypasses these oversight skills.
+Look at these two paths on the slide. The **AI path** is a smooth transaction: ask the AI, get the code, the task passes. The **Human path** is a rigorous cognitive cycle: predict, try, fail, debug, explain, and *retain*. As we review today's data, ask yourself: Which path did you choose the last time you used an LLM assistant?"
 
-## 4. The experiment as a pipeline
+---
 
-- Trio matters because it is unfamiliar but realistic: a new async library a developer might learn on the job.
-- The randomized setup matters, but do not get stuck in methods details.
-- Stress the final unassisted quiz: this is what separates task completion from retained mastery.
+## Slide 2: Hook (01 HOOK)
 
-## 5. What exactly did they ask developers to learn?
+**Visual:** "The visible win hides the invisible cost." Organizational gains vs. what may be missing.
 
-- The tasks were small but concept-bearing: concurrent timers, nurseries, missing-record handling, channels, and result flow.
-- The point is workplace onboarding, not a toy syntax exercise.
-- Keep the explanation brief; the next slide explains how mastery was measured.
+**Script:**
+"The core tension of deploying generative AI tools at scale can be summarized simply: **The visible win hides the invisible cost**.
 
-## 6. How did they measure learning?
+Organizations are easily enticed by what is visible—faster draft generation, tickets closed, and a drastic drop in syntax errors. But what is hidden from the ledger is a form of **cognitive debt**. We are seeing compromised skill acquisition, stunted debugging mechanics, and a passive acceptance of plausible-sounding but fundamentally incorrect code. It forces us to confront an uncomfortable reality: *How many of us have approved or shipped code this week that we could not fully explain line by line?*"
 
-- The quiz is not just "do you remember syntax?"
-- Debugging is the important one for oversight because AI-generated code can be plausible and wrong.
-- Low-level code writing may become less central, but reading, debugging, and conceptual judgment remain central.
+---
 
-## 7. How did they conclude there was a learning penalty?
+## Slide 3: Article Question (01 ARTICLE QUESTION)
 
-- Say "17 percentage points" when comparing 50% and 67%.
-- The article describes the gap as 17% lower and nearly two letter grades; the slide uses percentage points for clarity.
-- The speed result was about two minutes faster for AI on average, but not statistically significant.
-- Do not imply every AI user performed poorly; the next section explains interaction-pattern variation.
+**Visual:** Core Question: Does AI provide a shortcut to both efficiency and skill development?
 
-## 8. The productivity story breaks
+**Script:**
+"This brings us directly to the core objective of the Shen & Tamkin study. We have all seen the *prior productivity story*—massive headline figures showing that AI can accelerate familiar, well-rehearsed tasks.
 
-- This is the visual headline slide for the main result.
-- Keep the interpretation simple: the task artifact was not enough evidence of retained mastery.
-- Do not overclaim permanent degradation; the measured outcome was immediate unassisted mastery.
+But this study asks an essential question: What happens when developers utilize AI while attempting to master a completely unfamiliar framework? To isolate this, the researchers chose **Trio**, an asynchronous programming library in Python that is highly conceptual and intentionally outside the everyday experience of most developers. Does AI act as a shortcut to both immediate completion and long-term competence, or does it bypass the learning loop entirely?"
 
-## 9. Debugging is where the gap bites
+---
 
-- The paper reports the largest score gap on debugging questions.
-- The proposed mechanism is that no-AI learners encountered and repaired more errors, so they practiced debugging.
-- Mark the mechanism as plausible, not proven causal mediation.
+## Slide 4: The Experiment (02 THE EXPERIMENT)
 
-## 10. Where did the time savings go?
+**Visual:** Experimental timeline: 1 Recruit $\rightarrow$ 2 Calibrate $\rightarrow$ 3 Learn $\rightarrow$ 4 Evaluate.
 
-- AI generation is not the whole workflow.
-- Some participants spent substantial time composing and iterating on prompts.
-- Use this slide to pivot from "AI or no AI" to "what kind of AI interaction?"
+**Script:**
+"To untangle task completion from skill retention, the researchers designed a randomized controlled experiment. They recruited 52 Python developers with no prior exposure to Trio.
 
-## 11. Not all AI use is the same
+The workflow was strictly controlled. First, a 10-minute unassisted warm-up calibrated baseline development speed. Next, the 35-minute learning phase kicked off. Participants were randomly split into two streams to complete two Trio tasks: the **AI Condition** provided a chat-based assistant in a sidebar that could ingest their current code and generate active solutions; the **No-AI Condition** provided identical reading materials but mandated entirely manual coding. Finally, everyone sat for a 25-minute evaluation quiz with **zero AI access**."
 
-- Do not moralize the personas. These are behavior patterns under time pressure.
-- The important contrast is whether the user keeps doing prediction, explanation, and repair.
-- The qualitative clusters are descriptive; do not present them as causal proof.
+---
 
-## 12. Same assistant. Different practice loop.
+## Slide 5: What Exactly Did They Ask Developers to Learn?
 
-- Keep this concrete and quick.
-- The traces are intentionally minimal, not realistic transcripts.
-- Ask the room which trace feels closer to their own use.
+**Visual:** Breakdown of Task 1 (Timer/Nurseries) and Task 2 (Record retrieval/Error handling).
 
-## 13. Which persona was your last AI session?
+**Script:**
+"The tasks were meticulously selected to simulate real-world software engineering onboarding. This wasn't a standard syntax check; it was an architectural test.
 
-- This is a short pair-share, about one or two minutes.
-- Ask participants to choose a label, not justify themselves.
-- If the room is quiet, answer the three diagnostic questions yourself first.
+Task 1 required building a timer that prints every second concurrently alongside other functions, forcing developers to implement Trio’s core concurrency abstraction: **nurseries**. Task 2 scaled up the difficulty, requiring a record retrieval system with strict error handling, testing their grip on **memory channels** and complex async result flows. This layout perfectly mirrors joining a new team: you parse some brief docs, look at starter code, and are expected to ship a minor feature."
 
-## 14. Generator or coach?
+---
 
-- Move from individual responsibility to interface design.
-- Make the tradeoff explicit: friction can harm throughput but help learning.
-- Ask which interventions belong in onboarding or unfamiliar-library work, not necessarily in every production task.
+## Slide 6: The Evaluation Quiz
+
+**Visual:** Quiz breakdown: 14 questions, 27 points, 4 assessment types.
+
+**Script:**
+"The evaluation quiz was built to evaluate independent AI supervision. If your assistant vanishes, can you still read, audit, and fix the codebase?
+
+The 14-question, 27-point evaluation targeted four distinct dimensions derived from computer science education literature: **Debugging** (diagnosing hidden faults), **Code Reading** (verifying correctness line-by-line), **Code Writing** (architecting an independent approach), and **Conceptual Inquiry** (explaining the underlying engine mechanics)."
+
+---
+
+## Slide 7 & 8: Results & The Retention Crash (03 RESULTS)
+
+**Visual:** Completion Time ($p=0.391$) vs. Quiz Score ($p=0.010$) graphs.
+
+**Script:**
+"When the data came in, it revealed what the paper frames as a highly significant **learning penalty**.
+
+First, look at the productivity outcome. On average, the AI-assisted group finished the tasks only about two minutes faster than the manual coders. Statistically, this time difference was **not significant** ($p=0.391$).
+
+But look at the quiz scores. The manual coding group averaged a solid **67%**, whereas the AI-assisted group dropped to a **50%** average. That is a massive 17% drop—nearly two full letter grades—and it is statistically highly significant with a large effect size ($d=0.738, p=0.010$). Shipping a completed task did not equate to retaining underlying knowledge."
+
+---
+
+## Slide 9 & 10: Skill Development by Experience & The Productivity Paradox
+
+**Visual:** Data charts showing quiz scores and task times by years of coding experience.
+
+**Script:**
+"A common counter-argument is that this penalty only applies to junior engineers. However, when you segment the data by experience—1-3 years, 4-6 years, and 7+ years—the learning gap persists broadly across the board.
+
+Why does this happen? The answer lies in the subarea breakdown: **debugging is where the gap bites hardest**. The manual group encountered significantly more errors during development, forcing them to manually diagnose, trace, and repair them. That exact friction is what trains engineering judgment. Because the AI group offloaded their troubleshooting, they skipped the cognitive struggle, leaving their mental models completely unverified."
+
+---
+
+## Slide 11 & 12: Behavioral Personas (04 BEHAVIORAL PERSONAS)
+
+**Visual:** The 6 AI interaction modes categorized into Low skill development vs. High skill development interactions.
+
+**Script:**
+"The critical finding of Shen & Tamkin’s research is that 'AI use' is not a monolith; **the interaction pattern dictates the learning outcome**. They identified six qualitative behavioral personas.
+
+Let's look at the **Low-Skill Development Interactions**, which pulled quiz scores below 40%:
+
+* **AI Delegation**: Pure cognitive offloading. Asking the tool to write the full block and blindly pasting it.
 
 
-## 15. When delegation felt productive but did not teach enough
+* **Progressive AI Reliance**: Hand-coding the baseline task, hitting a wall on the second, and completely surrendering the architecture to the model.
 
-- Use the Tonic profiling example as the personal version of the artifact-path warning.
-- Be concrete: the agent could produce runs, tables, and dashboards, but the useful understanding came from checking whether the comparisons were valid.
-- Tie the lesson to method: matched regimes, instrumentation-off throughput, and perf evidence turned the artifact into learning.
 
-## 16. The coroutine bug worked because I steered the debugger
+* **Iterative AI Debugging**: Treating the AI as a rapid-fire trial-and-error crutch to fix runtime errors without processing *why* the failure occurred.
 
-- Frame this as learning-oriented delegation, not solo hero debugging.
-- Say that the useful move was giving Claude the suspected boundary: DSA descriptor/completion alignment interacting with coroutine-frame storage.
-- Claude helped inspect layout and challenge the naive `alignas()` assumption, but the human kept the hypothesis, evidence standard, and final judgment in the loop.
 
-## 17. One question to end on
 
-- Use this as the single closing discussion: what undergraduate CS education should protect when AI can produce working artifacts.
-- Ask the class to choose one practice loop: prediction, debugging, explanation, or design judgment.
-- Push for one concrete course policy that preserves the chosen practice loop without pretending students will not use AI.
+Now, look at the **High-Skill Development Interactions**, where scores remained at or above 65%:
 
-## 18. Bibliography
+* **Conceptual Inquiry**: Using the model purely to clarify documentation or library concepts while writing every line of code independently.
 
-- Show briefly or leave as a reference slide.
-- The primary grounding is Shen and Tamkin plus the Anthropic research article.
-- Storey's cognitive-debt article and Sarkar's intention paper provide the broader framing for shared understanding and intentional programming.
-- The reference video can be shared as a pre-watch or follow-up link.
+
+* **Hybrid Code-Explanation**: Demanding that code generation be accompanied by comprehensive structural explanations, taking time to read them before compiling.
+
+
+* **Generation-then-comprehension**: Getting a snippet, but immediately engaging in active, focused follow-up queries to stress-test their own understanding."
+
+
+
+---
+
+## Slide 13: Caveat (05 CAVEAT)
+
+**Visual:** Methodology note regarding qualitative clusters vs. controlled variables.
+
+**Script:**
+"As systems engineers and researchers, we must call out the methodological boundaries of these personas. These six interaction styles represent descriptive qualitative clusters drawn from small groups ($n=2$ to $7$).
+
+They are not independently controlled, randomized conditions. We cannot definitively state whether delegation *caused* the lower quiz scores, or if developers with weaker baseline asynchronous programming skills simply fell back on delegation because they were severely stuck. It highlights a vital correlation: active cognitive friction matches better retention."
+
+---
+
+## Slide 14: Personal Trace: Delegation (06 PERSONAL TRACE)
+
+**Visual:** Personal troubleshooting example with Tonic profiling. Ask $\rightarrow$ Inspect $\rightarrow$ Failure.
+
+**Script:**
+"Let me ground this paper's theory in a recent, real-world trace from my own systems engineering workflow. I was profiling a high-performance distributed network framework—specifically an asynchronous gRPC system using Tonic.
+
+I fell straight into the **AI Delegation** trap. I asked the model to quickly generate a general code path for microsecond-level system profiling. When I inspected the code, the benchmark was totally corrupted; the hot-path timers it generated altered the cache lines and instrumentation overhead, fundamentally changing the system's behavior. It gave me highly plausible but structurally disastrous advice on a performance gap."
+
+---
+
+## Slide 15: Personal Trace: Directed Debugging (06 PERSONAL TRACE)
+
+**Visual:** System architecture trace: Intel DSA 64-byte descriptor / 32-byte completion alignment logic.
+
+**Script:**
+"Compare that to when I consciously switched to a **Conceptual Inquiry** loop. I was debugging a low-level hardware-software co-design problem: alignment for Intel Data Streaming Accelerator (DSA) descriptors inside asynchronous coroutine-frame storage.
+
+I owned the structural model. I forced the assistant to operate within a rigid hardware contract: a 64-byte descriptor and a 32-byte completion block. I directed Claude to explicitly inspect the alignment bounds, challenge standard compiler macro expansions, and track exactly how pointers were being evaluated.
+
+Together, we derived the solution: over-allocate the heap buffer, compute the bitwise pointer adjustments once, and cache those hot addresses. The mathematical constraint—`(base + align - 1) & ~(align - 1)`—was driven by my direction. The assistant executed the search, but I maintained the oversight."
+
+---
+
+## Slide 16: Discussion (07 DISCUSSION / REFERENCES)
+
+**Visual:** Final takeaway: "AI-enhanced productivity is not a shortcut to competence."
+
+**Script:**
+"We conclude with the definitive thesis statement of Shen & Tamkin's work: **AI-enhanced productivity is not a shortcut to competence**.
+
+If engineering oversight, architectural safety, and systems verification depend on long-term human expertise, our tools, IDE configurations, and educational frameworks must protect the practice loop.
+
+If we optimize our environments for zero friction, we risk optimizing our brains for zero retention. This leaves us with a critical question for discussion: As AI agents become more autonomous, what engineering difficulties must we intentionally design *back* into computer science education to ensure students actually learn?
+
+Thank you, and let's open the floor."

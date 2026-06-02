@@ -18,7 +18,7 @@ use hw_eval::dsa::{
     reset_completion, DsaCompletionRecord, DsaCompletionStatus, DsaHwDesc, DSA_COMP_NONE,
     DSA_COMP_SUCCESS,
 };
-use hw_eval::submit::{cycles_to_ns, flush_range, rdtscp, WqPortal};
+use hw_eval::submit::{cycles_to_ns, flush_range, WqPortal};
 
 use crate::config::DsaOperationClass;
 use crate::report::{
@@ -27,18 +27,20 @@ use crate::report::{
 };
 
 use super::super::common::{
-    dsa_operation_payload_size, fill_descriptor, optional_stats, OperationSlots,
+    dsa_operation_payload_size, fill_descriptor, measured_call, optional_stats, OperationSlots,
     COMPLETION_TIMEOUT_NS, TIMEOUT_CHECK_STRIDE,
 };
 
 const SUBMIT_MARKER_MECHANISM_BENCHMARK: &str = "submit_marker_mechanism";
 const CACHELINE_BYTES: usize = 64;
 const COMPLETION_RECORD_BYTES: usize = 32;
+const DEFAULT_POLL_SUBMIT_BATCH_N: usize = 1;
 
 pub(crate) fn bench_submit_marker_mechanism_probes(
     wq: &WqPortal,
     bursts: &[usize],
     poll_offsets: &[usize],
+    poll_submit_batches: &[usize],
     operation: DsaOperationClass,
     iterations: usize,
     tsc_freq: u64,
@@ -58,8 +60,8 @@ pub(crate) fn bench_submit_marker_mechanism_probes(
             operation.as_str()
         );
         println!(
-            "{:>8} {:>8} {:>18} {:>22} {:>14} {:>14} {:>14}",
-            "n", "offset", "sub_exp", "variant", "visible_ns", "none_ns", "completed"
+            "{:>8} {:>8} {:>8} {:>18} {:>22} {:>14} {:>14} {:>14}",
+            "n", "offset", "poll_n", "sub_exp", "variant", "visible_ns", "none_ns", "completed"
         );
     }
 
@@ -80,6 +82,25 @@ pub(crate) fn bench_submit_marker_mechanism_probes(
             print_result_row(json, &baseline_result);
             results.push(baseline_result);
 
+            for &poll_submit_batch_n in poll_submit_batches {
+                if poll_submit_batch_n == DEFAULT_POLL_SUBMIT_BATCH_N {
+                    continue;
+                }
+
+                let mut result = run_probe(
+                    wq,
+                    &mut packed_slots,
+                    n,
+                    poll_offset,
+                    operation,
+                    iterations,
+                    tsc_freq,
+                    ProbeSpec::poll_submit_batch(poll_submit_batch_n),
+                );
+                baseline.apply_to(&mut result);
+                print_result_row(json, &result);
+                results.push(result);
+            }
             let packed_specs = [
                 ProbeSpec::prefetch(
                     "prefetch-1-lines",
@@ -161,9 +182,10 @@ fn print_result_row(json: bool, result: &SubmitMarkerMechanismResult) {
         .unwrap_or_else(|| "-".to_string());
 
     println!(
-        "{:>8} {:>8} {:>18} {:>22} {:>14} {:>14} {:>14}",
+        "{:>8} {:>8} {:>8} {:>18} {:>22} {:>14} {:>14} {:>14}",
         result.n,
         result.marker_poll_offset,
+        result.poll_submit_batch_n,
         result.sub_experiment,
         result.variant,
         visible_ns,
@@ -244,6 +266,7 @@ struct ProbeSpec {
     prefetch_distance_lines: usize,
     cache_state: CacheState,
     timing_mode: TimingMode,
+    poll_submit_batch_n: usize,
 }
 
 impl ProbeSpec {
@@ -254,6 +277,7 @@ impl ProbeSpec {
             prefetch_distance_lines: 0,
             cache_state: CacheState::ResetOnly,
             timing_mode: TimingMode::PerRead,
+            poll_submit_batch_n: DEFAULT_POLL_SUBMIT_BATCH_N,
         }
     }
 
@@ -269,6 +293,7 @@ impl ProbeSpec {
             prefetch_distance_lines,
             cache_state,
             timing_mode,
+            poll_submit_batch_n: DEFAULT_POLL_SUBMIT_BATCH_N,
         }
     }
 
@@ -284,6 +309,7 @@ impl ProbeSpec {
             prefetch_distance_lines,
             cache_state,
             timing_mode,
+            poll_submit_batch_n: DEFAULT_POLL_SUBMIT_BATCH_N,
         }
     }
 
@@ -299,6 +325,7 @@ impl ProbeSpec {
             prefetch_distance_lines,
             cache_state,
             timing_mode,
+            poll_submit_batch_n: DEFAULT_POLL_SUBMIT_BATCH_N,
         }
     }
 
@@ -314,6 +341,18 @@ impl ProbeSpec {
             prefetch_distance_lines,
             cache_state,
             timing_mode,
+            poll_submit_batch_n: DEFAULT_POLL_SUBMIT_BATCH_N,
+        }
+    }
+
+    fn poll_submit_batch(poll_submit_batch_n: usize) -> Self {
+        Self {
+            sub_experiment: "poll-submit-batch",
+            variant: "configured",
+            prefetch_distance_lines: 0,
+            cache_state: CacheState::ResetOnly,
+            timing_mode: TimingMode::PerRead,
+            poll_submit_batch_n,
         }
     }
 }
@@ -660,10 +699,8 @@ fn run_probe<S: CompletionStorage>(
     let mut accumulator = ProbeAccumulator::default();
     let mut seen = vec![false; n];
     let mut iteration_trace = IterationTrace::new(n);
-    let poll_to_next_unfinished = match spec.timing_mode {
-        TimingMode::PerRead => poll_to_next_unfinished_with_per_read_timing::<S>,
-        TimingMode::BatchScan => poll_to_next_unfinished_with_batch_timing::<S>,
-    };
+    let poll_submit_batch_n = spec.poll_submit_batch_n;
+    assert!(poll_submit_batch_n != 0);
 
     for iteration_index in 0..iterations {
         prepare_completions(slots, n, spec.cache_state);
@@ -671,17 +708,18 @@ fn run_probe<S: CompletionStorage>(
 
         let mut next_completion_to_poll = 0_usize;
         for submit_index in 0..n {
-            let submit_start_tsc = rdtscp().0;
-            unsafe { wq.submit(slots.descriptor(submit_index)) };
-            let submit_end_tsc = rdtscp().0;
-            iteration_trace.record_submit(submit_index, submit_start_tsc, submit_end_tsc);
+            let submit = measured_call(|| unsafe { wq.submit(slots.descriptor(submit_index)) });
+            iteration_trace.record_submit(submit_index, submit.start_tsc, submit.end_tsc);
 
-            if submit_index >= poll_offset && next_completion_to_poll < n {
+            if should_poll_after_submit(submit_index, n, poll_offset, poll_submit_batch_n)
+                && next_completion_to_poll < n
+            {
                 poll_to_next_unfinished(
                     slots,
                     n,
                     &mut next_completion_to_poll,
                     spec.prefetch_distance_lines,
+                    spec.timing_mode,
                     &mut accumulator,
                     submit_index,
                     &mut iteration_trace,
@@ -715,90 +753,124 @@ fn prepare_completions<S: CompletionStorage>(slots: &mut S, n: usize, cache_stat
     }
 }
 
-fn poll_to_next_unfinished_with_per_read_timing<S: CompletionStorage>(
-    slots: &S,
-    n: usize,
-    next_completion_to_poll: &mut usize,
-    prefetch_distance_lines: usize,
-    accumulator: &mut ProbeAccumulator,
+fn should_poll_after_submit(
     submit_index: usize,
-    iteration_trace: &mut IterationTrace,
-) {
-    let mut current_line = None;
-    let mut visible_reads_in_line = 0_u64;
-
-    iteration_trace.begin_poll_event(submit_index);
-    while *next_completion_to_poll < n {
-        let completion_index = *next_completion_to_poll;
-        prefetch_ahead(slots, completion_index, prefetch_distance_lines);
-
-        let start_tsc = rdtscp().0;
-        let status = DsaCompletionStatus::mask(slots.completion(completion_index).status());
-        let end_tsc = rdtscp().0;
-        let latency = end_tsc.saturating_sub(start_tsc);
-        iteration_trace.record_poll_read(completion_index, status, Some(latency));
-
-        if status == DSA_COMP_NONE {
-            accumulator.record_none(latency);
-            break;
-        }
-
-        let line_addr = slots.completion_addr(completion_index) & !(CACHELINE_BYTES - 1);
-        if current_line != Some(line_addr) {
-            current_line = Some(line_addr);
-            visible_reads_in_line = 0;
-        }
-        visible_reads_in_line += 1;
-
-        accumulator.record_visible(
-            latency,
-            slots.line_position(completion_index),
-            visible_reads_in_line,
-        );
-        *next_completion_to_poll += 1;
+    n: usize,
+    poll_offset: usize,
+    poll_submit_batch_n: usize,
+) -> bool {
+    if submit_index < poll_offset {
+        return false;
     }
-    iteration_trace.finish_poll_event(submit_index, *next_completion_to_poll as u64, None);
+
+    let submitted_since_poll_start = submit_index - poll_offset + 1;
+    submitted_since_poll_start % poll_submit_batch_n == 0 || submit_index + 1 == n
 }
 
-fn poll_to_next_unfinished_with_batch_timing<S: CompletionStorage>(
+fn poll_to_next_unfinished<S: CompletionStorage>(
     slots: &S,
     n: usize,
     next_completion_to_poll: &mut usize,
     prefetch_distance_lines: usize,
+    timing_mode: TimingMode,
     accumulator: &mut ProbeAccumulator,
     submit_index: usize,
     iteration_trace: &mut IterationTrace,
 ) {
-    let start_tsc = rdtscp().0;
-    let mut reads = 0_u64;
-    let mut visible = 0_u64;
-
     iteration_trace.begin_poll_event(submit_index);
-    while *next_completion_to_poll < n {
-        let completion_index = *next_completion_to_poll;
-        prefetch_ahead(slots, completion_index, prefetch_distance_lines);
 
-        reads += 1;
-        let status = DsaCompletionStatus::mask(slots.completion(completion_index).status());
-        iteration_trace.record_poll_read(completion_index, status, None);
-        if status == DSA_COMP_NONE {
-            break;
+    match timing_mode {
+        TimingMode::PerRead => {
+            let mut current_line = None;
+            let mut visible_reads_in_line = 0_u64;
+
+            while *next_completion_to_poll < n {
+                let completion_index = *next_completion_to_poll;
+                prefetch_ahead(slots, completion_index, prefetch_distance_lines);
+
+                let poll = measured_call(|| {
+                    DsaCompletionStatus::mask(slots.completion(completion_index).status())
+                });
+                let status = poll.value;
+                let latency_tsc = poll.elapsed_tsc();
+                iteration_trace.record_poll_read(completion_index, status, Some(latency_tsc));
+
+                if status == DSA_COMP_NONE {
+                    accumulator.record_none(latency_tsc);
+                    break;
+                }
+
+                record_visible_poll_read(
+                    slots,
+                    completion_index,
+                    latency_tsc,
+                    &mut current_line,
+                    &mut visible_reads_in_line,
+                    accumulator,
+                );
+                *next_completion_to_poll += 1;
+            }
+
+            iteration_trace.finish_poll_event(submit_index, *next_completion_to_poll as u64, None);
         }
+        TimingMode::BatchScan => {
+            let scan = measured_call(|| {
+                let mut reads = 0_u64;
+                let mut visible = 0_u64;
 
-        visible += 1;
-        *next_completion_to_poll += 1;
-    }
+                while *next_completion_to_poll < n {
+                    let completion_index = *next_completion_to_poll;
+                    prefetch_ahead(slots, completion_index, prefetch_distance_lines);
 
-    let end_tsc = rdtscp().0;
-    if reads != 0 {
-        let latency_tsc = end_tsc.saturating_sub(start_tsc);
-        accumulator.record_poll_window(latency_tsc, reads, visible);
-        iteration_trace.finish_poll_event(
-            submit_index,
-            *next_completion_to_poll as u64,
-            Some(latency_tsc),
-        );
+                    reads += 1;
+                    let status =
+                        DsaCompletionStatus::mask(slots.completion(completion_index).status());
+                    iteration_trace.record_poll_read(completion_index, status, None);
+                    if status == DSA_COMP_NONE {
+                        break;
+                    }
+
+                    visible += 1;
+                    *next_completion_to_poll += 1;
+                }
+
+                (reads, visible)
+            });
+
+            let (reads, visible) = scan.value;
+            if reads != 0 {
+                let latency_tsc = scan.elapsed_tsc();
+                accumulator.record_poll_window(latency_tsc, reads, visible);
+                iteration_trace.finish_poll_event(
+                    submit_index,
+                    *next_completion_to_poll as u64,
+                    Some(latency_tsc),
+                );
+            }
+        }
     }
+}
+
+fn record_visible_poll_read<S: CompletionStorage>(
+    slots: &S,
+    completion_index: usize,
+    latency_tsc: u64,
+    current_line: &mut Option<usize>,
+    visible_reads_in_line: &mut u64,
+    accumulator: &mut ProbeAccumulator,
+) {
+    let line_addr = slots.completion_addr(completion_index) & !(CACHELINE_BYTES - 1);
+    if *current_line != Some(line_addr) {
+        *current_line = Some(line_addr);
+        *visible_reads_in_line = 0;
+    }
+    *visible_reads_in_line += 1;
+
+    accumulator.record_visible(
+        latency_tsc,
+        slots.line_position(completion_index),
+        *visible_reads_in_line,
+    );
 }
 
 fn prefetch_ahead<S: CompletionStorage>(
@@ -950,6 +1022,7 @@ impl ProbeAccumulator {
             operation_class: operation.as_str().to_string(),
             n,
             marker_poll_offset: poll_offset,
+            poll_submit_batch_n: spec.poll_submit_batch_n,
             completion_layout: slots.layout_name().to_string(),
             completion_stride_bytes: slots.stride_bytes(),
             completion_alignment_bytes: slots.alignment_bytes(),
@@ -1048,6 +1121,21 @@ mod tests {
         assert_eq!(position(32, 0, COMPLETION_RECORD_BYTES), 1);
         assert_eq!(position(32, 1, COMPLETION_RECORD_BYTES), 0);
         assert_eq!(position(0, 1, CACHELINE_BYTES), 0);
+    }
+
+    #[test]
+    fn poll_submit_batch_counts_submissions_between_polls() {
+        let n = 10;
+        let poll_offset = 2;
+        let poll_submit_batch_n = 3;
+
+        let poll_points = (0..n)
+            .filter(|&submit_index| {
+                should_poll_after_submit(submit_index, n, poll_offset, poll_submit_batch_n)
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(poll_points, vec![4, 7, 9]);
     }
 
     #[test]

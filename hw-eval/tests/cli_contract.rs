@@ -273,6 +273,8 @@ fn submit_occupancy_selector_reaches_hardware_open_with_structured_error() {
         "0,32",
         "--dsa-op",
         "memmove64",
+        "--dsa-memmove-bytes",
+        "16777216",
         "--device",
         missing_device,
         "--sizes",
@@ -342,6 +344,11 @@ fn assert_dsa_selector_reaches_hardware_open(benchmark: &str, extra_args: &[&str
         "selector should parse before hardware open fails: {stderr}"
     );
     assert_no_payload_bytes(&stderr);
+}
+
+#[test]
+fn experiment_two_default_suite_selector_reaches_hardware_open() {
+    assert_dsa_selector_reaches_hardware_open("submit-marker-overlap", &[]);
 }
 
 #[test]

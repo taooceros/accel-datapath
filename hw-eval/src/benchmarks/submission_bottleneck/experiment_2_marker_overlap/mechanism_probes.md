@@ -22,11 +22,12 @@ The default Experiment 2 selector, `submit-marker-overlap`, also runs these mech
 | `layout` | `padded-64b` | Does one-completion-per-cacheline close or widen the gap against baseline? |
 | `prefetch` | `prefetch-1-lines`, `prefetch-2-lines`, `prefetch-4-lines` | Can CPU prefetch hide DSA-written line visibility cost? |
 | `measurement` | `batch-scan-timing` | Does avoiding per-read `rdtscp` change scan cost against baseline? |
+| `poll-submit-batch` | `configured` with `poll_submit_batch_n > 1` | What changes when the CPU submits several descriptors before polling the next-unfinished frontier? |
 | `cache-state` | `pre-touch`, `clflush` | Does CPU cache state before DSA writes change first-visible cost? |
 
 ## Output interpretation
 
-Each result row records completion-storage stride, nominal alignment, base pointer modulo 64 and 4096, completion outcome counts, and latency statistics split by status and cacheline position. Non-baseline rows also include `baseline_comparison`, which reports median nanosecond deltas and ratios against the single `baseline/packed-32b` row for the same burst and poll offset.
+Each result row records completion-storage stride, nominal alignment, base pointer modulo 64 and 4096, `poll_submit_batch_n`, completion outcome counts, and latency statistics split by status and cacheline position. Non-baseline rows also include `baseline_comparison`, which reports median nanosecond deltas and ratios against the single `baseline/packed-32b` row for the same burst and poll offset.
 
 For packed 32-byte completion storage, line position is computed from the actual completion base address. Do not assume request parity alone; use the emitted alignment fields to interpret whether pairs are `(0,1)`, `(1,2)`, or shifted by allocation.
 
@@ -35,4 +36,5 @@ For packed 32-byte completion storage, line position is computed from the actual
 - Batch size remains one logical operation per MMIO submission.
 - `n` remains the number of logical descriptors submitted in the burst.
 - The poll loop still follows the Experiment 2 next-unfinished frontier model.
+- `poll_submit_batch_n` is a submit-side interval: how many logical requests are submitted between poll events. It is not a DSA batch descriptor size and not the number of completion records read inside one poll scan.
 - Existing `submit_marker_overlap` row shape is not modified by this module; the default suite appends `submit_marker_mechanism` rows as a separate result family.

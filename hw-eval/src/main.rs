@@ -186,6 +186,7 @@ fn run() -> Result<(), HwEvalError> {
             config.benchmark,
             BenchmarkKind::SubmitOccupancy
                 | BenchmarkKind::SubmitMarkerOverlap
+                | BenchmarkKind::SubmitMarkerMechanism
                 | BenchmarkKind::TrafficClassLadder
                 | BenchmarkKind::CompletionReusePolicy
         ) {
@@ -196,12 +197,16 @@ fn run() -> Result<(), HwEvalError> {
                     println!("DSA operation: {}", bottleneck.dsa_operation.as_str());
                 }
                 BenchmarkKind::SubmitMarkerOverlap => {
+                    println!("Experiment 2 suite: overlap + mechanism probes");
                     println!("Marker bursts: {:?}", bottleneck.marker_bursts);
                     println!("Marker positions: {:?}", bottleneck.marker_positions);
-                    println!(
-                        "Marker poll cadences: {:?}",
-                        bottleneck.marker_poll_cadences
-                    );
+                    println!("Marker poll offsets: {:?}", bottleneck.marker_poll_offsets);
+                    println!("DSA operation: {}", bottleneck.dsa_operation.as_str());
+                }
+                BenchmarkKind::SubmitMarkerMechanism => {
+                    println!("Experiment 2 mechanism probes only");
+                    println!("Marker bursts: {:?}", bottleneck.marker_bursts);
+                    println!("Marker poll offsets: {:?}", bottleneck.marker_poll_offsets);
                     println!("DSA operation: {}", bottleneck.dsa_operation.as_str());
                 }
                 BenchmarkKind::TrafficClassLadder => {

@@ -268,13 +268,27 @@ pub(crate) struct SubmitOccupancyResult {
     pub(crate) operation_class: String,
     pub(crate) k_prefill: usize,
     pub(crate) submitted: usize,
-    pub(crate) completed: LatencyStats,
-    pub(crate) missing: LatencyStats,
-    pub(crate) errors: LatencyStats,
-    pub(crate) extra_submit_tsc_ticks: LatencyStats,
-    pub(crate) extra_submit_ns: LatencyStats,
-    pub(crate) first_old_completion_tsc_ticks: Option<LatencyStats>,
-    pub(crate) first_old_completion_ns: Option<LatencyStats>,
+    pub(crate) trace_until: usize,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) extra_submit_trace: Vec<SubmitOccupancyExtraTracePoint>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) trace_outcomes: Vec<SubmitOccupancyTraceOutcome>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct SubmitOccupancyExtraTracePoint {
+    pub(crate) iteration_index: usize,
+    pub(crate) submit_index: usize,
+    pub(crate) submit_tsc_ticks: u64,
+    pub(crate) submit_ns: u64,
+}
+
+#[derive(Serialize)]
+pub(crate) struct SubmitOccupancyTraceOutcome {
+    pub(crate) iteration_index: usize,
+    pub(crate) completed: usize,
+    pub(crate) missing: usize,
+    pub(crate) errors: usize,
 }
 
 #[derive(Serialize)]
@@ -402,6 +416,7 @@ pub(crate) struct SubmitMarkerMechanismResult {
     pub(crate) operation_class: String,
     pub(crate) n: usize,
     pub(crate) marker_poll_offset: usize,
+    pub(crate) poll_submit_batch_n: usize,
     pub(crate) completion_layout: String,
     pub(crate) completion_stride_bytes: usize,
     pub(crate) completion_alignment_bytes: usize,

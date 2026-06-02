@@ -23,8 +23,8 @@ use crate::report::{
 };
 
 use super::super::common::{
-    count_visible_completions, optional_stats, reset_sample_completions, OperationSlots,
-    COMPLETION_TIMEOUT_NS, TIMEOUT_CHECK_STRIDE,
+    count_visible_completions, measured_call, optional_stats, reset_sample_completions,
+    OperationSlots, COMPLETION_TIMEOUT_NS, TIMEOUT_CHECK_STRIDE,
 };
 
 const SUBMIT_MARKER_OVERLAP_BENCHMARK: &str = "submit_marker_overlap";
@@ -44,14 +44,7 @@ pub(crate) fn bench_submit_marker_overlap(
     let Some(&max_burst) = bursts.iter().max() else {
         return;
     };
-    let mut slots = OperationSlots::new(max_burst, operation);
-    let mut seen = vec![false; max_burst];
-    let mut submit_start_tscs = vec![0_u64; max_burst];
-    let mut observed_tscs = vec![0_u64; max_burst];
-    let mut submit_end_tscs = vec![0_u64; max_burst];
-    let mut observed_statuses = vec![DSA_COMP_NONE; max_burst];
-    let mut observed_after_submit_indices = vec![0_usize; max_burst];
-    let mut observed_from_marker_tscs = vec![None; max_burst];
+    let mut scratch = OverlapScratch::new(max_burst, operation);
 
     let mut drain_desc = DsaHwDesc::default();
     let mut drain_comp = DsaCompletionRecord::default();
@@ -74,281 +67,249 @@ pub(crate) fn bench_submit_marker_overlap(
             let marker_position = position.to_index(n);
 
             for &poll_offset in poll_offsets {
-                let mut submit_tail_tsc = Vec::with_capacity(iterations);
-                let mut marker_visible_tsc = Vec::with_capacity(iterations);
-                let mut completed_counts = Vec::with_capacity(iterations);
-                let mut missing_counts = Vec::with_capacity(iterations);
-                let mut error_counts = Vec::with_capacity(iterations);
-                let mut observed_before_final_submit = 0_u64;
-
-                let mut request_accumulators = request_completion_accumulators(n, iterations);
-                let mut trace_accumulators = trace_accumulators(n, poll_offset, iterations);
-                let mut sample_trace = Vec::with_capacity(iterations);
-                let max_poll_reads_per_iteration =
-                    n.saturating_add(n.saturating_sub(poll_offset.min(n)));
-                let mut poll_result = CompletionPollResult::with_capacity(n);
-                let mut poll_event_offsets = vec![0_usize; n];
-                let mut poll_event_counts = vec![0_usize; n];
-                let mut poll_visible_prefix_lens = vec![0_u64; n];
-                let mut poll_event_request_indices =
-                    Vec::with_capacity(max_poll_reads_per_iteration);
-                let mut poll_event_statuses = Vec::with_capacity(max_poll_reads_per_iteration);
-                let mut poll_event_latency_tsc_ticks =
-                    Vec::with_capacity(max_poll_reads_per_iteration);
-
-                for iteration_index in 0..iterations {
-                    reset_sample_completions(&mut slots.completions[..n]);
-                    submit_start_tscs[..n].fill(0);
-                    submit_end_tscs[..n].fill(0);
-                    observed_tscs[..n].fill(0);
-                    observed_statuses[..n].fill(DSA_COMP_NONE);
-                    observed_after_submit_indices[..n].fill(0);
-                    observed_from_marker_tscs[..n].fill(None);
-                    poll_event_offsets.fill(0);
-                    poll_event_counts.fill(0);
-                    poll_visible_prefix_lens.fill(0);
-                    poll_event_request_indices.clear();
-                    poll_event_statuses.clear();
-                    poll_event_latency_tsc_ticks.clear();
-
-                    let mut next_completion_to_poll = 0_usize;
-                    let mut marker_submit_tsc = None;
-                    let mut final_submit_tsc = 0_u64;
-
-                    for index in 0..n {
-                        let submit =
-                            measured_call(|| unsafe { wq.submit(&slots.descriptors[index]) });
-                        let submit_start_tsc = submit.start_tsc;
-                        submit_start_tscs[index] = submit_start_tsc;
-                        let submit_end_tsc = submit.end_tsc;
-                        submit_end_tscs[index] = submit_end_tsc;
-
-                        if index == marker_position {
-                            marker_submit_tsc = Some(submit_start_tsc);
-                        }
-                        if index == n - 1 {
-                            final_submit_tsc = submit_end_tsc;
-                        }
-
-                        trace_accumulators[index].record_submit(
-                            submit_end_tsc.saturating_sub(submit_start_tsc),
-                            marker_submit_tsc
-                                .map(|marker_tsc| submit_start_tsc.saturating_sub(marker_tsc)),
-                            marker_submit_tsc
-                                .map(|marker_tsc| submit_end_tsc.saturating_sub(marker_tsc)),
-                        );
-
-                        if index >= poll_offset && next_completion_to_poll < n {
-                            poll_to_next_unfinished(
-                                &slots.completions[..n],
-                                &mut next_completion_to_poll,
-                                &mut observed_tscs[..n],
-                                &mut observed_statuses[..n],
-                                &mut observed_after_submit_indices[..n],
-                                &mut observed_from_marker_tscs[..n],
-                                index,
-                                marker_submit_tsc,
-                                &mut poll_result,
-                            );
-
-                            let event_start = poll_event_request_indices.len();
-                            let read_count = poll_result.read_count() as usize;
-                            debug_assert!(
-                                event_start + read_count <= poll_event_request_indices.capacity()
-                            );
-                            debug_assert!(
-                                event_start + read_count <= poll_event_statuses.capacity()
-                            );
-                            debug_assert!(
-                                event_start + read_count <= poll_event_latency_tsc_ticks.capacity()
-                            );
-
-                            poll_event_offsets[index] = event_start;
-                            poll_event_counts[index] = read_count;
-                            poll_visible_prefix_lens[index] = poll_result.visible_prefix_len;
-                            poll_event_request_indices
-                                .extend_from_slice(&poll_result.request_indices);
-                            poll_event_statuses.extend_from_slice(&poll_result.statuses);
-                            poll_event_latency_tsc_ticks
-                                .extend_from_slice(&poll_result.latency_tsc_ticks);
-
-                            trace_accumulators[index].record_poll_summary(
-                                poll_result.visible_prefix_len,
-                                poll_result.read_count(),
-                            );
-                        } else {
-                            trace_accumulators[index].record_no_poll();
-                        }
-                    }
-
-                    for submit_index in 0..n {
-                        let event_count = poll_event_counts[submit_index];
-                        if event_count == 0 {
-                            continue;
-                        }
-
-                        let event_start = poll_event_offsets[submit_index];
-                        let event_end = event_start + event_count;
-                        trace_accumulators[submit_index].record_poll_latencies(
-                            &poll_event_latency_tsc_ticks[event_start..event_end],
-                        );
-                    }
-
-                    let mut marker_observed_tsc = observed_tscs[marker_position];
-                    for completion_index in 0..n {
-                        if observed_tscs[completion_index] != 0 {
-                            continue;
-                        }
-
-                        if let Some((completion_tsc, status)) =
-                            wait_for_completion(&slots.completions[completion_index], tsc_freq)
-                        {
-                            observed_tscs[completion_index] = completion_tsc;
-                            observed_statuses[completion_index] = status;
-                            observed_after_submit_indices[completion_index] = n - 1;
-                            observed_from_marker_tscs[completion_index] = marker_submit_tsc
-                                .map(|marker_tsc| completion_tsc.saturating_sub(marker_tsc));
-                            if completion_index == marker_position {
-                                marker_observed_tsc = completion_tsc;
-                            }
-                        }
-                    }
-
-                    for completion_index in 0..n {
-                        if observed_tscs[completion_index] == 0 {
-                            continue;
-                        }
-
-                        record_request_completion(
-                            completion_index,
-                            observed_statuses[completion_index],
-                            observed_tscs[completion_index],
-                            observed_after_submit_indices[completion_index],
-                            observed_from_marker_tscs[completion_index],
-                            &submit_start_tscs[..n],
-                            &mut request_accumulators[..n],
-                        );
-                    }
-
-                    if marker_observed_tsc != 0 && marker_observed_tsc < final_submit_tsc {
-                        observed_before_final_submit += 1;
-                    }
-
-                    if marker_observed_tsc != 0 {
-                        marker_visible_tsc.push(
-                            marker_observed_tsc.saturating_sub(submit_start_tscs[marker_position]),
-                        );
-                    }
-
-                    // Trace boundary: materialize only submit-loop observations.
-                    // The drain below is cleanup and must not affect per-submit trace points.
-                    let mut iteration_sample_trace = Vec::with_capacity(n);
-                    for submit_index in 0..n {
-                        let event_start = poll_event_offsets[submit_index];
-                        let event_end = event_start + poll_event_counts[submit_index];
-
-                        let point_marker_submit_tsc = if submit_index >= marker_position {
-                            marker_submit_tsc
-                        } else {
-                            None
-                        };
-                        iteration_sample_trace.push(sample_trace_point(
-                            submit_index,
-                            submit_start_tscs[submit_index],
-                            submit_end_tscs[submit_index],
-                            point_marker_submit_tsc,
-                            poll_visible_prefix_lens[submit_index],
-                            &poll_event_request_indices[event_start..event_end],
-                            &poll_event_latency_tsc_ticks[event_start..event_end],
-                            &poll_event_statuses[event_start..event_end],
-                        ));
-                    }
-
-                    sample_trace.push(SubmitMarkerSampleTrace {
-                        iteration_index,
-                        points: iteration_sample_trace,
-                    });
-
-                    // Cleanup boundary: after this point we may force queue progress with a
-                    // drain descriptor, so only aggregate end-of-iteration accounting belongs here.
-                    let outcome =
-                        count_visible_completions(&slots.completions[..n], &mut seen[..n]);
-                    drain_with_drain_descriptor(
-                        wq,
-                        &drain_desc,
-                        &mut drain_comp,
-                        operation,
+                let result = run_overlap_case(
+                    wq,
+                    &mut scratch,
+                    &drain_desc,
+                    &mut drain_comp,
+                    OverlapCase {
                         n,
-                        poll_offset,
-                    );
-                    if let Some(marker_tsc) = marker_submit_tsc {
-                        submit_tail_tsc.push(final_submit_tsc.saturating_sub(marker_tsc));
-                    }
-                    completed_counts.push(outcome.completed as u64);
-                    missing_counts.push((n - outcome.completed) as u64);
-                    error_counts.push(outcome.errors as u64);
-                }
-
-                let submit_tail_ns_stats = stats_from_tsc_slice(&submit_tail_tsc, tsc_freq);
-                let marker_visible_ns_stats =
-                    optional_stats_from_tsc_slice(&marker_visible_tsc, tsc_freq);
-                let marker_visible_tsc_stats = optional_stats(marker_visible_tsc);
-                let completed = stats_from_values(completed_counts);
-
-                let request_completions = request_accumulators
-                    .into_iter()
-                    .map(|accumulator| accumulator.into_trace(tsc_freq, iterations))
-                    .collect::<Vec<_>>();
-
-                let trace = trace_accumulators
-                    .into_iter()
-                    .map(|accumulator| accumulator.into_point(tsc_freq))
-                    .collect::<Vec<_>>();
-
-                if !json {
-                    let marker_ns = marker_visible_ns_stats
-                        .as_ref()
-                        .map(|stats| stats.median.to_string())
-                        .unwrap_or_else(|| "-".to_string());
-                    println!(
-                        "{:>8} {:>8} {:>8} {:>12} {:>14} {:>14} {:>10}",
-                        n,
+                        position,
                         marker_position,
                         poll_offset,
-                        trace.len(),
-                        submit_tail_ns_stats.median,
-                        marker_ns,
-                        completed.median
-                    );
+                        operation,
+                        iterations,
+                        tsc_freq,
+                    },
+                );
+
+                if !json {
+                    print_result_row(&result);
                 }
 
-                results.push(SubmitMarkerOverlapResult {
-                    benchmark: SUBMIT_MARKER_OVERLAP_BENCHMARK.to_string(),
-                    operation_class: operation.as_str().to_string(),
-                    n,
-                    marker_position,
-                    marker_position_label: position.as_str().to_string(),
-                    poll_cadence: POLL_STEP.to_string(),
-                    marker_poll_offset: poll_offset,
-                    poll_step: POLL_STEP,
-                    tracked_completions: 0,
-                    submit_tail_tsc_ticks: stats_from_values(submit_tail_tsc),
-                    submit_tail_ns: submit_tail_ns_stats,
-                    marker_visible_tsc_ticks: marker_visible_tsc_stats,
-                    marker_visible_ns: marker_visible_ns_stats,
-                    marker_observed_before_final_submit_count: observed_before_final_submit,
-                    marker_observed_before_final_submit_fraction: observed_before_final_submit
-                        as f64
-                        / iterations as f64,
-                    completed,
-                    missing: stats_from_values(missing_counts),
-                    errors: stats_from_values(error_counts),
-                    request_completions,
-                    sample_trace,
-                    trace,
-                });
+                results.push(result);
             }
         }
+    }
+}
+
+fn print_result_row(result: &SubmitMarkerOverlapResult) {
+    let marker_ns = result
+        .marker_visible_ns
+        .as_ref()
+        .map(|stats| stats.median.to_string())
+        .unwrap_or_else(|| "-".to_string());
+    println!(
+        "{:>8} {:>8} {:>8} {:>12} {:>14} {:>14} {:>10}",
+        result.n,
+        result.marker_position,
+        result.marker_poll_offset,
+        result.trace.len(),
+        result.submit_tail_ns.median,
+        marker_ns,
+        result.completed.median
+    );
+}
+
+#[derive(Clone, Copy)]
+struct OverlapCase {
+    n: usize,
+    position: MarkerPosition,
+    marker_position: usize,
+    poll_offset: usize,
+    operation: DsaOperationClass,
+    iterations: usize,
+    tsc_freq: u64,
+}
+
+struct OverlapScratch {
+    slots: OperationSlots,
+    seen: Vec<bool>,
+    observations: CompletionObservations,
+    iteration_trace: IterationTrace,
+    poll_result: CompletionPollResult,
+}
+
+impl OverlapScratch {
+    fn new(max_burst: usize, operation: DsaOperationClass) -> Self {
+        Self {
+            slots: OperationSlots::new(max_burst, operation),
+            seen: vec![false; max_burst],
+            observations: CompletionObservations::new(max_burst),
+            iteration_trace: IterationTrace::new(max_burst),
+            poll_result: CompletionPollResult::with_capacity(max_burst),
+        }
+    }
+
+    fn reset_iteration(&mut self, n: usize) {
+        reset_sample_completions(&mut self.slots.completions[..n]);
+        self.observations.reset(n);
+        self.iteration_trace.reset(n);
+    }
+}
+
+fn run_overlap_case(
+    wq: &WqPortal,
+    scratch: &mut OverlapScratch,
+    drain_desc: &DsaHwDesc,
+    drain_comp: &mut DsaCompletionRecord,
+    case: OverlapCase,
+) -> SubmitMarkerOverlapResult {
+    let mut submit_tail_tsc = Vec::with_capacity(case.iterations);
+    let mut marker_visible_tsc = Vec::with_capacity(case.iterations);
+    let mut completed_counts = Vec::with_capacity(case.iterations);
+    let mut missing_counts = Vec::with_capacity(case.iterations);
+    let mut error_counts = Vec::with_capacity(case.iterations);
+    let mut observed_before_final_submit = 0_u64;
+
+    let mut request_accumulators = request_completion_accumulators(case.n, case.iterations);
+    let mut trace_accumulators = trace_accumulators(case.n, case.poll_offset, case.iterations);
+    let mut sample_trace = Vec::with_capacity(case.iterations);
+
+    for iteration_index in 0..case.iterations {
+        scratch.reset_iteration(case.n);
+
+        let mut next_completion_to_poll = 0_usize;
+        let mut marker_submit_tsc = None;
+
+        for submit_index in 0..case.n {
+            let submit =
+                measured_call(|| unsafe { wq.submit(&scratch.slots.descriptors[submit_index]) });
+            scratch
+                .iteration_trace
+                .record_submit(submit_index, submit.start_tsc, submit.end_tsc);
+
+            if submit_index == case.marker_position {
+                marker_submit_tsc = Some(submit.start_tsc);
+            }
+
+            trace_accumulators[submit_index].record_submit(
+                submit.elapsed_tsc(),
+                marker_submit_tsc.map(|marker_tsc| submit.start_tsc.saturating_sub(marker_tsc)),
+                marker_submit_tsc.map(|marker_tsc| submit.end_tsc.saturating_sub(marker_tsc)),
+            );
+
+            if submit_index >= case.poll_offset && next_completion_to_poll < case.n {
+                poll_to_next_unfinished(
+                    &scratch.slots.completions[..case.n],
+                    &mut next_completion_to_poll,
+                    &mut scratch.observations,
+                    submit_index,
+                    marker_submit_tsc,
+                    &mut scratch.poll_result,
+                );
+                scratch
+                    .iteration_trace
+                    .record_poll_event(submit_index, &scratch.poll_result);
+                trace_accumulators[submit_index].record_poll_summary(
+                    scratch.poll_result.visible_prefix_len,
+                    scratch.poll_result.read_count(),
+                );
+            } else {
+                trace_accumulators[submit_index].record_no_poll();
+            }
+        }
+
+        for (submit_index, accumulator) in trace_accumulators.iter_mut().enumerate() {
+            accumulator.record_poll_latencies(scratch.iteration_trace.poll_latencies(submit_index));
+        }
+
+        let final_submit_tsc = scratch.iteration_trace.submit_end_tsc(case.n - 1);
+        let marker_observed_tsc = observe_remaining_completions(
+            &scratch.slots.completions[..case.n],
+            &mut scratch.observations,
+            case.tsc_freq,
+            case.n - 1,
+            marker_submit_tsc,
+            case.marker_position,
+        );
+        scratch.observations.record_request_completions(
+            case.n,
+            scratch.iteration_trace.submit_start_tscs(case.n),
+            &mut request_accumulators[..case.n],
+        );
+
+        if marker_observed_tsc != 0 && marker_observed_tsc < final_submit_tsc {
+            observed_before_final_submit += 1;
+        }
+
+        if marker_observed_tsc != 0 {
+            marker_visible_tsc.push(
+                marker_observed_tsc.saturating_sub(
+                    scratch
+                        .iteration_trace
+                        .submit_start_tsc(case.marker_position),
+                ),
+            );
+        }
+
+        // Trace boundary: materialize only submit-loop observations.
+        // The drain below is cleanup and must not affect per-submit trace points.
+        sample_trace.push(scratch.iteration_trace.to_sample_trace(
+            case.n,
+            iteration_index,
+            case.marker_position,
+            marker_submit_tsc,
+        ));
+
+        // Cleanup boundary: after this point we may force queue progress with a
+        // drain descriptor, so only aggregate end-of-iteration accounting belongs here.
+        let outcome =
+            count_visible_completions(&scratch.slots.completions[..case.n], &mut scratch.seen);
+        drain_with_drain_descriptor(
+            wq,
+            drain_desc,
+            drain_comp,
+            case.operation,
+            case.n,
+            case.poll_offset,
+        );
+        if let Some(marker_tsc) = marker_submit_tsc {
+            submit_tail_tsc.push(final_submit_tsc.saturating_sub(marker_tsc));
+        }
+        completed_counts.push(outcome.completed as u64);
+        missing_counts.push((case.n - outcome.completed) as u64);
+        error_counts.push(outcome.errors as u64);
+    }
+
+    let submit_tail_ns_stats = stats_from_tsc_slice(&submit_tail_tsc, case.tsc_freq);
+    let marker_visible_ns_stats = optional_stats_from_tsc_slice(&marker_visible_tsc, case.tsc_freq);
+    let marker_visible_tsc_stats = optional_stats(marker_visible_tsc);
+    let completed = stats_from_values(completed_counts);
+
+    let request_completions = request_accumulators
+        .into_iter()
+        .map(|accumulator| accumulator.into_trace(case.tsc_freq, case.iterations))
+        .collect::<Vec<_>>();
+
+    let trace = trace_accumulators
+        .into_iter()
+        .map(|accumulator| accumulator.into_point(case.tsc_freq))
+        .collect::<Vec<_>>();
+
+    SubmitMarkerOverlapResult {
+        benchmark: SUBMIT_MARKER_OVERLAP_BENCHMARK.to_string(),
+        operation_class: case.operation.as_str().to_string(),
+        n: case.n,
+        marker_position: case.marker_position,
+        marker_position_label: case.position.as_str().to_string(),
+        poll_cadence: POLL_STEP.to_string(),
+        marker_poll_offset: case.poll_offset,
+        poll_step: POLL_STEP,
+        tracked_completions: 0,
+        submit_tail_tsc_ticks: stats_from_values(submit_tail_tsc),
+        submit_tail_ns: submit_tail_ns_stats,
+        marker_visible_tsc_ticks: marker_visible_tsc_stats,
+        marker_visible_ns: marker_visible_ns_stats,
+        marker_observed_before_final_submit_count: observed_before_final_submit,
+        marker_observed_before_final_submit_fraction: observed_before_final_submit as f64
+            / case.iterations as f64,
+        completed,
+        missing: stats_from_values(missing_counts),
+        errors: stats_from_values(error_counts),
+        request_completions,
+        sample_trace,
+        trace,
     }
 }
 
@@ -369,13 +330,233 @@ fn request_completion_accumulators(
         .collect()
 }
 
+struct CompletionObservations {
+    tscs: Vec<u64>,
+    statuses: Vec<u8>,
+    after_submit_indices: Vec<usize>,
+    from_marker_tscs: Vec<Option<u64>>,
+}
+
+impl CompletionObservations {
+    fn new(max_burst: usize) -> Self {
+        Self {
+            tscs: vec![0; max_burst],
+            statuses: vec![DSA_COMP_NONE; max_burst],
+            after_submit_indices: vec![0; max_burst],
+            from_marker_tscs: vec![None; max_burst],
+        }
+    }
+
+    fn reset(&mut self, n: usize) {
+        self.tscs[..n].fill(0);
+        self.statuses[..n].fill(DSA_COMP_NONE);
+        self.after_submit_indices[..n].fill(0);
+        self.from_marker_tscs[..n].fill(None);
+    }
+
+    fn is_observed(&self, completion_index: usize) -> bool {
+        self.tscs[completion_index] != 0
+    }
+
+    fn marker_tsc(&self, marker_position: usize) -> u64 {
+        self.tscs[marker_position]
+    }
+
+    fn record(
+        &mut self,
+        completion_index: usize,
+        status: u8,
+        completion_tsc: u64,
+        observed_after_submit_index: usize,
+        marker_submit_tsc: Option<u64>,
+    ) {
+        self.tscs[completion_index] = completion_tsc;
+        self.statuses[completion_index] = status;
+        self.after_submit_indices[completion_index] = observed_after_submit_index;
+        self.from_marker_tscs[completion_index] =
+            marker_submit_tsc.map(|marker_tsc| completion_tsc.saturating_sub(marker_tsc));
+    }
+
+    fn record_request_completions(
+        &self,
+        n: usize,
+        submit_start_tscs: &[u64],
+        request_accumulators: &mut [RequestCompletionAccumulator],
+    ) {
+        for completion_index in 0..n {
+            if !self.is_observed(completion_index) {
+                continue;
+            }
+
+            record_request_completion(
+                completion_index,
+                self.statuses[completion_index],
+                self.tscs[completion_index],
+                self.after_submit_indices[completion_index],
+                self.from_marker_tscs[completion_index],
+                submit_start_tscs,
+                request_accumulators,
+            );
+        }
+    }
+}
+
+struct IterationTrace {
+    submit_start_tscs: Vec<u64>,
+    submit_end_tscs: Vec<u64>,
+    poll_event_offsets: Vec<usize>,
+    poll_event_counts: Vec<usize>,
+    poll_visible_prefix_lens: Vec<u64>,
+    poll_event_request_indices: Vec<usize>,
+    poll_event_statuses: Vec<u8>,
+    poll_event_latency_tsc_ticks: Vec<u64>,
+}
+
+impl IterationTrace {
+    fn new(max_burst: usize) -> Self {
+        let max_poll_reads_per_iteration = max_burst.saturating_mul(2);
+        Self {
+            submit_start_tscs: vec![0; max_burst],
+            submit_end_tscs: vec![0; max_burst],
+            poll_event_offsets: vec![0; max_burst],
+            poll_event_counts: vec![0; max_burst],
+            poll_visible_prefix_lens: vec![0; max_burst],
+            poll_event_request_indices: Vec::with_capacity(max_poll_reads_per_iteration),
+            poll_event_statuses: Vec::with_capacity(max_poll_reads_per_iteration),
+            poll_event_latency_tsc_ticks: Vec::with_capacity(max_poll_reads_per_iteration),
+        }
+    }
+
+    fn reset(&mut self, n: usize) {
+        self.submit_start_tscs[..n].fill(0);
+        self.submit_end_tscs[..n].fill(0);
+        self.poll_event_offsets[..n].fill(0);
+        self.poll_event_counts[..n].fill(0);
+        self.poll_visible_prefix_lens[..n].fill(0);
+        self.poll_event_request_indices.clear();
+        self.poll_event_statuses.clear();
+        self.poll_event_latency_tsc_ticks.clear();
+    }
+
+    fn record_submit(&mut self, submit_index: usize, start_tsc: u64, end_tsc: u64) {
+        self.submit_start_tscs[submit_index] = start_tsc;
+        self.submit_end_tscs[submit_index] = end_tsc;
+    }
+
+    fn record_poll_event(&mut self, submit_index: usize, result: &CompletionPollResult) {
+        let event_start = self.poll_event_request_indices.len();
+
+        self.poll_event_offsets[submit_index] = event_start;
+        self.poll_event_counts[submit_index] = result.request_indices.len();
+        self.poll_visible_prefix_lens[submit_index] = result.visible_prefix_len;
+        self.poll_event_request_indices
+            .extend_from_slice(&result.request_indices);
+        self.poll_event_statuses.extend_from_slice(&result.statuses);
+        self.poll_event_latency_tsc_ticks
+            .extend_from_slice(&result.latency_tsc_ticks);
+    }
+
+    fn submit_start_tsc(&self, submit_index: usize) -> u64 {
+        self.submit_start_tscs[submit_index]
+    }
+
+    fn submit_end_tsc(&self, submit_index: usize) -> u64 {
+        self.submit_end_tscs[submit_index]
+    }
+
+    fn submit_start_tscs(&self, n: usize) -> &[u64] {
+        &self.submit_start_tscs[..n]
+    }
+
+    fn poll_latencies(&self, submit_index: usize) -> &[u64] {
+        let event_start = self.poll_event_offsets[submit_index];
+        let event_end = event_start + self.poll_event_counts[submit_index];
+        &self.poll_event_latency_tsc_ticks[event_start..event_end]
+    }
+
+    fn to_sample_trace(
+        &self,
+        n: usize,
+        iteration_index: usize,
+        marker_position: usize,
+        marker_submit_tsc: Option<u64>,
+    ) -> SubmitMarkerSampleTrace {
+        let points = (0..n)
+            .map(|submit_index| {
+                let point_marker_submit_tsc = if submit_index >= marker_position {
+                    marker_submit_tsc
+                } else {
+                    None
+                };
+                self.sample_trace_point(submit_index, point_marker_submit_tsc)
+            })
+            .collect();
+
+        SubmitMarkerSampleTrace {
+            iteration_index,
+            points,
+        }
+    }
+
+    fn sample_trace_point(
+        &self,
+        submit_index: usize,
+        marker_submit_tsc: Option<u64>,
+    ) -> SubmitMarkerSampleTracePoint {
+        let event_start = self.poll_event_offsets[submit_index];
+        let event_end = event_start + self.poll_event_counts[submit_index];
+
+        sample_trace_point(
+            submit_index,
+            self.submit_start_tscs[submit_index],
+            self.submit_end_tscs[submit_index],
+            marker_submit_tsc,
+            self.poll_visible_prefix_lens[submit_index],
+            &self.poll_event_request_indices[event_start..event_end],
+            &self.poll_event_latency_tsc_ticks[event_start..event_end],
+            &self.poll_event_statuses[event_start..event_end],
+        )
+    }
+}
+
+fn observe_remaining_completions(
+    completions: &[DsaCompletionRecord],
+    observations: &mut CompletionObservations,
+    tsc_freq: u64,
+    observed_after_submit_index: usize,
+    marker_submit_tsc: Option<u64>,
+    marker_position: usize,
+) -> u64 {
+    let mut marker_observed_tsc = observations.marker_tsc(marker_position);
+
+    for completion_index in 0..completions.len() {
+        if observations.is_observed(completion_index) {
+            continue;
+        }
+
+        if let Some((completion_tsc, status)) =
+            wait_for_completion(&completions[completion_index], tsc_freq)
+        {
+            observations.record(
+                completion_index,
+                status,
+                completion_tsc,
+                observed_after_submit_index,
+                marker_submit_tsc,
+            );
+            if completion_index == marker_position {
+                marker_observed_tsc = completion_tsc;
+            }
+        }
+    }
+
+    marker_observed_tsc
+}
+
 fn poll_to_next_unfinished(
     completions: &[DsaCompletionRecord],
     next_completion_to_poll: &mut usize,
-    observed_tscs: &mut [u64],
-    observed_statuses: &mut [u8],
-    observed_after_submit_indices: &mut [usize],
-    observed_from_marker_tscs: &mut [Option<u64>],
+    observations: &mut CompletionObservations,
     submit_index: usize,
     marker_submit_tsc: Option<u64>,
     result: &mut CompletionPollResult,
@@ -394,11 +575,13 @@ fn poll_to_next_unfinished(
             break;
         }
 
-        observed_tscs[completion_index] = poll.end_tsc;
-        observed_statuses[completion_index] = status;
-        observed_after_submit_indices[completion_index] = submit_index;
-        observed_from_marker_tscs[completion_index] =
-            marker_submit_tsc.map(|marker_tsc| poll.end_tsc.saturating_sub(marker_tsc));
+        observations.record(
+            completion_index,
+            status,
+            poll.end_tsc,
+            submit_index,
+            marker_submit_tsc,
+        );
         *next_completion_to_poll += 1;
     }
 
@@ -420,31 +603,6 @@ fn record_request_completion(
         observed_after_submit_index as u64,
         observed_from_marker_tsc,
     );
-}
-
-#[derive(Clone, Copy)]
-struct MeasuredCall<T> {
-    value: T,
-    start_tsc: u64,
-    end_tsc: u64,
-}
-
-impl<T> MeasuredCall<T> {
-    fn elapsed_tsc(&self) -> u64 {
-        self.end_tsc.saturating_sub(self.start_tsc)
-    }
-}
-
-fn measured_call<T>(call: impl FnOnce() -> T) -> MeasuredCall<T> {
-    let start_tsc = rdtscp().0;
-    let value = call();
-    let end_tsc = rdtscp().0;
-
-    MeasuredCall {
-        value,
-        start_tsc,
-        end_tsc,
-    }
 }
 
 fn sample_trace_point(
@@ -755,6 +913,31 @@ mod tests {
 
         assert_eq!(submit_indices, vec![0, 1, 2, 3, 4]);
         assert_eq!(poll_flags, vec![false, false, false, true, true]);
+    }
+
+    #[test]
+    fn iteration_trace_materializes_only_active_submit_indices() {
+        let mut trace = IterationTrace::new(5);
+        let mut poll = CompletionPollResult::with_capacity(2);
+
+        trace.reset(3);
+        trace.record_submit(0, 10, 14);
+        trace.record_submit(1, 20, 29);
+        trace.record_submit(2, 30, 41);
+        poll.record_read(0, DSA_COMP_SUCCESS, 7);
+        poll.record_read(1, DSA_COMP_NONE, 11);
+        poll.visible_prefix_len = 1;
+        trace.record_poll_event(1, &poll);
+
+        let sample = trace.to_sample_trace(3, 0, 0, Some(10));
+
+        assert_eq!(sample.points.len(), 3);
+        assert_eq!(sample.points[0].submit_tsc_ticks, 4);
+        assert_eq!(sample.points[1].submit_tsc_ticks, 9);
+        assert_eq!(sample.points[1].polled_request_indices, vec![0, 1]);
+        assert_eq!(sample.points[1].poll_latency_tsc_ticks, vec![7, 11]);
+        assert_eq!(sample.points[1].visible_prefix_len, 1);
+        assert_eq!(sample.points[2].submit_tsc_ticks, 11);
     }
 
     #[test]

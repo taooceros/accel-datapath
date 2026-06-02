@@ -4,6 +4,7 @@ use hw_eval::dsa::{
     completion_flags_no_cache_control, reset_completion, DsaCompletionRecord, DsaCompletionStatus,
     DsaHwDesc, DSA_COMP_NONE, DSA_COMP_SUCCESS,
 };
+use hw_eval::submit::rdtscp;
 
 use crate::config::{DsaOperationClass, TrafficClass};
 use crate::report::{stats_from_values, LatencyStats};
@@ -11,12 +12,35 @@ use crate::report::{stats_from_values, LatencyStats};
 pub(super) const COMPLETION_TIMEOUT_NS: u128 = 1_000_000;
 pub(super) const TIMEOUT_CHECK_STRIDE: u64 = 256;
 
-pub(super) fn dsa_operation_payload_size(operation: DsaOperationClass) -> usize {
-    match operation {
-        DsaOperationClass::Noop => 0,
-        DsaOperationClass::Memmove64 => 64,
-        DsaOperationClass::Memmove4k => 4096,
+#[derive(Clone, Copy)]
+pub(super) struct MeasuredCall<T> {
+    pub(super) value: T,
+    pub(super) start_tsc: u64,
+    pub(super) end_tsc: u64,
+}
+
+impl<T> MeasuredCall<T> {
+    #[inline(always)]
+    pub(super) fn elapsed_tsc(&self) -> u64 {
+        self.end_tsc.saturating_sub(self.start_tsc)
     }
+}
+
+#[inline(always)]
+pub(super) fn measured_call<T>(call: impl FnOnce() -> T) -> MeasuredCall<T> {
+    let start_tsc = rdtscp().0;
+    let value = call();
+    let end_tsc = rdtscp().0;
+
+    MeasuredCall {
+        value,
+        start_tsc,
+        end_tsc,
+    }
+}
+
+pub(super) fn dsa_operation_payload_size(operation: DsaOperationClass) -> usize {
+    operation.default_payload_size()
 }
 
 pub(super) fn traffic_class_operation_size(traffic_class: TrafficClass) -> Option<usize> {
@@ -37,10 +61,17 @@ pub(super) struct OperationSlots {
 
 impl OperationSlots {
     pub(super) fn new(count: usize, operation: DsaOperationClass) -> Self {
+        Self::new_with_payload(count, operation, operation.default_payload_size())
+    }
+
+    pub(super) fn new_with_payload(
+        count: usize,
+        operation: DsaOperationClass,
+        payload_size: usize,
+    ) -> Self {
         let mut descriptors = vec![DsaHwDesc::default(); count];
         let mut completions = vec![DsaCompletionRecord::default(); count];
 
-        let payload_size = dsa_operation_payload_size(operation);
         let mut sources = vec![0xa5; count * payload_size];
         let mut destinations = vec![0; count * payload_size];
 

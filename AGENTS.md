@@ -2,47 +2,31 @@
 
 Research monorepo for Intel DSA/IAX data-path work.
 
-- If some code looks heavyweight, perhaps with lots of conditionals, then think harder for a more elegant way of achieving it.
-- It is important to not have duplicate code; abstract if possible, but if not, then at least keep the duplicate code clean and well-maintained.
-
-## SOURCE ORDER
-1. Current conversation
-2. Repo docs in `docs/` and `remark/`
-3. Agent states in `agents/`
-3. use `codemogger` for searching code
-4. External docs and web search
-
 ## CONVENTIONS
-- Before acting, read the latest relevant plan or report.
-- On resume, read any linked durable artifacts needed to continue.
+
 - Keep durable detail in plans, reports, and remarks rather than transient notes.
 - Keep commit headlines short and consistent with current style.
 - Write commits in focused, reviewable increments, but not so small that they lose a coherent unit of work.
-- Write a human project plan in `docs/plan/YYYY-MM-DD/NN.<topic>.<state>.md` before non-trivial project changes.
-- Write agent execution/workflow plans in `agents/plan/YYYY-MM-DD/NN.<topic>.<state>.md`.
-- Write plans for humans first. State the goal, scope, intended changes, verification, and completion notes in plain language.
-- Always write agent execution plans.
+- Write a human project plan in `docs/plan/YYYY-MM-DD/NN.<topic>.<state>.md` before non-trivial project changes. State the goal, scope, intended changes, verification, and completion notes in plain language.
+- Always write agent execution/workflow plans in `agents/plan/YYYY-MM-DD/NN.<topic>.<state>.md`.
 - Write findings to `docs/report/<topic>/NNN.<descriptor>.<ext>`.
 - Write single-point insights to `remark/NNN_<topic>.md`.
-- Before writing or modifying code, read `agents/CODING_REQUIREMENTS.md` and treat its requirements as active coding constraints.
 - Match code to specs, not specs to code, unless explicitly told otherwise.
-- Keep the code lean; before adding another copy of logic, stop and decide whether duplication is really necessary.
-- Elegance is a first-class goal; if some code looks heavyweight, perhaps with lots of conditionals, then think harder for a more elegant way of achieving it.
-- Keep child `AGENTS.md` files lean and local.
-- Do not repeat parent guidance in child `AGENTS.md` files.
+- **Code Elegance & Lean Design:** Keep code lean. Do not repeat duplicate logic; abstract if possible, or keep it perfectly clean if unavoidable. If code looks heavyweight with excessive conditionals, stop and design a more elegant approach.
+- Keep child `AGENTS.md` files lean and local; do not repeat parent guidance within them.
 
 ## DO NOT
 - Guess DSA/IAX behavior if `docs/specs/*.md` or `docs/report/architecture/001.design_decisions.md` already cover it.
-- Treat raw PDFs as KB-ingested content; searchable paper content belongs in tracked markdown.
 - Run hardware-facing binaries directly when the documented flow requires `launch` or `dsa_launcher`.
 
 ## HARDWARE BATCHING TERMINOLOGY
 - Use `hw-eval/` as the hardware potential baseline when comparing accelerator submission strategies.
 - Keep `batch` and `concurrency` separate in plans, reports, and code names.
-- Batch size / `batch_n`: the number of logical operations submitted to hardware through one MMIO submission. Batch size 1 means one operation per MMIO submission.
-- Concurrency: the maximum number of logical operations outstanding at once, independent of how those operations are grouped into MMIO submissions.
-- If a benchmark reports outstanding submission slots instead of logical operations, convert before comparing: `logical_concurrency = batch_size * outstanding_submission_slots`.
-- Avoid ambiguous phrases like “batch size 1” without saying whether it means the no-batch/direct-descriptor baseline or a DSA `BATCH` descriptor containing one sub-descriptor.
+- **Batch size (`batch_n`):** The number of logical operations submitted to hardware through one MMIO submission. Batch size 1 means one operation per MMIO submission.
+- **Concurrency:** The maximum number of logical operations outstanding at once, independent of how those operations are grouped into MMIO submissions.
+- If a benchmark reports outstanding submission slots instead of logical operations, convert before comparing:
+  $$logical\_concurrency = batch\_size \times outstanding\_submission\_slots$$
+- Avoid ambiguous phrases like “batch size 1” without specifying whether it means the no-batch/direct-descriptor baseline or a DSA `BATCH` descriptor containing one sub-descriptor.
 - Keep hw-eval-specific strategy names and command-line trigger details in `hw-eval/AGENTS.md`.
 
 ## REPO MAP
@@ -52,17 +36,4 @@ accel-rpc/    Rust accelerator-aware RPC workspace
 hw-eval/      Hardware potential baseline benchmark harnesses
 docs/         Plans, reports, specs, related work
 tools/        Launcher behavior
-```
-
-## KEY PATHS
-- Root policy: `AGENTS.md`
-- Agent workflows: `.agents/workflows/`
-- Agent prompt templates: `.agents/templates/`
-- Agent execution plans: `agents/plan/`
-- Agent-focused reports: `agents/report/workflow/`
-- Agent coding requirements: `agents/CODING_REQUIREMENTS.md`
-- C++ framework: `dsa-stdexec/AGENTS.md`
-- Rust workspace: `accel-rpc/AGENTS.md`
-- Hardware potential baseline: `hw-eval/AGENTS.md`
-- Docs placement rules: `docs/AGENTS.md`
-- Launcher behavior: `tools/README.md`
+.agents/      Hidden configuration directory for agent tooling templates/workflows
