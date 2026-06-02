@@ -3,17 +3,29 @@
   "checkpoint_id": "82a322473936",
   "strategy": "manual-commit",
   "branch": "async-binding-intel-idxd",
-  "checkpoints_count": 19,
+  "checkpoints_count": 26,
   "files_touched": [
     "AGENTS.md",
     "Cargo.toml",
     "agents/CODING_REQUIREMENTS.md",
     "agents/plan/2026-06-01/03.experiment2-ablation-study.plan.md",
+    "agents/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md",
+    "agents/plan/2026-06-01/05.submit-occupancy-huge-memmove.plan.md",
     "devenv.nix",
     "docs/plan/2026-06-01/03.experiment2-ablation-study.plan.md",
+    "docs/plan/2026-06-01/04.experiment2-codepath-simplification.plan.md",
+    "docs/plan/2026-06-01/05.submit-occupancy-huge-memmove.plan.md",
+    "docs/report/benchmarking/039.submit_occupancy_huge_memmove_2026-06-01.md",
+    "docs/report/benchmarking/040.submit_occupancy_trace_until_128_2026-06-01.md",
     "hw-eval/README.md",
+    "hw-eval/src/benchmarks/submission_bottleneck.rs",
+    "hw-eval/src/benchmarks/submission_bottleneck/common.rs",
+    "hw-eval/src/benchmarks/submission_bottleneck/experiment_1_submit_occupancy.rs",
+    "hw-eval/src/benchmarks/submission_bottleneck/experiment_2_marker_overlap/mechanism_probes.rs",
+    "hw-eval/src/benchmarks/submission_bottleneck/experiment_2_marker_overlap/overlap.rs",
     "hw-eval/src/config.rs",
     "hw-eval/src/main.rs",
+    "hw-eval/src/report.rs",
     "hw-eval/tests/cli_contract.rs",
     "presentation/2026-05-27/ai_coding_skill_formation_discussion/ai_coding_skill_formation_discussion.pdf",
     "presentation/2026-05-27/ai_coding_skill_formation_discussion/ai_coding_skill_formation_discussion.typ",
@@ -49,13 +61,19 @@
       "transcript": "/82/a322473936/4/full.jsonl",
       "content_hash": "/82/a322473936/4/content_hash.txt",
       "prompt": "/82/a322473936/4/prompt.txt"
+    },
+    {
+      "metadata": "/82/a322473936/5/metadata.json",
+      "transcript": "/82/a322473936/5/full.jsonl",
+      "content_hash": "/82/a322473936/5/content_hash.txt",
+      "prompt": "/82/a322473936/5/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 451659,
+    "input_tokens": 1035923,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 4280064,
-    "output_tokens": 26619,
-    "api_call_count": 91
+    "cache_read_tokens": 25115904,
+    "output_tokens": 88896,
+    "api_call_count": 292
   }
 }
