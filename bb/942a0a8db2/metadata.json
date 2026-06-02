@@ -3,7 +3,7 @@
   "checkpoint_id": "bb942a0a8db2",
   "strategy": "manual-commit",
   "branch": "async-binding-intel-idxd",
-  "checkpoints_count": 0,
+  "checkpoints_count": 6,
   "files_touched": [
     "hw-eval/src/benchmarks/submission_bottleneck/experiment_1_submit_occupancy.md",
     "hw-eval/src/benchmarks/submission_bottleneck/experiment_1_submit_occupancy.rs",
@@ -18,13 +18,19 @@
       "transcript": "/bb/942a0a8db2/0/full.jsonl",
       "content_hash": "/bb/942a0a8db2/0/content_hash.txt",
       "prompt": "/bb/942a0a8db2/0/prompt.txt"
+    },
+    {
+      "metadata": "/bb/942a0a8db2/1/metadata.json",
+      "transcript": "/bb/942a0a8db2/1/full.jsonl",
+      "content_hash": "/bb/942a0a8db2/1/content_hash.txt",
+      "prompt": "/bb/942a0a8db2/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 33141,
+    "input_tokens": 553478,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 58880,
-    "output_tokens": 2384,
-    "api_call_count": 3
+    "cache_read_tokens": 4325632,
+    "output_tokens": 18173,
+    "api_call_count": 88
   }
 }

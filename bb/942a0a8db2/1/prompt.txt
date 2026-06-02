@@ -1,0 +1,40 @@
+in experiment 1, also record how long does it take to finish the prefill k requests
+
+---
+
+let (prefill_completion_tsc_ticks, prefill_completed, prefill_errors) =
+                if k_prefill == 0 {
+                    (0, 0, 0)
+                } else {
+                    let prefill_outcome = count_visible_completions(
+                        &slots.completions[..k_prefill],
+                        &mut seen[..k_prefill],
+                    );
+                    (
+                        rdtscp().0 - prefill_end_tsc,
+                        prefill_outcome.completed,
+                        prefill_outcome.errors,
+                    )
+                };
+
+this is too hard to read
+
+---
+
+this is not what I want, I want to record how long does it take for the prefill to be done (so we can have some idea about whether the hw may finish some requests during the submission)
+
+---
+
+now re-run the experiment
+
+---
+
+use tsc counter instead of ns
+
+---
+
+this seems to be shorter than even a noop operations (for k=96); so that we didn't see any difference can because that the consumer side is not full?
+
+---
+
+this seems to be shorter than even the noop operations; so will the noop/memmove no difference in the credit usage due to the hardware instead of the pcie credit?
