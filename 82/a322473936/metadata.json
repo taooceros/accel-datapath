@@ -3,7 +3,7 @@
   "checkpoint_id": "82a322473936",
   "strategy": "manual-commit",
   "branch": "async-binding-intel-idxd",
-  "checkpoints_count": 2,
+  "checkpoints_count": 5,
   "files_touched": [
     "AGENTS.md",
     "Cargo.toml",
@@ -29,13 +29,19 @@
       "transcript": "/82/a322473936/1/full.jsonl",
       "content_hash": "/82/a322473936/1/content_hash.txt",
       "prompt": "/82/a322473936/1/prompt.txt"
+    },
+    {
+      "metadata": "/82/a322473936/2/metadata.json",
+      "transcript": "/82/a322473936/2/full.jsonl",
+      "content_hash": "/82/a322473936/2/content_hash.txt",
+      "prompt": "/82/a322473936/2/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 58197,
+    "input_tokens": 119563,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 0,
-    "output_tokens": 502,
-    "api_call_count": 2
+    "cache_read_tokens": 510464,
+    "output_tokens": 5139,
+    "api_call_count": 17
   }
 }

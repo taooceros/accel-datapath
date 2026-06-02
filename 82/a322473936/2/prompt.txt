@@ -1,0 +1,9 @@
+save auth token: save token to keyring: failed to unlock correct collection '/org/freedesktop/secrets/aliases/default'
+
+---
+
+secret-tool: Object does not exist at path “/org/freedesktop/secrets/collection/login”
+
+---
+
+I am using entire cli
