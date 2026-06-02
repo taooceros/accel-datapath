@@ -1,0 +1,33 @@
+simplify the codepath of the experiment 2
+
+---
+
+why do you don't use the measured_call helper?
+
+---
+
+let submit_start_tsc = rdtscp().0;
+            unsafe { wq.submit(slots.descriptor(submit_index)) };
+            let submit_end_tsc = rdtscp().0;
+
+I still see quite a few raw call of rdtscp?
+
+---
+
+why not implement index/indexmut trait for completion storage
+
+---
+
+sorry I think this is wrong? don't you?
+
+---
+
+we don't need poll_to_next_unfinished_with_per_read_timing, it can just be represented as batch size 1 when polling completion
+
+---
+
+I think the poll batch is not what I want; I was saying the poll batch be, how many requests we submit before we poll it
+
+---
+
+contuct the proposed experiment

@@ -1,0 +1,45 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "bf9d339942cf",
+  "strategy": "manual-commit",
+  "branch": "async-binding-intel-idxd",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/early_k_memmove_1048576.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/early_k_memmove_262144.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/early_k_memmove_65536.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/early_k_noop.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/single_trace_memmove_1048576.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/single_trace_memmove_262144.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/single_trace_memmove_65536.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/single_trace_noop.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/submit_occupancy_memmove16m.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/trace_until_128_k112_iter20_memmove_1048576.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/trace_until_128_k112_iter20_memmove_262144.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/trace_until_128_k112_iter20_memmove_65536.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/trace_until_128_k112_iter20_noop.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/warmed_single_trace_memmove_1048576.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/warmed_single_trace_memmove_262144.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/warmed_single_trace_memmove_65536.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/warmed_single_trace_noop.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/warmup_discard_memmove_1048576.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/warmup_discard_memmove_262144.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/warmup_discard_memmove_65536.json",
+    "docs/report/benchmarking/submit_occupancy_huge_memmove_2026-06-01/warmup_discard_noop.json"
+  ],
+  "sessions": [
+    {
+      "metadata": "/bf/9d339942cf/0/metadata.json",
+      "transcript": "/bf/9d339942cf/0/full.jsonl",
+      "content_hash": "/bf/9d339942cf/0/content_hash.txt",
+      "prompt": "/bf/9d339942cf/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 584264,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 20835840,
+    "output_tokens": 62277,
+    "api_call_count": 201
+  }
+}
