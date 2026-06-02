@@ -1,0 +1,33 @@
+how to use keyring in ubuntu server (no gnome)
+
+---
+
+use fish shell
+
+---
+
+- (line 1): Unsupported use of '='. In fish, please use 'set SSH_AUTH_SOCK /run/user/1001/keyring/ssh'.
+SSH_AUTH_SOCK=/run/user/1001/keyring/ssh
+^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+from sourcing file -
+source: Error while reading file “<stdin>”
+
+---
+
+are there easier way, it seems like hongtao@saturn:~/accel-datapath/async-binding-intel-idxd$    secret-tool store --label='test secret' service test user me will stuck
+
+---
+
+how to uninstall gnome keyring
+
+---
+
+dbus-daemon[2721107]: [session uid=1001 pid=2721107] Failed to activate service 'org.freedesktop.secrets': timed out (service_start_timeout=120000ms
+
+---
+
+save auth token: save token to keyring: The name org.freedesktop.secrets was not provided by any .service files
+
+---
+
+entire cli
