@@ -7,3 +7,7 @@ every abstraction should carry some value; it is important to keep things simple
 ---
 
 make the measured_call in experiment_2 a common help across all experiments
+
+---
+
+commit these first
