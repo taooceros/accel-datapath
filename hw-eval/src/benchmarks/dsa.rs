@@ -83,6 +83,24 @@ pub(crate) fn run_dsa_benchmarks(
         return;
     }
 
+    if benchmark == BenchmarkKind::PayloadLatency {
+        bench_single_op_latency(
+            wq,
+            "payload_latency",
+            sizes,
+            iterations,
+            tsc_freq,
+            cold,
+            json,
+            latency_results,
+            payload_latency_warmup_iterations,
+            |desc, src, dst, size| {
+                desc.fill_memmove(src, dst, size);
+            },
+        );
+        return;
+    }
+
     bench_noop_latency(wq, iterations, tsc_freq, json, latency_results);
     bench_submit_only_workloads(
         wq,
@@ -103,6 +121,7 @@ pub(crate) fn run_dsa_benchmarks(
         cold,
         json,
         latency_results,
+        default_single_op_warmup_iterations,
         |desc, src, dst, size| {
             desc.fill_memmove(src, dst, size);
         },
@@ -117,6 +136,7 @@ pub(crate) fn run_dsa_benchmarks(
         cold,
         json,
         latency_results,
+        default_single_op_warmup_iterations,
         |desc, src, _dst, size| {
             desc.fill_crc_gen(src, size, 0, 0);
         },
@@ -131,6 +151,7 @@ pub(crate) fn run_dsa_benchmarks(
         cold,
         json,
         latency_results,
+        default_single_op_warmup_iterations,
         |desc, src, dst, size| {
             desc.fill_copy_crc(src, dst, size, 0, 0);
         },
@@ -688,6 +709,7 @@ fn bench_single_op_latency(
     cold: bool,
     json: bool,
     results: &mut Vec<LatencyResult>,
+    warmup_iterations: fn(usize) -> usize,
     fill_fn: impl Fn(&mut DsaHwDesc, *const u8, *mut u8, u32),
 ) {
     if !json {
@@ -699,21 +721,24 @@ fn bench_single_op_latency(
     }
 
     for &size in sizes {
-        let src = vec![0xABu8; size];
+        let size_u32 = dsa_transfer_size(size, "single-op latency", op_name);
+        let mut src = vec![0xABu8; size];
         let mut dst = vec![0u8; size];
+        touch_payload_pages(&mut src);
+        touch_payload_pages(&mut dst);
 
         let mut desc = DsaHwDesc::default();
         let mut comp = DsaCompletionRecord::default();
 
         let mut latencies = Vec::with_capacity(iterations);
 
-        // Warmup
-        for _ in 0..100 {
+        // Warmup. The focused payload-latency selector caps this by bytes, so
+        // very large payload rows do not spend most of the run copying warmup data.
+        for _ in 0..warmup_iterations(size) {
             reset_completion(&mut comp);
-            fill_fn(&mut desc, src.as_ptr(), dst.as_mut_ptr(), size as u32);
+            fill_fn(&mut desc, src.as_ptr(), dst.as_mut_ptr(), size_u32);
             desc.set_completion(&mut comp);
-            unsafe { wq.submit(&desc) };
-            poll_completion(&comp);
+            submit_until_dsa_latency_success(wq, &desc, &mut comp, op_name, size, "during warmup");
         }
 
         // Measure
@@ -723,17 +748,27 @@ fn bench_single_op_latency(
                 flush_range(dst.as_ptr(), size);
             }
 
-            reset_completion(&mut comp);
-            fill_fn(&mut desc, src.as_ptr(), dst.as_mut_ptr(), size as u32);
-            desc.set_completion(&mut comp);
+            loop {
+                reset_completion(&mut comp);
+                fill_fn(&mut desc, src.as_ptr(), dst.as_mut_ptr(), size_u32);
+                desc.set_completion(&mut comp);
 
-            lfence();
-            let start = rdtscp().0;
-            unsafe { wq.submit(&desc) };
-            poll_completion(&comp);
-            let end = rdtscp().0;
+                lfence();
+                let start = rdtscp().0;
+                unsafe { wq.submit(&desc) };
+                let status = poll_completion(&comp);
+                let end = rdtscp().0;
 
-            latencies.push(end - start);
+                if status == DSA_COMP_SUCCESS {
+                    latencies.push(end - start);
+                    break;
+                }
+                if status == DSA_COMP_PAGE_FAULT_NOBOF {
+                    touch_fault_page(&comp);
+                    continue;
+                }
+                panic_dsa_latency_failure(op_name, status, size, "during measurement");
+            }
         }
 
         latencies.sort_unstable();
@@ -755,6 +790,84 @@ fn bench_single_op_latency(
     }
 }
 
+fn default_single_op_warmup_iterations(_size: usize) -> usize {
+    100
+}
+
+fn payload_latency_warmup_iterations(size: usize) -> usize {
+    const MIN_WARMUPS: usize = 1;
+    const MAX_WARMUPS: usize = 100;
+    const WARMUP_BYTE_BUDGET: usize = 64 * 1024 * 1024;
+
+    (WARMUP_BYTE_BUDGET / size.max(1)).clamp(MIN_WARMUPS, MAX_WARMUPS)
+}
+
+fn dsa_transfer_size(size: usize, benchmark: &str, operation: &str) -> u32 {
+    u32::try_from(size).unwrap_or_else(|_| {
+        panic!("{benchmark} {operation} size {size} exceeds the DSA descriptor transfer-size field")
+    })
+}
+
+fn aligned_dsa_desc_list(len: usize, context: &str) -> Vec<DsaHwDesc> {
+    let descs: Vec<DsaHwDesc> = (0..len).map(|_| DsaHwDesc::default()).collect();
+    let ptr = descs.as_ptr() as usize;
+    if ptr % 64 != 0 {
+        panic!("{context} descriptor list is not 64-byte aligned: ptr={ptr:#x}");
+    }
+    descs
+}
+
+fn touch_payload_pages(buf: &mut [u8]) {
+    for offset in (0..buf.len()).step_by(4096) {
+        touch_payload_byte(buf, offset);
+    }
+
+    if !buf.is_empty() {
+        touch_payload_byte(buf, buf.len() - 1);
+    }
+}
+
+fn touch_payload_byte(buf: &mut [u8], offset: usize) {
+    unsafe {
+        let ptr = buf.as_mut_ptr().add(offset);
+        let value = ptr.read_volatile();
+        ptr.write_volatile(value);
+    }
+}
+
+fn submit_until_dsa_latency_success(
+    wq: &WqPortal,
+    desc: &DsaHwDesc,
+    comp: &mut DsaCompletionRecord,
+    op_name: &str,
+    size: usize,
+    context: &str,
+) {
+    let max_page_fault_retries = size.div_ceil(4096).saturating_add(4096);
+
+    for _ in 0..max_page_fault_retries {
+        unsafe { wq.submit(desc) };
+        let status = poll_completion(comp);
+        if status == DSA_COMP_SUCCESS {
+            return;
+        }
+        if status != DSA_COMP_PAGE_FAULT_NOBOF {
+            panic_dsa_latency_failure(op_name, status, size, context);
+        }
+
+        touch_fault_page(comp);
+        reset_completion(comp);
+    }
+
+    panic!(
+        "{op_name} failed {context}: exceeded {max_page_fault_retries} page-fault retries for size={size}"
+    );
+}
+
+fn panic_dsa_latency_failure(op_name: &str, status: u8, size: usize, context: &str) -> ! {
+    panic!("{op_name} failed {context}: status={status:#x} size={size}");
+}
+
 // ============================================================================
 // Batch latency benchmark
 // ============================================================================
@@ -767,6 +880,7 @@ fn bench_batch_latency(
     json: bool,
     results: &mut Vec<LatencyResult>,
 ) {
+    let size_u32 = dsa_transfer_size(size, "batch latency", "memmove");
     if !json {
         println!("\n=== Batch latency: memmove (size={}) ===", size);
         println!(
@@ -776,14 +890,10 @@ fn bench_batch_latency(
     }
 
     for &batch_n in &[1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024] {
-        let mut sub_descs: Vec<DsaHwDesc> = (0..batch_n).map(|_| DsaHwDesc::default()).collect();
+        let mut sub_descs = aligned_dsa_desc_list(batch_n, "batch latency memmove");
         let mut sub_comps: Vec<DsaCompletionRecord> = (0..batch_n)
             .map(|_| DsaCompletionRecord::default())
             .collect();
-        debug_assert!(
-            sub_descs.as_ptr() as usize % 64 == 0,
-            "descriptor list not 64-byte aligned"
-        );
 
         let src = vec![0xABu8; size];
         let mut dst = vec![0u8; size];
@@ -797,7 +907,7 @@ fn bench_batch_latency(
         for _ in 0..50 {
             for i in 0..batch_n {
                 reset_completion(&mut sub_comps[i]);
-                sub_descs[i].fill_memmove(src.as_ptr(), dst.as_mut_ptr(), size as u32);
+                sub_descs[i].fill_memmove(src.as_ptr(), dst.as_mut_ptr(), size_u32);
                 sub_descs[i].set_completion(&mut sub_comps[i]);
             }
             reset_completion(&mut batch_comp);
@@ -815,7 +925,7 @@ fn bench_batch_latency(
         for _ in 0..iterations {
             for i in 0..batch_n {
                 reset_completion(&mut sub_comps[i]);
-                sub_descs[i].fill_memmove(src.as_ptr(), dst.as_mut_ptr(), size as u32);
+                sub_descs[i].fill_memmove(src.as_ptr(), dst.as_mut_ptr(), size_u32);
                 sub_descs[i].set_completion(&mut sub_comps[i]);
             }
             reset_completion(&mut batch_comp);
@@ -873,6 +983,7 @@ fn bench_pipelined_batch(
     json: bool,
     results: &mut Vec<ThroughputResult>,
 ) {
+    let size_u32 = dsa_transfer_size(size, "pipelined batch throughput", "memmove");
     if !json {
         println!(
             "\n=== Pipelined batch throughput: memmove (size={}) ===",
@@ -913,7 +1024,7 @@ fn bench_pipelined_batch(
                     BatchSlot {
                         batch_desc: DsaHwDesc::default(),
                         batch_comp: DsaCompletionRecord::default(),
-                        sub_descs: (0..batch_n).map(|_| DsaHwDesc::default()).collect(),
+                        sub_descs: aligned_dsa_desc_list(batch_n, "pipelined batch memmove"),
                         sub_comps: (0..batch_n)
                             .map(|_| DsaCompletionRecord::default())
                             .collect(),
@@ -930,7 +1041,7 @@ fn bench_pipelined_batch(
                     slot.sub_descs[i].fill_memmove(
                         slot.src.as_ptr(),
                         slot.dst.as_mut_ptr(),
-                        size as u32,
+                        size_u32,
                     );
                     slot.sub_descs[i].set_completion(&mut slot.sub_comps[i]);
                 }
@@ -1041,6 +1152,7 @@ fn bench_burst(
     results: &mut Vec<ThroughputResult>,
     fill_fn: impl Fn(&mut DsaHwDesc, *const u8, *mut u8, u32),
 ) {
+    let size_u32 = dsa_transfer_size(size, "burst throughput", op_name);
     if !json {
         println!("\n=== Burst throughput: {} (size={}) ===", op_name, size);
         println!("{:>6} {:>14} {:>14}", "burst", "ops/sec", "bandwidth_MB/s");
@@ -1079,7 +1191,7 @@ fn bench_burst(
                     &mut descs[i],
                     srcs[i].as_ptr(),
                     dsts[i].as_mut_ptr(),
-                    size as u32,
+                    size_u32,
                 );
                 descs[i].set_completion(&mut comps[i]);
                 unsafe { wq.submit(&descs[i]) };
@@ -1097,7 +1209,7 @@ fn bench_burst(
                         &mut descs[i],
                         srcs[i].as_ptr(),
                         dsts[i].as_mut_ptr(),
-                        size as u32,
+                        size_u32,
                     );
                     descs[i].set_completion(&mut comps[i]);
                     unsafe { wq.submit(&descs[i]) };
@@ -1153,6 +1265,7 @@ fn bench_burst_batch(
     json: bool,
     results: &mut Vec<ThroughputResult>,
 ) {
+    let size_u32 = dsa_transfer_size(size, "burst-batch throughput", "memmove");
     if !json {
         println!("\n=== Burst-batch throughput: memmove (size={}) ===", size);
         println!(
@@ -1186,7 +1299,7 @@ fn bench_burst_batch(
                     BatchSlot {
                         batch_desc: DsaHwDesc::default(),
                         batch_comp: DsaCompletionRecord::default(),
-                        sub_descs: (0..batch_n).map(|_| DsaHwDesc::default()).collect(),
+                        sub_descs: aligned_dsa_desc_list(batch_n, "burst batch memmove"),
                         sub_comps: (0..batch_n)
                             .map(|_| DsaCompletionRecord::default())
                             .collect(),
@@ -1202,7 +1315,7 @@ fn bench_burst_batch(
                     slot.sub_descs[i].fill_memmove(
                         slot.src.as_ptr(),
                         slot.dst.as_mut_ptr(),
-                        size as u32,
+                        size_u32,
                     );
                     slot.sub_descs[i].set_completion(&mut slot.sub_comps[i]);
                 }
@@ -1307,6 +1420,7 @@ fn bench_sliding_window(
     results: &mut Vec<ThroughputResult>,
     fill_fn: DsaFillFn,
 ) {
+    let size_u32 = dsa_transfer_size(size, "sliding window throughput", op_name);
     if !json {
         println!(
             "\n=== Sliding window throughput: {} (size={}) ===",
@@ -1324,7 +1438,7 @@ fn bench_sliding_window(
         let mut state = DirectWindow::new(size, window);
 
         let start = Instant::now();
-        let total_ops = state.run(wq, size, iterations, op_name, fill_fn);
+        let total_ops = state.run(wq, size, size_u32, iterations, op_name, fill_fn);
         let elapsed = start.elapsed();
 
         let ops_per_sec = total_ops as f64 / elapsed.as_secs_f64();
@@ -1357,6 +1471,7 @@ fn bench_multithread_memmove(
     json: bool,
     results: &mut Vec<ThroughputResult>,
 ) {
+    let size_u32 = dsa_transfer_size(size, "multi-thread direct memmove throughput", "memmove");
     if !json {
         println!(
             "\n=== Multi-thread direct memmove throughput: size={} threads={} ===",
@@ -1391,7 +1506,14 @@ fn bench_multithread_memmove(
                     let mut state = DirectWindow::new(size, thread_window);
                     ready_barrier.wait();
                     start_barrier.wait();
-                    state.run(wq, size, iterations, "memmove_mt", fill_memmove_desc)
+                    state.run(
+                        wq,
+                        size,
+                        size_u32,
+                        iterations,
+                        "memmove_mt",
+                        fill_memmove_desc,
+                    )
                 }));
             }
 
@@ -1465,6 +1587,7 @@ impl DirectWindow {
         &mut self,
         wq: &WqPortal,
         size: usize,
+        size_u32: u32,
         iterations: usize,
         op_name: &str,
         fill_fn: DsaFillFn,
@@ -1472,7 +1595,7 @@ impl DirectWindow {
         let window = self.descs.len();
 
         for slot in 0..window {
-            self.submit_slot(wq, size, fill_fn, slot);
+            self.submit_slot(wq, size_u32, fill_fn, slot);
         }
 
         let mut issued = window;
@@ -1483,7 +1606,7 @@ impl DirectWindow {
             let status = poll_completion(&self.comps[slot]);
             if status == DSA_COMP_PAGE_FAULT_NOBOF {
                 touch_fault_page(&self.comps[slot]);
-                self.submit_slot(wq, size, fill_fn, slot);
+                self.submit_slot(wq, size_u32, fill_fn, slot);
                 continue;
             }
             if status != DSA_COMP_SUCCESS {
@@ -1496,7 +1619,7 @@ impl DirectWindow {
             completed += 1;
 
             if issued < iterations {
-                self.submit_slot(wq, size, fill_fn, slot);
+                self.submit_slot(wq, size_u32, fill_fn, slot);
                 issued += 1;
             }
 
@@ -1507,13 +1630,13 @@ impl DirectWindow {
         completed
     }
 
-    fn submit_slot(&mut self, wq: &WqPortal, size: usize, fill_fn: DsaFillFn, slot: usize) {
+    fn submit_slot(&mut self, wq: &WqPortal, size_u32: u32, fill_fn: DsaFillFn, slot: usize) {
         reset_completion(&mut self.comps[slot]);
         fill_fn(
             &mut self.descs[slot],
             self.srcs[slot].as_ptr(),
             self.dsts[slot].as_mut_ptr(),
-            size as u32,
+            size_u32,
         );
         self.descs[slot].set_completion(&mut self.comps[slot]);
         unsafe { wq.submit(&self.descs[slot]) };

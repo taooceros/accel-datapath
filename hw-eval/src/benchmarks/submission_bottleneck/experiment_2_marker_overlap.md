@@ -26,6 +26,7 @@ The benchmark submits `N` logical operations one per MMIO. After `poll_offset`, 
 - `--marker-positions <first|half|last>`: marker position in CPU submit order.
 - `--marker-poll-offsets <LIST>`: first zero-based submit indices where polling begins.
 - `--dsa-op <noop|memmove64|memmove4k>`: logical operation class.
+- `--dsa-memmove-bytes <N>`: override payload size for `memmove64` / `memmove4k` runs.
 - `--iterations <N>`: repeated samples per configuration.
 
 Latest focused default-suite command:

@@ -124,6 +124,21 @@ pub(crate) fn zero_record<T>(record: &mut T) {
 }
 
 #[inline(always)]
+pub fn rdtsc_relaxed() -> u64 {
+    let lo: u32;
+    let hi: u32;
+    unsafe {
+        core::arch::asm!(
+            "rdtsc",
+            out("eax") lo,
+            out("edx") hi,
+            options(nostack, nomem, preserves_flags),
+        );
+    }
+    ((hi as u64) << 32) | lo as u64
+}
+
+#[inline(always)]
 pub fn rdtscp() -> (u64, u32) {
     let lo: u32;
     let hi: u32;

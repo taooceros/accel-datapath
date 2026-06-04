@@ -51,6 +51,9 @@ pub(crate) fn run(
                 request.config.dsa_operation,
                 request.config.dsa_payload_size,
                 request.config.submit_occupancy_trace_until,
+                request.config.submit_occupancy_spin_iters,
+                request.config.submit_occupancy_gap_tsc,
+                request.config.submit_occupancy_shared_payload,
                 request.iterations,
                 request.tsc_freq,
                 request.json,
@@ -65,21 +68,11 @@ pub(crate) fn run(
                 &request.config.marker_positions,
                 &request.config.marker_poll_offsets,
                 request.config.dsa_operation,
+                request.config.dsa_payload_size,
                 request.iterations,
                 request.tsc_freq,
                 request.json,
                 &mut results.submit_marker_overlap,
-            );
-            bench_submit_marker_mechanism_probes(
-                request.wq,
-                &request.config.marker_bursts,
-                &request.config.marker_poll_offsets,
-                &request.config.marker_poll_submit_batches,
-                request.config.dsa_operation,
-                request.iterations,
-                request.tsc_freq,
-                request.json,
-                &mut results.submit_marker_mechanism,
             );
             true
         }
@@ -90,6 +83,7 @@ pub(crate) fn run(
                 &request.config.marker_poll_offsets,
                 &request.config.marker_poll_submit_batches,
                 request.config.dsa_operation,
+                request.config.dsa_payload_size,
                 request.iterations,
                 request.tsc_freq,
                 request.json,

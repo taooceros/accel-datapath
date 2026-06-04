@@ -80,6 +80,17 @@ pub(crate) struct Args {
     /// Trace extra submit timings from each occupancy through this total submission count
     #[arg(long)]
     submit_occupancy_trace_until: Option<usize>,
+    /// Fixed `black_box(n)` loop iterations inserted between Experiment 1 submissions
+    #[arg(long, default_value_t = 0)]
+    submit_occupancy_spin_iters: u64,
+
+    /// Target TSC ticks to wait between Experiment 1 submissions
+    #[arg(long, default_value_t = 0)]
+    submit_occupancy_gap_tsc: u64,
+
+    /// Reuse one payload buffer for all Experiment 1 memmove descriptors
+    #[arg(long)]
+    submit_occupancy_shared_payload: bool,
     /// First zero-based submit indexes where Experiment 2 tracing/probes start polling
     #[arg(long, default_value = DEFAULT_MARKER_POLL_OFFSETS)]
     marker_poll_offsets: String,
@@ -154,6 +165,7 @@ pub(crate) enum BenchmarkKind {
     SubmitMarkerMechanism,
     TrafficClassLadder,
     CompletionReusePolicy,
+    PayloadLatency,
 }
 
 impl BenchmarkKind {
@@ -167,6 +179,7 @@ impl BenchmarkKind {
             Self::SubmitMarkerMechanism => "submit-marker-mechanism",
             Self::TrafficClassLadder => "traffic-class-ladder",
             Self::CompletionReusePolicy => "completion-reuse-policy",
+            Self::PayloadLatency => "payload-latency",
         }
     }
 }
@@ -444,6 +457,9 @@ fn parse_usize_list(
 pub(crate) struct SubmissionBottleneckConfig {
     pub(crate) submit_occupancies: Vec<usize>,
     pub(crate) submit_occupancy_trace_until: Option<usize>,
+    pub(crate) submit_occupancy_spin_iters: u64,
+    pub(crate) submit_occupancy_gap_tsc: u64,
+    pub(crate) submit_occupancy_shared_payload: bool,
     pub(crate) marker_bursts: Vec<usize>,
     pub(crate) marker_positions: Vec<MarkerPosition>,
     pub(crate) marker_poll_cadences: Vec<MarkerPollCadence>,
@@ -500,6 +516,9 @@ impl BenchmarkConfig {
         #[builder(default = DEFAULT_SUBMIT_OCCUPANCIES.to_string(), into)]
         submit_occupancies: String,
         submit_occupancy_trace_until: Option<usize>,
+        #[builder(default = 0)] submit_occupancy_spin_iters: u64,
+        #[builder(default = 0)] submit_occupancy_gap_tsc: u64,
+        #[builder(default)] submit_occupancy_shared_payload: bool,
         #[builder(default = DEFAULT_MARKER_BURSTS.to_string(), into)] marker_bursts: String,
         #[builder(default = DEFAULT_MARKER_POSITIONS.to_string(), into)] marker_positions: String,
         #[builder(default = DEFAULT_MARKER_POLL_CADENCES.to_string(), into)]
@@ -520,6 +539,15 @@ impl BenchmarkConfig {
         #[builder(default)] cold: bool,
         #[builder(default)] json: bool,
     ) -> Result<Self, BenchmarkConfigError> {
+        if iterations == 0 {
+            return Err(BenchmarkConfigError::ZeroIterations);
+        }
+        if max_concurrency == 0 {
+            return Err(BenchmarkConfigError::ZeroMaxConcurrency);
+        }
+        if completion_reuse_window == 0 {
+            return Err(BenchmarkConfigError::ZeroCompletionReuseWindow);
+        }
         let device = device.unwrap_or_else(|| default_device(accel));
         let sizes = parse_sizes(&sizes)?;
         let submit_bursts = parse_submit_bursts(&submit_bursts)?;
@@ -531,9 +559,15 @@ impl BenchmarkConfig {
             Some(bytes) => bytes,
             None => dsa_op.default_payload_size(),
         };
+        if submit_occupancy_spin_iters != 0 && submit_occupancy_gap_tsc != 0 {
+            return Err(BenchmarkConfigError::ConflictingSubmitOccupancyGapOptions);
+        }
         let submission_bottleneck = SubmissionBottleneckConfig {
             submit_occupancies: parse_submit_occupancies(&submit_occupancies)?,
             submit_occupancy_trace_until,
+            submit_occupancy_spin_iters,
+            submit_occupancy_gap_tsc,
+            submit_occupancy_shared_payload,
             marker_bursts: parse_marker_bursts(&marker_bursts)?,
             marker_positions: parse_marker_positions(&marker_positions)?,
             marker_poll_cadences: parse_marker_poll_cadences(&marker_poll_cadences)?,
@@ -559,7 +593,8 @@ impl BenchmarkConfig {
                 | BenchmarkKind::SubmitMarkerOverlap
                 | BenchmarkKind::SubmitMarkerMechanism
                 | BenchmarkKind::TrafficClassLadder
-                | BenchmarkKind::CompletionReusePolicy,
+                | BenchmarkKind::CompletionReusePolicy
+                | BenchmarkKind::PayloadLatency,
         ) && accel != AccelKind::Dsa
         {
             return Err(BenchmarkConfigError::UnsupportedBenchmark {
@@ -598,6 +633,9 @@ impl BenchmarkConfig {
             submit_mode,
             submit_bursts,
             submit_occupancy_trace_until,
+            submit_occupancy_spin_iters,
+            submit_occupancy_gap_tsc,
+            submit_occupancy_shared_payload,
             sw_only,
             submit_occupancies,
             marker_bursts,
@@ -629,6 +667,9 @@ impl BenchmarkConfig {
             .submit_occupancies(submit_occupancies)
             .marker_bursts(marker_bursts)
             .maybe_submit_occupancy_trace_until(submit_occupancy_trace_until)
+            .submit_occupancy_spin_iters(submit_occupancy_spin_iters)
+            .submit_occupancy_gap_tsc(submit_occupancy_gap_tsc)
+            .submit_occupancy_shared_payload(submit_occupancy_shared_payload)
             .marker_positions(marker_positions)
             .marker_poll_cadences(marker_poll_cadences)
             .marker_poll_offsets(marker_poll_offsets)
@@ -662,12 +703,22 @@ pub(crate) enum BenchmarkConfigError {
     },
     #[snafu(display("{flag} entries must be positive integers greater than zero (got {raw:?})"))]
     ZeroListEntry { flag: &'static str, raw: String },
+    #[snafu(display("--iterations must be greater than zero"))]
+    ZeroIterations,
+    #[snafu(display("--max-concurrency must be greater than zero"))]
+    ZeroMaxConcurrency,
+    #[snafu(display("--completion-reuse-window must be greater than zero"))]
+    ZeroCompletionReuseWindow,
     #[snafu(display("--threads must be greater than zero"))]
     ZeroThreads,
     #[snafu(display("--dsa-memmove-bytes must be greater than zero"))]
     ZeroDsaMemmoveBytes,
     #[snafu(display("--dsa-memmove-bytes requires --dsa-op memmove64 or --dsa-op memmove4k"))]
     DsaMemmoveBytesForNoop,
+    #[snafu(display(
+        "--submit-occupancy-spin-iters and --submit-occupancy-gap-tsc are mutually exclusive"
+    ))]
+    ConflictingSubmitOccupancyGapOptions,
     #[snafu(display("--benchmark {benchmark} is not supported for --accel {accel}"))]
     UnsupportedBenchmark {
         benchmark: &'static str,
@@ -742,6 +793,9 @@ mod tests {
             config.submission_bottleneck.submit_occupancies,
             vec![0, 32, 64, 96, 112, 120, 124, 126, 127, 128, 129, 132, 136, 144, 160]
         );
+        assert_eq!(config.submission_bottleneck.submit_occupancy_spin_iters, 0);
+        assert_eq!(config.submission_bottleneck.submit_occupancy_gap_tsc, 0);
+        assert!(!config.submission_bottleneck.submit_occupancy_shared_payload);
         assert_eq!(
             config.submission_bottleneck.marker_bursts,
             vec![64, 96, 128, 160, 256]
@@ -832,6 +886,8 @@ mod tests {
             .submit_mode(SubmitOnlyMode::Mfence)
             .submit_bursts("2, 64".to_string())
             .submit_occupancies("0, 32,128".to_string())
+            .submit_occupancy_gap_tsc(23)
+            .submit_occupancy_shared_payload(true)
             .marker_bursts("64,160".to_string())
             .marker_positions("first,last".to_string())
             .marker_poll_cadences("4,never".to_string())
@@ -862,6 +918,9 @@ mod tests {
             config.submission_bottleneck.submit_occupancies,
             vec![0, 32, 128]
         );
+        assert_eq!(config.submission_bottleneck.submit_occupancy_spin_iters, 0);
+        assert_eq!(config.submission_bottleneck.submit_occupancy_gap_tsc, 23);
+        assert!(config.submission_bottleneck.submit_occupancy_shared_payload);
         assert_eq!(config.submission_bottleneck.marker_bursts, vec![64, 160]);
         assert_eq!(
             config.submission_bottleneck.marker_positions,
@@ -1116,6 +1175,23 @@ mod tests {
     }
 
     #[test]
+    fn benchmark_config_rejects_conflicting_submit_occupancy_gap_options() {
+        let error = BenchmarkConfig::builder()
+            .submit_occupancy_spin_iters(1)
+            .submit_occupancy_gap_tsc(1)
+            .build()
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            BenchmarkConfigError::ConflictingSubmitOccupancyGapOptions
+        ));
+        assert_eq!(
+            error.to_string(),
+            "--submit-occupancy-spin-iters and --submit-occupancy-gap-tsc are mutually exclusive"
+        );
+    }
+
+    #[test]
     fn submit_only_benchmark_is_dsa_only() {
         let error = BenchmarkConfig::builder()
             .accel(AccelKind::Iax)
@@ -1170,7 +1246,7 @@ mod tests {
     }
 
     #[test]
-    fn remaining_bottleneck_experiment_benchmarks_are_dsa_only() {
+    fn remaining_dsa_only_benchmarks_reject_iax() {
         for (benchmark, name) in [
             (BenchmarkKind::SubmitMarkerOverlap, "submit-marker-overlap"),
             (
@@ -1182,6 +1258,7 @@ mod tests {
                 BenchmarkKind::CompletionReusePolicy,
                 "completion-reuse-policy",
             ),
+            (BenchmarkKind::PayloadLatency, "payload-latency"),
         ] {
             let error = BenchmarkConfig::builder()
                 .accel(AccelKind::Iax)

@@ -104,6 +104,44 @@ fn assert_malformed_sizes_fail_without_panic(raw_sizes: &str, expected_fragment:
     assert_no_payload_bytes(&stderr);
 }
 
+fn assert_positive_count_flag_rejects_zero(flag: &str) {
+    let output = hw_eval(&["--sw-only", flag, "0"]);
+
+    assert!(
+        !output.status.success(),
+        "{flag}=0 should fail; stdout:\n{}\nstderr:\n{}",
+        stdout(&output),
+        stderr(&output)
+    );
+
+    let stdout = stdout(&output);
+    let stderr = stderr(&output);
+    assert!(
+        stderr.contains(&format!("{flag} must be greater than zero")),
+        "stderr should report positive-count validation for {flag}: {stderr}"
+    );
+    assert!(
+        !stderr.to_ascii_lowercase().contains("panicked"),
+        "CLI validation should not panic: {stderr}"
+    );
+    assert!(
+        stdout.trim().is_empty() || serde_json::from_str::<Value>(&stdout).is_err(),
+        "failed CLI validation should not emit a valid JSON report: {stdout}"
+    );
+    assert_no_payload_bytes(&stderr);
+}
+
+#[test]
+fn positive_count_flags_reject_zero_without_json_or_panic() {
+    for flag in [
+        "--iterations",
+        "--max-concurrency",
+        "--completion-reuse-window",
+    ] {
+        assert_positive_count_flag_rejects_zero(flag);
+    }
+}
+
 #[test]
 fn malformed_size_reports_token_and_raw_list_without_json_or_panic() {
     assert_malformed_sizes_fail_without_panic("64,abc,128", "abc");
@@ -275,6 +313,9 @@ fn submit_occupancy_selector_reaches_hardware_open_with_structured_error() {
         "memmove64",
         "--dsa-memmove-bytes",
         "16777216",
+        "--submit-occupancy-gap-tsc",
+        "12",
+        "--submit-occupancy-shared-payload",
         "--device",
         missing_device,
         "--sizes",
@@ -395,6 +436,7 @@ fn remaining_bottleneck_selectors_reach_hardware_open_with_structured_error() {
                 "noop",
             ][..],
         ),
+        ("payload-latency", &[][..]),
     ] {
         assert_dsa_selector_reaches_hardware_open(benchmark, extra_args);
     }
@@ -440,12 +482,13 @@ fn submit_occupancy_rejects_iax_before_opening_hardware() {
 }
 
 #[test]
-fn remaining_bottleneck_selectors_reject_iax_before_opening_hardware() {
+fn remaining_dsa_only_selectors_reject_iax_before_opening_hardware() {
     for benchmark in [
         "submit-marker-overlap",
         "submit-marker-mechanism",
         "traffic-class-ladder",
         "completion-reuse-policy",
+        "payload-latency",
     ] {
         let missing_device = std::env::temp_dir().join(format!(
             "hw-eval-{benchmark}-iax-missing-wq-{}",

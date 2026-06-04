@@ -15,10 +15,10 @@ use std::mem;
 use std::time::Instant;
 
 use hw_eval::dsa::{
-    reset_completion, DsaCompletionRecord, DsaCompletionStatus, DsaHwDesc, DSA_COMP_NONE,
-    DSA_COMP_SUCCESS,
+    completion_flags_no_cache_control, poll_completion, reset_completion, DsaCompletionRecord,
+    DsaCompletionStatus, DsaHwDesc, DSA_COMP_NONE, DSA_COMP_SUCCESS,
 };
-use hw_eval::submit::{cycles_to_ns, flush_range, WqPortal};
+use hw_eval::submit::{cycles_to_ns, flush_range, mfence, WqPortal};
 
 use crate::config::DsaOperationClass;
 use crate::report::{
@@ -27,8 +27,8 @@ use crate::report::{
 };
 
 use super::super::common::{
-    dsa_operation_payload_size, fill_descriptor, measured_call, optional_stats, OperationSlots,
-    COMPLETION_TIMEOUT_NS, TIMEOUT_CHECK_STRIDE,
+    fill_descriptor, measured_call, optional_stats, OperationSlots, COMPLETION_TIMEOUT_NS,
+    TIMEOUT_CHECK_STRIDE,
 };
 
 const SUBMIT_MARKER_MECHANISM_BENCHMARK: &str = "submit_marker_mechanism";
@@ -42,6 +42,7 @@ pub(crate) fn bench_submit_marker_mechanism_probes(
     poll_offsets: &[usize],
     poll_submit_batches: &[usize],
     operation: DsaOperationClass,
+    payload_size: usize,
     iterations: usize,
     tsc_freq: u64,
     json: bool,
@@ -51,8 +52,8 @@ pub(crate) fn bench_submit_marker_mechanism_probes(
         return;
     };
 
-    let mut packed_slots = OperationSlots::new(max_burst, operation);
-    let mut padded_slots = PaddedOperationSlots::new(max_burst, operation);
+    let mut packed_slots = OperationSlots::new_with_payload(max_burst, operation, payload_size);
+    let mut padded_slots = PaddedOperationSlots::new(max_burst, operation, payload_size);
 
     if !json {
         println!(
@@ -471,10 +472,9 @@ struct PaddedOperationSlots {
 }
 
 impl PaddedOperationSlots {
-    fn new(count: usize, operation: DsaOperationClass) -> Self {
+    fn new(count: usize, operation: DsaOperationClass, payload_size: usize) -> Self {
         let mut descriptors = vec![DsaHwDesc::default(); count];
         let mut completions = vec![PaddedCompletionSlot::default(); count];
-        let payload_size = dsa_operation_payload_size(operation);
         let mut sources = vec![0xa5; count * payload_size];
         let mut destinations = vec![0; count * payload_size];
         touch_pages(&mut sources);
@@ -700,6 +700,11 @@ fn run_probe<S: CompletionStorage>(
     let mut seen = vec![false; n];
     let mut iteration_trace = IterationTrace::new(n);
     let poll_submit_batch_n = spec.poll_submit_batch_n;
+
+    let mut drain_desc = DsaHwDesc::default();
+    let mut drain_comp = DsaCompletionRecord::default();
+    drain_desc.fill_drain(completion_flags_no_cache_control());
+    drain_desc.set_completion(&mut drain_comp);
     assert!(poll_submit_batch_n != 0);
 
     for iteration_index in 0..iterations {
@@ -728,6 +733,17 @@ fn run_probe<S: CompletionStorage>(
         }
 
         let outcome = wait_for_all_completions(slots, n, &mut seen);
+        if outcome.completed < n as u64 {
+            drain_after_timeout(
+                wq,
+                &drain_desc,
+                &mut drain_comp,
+                operation,
+                n,
+                poll_offset,
+                spec,
+            );
+        }
         accumulator.record_outcome(n, outcome);
         accumulator.record_sample_trace(iteration_trace.to_sample_trace(iteration_index));
     }
@@ -950,6 +966,30 @@ fn wait_for_all_completions<S: CompletionStorage>(
         }
 
         core::hint::spin_loop();
+    }
+}
+
+fn drain_after_timeout(
+    wq: &WqPortal,
+    drain_desc: &DsaHwDesc,
+    drain_comp: &mut DsaCompletionRecord,
+    operation: DsaOperationClass,
+    n: usize,
+    poll_offset: usize,
+    spec: ProbeSpec,
+) {
+    reset_completion(drain_comp);
+    mfence();
+    unsafe { wq.submit(drain_desc) };
+    let status = poll_completion(drain_comp);
+    if status != DSA_COMP_SUCCESS {
+        panic!(
+            "submit-marker-mechanism drain descriptor failed: status {status:#x} \
+             (operation={}, n={n}, poll_offset={poll_offset}, sub_experiment={}, variant={})",
+            operation.as_str(),
+            spec.sub_experiment,
+            spec.variant
+        );
     }
 }
 

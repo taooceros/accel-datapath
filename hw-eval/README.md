@@ -24,7 +24,9 @@ cargo bench
 --sizes, -s <LIST>       Message sizes in bytes, comma-separated
 --iterations, -i <N>     Iterations per measurement (default: 10000)
 --max-concurrency, -m <N> Max sliding window concurrency (default: 128)
---benchmark <all|submit-only|submit-admission|submit-occupancy|submit-marker-overlap|submit-marker-mechanism|traffic-class-ladder|completion-reuse-policy>
+--threads <N>           Submitter thread count for DSA direct memmove throughput
+                         (default: 1); distinct from maximum logical concurrency
+--benchmark <all|submit-only|submit-admission|submit-occupancy|submit-marker-overlap|submit-marker-mechanism|traffic-class-ladder|completion-reuse-policy|payload-latency>
                          Benchmark subset to run (default: all)
 --submit-mode <all|unloaded|sustained|mfence>
                          Submit-only workload variant (default: all)
@@ -57,6 +59,12 @@ cargo bench
                          Override memmove byte count for bottleneck experiments
 --submit-occupancy-trace-until <N>
                          For submit-occupancy, time every post-prefill submit until total submitted reaches N
+--submit-occupancy-spin-iters <N>
+                         For submit-occupancy, insert N `black_box(n)` loop iterations between submissions
+--submit-occupancy-gap-tsc <N>
+                         For submit-occupancy, wait about N TSC ticks between submissions
+--submit-occupancy-shared-payload
+                         For submit-occupancy memmove, reuse one payload buffer across descriptors
 --sw-only                Software baselines only (no hardware)
 --pin-core <N>           Pin benchmark thread to CPU core
 --cold                   Flush caches between iterations (cold-cache DMA)
@@ -74,6 +82,7 @@ cargo bench
 | **submit_only_mfence** | DSA NOOP submit burst with `mfence` between submissions; probes posted-write serialization |
 | **submit_admission_distinct** | Distinct completion-bearing NOOP burst with no software inflight gate; counts missing completions to test dedicated-WQ admission behavior |
 | **memmove** | Single-op DMA copy latency (rdtscp, per size) |
+| **payload_latency** | Focused DSA memmove descriptor completion latency for `--sizes`; selected by `--benchmark payload-latency` |
 | **submit_occupancy_one_extra** | Prefill K completion-bearing descriptors, time one extra submit, then record first-old completion visibility and drain counts |
 | **submit_marker_overlap** | Default Experiment 2 suite: baseline overlap traces plus all mechanism-probe rows for the configured marker bursts and poll offsets |
 | **submit_marker_mechanism** | Mechanism-only Experiment 2 sub-experiments for completion-record layout, cacheline-pair, prefetch, measurement-method, and cache-state probes |
@@ -125,10 +134,12 @@ launch ./target/release/hw-eval \
 ```
 
 For payload-saturation probes, use `--dsa-op memmove64 --dsa-memmove-bytes <N>` to keep the memmove operation path while overriding the byte count.
+To stretch the submit loop without changing the timed MMIO-submit call itself, prefer `--submit-occupancy-gap-tsc <N>`, which waits until about `N` TSC ticks have elapsed between Experiment 1 submissions. The legacy `--submit-occupancy-spin-iters <N>` inserts a fixed `for n in 0..N { black_box(n); }` loop instead; the two options are mutually exclusive. For very large memmove payload-size sweeps, `--submit-occupancy-shared-payload` reuses one source/destination payload buffer across descriptors while preserving distinct completion records.
+
 
 JSON reports include skipped-when-empty arrays for these modes:
 - `admission`: rows use `benchmark: "submit_admission_distinct"` and record burst size, submitted operations, completion counts, missing counts, descriptor errors, and submit timing for the Experiment 5 correctness gate.
-- `submit_occupancy`: rows use `benchmark: "submit_occupancy_trace"` and record `operation_class`, `k_prefill`, `submitted`, `trace_until`, raw per-submit `extra_submit_trace` points, and per-iteration `trace_outcomes`. Percentiles and ranges are computed by post-processing scripts, not by the runner.
+- `submit_occupancy`: rows use `benchmark: "submit_occupancy_trace"` and record `operation_class`, `k_prefill`, `submitted`, `trace_until`, `spin_loop_iters`, `gap_tsc_ticks`, `shared_payload`, raw per-submit `extra_submit_trace` points, per-iteration `trace_outcomes`, `hardware_observed` completion counts, and drain-sentinel completion status. Percentiles and ranges are computed by post-processing scripts, not by the runner.
 - `submit_marker_overlap`: rows use `benchmark: "submit_marker_overlap"` and record `n`, zero-based marker position, fixed poll step, zero-based poll offset, submit-tail timing, marker-visible timing when observed, completion counts, and a `trace` list keyed by zero-based `submit_index`. Each trace point records submit latency, visible prefix/count, and per-read poll latency/status stats for plotting.
 - `traffic_class_ladder`: rows use `benchmark: "traffic_class_ladder"` and record traffic class, operation size, window, submit timing, completion-visible timing where applicable, completion counts where applicable, and ops/sec.
 - `completion_reuse_policy`: rows use `benchmark: "completion_reuse_policy"` and record operation class, window, policy, operations completed, ops/sec, polls/completion, harvest timing, reset-to-submit timing where applicable, and completion counts.

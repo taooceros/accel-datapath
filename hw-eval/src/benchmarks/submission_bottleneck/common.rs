@@ -69,22 +69,47 @@ impl OperationSlots {
         operation: DsaOperationClass,
         payload_size: usize,
     ) -> Self {
+        Self::new_with_payload_layout(count, operation, payload_size, false)
+    }
+
+    pub(super) fn new_with_shared_payload(
+        count: usize,
+        operation: DsaOperationClass,
+        payload_size: usize,
+    ) -> Self {
+        Self::new_with_payload_layout(count, operation, payload_size, true)
+    }
+
+    fn new_with_payload_layout(
+        count: usize,
+        operation: DsaOperationClass,
+        payload_size: usize,
+        shared_payload: bool,
+    ) -> Self {
+        let payload_slots = if payload_size == 0 {
+            0
+        } else if shared_payload {
+            1
+        } else {
+            count
+        };
         let mut descriptors = vec![DsaHwDesc::default(); count];
         let mut completions = vec![DsaCompletionRecord::default(); count];
 
-        let mut sources = vec![0xa5; count * payload_size];
-        let mut destinations = vec![0; count * payload_size];
+        let mut sources = vec![0xa5; payload_slots * payload_size];
+        let mut destinations = vec![0; payload_slots * payload_size];
 
         touch_pages(&mut sources);
         touch_pages(&mut destinations);
 
         for slot in 0..count {
+            let payload_slot = if shared_payload { 0 } else { slot };
             fill_descriptor(
                 &mut descriptors[slot],
                 &mut completions[slot],
                 &mut sources,
                 &mut destinations,
-                slot,
+                payload_slot,
                 payload_size,
                 operation,
             );

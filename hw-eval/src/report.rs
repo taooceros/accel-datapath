@@ -257,6 +257,9 @@ mod tests {
             k_prefill: 4,
             submitted: 5,
             trace_until: 5,
+            spin_loop_iters: 11,
+            gap_tsc_ticks: 13,
+            shared_payload: true,
             prefill_completion_trace: vec![SubmitOccupancyPrefillCompletionTracePoint {
                 iteration_index: 0,
                 prefill_submit_tsc_ticks: 100,
@@ -274,6 +277,9 @@ mod tests {
         };
 
         let json = serde_json::to_value(result).expect("submit occupancy result serializes");
+        assert_eq!(json["spin_loop_iters"], serde_json::Value::from(11));
+        assert_eq!(json["gap_tsc_ticks"], serde_json::Value::from(13));
+        assert_eq!(json["shared_payload"], serde_json::Value::from(true));
         let prefill_trace = json["prefill_completion_trace"]
             .as_array()
             .expect("prefill completion trace is an array");
@@ -312,6 +318,9 @@ pub(crate) struct SubmitOccupancyResult {
     pub(crate) k_prefill: usize,
     pub(crate) submitted: usize,
     pub(crate) trace_until: usize,
+    pub(crate) spin_loop_iters: u64,
+    pub(crate) gap_tsc_ticks: u64,
+    pub(crate) shared_payload: bool,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) prefill_completion_trace: Vec<SubmitOccupancyPrefillCompletionTracePoint>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -346,8 +355,11 @@ pub(crate) struct SubmitOccupancyExtraTracePoint {
 pub(crate) struct SubmitOccupancyTraceOutcome {
     pub(crate) iteration_index: usize,
     pub(crate) completed: usize,
+    pub(crate) hardware_observed: usize,
     pub(crate) missing: usize,
     pub(crate) errors: usize,
+    pub(crate) drain_sentinel_completed: bool,
+    pub(crate) drain_sentinel_status: u8,
 }
 
 #[derive(Serialize)]

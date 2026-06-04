@@ -87,7 +87,6 @@ user-invocable: false
 
 ```
 Naming: snake_case (fn/var), CamelCase (type), SCREAMING_CASE (const)
-Format: rustfmt (just use it)
 Docs: /// for public items, //! for module docs
 Lint: #![warn(clippy::all)]
 ```

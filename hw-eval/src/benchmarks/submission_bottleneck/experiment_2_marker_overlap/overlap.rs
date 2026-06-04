@@ -36,6 +36,7 @@ pub(crate) fn bench_submit_marker_overlap(
     positions: &[MarkerPosition],
     poll_offsets: &[usize],
     operation: DsaOperationClass,
+    payload_size: usize,
     iterations: usize,
     tsc_freq: u64,
     json: bool,
@@ -44,7 +45,7 @@ pub(crate) fn bench_submit_marker_overlap(
     let Some(&max_burst) = bursts.iter().max() else {
         return;
     };
-    let mut scratch = OverlapScratch::new(max_burst, operation);
+    let mut scratch = OverlapScratch::new(max_burst, operation, payload_size);
 
     let mut drain_desc = DsaHwDesc::default();
     let mut drain_comp = DsaCompletionRecord::default();
@@ -131,9 +132,9 @@ struct OverlapScratch {
 }
 
 impl OverlapScratch {
-    fn new(max_burst: usize, operation: DsaOperationClass) -> Self {
+    fn new(max_burst: usize, operation: DsaOperationClass, payload_size: usize) -> Self {
         Self {
-            slots: OperationSlots::new(max_burst, operation),
+            slots: OperationSlots::new_with_payload(max_burst, operation, payload_size),
             seen: vec![false; max_burst],
             observations: CompletionObservations::new(max_burst),
             iteration_trace: IterationTrace::new(max_burst),

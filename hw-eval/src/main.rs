@@ -195,6 +195,18 @@ fn run() -> Result<(), HwEvalError> {
                 BenchmarkKind::SubmitOccupancy => {
                     println!("Submit occupancies: {:?}", bottleneck.submit_occupancies);
                     println!("DSA operation: {}", bottleneck.dsa_operation.as_str());
+                    println!(
+                        "Submit occupancy spin iterations: {}",
+                        bottleneck.submit_occupancy_spin_iters
+                    );
+                    println!(
+                        "Submit occupancy TSC gap ticks: {}",
+                        bottleneck.submit_occupancy_gap_tsc
+                    );
+                    println!(
+                        "Submit occupancy shared payload: {}",
+                        bottleneck.submit_occupancy_shared_payload
+                    );
                 }
                 BenchmarkKind::SubmitMarkerOverlap => {
                     println!("Experiment 2 suite: overlap + mechanism probes");

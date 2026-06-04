@@ -317,7 +317,7 @@ def plot(
     )
     subtitle = (
         f"N={row['n']}, poll offset={poll_offset}, "
-        f"random iteration={iteration_index}; {visible_text}; "
+        f"sample iteration={iteration_index}; {visible_text}; "
         f"1 TSC tick = {ns_per_tick:.3f} ns"
     )
     axes[0].text(
