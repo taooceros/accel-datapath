@@ -1,0 +1,125 @@
+for experiment 1, add an option to manually add spin loop across submission (so adding some manual overhead so that we can understand where the bottleneck is from by seeing the difference between first latency increase of noop vs large memmove)
+
+---
+
+let's try different number of spin and see whether the results may change
+
+---
+
+plot the results
+
+---
+
+don't link the x-axis of top half and bottom half
+
+---
+
+what's the ... line?
+
+---
+
+no need for the p99
+
+---
+
+what's the bottom graph mean
+
+---
+
+the bottom graph is not important; instead, print the average ticks of the ticks across the spin iters
+
+---
+
+the bottom graph is not important; instead, print the average ticks of the prefill k across the spin iters
+
+---
+
+instead of making the spin a spin_loop, which incurs a pause instruction that can be hard to understand; make it a blackbox loop
+
+---
+
+what's the results
+
+---
+
+investigate the asm of the generated binary; why is even one black box spin will incur such a massive change of behavior
+
+---
+
+think harder
+
+---
+
+continue
+
+---
+
+use cargo asm
+
+---
+
+use cargo asm to investigate what the blackbox do, and why just with one iteration of changes can change the experiment 1 results massively
+
+---
+
+shouldn't one iteration of spin correponds to ~1 cycle?
+
+---
+
+make it cheaper, but don't make the spin loop being optimized out
+
+---
+
+it is still way too expensive; let's try your way
+
+---
+
+why can a rdtsc loop cheaper than a spin loop
+
+---
+
+how many cycle do rdtsc take
+
+---
+
+I think it may be enough for our experiment; what are we trying to show
+
+---
+
+if we have a gap_tsc = 50, what's the prefill latency
+
+---
+
+why is K=114 longer than K=96
+
+---
+
+please report the median
+
+---
+
+what's the extra submission cost with different tsc gap
+
+---
+
+let's rerun the experiment, with larger cap
+
+---
+
+rerun the experiment with noop, 1MB transfer, 10MB transfer, 100MB transfer, and 1GB transfer
+
+---
+
+rerun the experiment with noop, 1MB transfer, 10MB transfer, 100MB transfer, and 1GB transfer (and reduce the iteration to 10)
+
+---
+
+continue
+
+---
+
+for the very large request, it is possible that the hardware will silently drop requests, as dedicated wq doesn't have a flow control using movdir64, so don't panic if you cannot poll completion, just mark the specific request as incomplete
+
+---
+
+let's also record how many requests hardware observe (i.e. we can poll its completion). Also, do it for 4k, 64k as well

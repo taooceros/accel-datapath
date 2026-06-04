@@ -3,15 +3,51 @@
   "checkpoint_id": "26aa82d37478",
   "strategy": "manual-commit",
   "branch": "async-binding-intel-idxd",
-  "checkpoints_count": 6,
+  "checkpoints_count": 40,
   "files_touched": [
     ".agents/skills/coding-guidelines/SKILL.md",
     ".omp/SYSTEM.md",
     ".omp/SYSTEM_DUMP.md",
     ".omp/commands/generate-system-prompt.md",
+    "AGENTS.md",
     "agents/plan/2026-06-02/01.submit-occupancy-prefill-completion.plan.md",
+    "agents/plan/2026-06-02/02.submit-occupancy-spin-overhead.plan.md",
+    "agents/plan/2026-06-02/03.submit-occupancy-tsc-gap.plan.md",
+    "agents/plan/2026-06-02/04.submit-occupancy-payload-size-sweep.plan.md",
     "docs/plan/2026-06-02/01.submit-occupancy-prefill-completion.plan.md",
-    "hw-eval/src/benchmarks/submission_bottleneck/experiment_1_submit_occupancy.rs"
+    "docs/plan/2026-06-02/02.submit-occupancy-spin-overhead.plan.md",
+    "docs/plan/2026-06-02/03.submit-occupancy-tsc-gap.plan.md",
+    "docs/plan/2026-06-02/04.submit-occupancy-payload-size-sweep.plan.md",
+    "docs/report/benchmarking/041.submit_occupancy_spin_sweep_2026-06-02.md",
+    "docs/report/benchmarking/041.submit_occupancy_spin_sweep_2026-06-02.pdf",
+    "docs/report/benchmarking/041.submit_occupancy_spin_sweep_2026-06-02.summary.csv",
+    "docs/report/benchmarking/042.submit_occupancy_blackbox_asm.md",
+    "docs/report/benchmarking/043.submit_occupancy_blackbox_n_gap.md",
+    "docs/report/benchmarking/044.submit_occupancy_tsc_gap.md",
+    "docs/report/benchmarking/044.submit_occupancy_tsc_gap.summary.csv",
+    "docs/report/benchmarking/045.submit_occupancy_tsc_gap_cap320.md",
+    "docs/report/benchmarking/045.submit_occupancy_tsc_gap_cap320.summary.csv",
+    "docs/report/benchmarking/046.submit_occupancy_payload_size_sweep_iter10.md",
+    "docs/report/benchmarking/046.submit_occupancy_payload_size_sweep_iter10.summary.csv",
+    "docs/report/benchmarking/047.submit_occupancy_payload_observed_sweep_iter10.summary.csv",
+    "docs/report/benchmarking/049.submit_occupancy_payload_observed_sweep_iter10.md",
+    "docs/report/benchmarking/049.submit_occupancy_payload_observed_sweep_iter10.summary.csv",
+    "docs/report/benchmarking/plot_submit_occupancy_spin_sweep_2026_06_02.py",
+    "docs/report/benchmarking/submission_bottleneck_2026-05-27/plot_submit_poll_trace.py",
+    "dsa-config/1-engine.conf",
+    "hw-eval/README.md",
+    "hw-eval/src/benchmarks/submission_bottleneck.rs",
+    "hw-eval/src/benchmarks/submission_bottleneck/common.rs",
+    "hw-eval/src/benchmarks/submission_bottleneck/experiment_1_submit_occupancy.md",
+    "hw-eval/src/benchmarks/submission_bottleneck/experiment_1_submit_occupancy.rs",
+    "hw-eval/src/benchmarks/submission_bottleneck/experiment_2_marker_overlap.md",
+    "hw-eval/src/benchmarks/submission_bottleneck/experiment_2_marker_overlap/mechanism_probes.rs",
+    "hw-eval/src/benchmarks/submission_bottleneck/experiment_2_marker_overlap/overlap.rs",
+    "hw-eval/src/config.rs",
+    "hw-eval/src/main.rs",
+    "hw-eval/src/report.rs",
+    "hw-eval/src/submit.rs",
+    "hw-eval/tests/cli_contract.rs"
   ],
   "sessions": [
     {
@@ -49,13 +85,19 @@
       "transcript": "/26/aa82d37478/5/full.jsonl",
       "content_hash": "/26/aa82d37478/5/content_hash.txt",
       "prompt": "/26/aa82d37478/5/prompt.txt"
+    },
+    {
+      "metadata": "/26/aa82d37478/6/metadata.json",
+      "transcript": "/26/aa82d37478/6/full.jsonl",
+      "content_hash": "/26/aa82d37478/6/content_hash.txt",
+      "prompt": "/26/aa82d37478/6/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 815020,
+    "input_tokens": 2874756,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 6853376,
-    "output_tokens": 31782,
-    "api_call_count": 152
+    "cache_read_tokens": 70118656,
+    "output_tokens": 169823,
+    "api_call_count": 693
   }
 }
