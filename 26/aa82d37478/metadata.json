@@ -3,7 +3,7 @@
   "checkpoint_id": "26aa82d37478",
   "strategy": "manual-commit",
   "branch": "async-binding-intel-idxd",
-  "checkpoints_count": 2,
+  "checkpoints_count": 3,
   "files_touched": [
     ".omp/SYSTEM.md",
     ".omp/SYSTEM_DUMP.md",
@@ -21,13 +21,19 @@
       "transcript": "/26/aa82d37478/1/full.jsonl",
       "content_hash": "/26/aa82d37478/1/content_hash.txt",
       "prompt": "/26/aa82d37478/1/prompt.txt"
+    },
+    {
+      "metadata": "/26/aa82d37478/2/metadata.json",
+      "transcript": "/26/aa82d37478/2/full.jsonl",
+      "content_hash": "/26/aa82d37478/2/content_hash.txt",
+      "prompt": "/26/aa82d37478/2/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 57306,
+    "input_tokens": 84203,
     "cache_creation_tokens": 0,
     "cache_read_tokens": 105472,
-    "output_tokens": 2864,
-    "api_call_count": 6
+    "output_tokens": 3188,
+    "api_call_count": 7
   }
 }

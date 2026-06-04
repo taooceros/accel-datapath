@@ -1,0 +1,59 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "26aa82d37478",
+  "session_id": "019e85c0-96b0-7000-b390-998e37e7abf5",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-04T23:01:53.604456434Z",
+  "branch": "async-binding-intel-idxd",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".omp/SYSTEM.md",
+    ".omp/SYSTEM_DUMP.md",
+    ".omp/commands/generate-system-prompt.md"
+  ],
+  "agent": "Pi",
+  "model": "",
+  "turn_id": "503bace26e38",
+  "token_usage": {
+    "input_tokens": 26897,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 324,
+    "api_call_count": 1
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-04T23:01:53.603507599Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 9033,
+    "human_modified": 404,
+    "human_removed": 0,
+    "total_committed": 9033,
+    "total_lines_changed": 9598,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 51730431,
+      "user_lines_removed": 404,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".omp/SYSTEM.md": 71,
+        ".omp/SYSTEM_DUMP.md": 1077,
+        ".omp/commands/generate-system-prompt.md": 261,
+        "docs/report/benchmarking/submission_bottleneck_2026-06-01/experiment2_poll_submit_batch_stdout.raw": 51729022
+      },
+      "user_removed_per_file": {
+        ".omp/SYSTEM.md": 40,
+        ".omp/SYSTEM_DUMP.md": 341,
+        ".omp/commands/generate-system-prompt.md": 23
+      }
+    }
+  ]
+}
