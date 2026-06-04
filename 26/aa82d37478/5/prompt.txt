@@ -1,0 +1,36 @@
+for iteration_index in 0..iterations {
+            reset_sample_completions(&mut slots.completions[..submitted]);
+            submit_descriptors(wq, &slots.descriptors[..k_prefill]);
+            trace_measured_submits(
+                wq,
+                &slots.descriptors[k_prefill..submitted],
+                k_prefill,
+                iteration_index,
+                tsc_freq,
+                &mut extra_submit_trace,
+            );
+
+            trace_outcomes.push(measure_trace_outcome(
+                wq,
+                &mut sentinel_comp,
+                &operation_class,
+                &slots.completions[..submitted],
+                &mut seen[..submitted],
+                k_prefill,
+                iteration_index,
+            ));
+
+            prefill_completion_trace.push(measure_prefill_completion_trace(
+                wq,
+                &slots.descriptors[..k_prefill],
+                &mut slots.completions[..k_prefill],
+                &mut seen[..k_prefill],
+                tsc_freq,
+                iteration_index,
+            ));
+            if k_prefill > 0 {
+                drain_with_sentinel(wq, &mut sentinel_comp, &operation_class, k_prefill);
+            }
+        }
+
+pretty clear that you have run the prefill twice

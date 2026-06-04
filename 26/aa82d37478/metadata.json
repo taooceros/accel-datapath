@@ -3,14 +3,15 @@
   "checkpoint_id": "26aa82d37478",
   "strategy": "manual-commit",
   "branch": "async-binding-intel-idxd",
-  "checkpoints_count": 5,
+  "checkpoints_count": 6,
   "files_touched": [
     ".agents/skills/coding-guidelines/SKILL.md",
     ".omp/SYSTEM.md",
     ".omp/SYSTEM_DUMP.md",
     ".omp/commands/generate-system-prompt.md",
     "agents/plan/2026-06-02/01.submit-occupancy-prefill-completion.plan.md",
-    "docs/plan/2026-06-02/01.submit-occupancy-prefill-completion.plan.md"
+    "docs/plan/2026-06-02/01.submit-occupancy-prefill-completion.plan.md",
+    "hw-eval/src/benchmarks/submission_bottleneck/experiment_1_submit_occupancy.rs"
   ],
   "sessions": [
     {
@@ -42,13 +43,19 @@
       "transcript": "/26/aa82d37478/4/full.jsonl",
       "content_hash": "/26/aa82d37478/4/content_hash.txt",
       "prompt": "/26/aa82d37478/4/prompt.txt"
+    },
+    {
+      "metadata": "/26/aa82d37478/5/metadata.json",
+      "transcript": "/26/aa82d37478/5/full.jsonl",
+      "content_hash": "/26/aa82d37478/5/content_hash.txt",
+      "prompt": "/26/aa82d37478/5/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 700663,
+    "input_tokens": 815020,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 4891392,
-    "output_tokens": 20770,
-    "api_call_count": 109
+    "cache_read_tokens": 6853376,
+    "output_tokens": 31782,
+    "api_call_count": 152
   }
 }
