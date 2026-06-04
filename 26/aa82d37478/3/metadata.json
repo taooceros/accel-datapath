@@ -1,0 +1,41 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "26aa82d37478",
+  "session_id": "019e8632-9bf9-7000-b42b-15c169ba4bb1",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-04T23:01:54.014896748Z",
+  "branch": "async-binding-intel-idxd",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".omp/SYSTEM.md",
+    ".omp/SYSTEM_DUMP.md",
+    ".omp/commands/generate-system-prompt.md",
+    "agents/plan/2026-06-02/01.submit-occupancy-prefill-completion.plan.md",
+    "docs/plan/2026-06-02/01.submit-occupancy-prefill-completion.plan.md"
+  ],
+  "agent": "Pi",
+  "model": "",
+  "turn_id": "40ec565f81c1",
+  "token_usage": {
+    "input_tokens": 520337,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 4266752,
+    "output_tokens": 15789,
+    "api_call_count": 85
+  },
+  "session_metrics": {
+    "turn_count": 6
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-04T23:01:54.000537029Z",
+    "agent_lines": 1462,
+    "agent_removed": 404,
+    "human_added": 9384,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 10846,
+    "total_lines_changed": 11411,
+    "agent_percentage": 16.35264218736307,
+    "metric_version": 2
+  }
+}

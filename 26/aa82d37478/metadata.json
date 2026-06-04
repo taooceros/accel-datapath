@@ -3,11 +3,13 @@
   "checkpoint_id": "26aa82d37478",
   "strategy": "manual-commit",
   "branch": "async-binding-intel-idxd",
-  "checkpoints_count": 3,
+  "checkpoints_count": 4,
   "files_touched": [
     ".omp/SYSTEM.md",
     ".omp/SYSTEM_DUMP.md",
-    ".omp/commands/generate-system-prompt.md"
+    ".omp/commands/generate-system-prompt.md",
+    "agents/plan/2026-06-02/01.submit-occupancy-prefill-completion.plan.md",
+    "docs/plan/2026-06-02/01.submit-occupancy-prefill-completion.plan.md"
   ],
   "sessions": [
     {
@@ -27,13 +29,19 @@
       "transcript": "/26/aa82d37478/2/full.jsonl",
       "content_hash": "/26/aa82d37478/2/content_hash.txt",
       "prompt": "/26/aa82d37478/2/prompt.txt"
+    },
+    {
+      "metadata": "/26/aa82d37478/3/metadata.json",
+      "transcript": "/26/aa82d37478/3/full.jsonl",
+      "content_hash": "/26/aa82d37478/3/content_hash.txt",
+      "prompt": "/26/aa82d37478/3/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 84203,
+    "input_tokens": 604540,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 105472,
-    "output_tokens": 3188,
-    "api_call_count": 7
+    "cache_read_tokens": 4372224,
+    "output_tokens": 18977,
+    "api_call_count": 92
   }
 }
