@@ -1,0 +1,33 @@
+now we are starting the integration of intel dsa with the tonic library, interactively investigate the architecture we want for the integration; please keep tokio as an integration middle point with the accelerator and the software.
+
+---
+
+I don'
+
+---
+
+I don't understand; craft an architecture graph
+
+---
+
+how hard will it be to make the codec async
+
+---
+
+what if we can change as much as we want (even adding unsafe)
+
+---
+
+why is encode not async
+
+---
+
+let's update our tonic to the latest remote
+
+---
+
+don't just fetch the fork, but also keep the fork sync with the real remote
+
+---
+
+don't just fetch the fork, but also keep the fork sync with the real remote https://github.com/grpc/grpc-rust
