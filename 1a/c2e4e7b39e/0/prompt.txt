@@ -1,1 +1,5 @@
-stash the current change; I don't think the current implementation makes sense; keep only the encode.rs file which fix a potential bug
+commit just the encode change
+
+---
+
+from the stash, get the AGENTS.md out and the coresponding benchmark baseline out
