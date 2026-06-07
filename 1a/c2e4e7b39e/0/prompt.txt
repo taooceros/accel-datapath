@@ -1,0 +1,1 @@
+stash the current change; I don't think the current implementation makes sense; keep only the encode.rs file which fix a potential bug

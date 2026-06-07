@@ -1,0 +1,88 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "1ac2e4e7b39e",
+  "session_id": "019ea467-83bc-7000-9270-1061c3c4a0e2",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-07T23:29:04.993196286Z",
+  "branch": "tonic-dsa",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "accel-rpc/tonic"
+  ],
+  "agent": "Pi",
+  "model": "",
+  "turn_id": "6332231f9bb0",
+  "token_usage": {
+    "input_tokens": 13888,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 258048,
+    "output_tokens": 1775,
+    "api_call_count": 8
+  },
+  "session_metrics": {
+    "turn_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-07T23:29:04.990886556Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 0,
+    "total_lines_changed": 0,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 920,
+      "user_lines_removed": 17,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "agents/plan/2026-06-04/03.dsa-tonic-integration.plan.md": 38,
+        "agents/plan/2026-06-05/01.async-tonic-codec-stream.plan.md": 41,
+        "agents/plan/2026-06-07/01.dsa-tonic-async-api-byte-transfer.plan.md": 111,
+        "docs/plan/2026-06-04/03.dsa-tonic-integration.plan.md": 273,
+        "docs/plan/2026-06-05/01.async-tonic-codec-stream.plan.md": 39,
+        "docs/plan/2026-06-07/01.dsa-tonic-async-api-byte-transfer.plan.md": 312,
+        "docs/report/benchmarking/052.tonic_dsa_transfer_perf_2026-06-07.md": 72,
+        "docs/report/benchmarking/052.tonic_dsa_transfer_perf_2026-06-07.summary.csv": 17,
+        "dsa-config/1-engine.conf": 2,
+        "dsa-config/2-engine.conf": 2,
+        "dsa-config/3-engine.conf": 2,
+        "dsa-config/4-engine.conf": 2,
+        "dsa-config/README.md": 9
+      },
+      "user_removed_per_file": {
+        ".omp/SYSTEM.md": 1,
+        "dsa-config/1-engine.conf": 2,
+        "dsa-config/2-engine.conf": 2,
+        "dsa-config/3-engine.conf": 2,
+        "dsa-config/4-engine.conf": 2,
+        "dsa-config/README.md": 8
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    }
+  ]
+}

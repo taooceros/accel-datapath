@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "1ac2e4e7b39e",
+  "strategy": "manual-commit",
+  "branch": "tonic-dsa",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "accel-rpc/tonic"
+  ],
+  "sessions": [
+    {
+      "metadata": "/1a/c2e4e7b39e/0/metadata.json",
+      "transcript": "/1a/c2e4e7b39e/0/full.jsonl",
+      "content_hash": "/1a/c2e4e7b39e/0/content_hash.txt",
+      "prompt": "/1a/c2e4e7b39e/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 13888,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 258048,
+    "output_tokens": 1775,
+    "api_call_count": 8
+  }
+}
