@@ -23,3 +23,7 @@ yes let's do that
 ---
 
 why is the 64kb version of async dsa fast so much?
+
+---
+
+commit everything we have done first
