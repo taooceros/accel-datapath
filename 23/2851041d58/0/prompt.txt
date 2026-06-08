@@ -1,0 +1,25 @@
+next step, implement an async version of bytes transfer with dsa (put it in a new crate) based on the poll_encode interface; let's see whether this interface is good enough for implementing the async execution of dsa
+
+---
+
+run and check
+
+---
+
+/dev/dsa is not empty
+
+---
+
+now let's compare the performance of async-dsa-bytes vs sync-dsa-bytes vs standard
+
+---
+
+why do you implement a standard codec in the async-dsa folder?
+
+---
+
+yes let's do that
+
+---
+
+why is the 64kb version of async dsa fast so much?

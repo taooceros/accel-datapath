@@ -1,0 +1,215 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "232851041d58",
+  "session_id": "019ea5f0-88dc-7000-b710-2d0fe6b4b860",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-08T07:43:09.641530655Z",
+  "branch": "tonic-dsa",
+  "checkpoints_count": 9,
+  "files_touched": [
+    "accel-rpc/tonic",
+    "agents/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md",
+    "agents/plan/2026-06-08/03.async-sync-standard-bytes-comparison.complete.md",
+    "agents/plan/2026-06-08/04.neutral-bytes-benchmark-crate.complete.md",
+    "agents/plan/2026-06-08/05.direct-encodebuf-async-dsa.complete.md",
+    "docs/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md",
+    "docs/plan/2026-06-08/03.async-sync-standard-bytes-comparison.complete.md",
+    "docs/plan/2026-06-08/04.neutral-bytes-benchmark-crate.complete.md",
+    "docs/plan/2026-06-08/05.direct-encodebuf-async-dsa.complete.md",
+    "docs/report/benchmarking/054.async_sync_standard_bytes_rpc_2026-06-08.md"
+  ],
+  "agent": "Pi",
+  "model": "",
+  "turn_id": "3deba42aa8d1",
+  "token_usage": {
+    "input_tokens": 1190317,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 36224000,
+    "output_tokens": 103155,
+    "api_call_count": 337
+  },
+  "session_metrics": {
+    "turn_count": 9
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-08T07:43:09.617338718Z",
+    "agent_lines": 136,
+    "agent_removed": 0,
+    "human_added": 221,
+    "human_modified": 137,
+    "human_removed": 0,
+    "total_committed": 452,
+    "total_lines_changed": 494,
+    "agent_percentage": 27.530364372469634,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 402,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "agents/plan/2026-06-07/01.dsa-tonic-gradual-integration.plan.md": 36,
+        "agents/plan/2026-06-07/02.dsa-tonic-separate-codec-encode.plan.md": 38,
+        "agents/plan/2026-06-08/01.tonic-dsa-bytes-e2e-benchmark.complete.md": 37,
+        "docs/plan/2026-06-07/01.dsa-tonic-gradual-integration.plan.md": 34,
+        "docs/plan/2026-06-07/02.dsa-tonic-separate-codec-encode.plan.md": 37,
+        "docs/plan/2026-06-08/01.tonic-dsa-bytes-e2e-benchmark.complete.md": 52,
+        "docs/report/benchmarking/053.tonic_mock_bytes_rpc_throughput_2026-06-08.md": 168
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 450,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 4,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 483,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 5,
+      "user_lines_added": 168,
+      "user_lines_removed": 2,
+      "agent_lines_added": 483,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "agents/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md": 3,
+        "docs/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md": 7,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md": 1,
+        "docs/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 6,
+      "user_lines_added": 174,
+      "user_lines_removed": 3,
+      "agent_lines_added": 483,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "agents/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md": 3,
+        "docs/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md": 13,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md": 2,
+        "docs/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 7,
+      "user_lines_added": 174,
+      "user_lines_removed": 3,
+      "agent_lines_added": 712,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "agents/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md": 3,
+        "docs/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md": 13,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md": 2,
+        "docs/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 8,
+      "user_lines_added": 174,
+      "user_lines_removed": 3,
+      "agent_lines_added": 712,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "agents/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md": 3,
+        "docs/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md": 13,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md": 2,
+        "docs/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 9,
+      "user_lines_added": 258,
+      "user_lines_removed": 42,
+      "agent_lines_added": 899,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "agents/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md": 5,
+        "agents/plan/2026-06-08/03.async-sync-standard-bytes-comparison.complete.md": 6,
+        "docs/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md": 17,
+        "docs/plan/2026-06-08/03.async-sync-standard-bytes-comparison.complete.md": 11,
+        "docs/report/benchmarking/054.async_sync_standard_bytes_rpc_2026-06-08.md": 61,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md": 4,
+        "agents/plan/2026-06-08/03.async-sync-standard-bytes-comparison.complete.md": 6,
+        "docs/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md": 5,
+        "docs/plan/2026-06-08/03.async-sync-standard-bytes-comparison.complete.md": 11,
+        "docs/report/benchmarking/054.async_sync_standard_bytes_rpc_2026-06-08.md": 16
+      }
+    },
+    {
+      "checkpoint_number": 10,
+      "user_lines_added": 258,
+      "user_lines_removed": 42,
+      "agent_lines_added": 899,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "agents/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md": 5,
+        "agents/plan/2026-06-08/03.async-sync-standard-bytes-comparison.complete.md": 6,
+        "docs/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md": 17,
+        "docs/plan/2026-06-08/03.async-sync-standard-bytes-comparison.complete.md": 11,
+        "docs/report/benchmarking/054.async_sync_standard_bytes_rpc_2026-06-08.md": 61,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      },
+      "user_removed_per_file": {
+        "agents/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md": 4,
+        "agents/plan/2026-06-08/03.async-sync-standard-bytes-comparison.complete.md": 6,
+        "docs/plan/2026-06-08/02.async-dsa-bytes-transfer.complete.md": 5,
+        "docs/plan/2026-06-08/03.async-sync-standard-bytes-comparison.complete.md": 11,
+        "docs/report/benchmarking/054.async_sync_standard_bytes_rpc_2026-06-08.md": 16
+      }
+    }
+  ]
+}
