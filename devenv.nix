@@ -156,7 +156,7 @@ in
 
   # https://devenv.sh/scripts/
   scripts.launch.exec = ''
-    REPO_ROOT="$(git rev-parse --show-toplevel)"
+    REPO_ROOT="''${DEVENV_ROOT:-$(git rev-parse --show-toplevel)}"
     TOOLS_DIR="$REPO_ROOT/tools"
     BUILD_DIR="$TOOLS_DIR/build"
     LAUNCHER="$BUILD_DIR/dsa_launcher"
@@ -179,7 +179,7 @@ in
   '';
 
   scripts.run.exec = ''
-    REPO_ROOT="$(git rev-parse --show-toplevel)"
+    REPO_ROOT="''${DEVENV_ROOT:-$(git rev-parse --show-toplevel)}"
     DSA_DIR="$REPO_ROOT/dsa-stdexec"
     MODE=$(cd "$DSA_DIR" && xmake show 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep 'mode:' | awk '{print $2}')
     BENCHMARK="$DSA_DIR/build/linux/x86_64/$MODE/dsa_benchmark"
@@ -195,7 +195,7 @@ in
 
   # https://devenv.sh/scripts/
   scripts.profile.exec = ''
-    REPO_ROOT="$(git rev-parse --show-toplevel)"
+    REPO_ROOT="''${DEVENV_ROOT:-$(git rev-parse --show-toplevel)}"
     DSA_DIR="$REPO_ROOT/dsa-stdexec"
     MODE=$(cd "$DSA_DIR" && xmake show 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep 'mode:' | awk '{print $2}')
     BENCHMARK="$DSA_DIR/build/linux/x86_64/$MODE/dsa_benchmark"
