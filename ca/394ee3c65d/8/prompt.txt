@@ -1,0 +1,37 @@
+run an e2e protobuf encoding with dsa support and print the result
+
+---
+
+I think the folder job is wrong; tonic-dsa-bytes-async is specially a codec that just copying the bytes with no additional work but with async dsa integration; we should implement these test in prost instead of that. write a small AGENTS.md in those crate to specify the crate job.
+
+---
+
+do we generate the same message for dsa run vs the software run?
+
+---
+
+what's tokio_stream::iter
+
+---
+
+let's make the test specifically for prost; no need for these complexity; just testing whether the encode_async can generate the same thing as encode with dsa
+
+---
+
+copy the launch dsa instruction from ../../AGENTS.md to the AGENTS.md here
+
+---
+
+now rerun the prost hardware test, and don't ignore the dsa tests
+
+---
+
+show me one example of the generated code of a simple struct
+
+---
+
+This file is not included in any crates, so rust-analyzer can't offer IDE services.
+
+If you're intentionally working on unowned files, you can silence this warning by adding "unlinked-file" to rust-analyzer.diagnostics.disabled in your settings.rust-analyzerunlinked-file
+
+why is this happening in prost test
