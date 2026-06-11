@@ -3,7 +3,7 @@
   "checkpoint_id": "ca394ee3c65d",
   "strategy": "manual-commit",
   "branch": "tonic-dsa",
-  "checkpoints_count": 62,
+  "checkpoints_count": 64,
   "files_touched": [
     "agents/plan/2026-06-07/01.dsa-tonic-gradual-integration.plan.md",
     "agents/plan/2026-06-07/02.dsa-tonic-separate-codec-encode.plan.md",
@@ -103,13 +103,19 @@
       "transcript": "/ca/394ee3c65d/10/full.jsonl",
       "content_hash": "/ca/394ee3c65d/10/content_hash.txt",
       "prompt": "/ca/394ee3c65d/10/prompt.txt"
+    },
+    {
+      "metadata": "/ca/394ee3c65d/11/metadata.json",
+      "transcript": "/ca/394ee3c65d/11/full.jsonl",
+      "content_hash": "/ca/394ee3c65d/11/content_hash.txt",
+      "prompt": "/ca/394ee3c65d/11/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 6439797,
+    "input_tokens": 6546203,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 186602496,
-    "output_tokens": 564474,
-    "api_call_count": 1890
+    "cache_read_tokens": 186915840,
+    "output_tokens": 568862,
+    "api_call_count": 1902
   }
 }
