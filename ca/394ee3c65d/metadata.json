@@ -3,14 +3,18 @@
   "checkpoint_id": "ca394ee3c65d",
   "strategy": "manual-commit",
   "branch": "tonic-dsa",
-  "checkpoints_count": 2,
+  "checkpoints_count": 24,
   "files_touched": [
     "agents/plan/2026-06-07/01.dsa-tonic-gradual-integration.plan.md",
     "agents/plan/2026-06-07/02.dsa-tonic-separate-codec-encode.plan.md",
     "agents/plan/2026-06-08/01.tonic-dsa-bytes-e2e-benchmark.complete.md",
+    "agents/plan/2026-06-08/06.encoder-owned-poll-encode.complete.md",
+    "agents/plan/2026-06-08/07.rust-dsa-page-fault-retry.complete.md",
     "docs/plan/2026-06-07/01.dsa-tonic-gradual-integration.plan.md",
     "docs/plan/2026-06-07/02.dsa-tonic-separate-codec-encode.plan.md",
     "docs/plan/2026-06-08/01.tonic-dsa-bytes-e2e-benchmark.complete.md",
+    "docs/plan/2026-06-08/06.encoder-owned-poll-encode.complete.md",
+    "docs/plan/2026-06-08/07.rust-dsa-page-fault-retry.complete.md",
     "docs/report/benchmarking/053.tonic_mock_bytes_rpc_throughput_2026-06-08.md"
   ],
   "sessions": [
@@ -19,13 +23,19 @@
       "transcript": "/ca/394ee3c65d/0/full.jsonl",
       "content_hash": "/ca/394ee3c65d/0/content_hash.txt",
       "prompt": "/ca/394ee3c65d/0/prompt.txt"
+    },
+    {
+      "metadata": "/ca/394ee3c65d/1/metadata.json",
+      "transcript": "/ca/394ee3c65d/1/full.jsonl",
+      "content_hash": "/ca/394ee3c65d/1/content_hash.txt",
+      "prompt": "/ca/394ee3c65d/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 1193540,
+    "input_tokens": 2161090,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 37041664,
-    "output_tokens": 103665,
-    "api_call_count": 343
+    "cache_read_tokens": 78003456,
+    "output_tokens": 186193,
+    "api_call_count": 686
   }
 }

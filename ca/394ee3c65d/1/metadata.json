@@ -1,0 +1,327 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "ca394ee3c65d",
+  "session_id": "019ea639-0474-7000-b827-a8e5bbafcd07",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-11T20:28:59.524731955Z",
+  "branch": "tonic-dsa",
+  "checkpoints_count": 22,
+  "files_touched": [
+    "agents/plan/2026-06-08/06.encoder-owned-poll-encode.complete.md",
+    "agents/plan/2026-06-08/07.rust-dsa-page-fault-retry.complete.md",
+    "docs/plan/2026-06-08/06.encoder-owned-poll-encode.complete.md",
+    "docs/plan/2026-06-08/07.rust-dsa-page-fault-retry.complete.md"
+  ],
+  "agent": "Pi",
+  "model": "",
+  "turn_id": "63c1dec598c2",
+  "token_usage": {
+    "input_tokens": 967550,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 40961792,
+    "output_tokens": 82528,
+    "api_call_count": 343
+  },
+  "session_metrics": {
+    "turn_count": 22
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-11T20:28:59.489333269Z",
+    "agent_lines": 132,
+    "agent_removed": 0,
+    "human_added": 1156,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1288,
+    "total_lines_changed": 1288,
+    "agent_percentage": 10.248447204968944,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 410,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".omp/rules/no-dsa-staging-buffer.md": 8,
+        "agents/plan/2026-06-07/01.dsa-tonic-gradual-integration.plan.md": 36,
+        "agents/plan/2026-06-07/02.dsa-tonic-separate-codec-encode.plan.md": 38,
+        "agents/plan/2026-06-08/01.tonic-dsa-bytes-e2e-benchmark.complete.md": 37,
+        "docs/plan/2026-06-07/01.dsa-tonic-gradual-integration.plan.md": 34,
+        "docs/plan/2026-06-07/02.dsa-tonic-separate-codec-encode.plan.md": 37,
+        "docs/plan/2026-06-08/01.tonic-dsa-bytes-e2e-benchmark.complete.md": 52,
+        "docs/report/benchmarking/053.tonic_mock_bytes_rpc_throughput_2026-06-08.md": 168
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 410,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 410,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 4,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 410,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 5,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 410,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 6,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 410,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 7,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 410,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 8,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 410,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 9,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 464,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 10,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 478,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 11,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 478,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 12,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 478,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 13,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 478,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 14,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 478,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 15,
+      "user_lines_added": 160,
+      "user_lines_removed": 0,
+      "agent_lines_added": 478,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "agents/plan/2026-06-08/06.encoder-owned-poll-encode.complete.md": 1,
+        "docs/plan/2026-06-08/06.encoder-owned-poll-encode.complete.md": 1,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 16,
+      "user_lines_added": 160,
+      "user_lines_removed": 0,
+      "agent_lines_added": 478,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "agents/plan/2026-06-08/06.encoder-owned-poll-encode.complete.md": 1,
+        "docs/plan/2026-06-08/06.encoder-owned-poll-encode.complete.md": 1,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 17,
+      "user_lines_added": 160,
+      "user_lines_removed": 0,
+      "agent_lines_added": 478,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "agents/plan/2026-06-08/06.encoder-owned-poll-encode.complete.md": 1,
+        "docs/plan/2026-06-08/06.encoder-owned-poll-encode.complete.md": 1,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 18,
+      "user_lines_added": 160,
+      "user_lines_removed": 0,
+      "agent_lines_added": 478,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "agents/plan/2026-06-08/06.encoder-owned-poll-encode.complete.md": 1,
+        "docs/plan/2026-06-08/06.encoder-owned-poll-encode.complete.md": 1,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 19,
+      "user_lines_added": 160,
+      "user_lines_removed": 0,
+      "agent_lines_added": 478,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "agents/plan/2026-06-08/06.encoder-owned-poll-encode.complete.md": 1,
+        "docs/plan/2026-06-08/06.encoder-owned-poll-encode.complete.md": 1,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 20,
+      "user_lines_added": 160,
+      "user_lines_removed": 0,
+      "agent_lines_added": 478,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "agents/plan/2026-06-08/06.encoder-owned-poll-encode.complete.md": 1,
+        "docs/plan/2026-06-08/06.encoder-owned-poll-encode.complete.md": 1,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 21,
+      "user_lines_added": 160,
+      "user_lines_removed": 0,
+      "agent_lines_added": 478,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "agents/plan/2026-06-08/06.encoder-owned-poll-encode.complete.md": 1,
+        "docs/plan/2026-06-08/06.encoder-owned-poll-encode.complete.md": 1,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 22,
+      "user_lines_added": 160,
+      "user_lines_removed": 0,
+      "agent_lines_added": 556,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "agents/plan/2026-06-08/06.encoder-owned-poll-encode.complete.md": 1,
+        "docs/plan/2026-06-08/06.encoder-owned-poll-encode.complete.md": 1,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    }
+  ]
+}

@@ -1,0 +1,110 @@
+I want to understand whether the poll_encode is a good api interface;
+
+---
+
+read the current encode.rs and think about whether our current design is good
+
+---
+
+I think it's better that we align with the poll_frame in Body; how so?
+
+---
+
+I think we should let the encoder contains all the state
+
+---
+
+I think the poll_encode should be similar to poll_frame, where it only pass one element: Pin<Self> and a context
+
+---
+
+sounds good, generate a goal prompt for me
+
+---
+
+no need for the quote
+
+---
+
+Redesign Tonic’s experimental async codec encode interface so Encoder::poll_encode mirrors Body::poll_frame: it should take only Pin<&mut Self> and &mut
+ Context<'_>, with the encoder owning all in-flight encode state.
+
+ Remove the current &mut Option<Item> continuation protocol and borrowed EncodeBuf<'_> polling contract. Introduce an explicit start step that transfers
+ the message and encode output storage into the encoder, then let poll_encode resume from encoder-owned state until it returns the encoded payload/result.
+
+ Keep gRPC framing, compression, max-message-size checks, and output chunking in EncodedBytes/EncodeBody, not in individual encoders. Preserve the
+ CPU/prost fast path and the DSA async path, but make ownership, cancellation/drop behavior, and pending buffer stability explicit in the type design
+ rather than hidden in caller conventions.set
+
+---
+
+<system-notice>
+Continue. Keep going from where you left off.
+
+- You MUST resume the most recent intent and carry the unfinished work to completion.
+- Interrupted mid-step? Pick it back up from where it stopped.
+- You NEVER pause to summarize progress, re-confirm the plan, or ask whether to proceed — just continue.
+</system-notice>
+
+---
+
+what is the inflightencode for
+
+---
+
+yes fix it
+
+---
+
+flatten it similar to the sync api; no need for an additional struct for this (check the master branch of this file)
+
+---
+
+have you test all the path working?
+
+---
+
+do not ignore the async dsa test
+
+---
+
+test the benchmark and check whether we have performance drop
+
+---
+
+why i see some failure when you are running
+
+---
+
+what's the hardware error
+
+---
+
+a page fault? or is it a problem with the buffer allocation
+
+---
+
+spawn a goal to fix this
+
+---
+
+generate a goal prompt to fix this
+
+---
+
+Implement page-fault retry for the Rust DSA bytes codecs instead of treating DsaCompletionStatus::PageFaultNoBof as a hard encode failure.
+
+ Update both tonic-dsa-bytes-sync and tonic-dsa-bytes-async so a DSA memmove completion with PAGE_FAULT_NOBOF touches the reported fault_addr, adjusts the
+ descriptor by bytes_completed, clears the completion record, and resubmits the remaining transfer until success or a non-retryable error. Correctly handle
+ the completion status write bit (DSA_COMP_STATUS_WRITE) when touching the faulting page.
+
+ Preserve the existing successful fast path, encoder-owned async buffer lifetime, and drop-drain behavior. Do not add page pinning as the solution. Keep
+ retries bounded by transfer progress or explicit safety checks so a repeated no-progress fault cannot spin forever without a clear error.
+
+ Add focused tests for the retry adjustment logic without requiring hardware, and run the existing hardware DSA smoke test through launch. Re-run the
+ affected async/sync DSA tests and the bytes RPC benchmark enough to verify the previous intermittent status=0x03 / status=0x83 page-fault failures no
+ longer surface under the tested workload.
+
+---
+
+stash all changes related to page fault, commit the previous refactor, then commit the page fault
