@@ -1,0 +1,77 @@
+```text
+Goal: Add an end-to-end Prost async payload-copy integration test that proves generated Prost messages can encode through the new resumable async `poll_encode` path, suspend/resume payload copies via `poll_put_payload`, and produce byte-for-byte identical output to normal synchronous `prost::Message::encode`.
+
+Context:
+- Work in `accel-rpc/tonic/prost`.
+- Recent work added Prost-side resumable async encode state:
+  - `prost/src/transfer.rs`
+  - `prost/src/encoding.rs`
+  - derive support under `prost-derive/src/field/*`
+  - async encode tests in `tests/src/message_encoding.rs`
+- The sink decides CPU copy vs future DSA/offload via `poll_put_payload`.
+- No Tonic codec changes are allowed.
+- `Message::encode_raw` must remain synchronous.
+- No boxed futures in the Prost encode hot path.
+- No borrowed `BufMut` / `EncodeBuf` may live across `Poll::Pending`.
+- Existing tests must keep passing.
+
+Task:
+Add an E2E-style test for Prost DSA/offload integration using a deterministic fake DSA/offload sink if real hardware is not available in the Prost test crate.
+
+The test should exercise:
+1. Generated message async encode entrypoint.
+2. Scalar fields that remain synchronously encoded.
+3. `string` / `bytes` payload fields routed through `poll_put_payload`.
+4. Repeated payload fields.
+5. Map payload fields.
+6. Nested messages containing payload fields.
+7. Oneof payload/nested payload fields, if supported by the existing generated test types.
+8. At least one forced `Poll::Pending` during payload copy.
+9. Resume from the exact suspended field/index/phase.
+10. Final encoded bytes equal normal synchronous Prost encoding.
+11. Optional: decode the async-produced bytes back with normal Prost decode and assert message equality.
+
+Implementation expectations:
+- Prefer adding to `accel-rpc/tonic/prost/tests/src/message_encoding.rs` unless there is already a better local test module.
+- Reuse existing async encode test helpers where possible.
+- The fake DSA sink should model offload semantics:
+  - accept payload source bytes;
+  - return `Poll::Pending` before completing selected copies;
+  - store only owned state across pending;
+  - on wake/resume, copy into the destination and return `Ready`.
+- Do not introduce real Tonic plumbing.
+- Do not add staging `BytesMut` for the production path.
+- Do not hide failures behind feature gates unless actual hardware is required.
+
+Verification:
+Run from `accel-rpc/tonic/prost`:
+
+```bash
+PROTOC_INCLUDE=/home/hongtao/accel-datapath/tonic-dsa/accel-rpc/tonic/prost/tests/src/include \
+rtk cargo test -p tests async_encode
+```
+
+Then run:
+
+```bash
+PROTOC_INCLUDE=/home/hongtao/accel-datapath/tonic-dsa/accel-rpc/tonic/prost/tests/src/include \
+rtk cargo test -p prost -p prost-derive -p tests
+```
+
+Finally run:
+
+```bash
+rtk git diff --check
+```
+
+Acceptance criteria:
+- New E2E test fails if payload-copy resume duplicates, skips, or reorders bytes.
+- New E2E test fails if nested/repeated/map payload state resumes at the wrong element or phase.
+- Async/offload encoded bytes are byte-for-byte equal to synchronous Prost encoding.
+- Existing Prost tests pass.
+- No changes under `accel-rpc/tonic/tonic/src/codec/encode.rs`.
+```
+
+---
+
+integrate the real dsa engine into; generate a goal prompt for it (the integration should be similar to our dsa integration in tonic directly)
