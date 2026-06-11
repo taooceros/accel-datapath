@@ -1,0 +1,128 @@
+```text
+Goal: Integrate the real Intel DSA engine into the Prost resumable async payload-copy path, using the same design shape as the existing direct Tonic DSA integration, and prove generated Prost messages can offload `string` / `bytes` payload copies through real hardware while preserving byte-for-byte Prost encoding compatibility.
+
+Context:
+- Work primarily in `accel-rpc/tonic/prost` and the local experimental DSA crates under `accel-rpc/tonic/`.
+- Recent Prost work added resumable async encode state:
+  - `prost/src/transfer.rs`
+  - `prost/src/encoding.rs`
+  - `prost/src/message.rs`
+  - derive support under `prost-derive/src/field/*`
+  - async encode tests in `tests/src/message_encoding.rs`
+- There is already real DSA integration in the Tonic-side experimental code:
+  - `tonic-dsa-bytes-sync/src/lib.rs`
+  - `tonic-dsa-bytes-sync/src/dsa_buf.rs`
+  - `tonic-dsa-bytes-async/src/lib.rs`
+  - `tonic-dsa-bytes-async/src/prost_codec.rs`
+- The new Prost async encode hook is `AsyncEncodeSink::poll_put_payload`.
+- The sink chooses CPU copy vs DSA/offload.
+- `Message::encode_raw` must remain synchronous.
+- No Tonic codec changes are allowed.
+- No boxed futures in the Prost encode hot path.
+- No borrowed `BufMut` / `EncodeBuf` may live across `Poll::Pending`.
+- No staging `BytesMut` in the production DSA path.
+- Existing tests must keep passing.
+
+Task:
+Integrate a real DSA-backed payload-copy sink/engine for generated Prost async encoding.
+
+The integration should be similar to the existing direct Tonic DSA integration:
+- Use the same DSA work queue/config concepts where possible:
+  - `DsaConfig`
+  - `SharedDsaWorkQueue` / `DsaWorkQueue`
+  - `DsaMemmoveRetry`
+  - `submit_retry`
+  - `touch_pages_for_dsa`
+  - completion polling and page-fault retry handling
+- Keep DSA opt-in. CPU encoding must remain the default.
+- Keep hardware details behind the experimental DSA boundary; do not make upstream-shaped Prost APIs hardware-specific.
+- Use `poll_put_payload` as the only generated-message payload-copy hook.
+
+Implementation expectations:
+1. Add a real DSA payload-copy state machine for Prost async encode.
+   - It must submit a DSA memmove descriptor for eligible `string` / `bytes` payloads.
+   - It must return `Poll::Pending` while hardware completion is outstanding.
+   - It must resume from the same suspended generated field/index/phase.
+   - It must support DSA page-fault retry using the existing retry machinery.
+   - It must drain or otherwise safely complete submitted descriptors on drop.
+
+2. Destination buffer handling:
+   - Do not hold a borrowed `BufMut`, `EncodeBuf`, or equivalent destination view across `Poll::Pending`.
+   - Reserve destination storage before submission using owned/pinned state.
+   - Advance/commit the destination exactly once after DSA success.
+   - Do not add a staging `BytesMut` production copy path.
+   - If the Prost-side generic `Vec<u8>` sink needs special support for uninitialized reservation, design it narrowly and document the safety invariant.
+
+3. CPU fallback:
+   - If no work queue is configured, copy payloads synchronously on CPU.
+   - If payload length is below `DsaConfig::min_message_bytes`, copy on CPU.
+   - Preserve exact synchronous Prost encoding bytes.
+
+4. Tests:
+   - Keep the existing fake offload E2E test.
+   - Add non-hardware tests for CPU fallback and state-machine behavior where possible.
+   - Add ignored hardware tests guarded by the same style as existing DSA tests:
+     - read work queue from `TONIC_DSA_WQ`, defaulting to `/dev/dsa/wq0.0`
+     - `#[ignore = "requires an enabled /dev/dsa work queue and CAP_SYS_RAWIO"]`
+   - Hardware test must encode a generated Prost message with:
+     - scalar fields
+     - string and bytes payloads
+     - repeated payload fields
+     - map payload fields
+     - nested messages containing payload fields
+     - oneof payload or nested payload fields if supported by local fixtures
+   - Hardware-produced bytes must equal normal synchronous `prost::Message::encode`.
+   - Decode hardware-produced bytes with normal Prost decode and assert message equality.
+
+5. Do not modify:
+   - `accel-rpc/tonic/tonic/src/codec/encode.rs`
+   - Tonic codec plumbing unless a compile break proves a local API mismatch; prefer fixing the experimental DSA crate boundary instead.
+
+Acceptance criteria:
+- Real DSA is used for eligible Prost async payload copies when a work queue is configured.
+- CPU fallback remains byte-for-byte identical to synchronous Prost encoding.
+- DSA path returns `Poll::Pending` for outstanding hardware copies and resumes without duplicating, skipping, or reordering bytes.
+- Nested/repeated/map/oneof payload state resumes at the correct field/index/phase.
+- Page-fault retry behavior matches the existing Tonic DSA integration.
+- Dropping an in-flight encode future cannot leave an unsafe outstanding descriptor referencing moved/dropped state.
+- `Message::encode_raw` remains synchronous.
+- No boxed futures are introduced in the generated Prost hot path.
+- Existing Prost tests pass.
+- No changes under `accel-rpc/tonic/tonic/src/codec/encode.rs`.
+
+Verification:
+Run from `accel-rpc/tonic/prost`:
+
+```bash
+PROTOC_INCLUDE=/home/hongtao/accel-datapath/tonic-dsa/accel-rpc/tonic/prost/tests/src/include \
+rtk cargo test -p tests async_encode
+```
+
+Then run:
+
+```bash
+PROTOC_INCLUDE=/home/hongtao/accel-datapath/tonic-dsa/accel-rpc/tonic/prost/tests/src/include \
+rtk cargo test -p prost -p prost-derive -p tests
+```
+
+Run the DSA crate tests from `accel-rpc/tonic`:
+
+```bash
+rtk cargo test -p tonic-dsa-bytes-async
+rtk cargo test -p tonic-dsa-bytes-sync
+```
+
+If hardware is available, run the ignored hardware test with the configured work queue:
+
+```bash
+TONIC_DSA_WQ=/dev/dsa/wq0.0 \
+PROTOC_INCLUDE=/home/hongtao/accel-datapath/tonic-dsa/accel-rpc/tonic/prost/tests/src/include \
+rtk cargo test -p <crate-containing-real-prost-dsa-test> --test hardware_dsa -- --ignored --nocapture
+```
+
+Finally run:
+
+```bash
+rtk git diff --check
+```
+```
