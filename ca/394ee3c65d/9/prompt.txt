@@ -1,0 +1,5 @@
+based on the cargo bench results in the accel-rpc/tonic/customized_integration_test write a small report
+
+---
+
+make the report looks better; include graphs
