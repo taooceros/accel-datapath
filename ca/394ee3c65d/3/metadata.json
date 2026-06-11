@@ -1,0 +1,98 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "ca394ee3c65d",
+  "session_id": "019eae8e-ff8a-7000-899d-9193d00661ab",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-11T20:29:01.730124422Z",
+  "branch": "tonic-dsa",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "docs/plan/2026-06-09/01.prost-bytes-dsa-integration.draft.md",
+    "docs/plan/2026-06-09/02.prost-bytes-dsa-minimal-code.draft.md"
+  ],
+  "agent": "Pi",
+  "model": "",
+  "turn_id": "9a2aa593ce2e",
+  "token_usage": {
+    "input_tokens": 254073,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 6288128,
+    "output_tokens": 44512,
+    "api_call_count": 88
+  },
+  "session_metrics": {
+    "turn_count": 4
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-11T20:29:01.714889874Z",
+    "agent_lines": 393,
+    "agent_removed": 0,
+    "human_added": 983,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1376,
+    "total_lines_changed": 1376,
+    "agent_percentage": 28.561046511627907,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 630,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".omp/rules/no-dsa-staging-buffer.md": 8,
+        "agents/plan/2026-06-07/01.dsa-tonic-gradual-integration.plan.md": 36,
+        "agents/plan/2026-06-07/02.dsa-tonic-separate-codec-encode.plan.md": 38,
+        "agents/plan/2026-06-08/01.tonic-dsa-bytes-e2e-benchmark.complete.md": 37,
+        "agents/plan/2026-06-08/06.encoder-owned-poll-encode.complete.md": 34,
+        "agents/plan/2026-06-08/07.rust-dsa-page-fault-retry.complete.md": 38,
+        "docs/plan/2026-06-07/01.dsa-tonic-gradual-integration.plan.md": 34,
+        "docs/plan/2026-06-07/02.dsa-tonic-separate-codec-encode.plan.md": 37,
+        "docs/plan/2026-06-08/01.tonic-dsa-bytes-e2e-benchmark.complete.md": 52,
+        "docs/plan/2026-06-08/06.encoder-owned-poll-encode.complete.md": 36,
+        "docs/plan/2026-06-08/07.rust-dsa-page-fault-retry.complete.md": 40,
+        "docs/report/architecture/018.tonic_dsa_integration_history.md": 72,
+        "docs/report/benchmarking/053.tonic_mock_bytes_rpc_throughput_2026-06-08.md": 168
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 866,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1023,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 4,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 1305,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    }
+  ]
+}

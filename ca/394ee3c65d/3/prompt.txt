@@ -1,0 +1,13 @@
+next step, we want dsa integration into the bytes encoding path of prost; draft about how we are going to do it
+
+---
+
+I think this is too complex; how about draft a plan with minimal code changes
+
+---
+
+I think this is not a good plan, as it only allows sync transfer; let me point you a direction, modify the encode_raw to provide an async version, and in String/Bytes implementation of the encode_raw, direct that to the async dsa copy if needed
+
+---
+
+generaate a goal prompt based on this

@@ -3,7 +3,7 @@
   "checkpoint_id": "ca394ee3c65d",
   "strategy": "manual-commit",
   "branch": "tonic-dsa",
-  "checkpoints_count": 27,
+  "checkpoints_count": 31,
   "files_touched": [
     "agents/plan/2026-06-07/01.dsa-tonic-gradual-integration.plan.md",
     "agents/plan/2026-06-07/02.dsa-tonic-separate-codec-encode.plan.md",
@@ -15,6 +15,8 @@
     "docs/plan/2026-06-08/01.tonic-dsa-bytes-e2e-benchmark.complete.md",
     "docs/plan/2026-06-08/06.encoder-owned-poll-encode.complete.md",
     "docs/plan/2026-06-08/07.rust-dsa-page-fault-retry.complete.md",
+    "docs/plan/2026-06-09/01.prost-bytes-dsa-integration.draft.md",
+    "docs/plan/2026-06-09/02.prost-bytes-dsa-minimal-code.draft.md",
     "docs/report/architecture/018.tonic_dsa_integration_history.md",
     "docs/report/benchmarking/053.tonic_mock_bytes_rpc_throughput_2026-06-08.md"
   ],
@@ -36,13 +38,19 @@
       "transcript": "/ca/394ee3c65d/2/full.jsonl",
       "content_hash": "/ca/394ee3c65d/2/content_hash.txt",
       "prompt": "/ca/394ee3c65d/2/prompt.txt"
+    },
+    {
+      "metadata": "/ca/394ee3c65d/3/metadata.json",
+      "transcript": "/ca/394ee3c65d/3/full.jsonl",
+      "content_hash": "/ca/394ee3c65d/3/content_hash.txt",
+      "prompt": "/ca/394ee3c65d/3/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 2344195,
+    "input_tokens": 2598268,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 78963968,
-    "output_tokens": 194235,
-    "api_call_count": 712
+    "cache_read_tokens": 85252096,
+    "output_tokens": 238747,
+    "api_call_count": 800
   }
 }
