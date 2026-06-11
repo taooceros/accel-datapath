@@ -1,0 +1,44 @@
+Goal: redesign only the Prost-side async encode state management so generated Prost messages can suspend on child async payload-copy operations, enabling future DSA offload, while leaving Tonic’s `EncodeBody`, `EncodedBytes`, and codec polling machinery unchanged.
+
+Scope:
+- Modify only Prost-side code under `accel-rpc/tonic/prost/`.
+- Do not modify `accel-rpc/tonic/tonic/src/codec/encode.rs`.
+- Do not redesign Tonic’s `Encoder` trait or `EncodeBody`.
+- Preserve the existing synchronous Prost encode behavior and public compatibility where possible.
+
+Design direction:
+- Learn from upstream Tonic `EncodedBytes` / `EncodeBody`: the parent poll loop owns child async operation state, polls it first, returns `Poll::Pending` when the child is pending, and resumes exactly where it left off.
+- Apply that pattern inside Prost:
+  - A top-level Prost async encode future owns the message, sink, and encode cursor.
+  - Generated `poll_encode_raw` owns no futures directly; it receives mutable state and advances a deterministic cursor.
+  - Payload copies for `string` / `bytes` are child async operations managed through sink payload state.
+  - On `Poll::Pending`, no CPU re-encoding of already-written keys/lengths may happen on the next poll.
+
+Required architecture:
+- Keep `Message::encode_raw` synchronous.
+- Keep normal CPU encode as the baseline fast path.
+- Add or refine a poll-based async encode path:
+  - `Message::poll_encode_raw<S>(&self, sink: &mut S, state: &mut PollEncodeState<S>, cx: &mut Context<'_>)`.
+  - `PollEncodeState` must track enough state to resume safely after any payload-copy suspension.
+- `AsyncEncodeSink` should expose:
+  - a short-lived `buf_mut()` for CPU-written protobuf structure,
+  - a `poll_put_payload(payload, state, cx)` hook for `string` / `bytes` payloads.
+- The sink, not generated message code, decides whether a payload is copied synchronously or offloaded.
+
+Important invariants:
+- No boxed futures in the hot Prost encode path.
+- No staging `BytesMut` for future DSA payload copies; the sink must be able to reserve final destination storage and commit it after completion.
+- No borrowed `EncodeBuf` or `BufMut` may live across `Poll::Pending`.
+- Once a payload copy returns `Pending`, all state needed to resume must live in the owned encode future / sink state.
+- Repeated fields and maps must resume at the exact element and phase where they suspended.
+- Nested messages should not silently force large `string` / `bytes` fields back onto the CPU path if the design can support nested async state cleanly.
+
+Acceptance criteria:
+- Generated messages with scalar-only fields still use the existing synchronous encode behavior.
+- Generated messages with `string` / `bytes` fields can be driven through `poll_encode_raw`.
+- A payload sink that deliberately returns `Poll::Pending` once must cause the top-level encode future to return `Pending`, then resume and produce bytes identical to synchronous Prost encoding.
+- Repeated `string` / `bytes` fields resume without duplicating earlier elements.
+- Map fields with `string` / `bytes` keys or values resume without duplicating entry headers, keys, or values.
+- Nested messages containing offloadable fields are either fully supported with explicit nested cursor state, or the limitation is documented in the design with a concrete reason.
+- Existing Prost tests continue to pass.
+- Add targeted tests for pending/resume behavior, byte-for-byte parity with synchronous encoding, repeated fields, maps, and nested messages.

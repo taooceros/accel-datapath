@@ -3,7 +3,7 @@
   "checkpoint_id": "ca394ee3c65d",
   "strategy": "manual-commit",
   "branch": "tonic-dsa",
-  "checkpoints_count": 45,
+  "checkpoints_count": 46,
   "files_touched": [
     "agents/plan/2026-06-07/01.dsa-tonic-gradual-integration.plan.md",
     "agents/plan/2026-06-07/02.dsa-tonic-separate-codec-encode.plan.md",
@@ -12,6 +12,7 @@
     "agents/plan/2026-06-08/07.rust-dsa-page-fault-retry.complete.md",
     "agents/plan/2026-06-09/01.prost-async-encode-raw-dsa.complete.md",
     "agents/plan/2026-06-10/01.poll-based-prost-encode.plan.md",
+    "agents/plan/2026-06-10/02.prost-resumable-async-encode.plan.md",
     "docs/plan/2026-06-07/01.dsa-tonic-gradual-integration.plan.md",
     "docs/plan/2026-06-07/02.dsa-tonic-separate-codec-encode.plan.md",
     "docs/plan/2026-06-08/01.tonic-dsa-bytes-e2e-benchmark.complete.md",
@@ -21,6 +22,7 @@
     "docs/plan/2026-06-09/02.prost-bytes-dsa-minimal-code.draft.md",
     "docs/plan/2026-06-09/03.prost-async-encode-raw-dsa.complete.md",
     "docs/plan/2026-06-10/01.poll-based-prost-encode.plan.md",
+    "docs/plan/2026-06-10/02.prost-resumable-async-encode.plan.md",
     "docs/report/architecture/018.tonic_dsa_integration_history.md",
     "docs/report/benchmarking/053.tonic_mock_bytes_rpc_throughput_2026-06-08.md"
   ],
@@ -54,13 +56,19 @@
       "transcript": "/ca/394ee3c65d/4/full.jsonl",
       "content_hash": "/ca/394ee3c65d/4/content_hash.txt",
       "prompt": "/ca/394ee3c65d/4/prompt.txt"
+    },
+    {
+      "metadata": "/ca/394ee3c65d/5/metadata.json",
+      "transcript": "/ca/394ee3c65d/5/full.jsonl",
+      "content_hash": "/ca/394ee3c65d/5/content_hash.txt",
+      "prompt": "/ca/394ee3c65d/5/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 4624349,
+    "input_tokens": 4955799,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 137753344,
-    "output_tokens": 406609,
-    "api_call_count": 1293
+    "cache_read_tokens": 149435392,
+    "output_tokens": 437864,
+    "api_call_count": 1406
   }
 }
