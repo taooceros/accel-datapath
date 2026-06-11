@@ -1,0 +1,45 @@
+write a short report about the integration of tonic with dsa based on the history agent discussing some of the design choice and what we learn from the gradual plan and historys.
+
+similar to the following tone:
+
+Progress & Tooling
+
+Profiling Workflow: Integrated a pprof-analyzer MCP (not working really well).
+Automation Friction: Continue working on an auto-profiling agent loop. It is failing to provide the specific profiling outputs and configuration depth required, often producing a "surface-level" view that requires manual correction to close the loop on evidence. 
+I think I make too much assumption about what gpt 5.4 should be knowing; The most stupid thing I realize the perf does not have symbol, while 2 weeks ago I did ask it to redo the experiment and add framepointer, but it only add the frame pointer without injecting the release symbol.
+I originally want it to generate a report; I will fresh out the previous history and redo the profiling reports.
+
+Synthesis: Done some visualization connecting stage-decomposition to the perf result. (not to the level I expect; I think I waste too much time here, because I make wrong assumption about the agent capability. next time I will just ask it to analyze the perf result per workload). I will generate a report for the profiling in the next couple days.
+Technical Constraints
+
+Instrumentation Overhead: The current timer-based stage decomposition is intrusive. While useful for small-scale cases, the noise limits confidence in broader interpretations.
+Confidence Level: Treating current findings as directional until verified with less intrusive instrumentation.
+Next Steps: Controlled Prototyping
+
+Async Binding Layer: I will pause a bit for the profiling, and start writing the the binding layer for Intel accelerators (DSA/QAT) to test the submission/completion path within the current async runtime model. It should be relatively easy given our prior experience (1-2 weeks?).
+Narrow Tonic Integration: Prototype a bounded integration at the codec/body boundary (the profiling result should give more hint about where should we do the offloading; I think an additional experiment will be compare it against intel's transparent offloading technique).
+https://github.com/intel/DTO (it offload by using a async over sync model; split the work into two chunk: 1 for cpu and 1 for dsa, and overlap together.)
+
+Objective: Measure real-world upside versus integration overhead in a single (there should be many trace that we are able to run; Jasper, who is going to be a student of Vincent, has already done a research toward overload control with tonic, and I think he will have many good trace for us to run the final experiment.
+
+
+
+
+Some thoughts:
+
+I think I made wrong assumption about agent capability; I will tweak a little bit about what is the appropriate way of interacting with the AI.
+Funny thing: I ask the AI to generate the visualization directly from the perf data and use the mosaic (a visualization library written by the professor in my cse 599h class), and it eventually gives me a 2000 lines markdown and not really use that library but instead a lot of native javascript data processing.
+
+---
+
+<system-notice>
+Continue. Keep going from where you left off.
+
+- You MUST resume the most recent intent and carry the unfinished work to completion.
+- Interrupted mid-step? Pick it back up from where it stopped.
+- You NEVER pause to summarize progress, re-confirm the plan, or ask whether to proceed — just continue.
+</system-notice>
+
+---
+
+simplify and make it more human tone
