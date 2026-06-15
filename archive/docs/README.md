@@ -16,4 +16,3 @@ This is the former active `docs/` tree. It is retained for historical reference.
 - Active workflow rules: `../../AGENTS.md`.
 - Current evidence maps: `../../docs/evidence/`.
 - Durable remarks: `../../docs/remark/`.
-- Agent operating material: `../../agents/`.

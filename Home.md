@@ -5,7 +5,6 @@ Open this repository root as the Obsidian vault. Active navigation stays small; 
 ## Start here
 
 - [[AGENTS|Project operating rules]] — active workflow, evidence discipline, and repo map.
-- [[agents/README|Agent operating materials]] — agent-facing workflow material when explicitly needed.
 - [[docs/remark/README|Research remarks]] — single-point insights distilled from experiments and reviews.
 - `docs/evidence/` — current-truth maps when a research thread needs one stable answer page.
 - `archive/` — historical docs, reports, plots, results, papers, and old root artifacts.
@@ -16,4 +15,3 @@ Open this repository root as the Obsidian vault. Active navigation stays small; 
 - Keep current research conclusions in `docs/evidence/`.
 - Keep short durable observations in `docs/remark/`.
 - Keep historical records under `archive/`.
-- Keep agent operating material under `agents/`.

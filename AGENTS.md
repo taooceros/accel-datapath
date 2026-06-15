@@ -67,7 +67,6 @@ tools/         Launcher and helper tooling
 dependencies/  Small vendored/tool dependency devenv modules
 docs/          Active evidence maps and durable remarks
 archive/       Historical docs, reports, plots, results, papers, and artifacts
-agents/        Agent operating material when explicitly needed
 ```
 
 ## COMMANDS

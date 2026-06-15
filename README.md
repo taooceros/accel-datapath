@@ -30,7 +30,6 @@ tools/         launcher and helper tooling
 dependencies/  small vendored/tool dependency devenv modules
 docs/          active evidence maps and durable remarks
 archive/       historical docs, reports, plots, results, papers, and artifacts
-agents/        agent-facing operating material
 ```
 
 ## Knowledge Vault
