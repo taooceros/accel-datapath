@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "52f0ff59d9bf",
+  "strategy": "manual-commit",
+  "branch": "tonic-dsa",
+  "checkpoints_count": 2,
+  "files_touched": [
+    ".obsidian/app.json",
+    ".obsidian/appearance.json",
+    ".obsidian/core-plugins.json",
+    "Home.md",
+    "README.md",
+    "agents/README.md",
+    "agents/plan/2026-06-11/03.obsidian-vault-reorg.plan.md",
+    "docs/README.md",
+    "remark/README.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/52/f0ff59d9bf/0/metadata.json",
+      "transcript": "/52/f0ff59d9bf/0/full.jsonl",
+      "content_hash": "/52/f0ff59d9bf/0/content_hash.txt",
+      "prompt": "/52/f0ff59d9bf/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 170726,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 2592768,
+    "output_tokens": 9394,
+    "api_call_count": 57
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "52f0ff59d9bf",
+  "session_id": "019eb8f9-fb56-7000-801a-5122fefffc81",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-15T19:13:33.320582982Z",
+  "branch": "tonic-dsa",
+  "checkpoints_count": 2,
+  "files_touched": [
+    ".obsidian/app.json",
+    ".obsidian/appearance.json",
+    ".obsidian/core-plugins.json",
+    "Home.md",
+    "README.md",
+    "agents/README.md",
+    "agents/plan/2026-06-11/03.obsidian-vault-reorg.plan.md",
+    "docs/README.md",
+    "remark/README.md"
+  ],
+  "agent": "Pi",
+  "model": "",
+  "turn_id": "031c0e317b67",
+  "token_usage": {
+    "input_tokens": 170726,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 2592768,
+    "output_tokens": 9394,
+    "api_call_count": 57
+  },
+  "session_metrics": {
+    "turn_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-15T19:13:33.313634698Z",
+    "agent_lines": 145,
+    "agent_removed": 5,
+    "human_added": 1145,
+    "human_modified": 1,
+    "human_removed": 0,
+    "total_committed": 1291,
+    "total_lines_changed": 1296,
+    "agent_percentage": 11.574074074074074,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 45,
+      "user_lines_removed": 3,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".omp/SYSTEM.md": 1,
+        "agents/plan/2026-06-11/02.prost-transfer-cleanup.plan.md": 20,
+        "docs/plan/2026-06-11/02.prost-transfer-cleanup.plan.md": 24
+      },
+      "user_removed_per_file": {
+        ".omp/SYSTEM.md": 3
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 191,
+      "agent_lines_removed": 166,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 191,
+      "agent_lines_removed": 166,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    }
+  ]
+}
