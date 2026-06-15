@@ -1,0 +1,19 @@
+{
+  "attachmentFolderPath": "docs/assets",
+  "alwaysUpdateLinks": true,
+  "newFileLocation": "folder",
+  "newFileFolderPath": "docs",
+  "showInlineTitle": true,
+  "userIgnoreFilters": [
+    "accel-rpc/",
+    "dsa-stdexec/",
+    "hw-eval/",
+    "tools/",
+    "dsa-config/",
+    ".git/",
+    ".agents/",
+    ".omp/",
+    "target/",
+    "node_modules/"
+  ]
+}

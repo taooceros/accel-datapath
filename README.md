@@ -25,12 +25,18 @@ include/dsa_stdexec/         stdexec sender/receiver integration
 benchmark/dsa/               Multi-dimensional benchmark suite
 examples/                    Per-operation examples (data_move, crc_gen, etc.)
 tools/                       dsa_launcher capability helper
-docs/specs/                  Local DSA / IAX hardware specification copies
-test/                        Unit and integration tests
-dsa-config/                  accel-config device configurations
-idxd-sys/          Canonical low-level Rust IDXD/UAPI/MMIO binding crate
-idxd-rust/         Canonical safe Rust and Tokio-facing IDXD binding crate
+docs/                       Research plans, reports, specs, and related work
+agents/                     Agent-facing operating material
+remark/                     Single-point research insights
+test/                       Unit and integration tests
+dsa-config/                 accel-config device configurations
+idxd-sys/                   Canonical low-level Rust IDXD/UAPI/MMIO binding crate
+idxd-rust/                  Canonical safe Rust and Tokio-facing IDXD binding crate
 ```
+
+## Knowledge Vault
+
+Open this repository root as an Obsidian vault. Start at [Home.md](Home.md) for the curated map across `docs/`, `agents/`, and `remark/`.
 
 ## Canonical Rust IDXD binding stack
 
