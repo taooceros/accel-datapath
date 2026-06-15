@@ -1,0 +1,77 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "a81b6af5d371",
+  "session_id": "019eccc1-25b6-7000-89bb-ac004c806336",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-15T23:10:29.439743673Z",
+  "branch": "tonic-dsa",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "docs/README.md",
+    "docs/related_work/README.md",
+    "docs/report/literature/papers/arrakis-the-operating-system-is-the-control-plane/README.md",
+    "docs/report/literature/papers/caladan-mitigating-interference-at-microsecond-timescales/README.md",
+    "docs/report/literature/papers/cloud-scale-characterization-of-remote-procedure-calls/README.md",
+    "docs/report/literature/papers/cornflakes-zero-copy-serialization-for-microsecond-scale-networking/README.md",
+    "docs/report/literature/papers/datacenter-rpcs-can-be-general-and-fast/README.md",
+    "docs/report/literature/papers/designing-a-micro-benchmark-suite-to-evaluate-grpc-for-tensorflow-early-experiences/README.md",
+    "docs/report/literature/papers/dsa-2lm-a-cpu-free-tiered-memory-architecture-with-intel-dsa/README.md",
+    "docs/report/literature/papers/fasst-fast-scalable-and-simple-distributed-transactions-with-two-sided-rdma-datagram-rpcs/README.md",
+    "docs/report/literature/papers/hardware-accelerator-for-protocol-buffers/README.md",
+    "docs/report/literature/papers/hermes-enhancing-layer-7-cloud-load-balancers-with-userspace-directed-i-o-event-notification/README.md",
+    "docs/report/literature/papers/high-throughput-and-flexible-host-networking-for-accelerated-computing/README.md",
+    "docs/report/literature/papers/host-congestion-control/README.md",
+    "docs/report/literature/papers/how-to-copy-memory-coordinated-asynchronous-copy-as-a-first-class-os-service/README.md",
+    "docs/report/literature/papers/ix-a-protected-dataplane-operating-system-for-high-throughput-and-low-latency/README.md",
+    "docs/report/literature/papers/megapipe-a-new-programming-interface-for-scalable-network-i-o/README.md",
+    "docs/report/literature/papers/mtcp-a-highly-scalable-user-level-tcp-stack-for-multicore-systems/README.md",
+    "docs/report/literature/papers/my-cxl-pool-obviates-your-pcie-switch/README.md",
+    "docs/report/literature/papers/r2p2-making-rpcs-first-class-datacenter-citizens/README.md",
+    "docs/report/literature/papers/rpcacc-a-high-performance-and-reconfigurable-pcie-attached-rpc-accelerator/README.md",
+    "docs/report/literature/papers/rr-compound-rdma-fused-grpc-for-low-latency-high-throughput-and-easy-interface/README.md",
+    "docs/report/literature/papers/shenango-achieving-high-cpu-efficiency-for-latency-sensitive-datacenter-workloads/README.md",
+    "docs/report/literature/papers/understanding-the-host-network/README.md"
+  ],
+  "agent": "Pi",
+  "model": "",
+  "turn_id": "af1ce1b8e352",
+  "token_usage": {
+    "input_tokens": 381637,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 11348992,
+    "output_tokens": 39520,
+    "api_call_count": 119
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-15T23:10:29.426511257Z",
+    "agent_lines": 0,
+    "agent_removed": 1289,
+    "human_added": 412530,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 412530,
+    "total_lines_changed": 825003,
+    "agent_percentage": 0.1562418560902203,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 45,
+      "user_lines_removed": 3,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".omp/SYSTEM.md": 1,
+        "agents/plan/2026-06-11/02.prost-transfer-cleanup.plan.md": 20,
+        "docs/plan/2026-06-11/02.prost-transfer-cleanup.plan.md": 24
+      },
+      "user_removed_per_file": {
+        ".omp/SYSTEM.md": 3
+      }
+    }
+  ]
+}
