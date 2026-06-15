@@ -19,24 +19,23 @@ run
 
 ## Project Structure
 
-```
-src/dsa/                     Low-level DSA hardware interface
-include/dsa_stdexec/         stdexec sender/receiver integration
-benchmark/dsa/               Multi-dimensional benchmark suite
-examples/                    Per-operation examples (data_move, crc_gen, etc.)
-tools/                       dsa_launcher capability helper
-archive/docs/                Historical plans, reports, specs, and related work
-agents/                      Agent-facing operating material
-remark/                      Single-point research insights
-test/                        Unit and integration tests
-dsa-config/                  accel-config device configurations
-idxd-sys/                    Canonical low-level Rust IDXD/UAPI/MMIO binding crate
-idxd-rust/                   Canonical safe Rust and Tokio-facing IDXD binding crate
+```text
+dsa-stdexec/   C++ stdexec sender/receiver framework
+accel-rpc/     Rust accelerator-aware RPC workspace
+hw-eval/       Hardware potential baseline benchmark harnesses
+idxd-sys/      Low-level Rust IDXD/UAPI/MMIO binding crate
+idxd-rust/     Safe Rust and Tokio-facing IDXD binding crate
+dsa-config/    accel-config device configurations
+tools/         launcher and helper tooling
+dependencies/  small vendored/tool dependency devenv modules
+docs/          active evidence maps and durable remarks
+archive/       historical docs, reports, plots, results, papers, and artifacts
+agents/        agent-facing operating material
 ```
 
 ## Knowledge Vault
 
-Open this repository root as an Obsidian vault. Start at [Home.md](Home.md) for the active map. Historical docs now live under `archive/docs/`; rebuild current thread maps under `docs/evidence/` only when needed.
+Open this repository root as an Obsidian vault. Start at [Home.md](Home.md) for the active map. Historical material lives under `archive/`; rebuild current thread maps under `docs/evidence/` only when needed.
 
 ## Canonical Rust IDXD binding stack
 

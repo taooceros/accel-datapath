@@ -1,7 +1,7 @@
 # Real DSA Exhibits a Bistable Throughput Regime
 
 **Date**: 2026-02-22
-**Source**: `report/progress_post_alignment_debug.md`, Section 4 "Bistable Feedback Loop"
+**Source**: `archive/docs/report/benchmarking/005.progress_post_alignment_debug.md`, Section 4 "Bistable Feedback Loop"
 
 ## Finding
 

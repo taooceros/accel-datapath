@@ -1,7 +1,7 @@
 # Transparent Auto-Batching Decouples Scheduling from Submission
 
 **Date**: 2026-02-22
-**Source**: `report/progress_post_alignment_debug.md`, Section 6
+**Source**: `archive/docs/report/benchmarking/005.progress_post_alignment_debug.md`, Section 6
 
 ## Finding
 

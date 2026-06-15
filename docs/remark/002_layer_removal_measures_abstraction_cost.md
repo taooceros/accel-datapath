@@ -1,7 +1,7 @@
 # Layer-Removal Experiments Measure Abstraction Cost Directly
 
 **Date**: 2026-02-22
-**Source**: `report/progress_post_alignment_debug.md`, Section 4 "What the Measured Deltas Tell Us"
+**Source**: `archive/docs/report/benchmarking/005.progress_post_alignment_debug.md`, Section 4 "What the Measured Deltas Tell Us"
 
 ## Finding
 

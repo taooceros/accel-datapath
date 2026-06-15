@@ -5,14 +5,14 @@ description: Paper-specific acquisition and processing pipeline — discover, pr
 
 # Literature Review Workflow
 
-Structured pipeline for acquiring and processing academic papers. This is the paper-specific workflow within the broader repo grounding process described by `AGENTS.md` and the tracked docs under `docs/`.
+Structured pipeline for acquiring and processing academic papers. This is the paper-specific workflow within the broader repo grounding process described by `AGENTS.md`.
 
 ## Repository Notes
 
-- This repository's existing literature hub is `docs/related work/`, not `docs/literature-review/`.
-- The repo currently contains `docs/research_plan.md`; it does not currently contain `docs/research_log.md`.
-- The repo currently does not include `rules/knowledge_grounding.md`, `papers/`, or `local-corpus/bin/corpus`. If those are added later, treat them as the canonical paper-processing path. Until then, use this workflow with the repo's current docs and KB helpers.
-- Before broad manual scans, follow `AGENTS.md`: read the relevant tracked docs first, then use `devenv shell -- codemogger search "query"` for code search.
+- Existing literature history lives under `archive/docs/related_work/` and `archive/docs/report/literature/`.
+- Active literature conclusions should be curated into `docs/evidence/` only when a current thread needs a stable answer page.
+- Old local PDF staging material lives under `archive/root/papers/`.
+- Before broad manual scans, follow `AGENTS.md`: read the relevant tracked docs first, then use focused repo/code search.
 
 ## Input Modes
 
@@ -21,22 +21,22 @@ Structured pipeline for acquiring and processing academic papers. This is the pa
 
 ## Phase 0: Discover Resources
 
-1. **Check existing knowledge** — Read `docs/related work/` and search tracked docs for existing coverage. If sufficient, skip to Phase 3.
+1. **Check existing knowledge** — Read archived related-work notes and literature reports, then search active evidence maps for current coverage. If sufficient, skip to Phase 3.
 2. **Search** — Use the search tools below. Try multiple query formulations. Prioritize strong venues and authoritative sources. Apply search saturation criteria: stop only after multiple query reformulations converge on the same core set of papers or when marginal results stop changing the reading list.
 3. **Curate a reading list** — Select the most relevant resources. Breadth first, then depth.
-4. **Acquire** — Download PDFs locally when possible. If the repo later adds `papers/todo/`, use it as the staging area. For non-downloadable resources, note the URL and clearly flag that the paper was not acquired.
+4. **Acquire** — Download PDFs locally when useful. Use an explicitly chosen active path for new corpus work; treat `archive/root/papers/` as historical staging material.
 
 ## Phase 1: Process Papers
 
 For each paper:
 
-1. **Check for existing coverage** — Search the repo KB and `docs/related work/` to see whether the paper or its claims are already captured.
-2. **Store locally** — Save the PDF or canonical URL in a repo-appropriate location. If a future `papers/` or local corpus directory is added, use that canonical location instead.
+1. **Check for existing coverage** — Search archived literature notes/reports and active evidence maps to see whether the paper or its claims are already captured.
+2. **Store locally** — Save the PDF or canonical URL in a repo-appropriate location chosen for the current review.
 3. **Deep comprehension** — Build a structured understanding of:
    - key claims, mechanisms, and quantitative results
    - system model, threat model, baselines, and evaluation methodology
    - limitations, assumptions, and future work
-4. **Integrate findings** — Merge findings into the appropriate file under `docs/related work/`. Add cross-references instead of duplicating claims.
+4. **Integrate findings** — Merge durable findings into the relevant active evidence map or explicitly requested report. Add cross-references instead of duplicating claims.
 
 ## Phase 2: Clarify and Expand
 
@@ -48,15 +48,15 @@ For each paper:
 ## Phase 3: Synthesize and Report
 
 1. **Cross-paper analysis** — Compare papers by mechanism, assumptions, metrics, and limitations.
-2. **Update topic files** — Merge claims into `docs/related work/` without creating paper-by-paper duplication.
-3. **Update planning or tracking docs** — Record next steps or open questions in `docs/research_plan.md` or another explicitly chosen repo document.
+2. **Update topic files** — Merge current conclusions into `docs/evidence/` or a requested report without creating paper-by-paper duplication.
+3. **Update tracking docs** — Record next steps or open questions in `notes/now.md`, `docs/evidence/`, or another explicitly chosen repo document.
 4. **Ground conclusions** — Keep every non-trivial claim attributable to a paper, spec, repo note, or directly inspected artifact.
 
 ## Search Tool Selection
 
 | Need | Tool | Why |
 |------|------|-----|
-| Internal prior work, plans, reports, specs | `rg` plus direct reads under `docs/` and `remark/` | Repo-local tracked docs should be first. |
+| Internal prior work, plans, reports, specs | direct reads under `archive/docs/`, `docs/evidence/`, and `docs/remark/` | Repo-local tracked docs should be first. |
 | Repo code and implementation search | `devenv shell -- codemogger search "query"` | Required repo-first code search path. |
 | Academic paper search | Scholar or web search tooling | Use to discover papers and PDF URLs. |
 | Known URL | Direct fetch/download tools | Best for canonical landing pages or PDF downloads. |
@@ -74,7 +74,7 @@ For each paper:
 When merging findings into topic files:
 
 1. Each file covers one coherent topic. Sections should flow from foundational ideas to more specific implications.
-2. Read `docs/related work/README.md` and the target topic file before editing so claims land in the right conceptual section.
+2. Read the relevant archived topic file or active evidence map before editing so claims land in the right conceptual section.
 3. If a claim does not fit an existing section, add a new section where it fits the file's conceptual flow.
 4. Use comparison tables for cross-paper results when they reduce repetition.
 5. Use cross-references instead of duplicating claims across files.

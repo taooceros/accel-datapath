@@ -1,7 +1,7 @@
 # Analytical Per-Phase Cost Models Over-Predicted Savings by 4x
 
 **Date**: 2026-02-22
-**Source**: `report/progress_post_alignment_debug.md`, Section 8
+**Source**: `archive/docs/report/benchmarking/005.progress_post_alignment_debug.md`, Section 8
 
 ## Finding
 

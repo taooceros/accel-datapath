@@ -17,9 +17,10 @@ Act first, document only when it helps the work.
 - `notes/now.md` — optional one-screen current-state snapshot.
 - `notes/inbox.md` — optional messy capture buffer; clean it only on request.
 - `docs/evidence/` — current-truth maps, one file per research thread.
+- `docs/remark/NNN_<topic>.md` — durable single-point insights.
 - `docs/report/` — new evidence reports after results exist.
-- `remark/NNN_<topic>.md` — durable single-point insights.
 - `archive/docs/` — historical docs, specs, reports, plans, and related work.
+- `archive/root/` — old root-level reports, plots, results, and paper/artifact folders.
 
 ## DOCUMENTATION RULES
 
@@ -60,9 +61,12 @@ A good evidence map contains: current conclusion, strongest evidence links, supe
 dsa-stdexec/   C++ stdexec sender/receiver framework
 accel-rpc/     Rust accelerator-aware RPC workspace
 hw-eval/       Hardware potential baseline benchmark harnesses
-tools/         Launcher behavior
-remark/        Durable single-point insights
-archive/docs/  Historical docs tree, specs, reports, plans, related work
+idxd-sys/      Low-level Rust IDXD/UAPI/MMIO binding crate
+idxd-rust/     Safe Rust and Tokio-facing IDXD binding crate
+tools/         Launcher and helper tooling
+dependencies/  Small vendored/tool dependency devenv modules
+docs/          Active evidence maps and durable remarks
+archive/       Historical docs, reports, plots, results, papers, and artifacts
 agents/        Agent operating material when explicitly needed
 ```
 

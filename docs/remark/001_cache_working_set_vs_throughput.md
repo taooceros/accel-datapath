@@ -1,7 +1,7 @@
 # Cache Working Set Determines Throughput Ceiling at High Concurrency
 
 **Date**: 2026-02-22
-**Source**: `report/progress_post_alignment_debug.md`, Section 4 "Cache Working Set Analysis"
+**Source**: `archive/docs/report/benchmarking/005.progress_post_alignment_debug.md`, Section 4 "Cache Working Set Analysis"
 
 ## Finding
 

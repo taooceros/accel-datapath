@@ -74,7 +74,7 @@ in
     repo_root="''${DEVENV_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || true)}"
     if [ -z "$repo_root" ]; then
       case "$PWD" in
-        */codemogger) repo_root="''${PWD%/codemogger}" ;;
+        */dependencies/codemogger) repo_root="''${PWD%/dependencies/codemogger}" ;;
         *) repo_root="$PWD" ;;
       esac
     fi

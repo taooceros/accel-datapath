@@ -4,7 +4,7 @@
 **Source**: Conversation analysis + Saksham Agarwal positioning (remark #006)
 
 Historical note:
-Corrected by: docs/report/literature/005.accelerator_hostpath_2026-03-28.md
+Corrected by: archive/docs/report/literature/005.accelerator_hostpath_2026-03-28.md
 Why: This note keeps the software-versus-hardware MMIO framing, but report `005` corrects the earlier certainty that a paper literally titled `CXL-NIC` was confirmed.
 
 ## Finding

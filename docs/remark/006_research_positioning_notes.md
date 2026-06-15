@@ -4,7 +4,7 @@
 **Purpose**: Memory file for research plan revision
 
 Historical note:
-Corrected by: docs/report/literature/005.accelerator_hostpath_2026-03-28.md
+Corrected by: archive/docs/report/literature/005.accelerator_hostpath_2026-03-28.md
 Why: This note keeps the host-to-accelerator positioning insight, but report `005` corrects the earlier certainty that a paper literally titled `CXL-NIC` was confirmed.
 
 ## Saksham Agarwal's Research Arc (key papers)
