@@ -4,19 +4,17 @@ This directory holds repository-local material whose primary audience is coding 
 
 ## Layout
 
-- `CODING_REQUIREMENTS.md` — persistent coding requirements distilled from GSD milestone decisions; read before writing or modifying project code.
-- `plan/` — agent execution plans for changes whose primary purpose is agent operation, delegation, tooling, prompt templates, or live-thread workflow.
+- `CODING_REQUIREMENTS.md` — persistent coding requirements distilled from GSD milestone decisions; read before writing or modifying project code when present.
+- `plan/` — agent execution plans only when explicitly useful for agent-operation changes or risky cross-subsystem work.
 - `report/workflow/` — durable reports about agent orchestration, task shaping, retrieval strategy, and live-thread workflow.
 
 ## Obsidian navigation
 
 - [[Home|Vault home]]
 - [[agents/CODING_REQUIREMENTS|Coding requirements]]
-- `plan/` — chronological execution plans.
+- `plan/` — historical and occasional execution plans.
 - `report/workflow/` — durable workflow reports.
 
 ## Boundary
 
-Keep project research, hardware findings, architecture reports, benchmark results, literature notes, specifications, and human project plans under `docs/`. Put material here when it exists to guide agent operation or preserve agent-workflow design decisions. Agent execution plans still need to be readable project records, not private scratchpads.
-
-Historical plan records may still mention the former docs workflow-report paths; prefer the paths under `agents/` for active references.
+Keep active project rules in root `AGENTS.md`. Historical project research, hardware findings, architecture reports, benchmark results, literature notes, specifications, and human project plans are now archived under `archive/docs/`. Create new active research docs only when rebuilding a current evidence map or writing a requested deliverable.
