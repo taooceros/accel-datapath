@@ -1,9 +1,1 @@
-commit the current change first
-
----
-
-continue the todo of reorganize the root directory
-
----
-
-move folders like codemogger that only contains devenv.nix or etc. into a dedicated dependencies folder
+commit the changes
