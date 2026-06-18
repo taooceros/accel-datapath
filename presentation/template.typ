@@ -1,4 +1,4 @@
-#import "@preview/touying:0.7.0": *
+#import "@preview/touying:0.7.4": *
 #import themes.simple: *
 
 #let palette = (
@@ -37,6 +37,7 @@
   leading: 0.9em,
   spacing: 1em,
   footer: [],
+  footer-right: context utils.slide-counter.display() + " / " + utils.last-slide-number,
   table-stroke: 0.4pt + luma(205),
   table-inset: 8pt,
 ) = {
@@ -44,6 +45,8 @@
     aspect-ratio: "16-9",
     primary: palette.title,
     footer: footer,
+    footer-right: footer-right,
+    config-common(breakable: false, detect-overflow: true),
   )
   set page(margin: margin)
   set text(font: font, size: size)
