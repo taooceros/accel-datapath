@@ -1,0 +1,8 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Write `presentation/2026-06-17/async-tonic-encode/fragments/slide01.typ` with function `slide_01` only.
+# Change
+Implement Slide 1 titled `Async Encode Was an Ownership Redesign`. Teaching job: establish the central lesson. Include: old instinct “make encode() async”; actual solution `owned resumable state + stable buffers + exact protobuf resume points`; one-line arc `sync encode → async experiments → poll codec API → owned futures at Tonic boundary → poll Prost field engine`; final thesis highlighted: `Poll encode was not removed; it migrated from the Tonic codec boundary into the Prost field-level state machine.` Visual should be a simple horizontal evolution arrow with the final thesis highlighted.
+# Acceptance
+The fragment compiles as a single Touying `#slide[...]` when imported, uses helper styling, and includes `speaker[This was not about sprinkling async. It was about deciding who owns state while encoding is suspended.]`. No commands.
