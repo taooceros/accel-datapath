@@ -1,0 +1,16 @@
+Complete the assignment below, thoroughly:
+
+# Target
+`presentation/2026-06-15/grpc-tonic-stack/plan.md` and the top/overview/candidate portions of `deck.typ`: the opening flow, slide titles, and slides currently titled encode overview, decode overview, and candidate map. Non-goal: do not rewrite deep send/receive detail diagrams except where a title/legend helper change requires consistency.
+
+# Change
+1. Update `plan.md` to justify the improved story: add a first anchor slide with the gRPC message shape; retitle overview slides as takeaway titles; update the flow to include the anchor before send/receive overview; keep the target duration concise.
+2. In `deck.typ`, add the opening anchor slide using native Typst boxes/arrows, not Chronos. Show `Rust T`, `protobuf bytes`, `[flag:1][len:4][payload]`, `HTTP/2 DATA`, and a short note that hardware candidates are selected bulk-byte spans only.
+3. Simplify the first two overview slides if you touch them: reduce long bullets, make the title a takeaway, and prefer a compact readable overview over full internals. Keep the rest of the deck technically consistent.
+4. Improve the candidate map slide headline/content to foreground “compression first; copies only when large; control stays CPU.”
+
+# Acceptance
+- Plan and deck agree on slide order and slide purpose.
+- Opening anchor slide exists and is understandable without code knowledge.
+- Overview/candidate titles read as takeaways, not just topics.
+- No project-wide commands, formatters, or final PDF export.
