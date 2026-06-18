@@ -3,10 +3,13 @@
   "checkpoint_id": "ec7f1651cd13",
   "strategy": "manual-commit",
   "branch": "tonic-dsa",
-  "checkpoints_count": 8,
+  "checkpoints_count": 11,
   "files_touched": [
     ".omp/SYSTEM.md",
-    "deck.pdf"
+    "deck.pdf",
+    "presentation/2026-06-18/async-tonic-encode-revision-2/deck.pdf",
+    "presentation/2026-06-18/async-tonic-encode-revision-2/deck.typ",
+    "presentation/2026-06-18/async-tonic-encode-revision-2/plan.md"
   ],
   "sessions": [
     {
@@ -110,13 +113,19 @@
       "transcript": "/ec/7f1651cd13/16/full.jsonl",
       "content_hash": "/ec/7f1651cd13/16/content_hash.txt",
       "prompt": "/ec/7f1651cd13/16/prompt.txt"
+    },
+    {
+      "metadata": "/ec/7f1651cd13/17/metadata.json",
+      "transcript": "/ec/7f1651cd13/17/full.jsonl",
+      "content_hash": "/ec/7f1651cd13/17/content_hash.txt",
+      "prompt": "/ec/7f1651cd13/17/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 1238154,
+    "input_tokens": 1566656,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 25096704,
-    "output_tokens": 100662,
-    "api_call_count": 373
+    "cache_read_tokens": 28396522,
+    "output_tokens": 134579,
+    "api_call_count": 423
   }
 }

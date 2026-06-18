@@ -1,0 +1,5 @@
+what do you think about slide 10 (page 14); I think we should split the sync path and async path into two slide; first one introduce how it is generating serialization path from the struct, and the second introduce how do we make the generated serialization path async
+
+---
+
+why do we not have advance_field in the sync path?
