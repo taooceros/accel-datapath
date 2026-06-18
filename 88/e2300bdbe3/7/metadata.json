@@ -1,0 +1,92 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "88e2300bdbe3",
+  "session_id": "019ed718-a417-7000-8121-37137cd3d50e",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-18T18:15:41.410154809Z",
+  "branch": "tonic-dsa",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "presentation/AGENTS.md"
+  ],
+  "agent": "Pi",
+  "model": "",
+  "turn_id": "75681db9f037",
+  "token_usage": {
+    "input_tokens": 43961,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 195840,
+    "output_tokens": 7577,
+    "api_call_count": 6
+  },
+  "session_metrics": {
+    "turn_count": 4
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-18T18:15:41.396823209Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 8094,
+    "human_modified": 25,
+    "human_removed": 0,
+    "total_committed": 8099,
+    "total_lines_changed": 8120,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 23758,
+      "user_lines_removed": 25,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "deck.pdf": 11117,
+        "presentation/2026-06-15/grpc-tonic-stack/deck.pdf": 11064,
+        "presentation/2026-06-15/grpc-tonic-stack/deck.typ": 1409,
+        "presentation/2026-06-15/grpc-tonic-stack/plan.md": 157,
+        "presentation/AGENTS.md": 11
+      },
+      "user_removed_per_file": {
+        "presentation/AGENTS.md": 25
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 23758,
+      "agent_lines_removed": 183,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 23758,
+      "agent_lines_removed": 183,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 4,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 23758,
+      "agent_lines_removed": 183,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    }
+  ]
+}

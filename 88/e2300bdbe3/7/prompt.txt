@@ -1,0 +1,13 @@
+based on the last git history; checkpoint and do research about how do we convert the encode from sync to async, and what's the challenge within it, and then write a teaching lesson based on those changes
+
+---
+
+do you rewind? on the other hand, I think we in the middle have a poll_encode design?
+
+---
+
+generate a very detailed goal prompt based on what you learn for creating a slide based on that
+
+---
+
+you should be designing which slide is doing what job
