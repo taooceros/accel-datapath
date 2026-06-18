@@ -1,0 +1,11 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Files: `presentation/2026-06-15/grpc-tonic-stack/deck.typ`, `presentation/2026-06-15/grpc-tonic-stack/plan.md`, and preview images `presentation/2026-06-15/grpc-tonic-stack/assets/previews/preview-slide-7.png`, `presentation/2026-06-15/grpc-tonic-stack/assets/previews/preview-slide-8.png`, `presentation/2026-06-15/grpc-tonic-stack/assets/previews/preview-slide-9.png`, `presentation/2026-06-15/grpc-tonic-stack/assets/previews/preview-slide-10.png`.
+Deck scope: slides 7-10 only, currently around `deck.typ` lines 824-1287. Do not edit slides 1-6. Avoid shared helper edits unless absolutely necessary; prefer local adjustments in slide blocks.
+
+# Change
+Make the dense Chronos detail slides easier to parse. Current issues visible in the contact sheet: the diagrams and side explanations fit, but they look small/dense and the right-side notes compete with diagram details. Improve legibility and visual rhythm: adjust scale, gutters, note text density, card prominence, and/or grouping. Preserve numbered callout mapping, offload legend, candidate span colors, and all technical boundaries.
+
+# Acceptance
+Slides 7-10 should feel less cramped and easier to scan while keeping technical precision. No Typst compile/test/formatter commands. Report exactly what you changed and any uncertainty.
