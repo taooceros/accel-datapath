@@ -1,0 +1,12 @@
+Complete the assignment below, thoroughly:
+
+# Target
+`presentation/2026-06-15/grpc-tonic-stack/deck.typ`, slide 8 currently titled `Send detail B: wait for offload without blocking`, plus any helper macro directly local to that slide if needed. Non-goals: do not alter other slide content or global deck style except narrowly adding reusable local helper definitions near existing detail helpers if necessary.
+# Change
+1. Rename the slide title to `Async encode: two polls, one owned operation`.
+2. Make the top state strip read as the main story: `First poll` → `In flight / Pending` → `Second poll`; use a neutral accent for the middle state, not orange.
+3. Keep the Chronos flow technically equivalent but make it cleaner/larger: fewer cramped words, larger readable labels if possible, stronger visual grouping of `OwnedPendingOp` + completion record as owned async state, and some visible async-gap callout between return Pending and wake.
+4. Replace the right-side seven-step list with a compact invariant box: own buffers across Pending; completion stores status/length and wakes; second poll observes success/error and emits DATA.
+5. Keep DSA copy/CRC as a small blue caveat saying it uses the same two-poll shape and is not another numbered flow/participant.
+# Acceptance
+Deck source reflects the updated plan and remains Typst-sensible by inspection. Skip all commands, builds, formatters, and preview generation.
