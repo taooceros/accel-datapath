@@ -1,0 +1,6 @@
+Complete the assignment below, thoroughly:
+
+1. Check out `presentation/2026-06-18/async-tonic-encode-revision-2/deck.pdf`.
+2. Give feedback via IRC on the current visual layout and how well the content communicates the story (Async Encode in Tonic).
+3. Do not modify files yourself. Tell Main via IRC what needs to change.
+4. Keep the IRC connection active, wait for Main to reply or send updates.
