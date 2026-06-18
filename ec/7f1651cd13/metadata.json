@@ -3,7 +3,7 @@
   "checkpoint_id": "ec7f1651cd13",
   "strategy": "manual-commit",
   "branch": "tonic-dsa",
-  "checkpoints_count": 3,
+  "checkpoints_count": 4,
   "files_touched": [
     ".omp/SYSTEM.md"
   ],
@@ -19,13 +19,19 @@
       "transcript": "/ec/7f1651cd13/1/full.jsonl",
       "content_hash": "/ec/7f1651cd13/1/content_hash.txt",
       "prompt": "/ec/7f1651cd13/1/prompt.txt"
+    },
+    {
+      "metadata": "/ec/7f1651cd13/2/metadata.json",
+      "transcript": "/ec/7f1651cd13/2/full.jsonl",
+      "content_hash": "/ec/7f1651cd13/2/content_hash.txt",
+      "prompt": "/ec/7f1651cd13/2/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 312346,
+    "input_tokens": 483072,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 4844544,
-    "output_tokens": 14156,
-    "api_call_count": 83
+    "cache_read_tokens": 7437312,
+    "output_tokens": 23550,
+    "api_call_count": 140
   }
 }

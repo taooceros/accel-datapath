@@ -1,0 +1,9 @@
+reorganize the docs/agnets into obesidian vault
+
+---
+
+how does obsidian works
+
+---
+
+install obsidian git plugin

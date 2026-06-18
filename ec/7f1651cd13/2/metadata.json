@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "ec7f1651cd13",
+  "session_id": "019eb8f9-fb56-7000-801a-5122fefffc81",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-18T18:35:16.417163819Z",
+  "branch": "tonic-dsa",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".omp/SYSTEM.md"
+  ],
+  "agent": "Pi",
+  "model": "",
+  "turn_id": "031c0e317b67",
+  "token_usage": {
+    "input_tokens": 170726,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 2592768,
+    "output_tokens": 9394,
+    "api_call_count": 57
+  },
+  "session_metrics": {
+    "turn_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-18T18:35:16.410975574Z",
+    "agent_lines": 0,
+    "agent_removed": 214,
+    "human_added": 4234,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 4234,
+    "total_lines_changed": 6526,
+    "agent_percentage": 3.279190928593319,
+    "metric_version": 2
+  }
+}
