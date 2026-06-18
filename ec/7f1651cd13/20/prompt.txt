@@ -1,0 +1,8 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Review the deck source against `plan.md` slide-by-slide.
+# Change
+Read `plan.md`, `deck.typ`, and all 12 slide fragments. Check whether each planned teaching job, title, required content, visual idea, and speaker message appears. Do not edit.
+# Acceptance
+Report any missing/incorrect slide requirements with exact slide numbers and file paths. No commands.
