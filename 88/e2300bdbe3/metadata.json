@@ -3,9 +3,25 @@
   "checkpoint_id": "88e2300bdbe3",
   "strategy": "manual-commit",
   "branch": "tonic-dsa",
-  "checkpoints_count": 23,
+  "checkpoints_count": 24,
   "files_touched": [
     "presentation/2026-06-15/grpc-tonic-stack/deck.pdf",
+    "presentation/2026-06-17/async-tonic-encode/deck.pdf",
+    "presentation/2026-06-17/async-tonic-encode/deck.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide01.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide02.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide03.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide04.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide05.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide06.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide07.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide08.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide09.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide10.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide11.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide12.typ",
+    "presentation/2026-06-17/async-tonic-encode/plan.md",
+    "presentation/2026-06-17/async-tonic-encode/support.typ",
     "presentation/AGENTS.md"
   ],
   "sessions": [
@@ -56,13 +72,19 @@
       "transcript": "/88/e2300bdbe3/7/full.jsonl",
       "content_hash": "/88/e2300bdbe3/7/content_hash.txt",
       "prompt": "/88/e2300bdbe3/7/prompt.txt"
+    },
+    {
+      "metadata": "/88/e2300bdbe3/8/metadata.json",
+      "transcript": "/88/e2300bdbe3/8/full.jsonl",
+      "content_hash": "/88/e2300bdbe3/8/content_hash.txt",
+      "prompt": "/88/e2300bdbe3/8/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 2084249,
+    "input_tokens": 2327841,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 29749248,
-    "output_tokens": 145592,
-    "api_call_count": 426
+    "cache_read_tokens": 37593088,
+    "output_tokens": 169950,
+    "api_call_count": 531
   }
 }

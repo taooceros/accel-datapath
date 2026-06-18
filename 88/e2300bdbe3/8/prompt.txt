@@ -1,0 +1,382 @@
+<attachment>
+You’re right. The prompt should specify the deck architecture: each slide’s teaching job, not just facts to include.
+
+```text
+Create a technical teaching slide deck about the evolution from sync Tonic encode to async DSA-backed Prost encode.
+
+Audience:
+Systems/Rust researchers familiar with async Rust, Tonic/gRPC, Prost, and accelerators, but not familiar with this repo’s encode redesign.
+
+Deck goal:
+Teach that async encode was an ownership/state-machine redesign, not a mechanical `async fn` rewrite. The deck must make the intermediate poll-based codec design explicit, then show why poll encode moved down into Prost while the Tonic boundary ended up using owned futures.
+
+Core thesis:
+“Poll encode was not removed; it migrated from the Tonic codec boundary into the Prost field-level state machine.”
+
+Deck structure:
+
+Slide 1 — Thesis / mental model
+Job:
+Establish the central lesson before details.
+
+Title:
+“Async Encode Was an Ownership Redesign”
+
+Content:
+- Old instinct: “make `encode()` async”
+- Actual solution: owned resumable state + stable buffers + exact protobuf resume points
+- One-line arc:
+  `sync encode → async experiments → poll codec API → owned futures at Tonic boundary → poll Prost field engine`
+
+Visual:
+A simple horizontal evolution arrow with the final thesis highlighted.
+
+Speaker message:
+This was not about sprinkling async. It was about deciding who owns state while encoding is suspended.
+
+---
+
+Slide 2 — Baseline: sync encode was simple because nothing suspended
+Job:
+Ground the audience in the original design and why it worked.
+
+Title:
+“Sync Encode: Borrow, Write, Return”
+
+Content:
+Show the old shape conceptually:
+
+```rust
+fn encode(&mut self, item, dst: &mut EncodeBuf) -> Result<()>
+```
+
+Explain:
+- Encoder borrows output buffer.
+- CPU writes payload immediately.
+- No state survives the call.
+- gRPC framing can happen around a completed buffer.
+
+Visual:
+Small flow:
+`message → encoder → borrowed EncodeBuf → completed bytes`
+
+Speaker message:
+The sync design is elegant because all lifetimes are stack-local.
+
+---
+
+Slide 3 — Why naive async encode fails
+Job:
+Explain the first design trap.
+
+Title:
+“Why `async fn encode(&mut self, &mut buf)` Is the Wrong Shape”
+
+Content:
+Show tempting shape:
+
+```rust
+async fn encode(&mut self, item, dst: &mut EncodeBuf) -> Result<()>
+```
+
+Then show why it breaks:
+- Future would borrow encoder and destination across `Pending`.
+- Tonic body driver needs an in-flight operation it can store and poll.
+- DSA may retain raw source/destination pointers after returning `Pending`.
+- `Send + 'static` pushes against borrowed state.
+
+Visual:
+A warning diagram:
+`borrowed &mut buffer` crosses a red `Pending` boundary.
+
+Speaker message:
+The problem is not syntax; it is that suspension turns temporary borrows into long-lived state.
+
+---
+
+Slide 4 — Historical turning point: codec-level poll encode
+Job:
+Make the intermediate design explicit, because this is easy to lose in the story.
+
+Title:
+“Middle Design: Poll-Based Codec Encode”
+
+Content:
+Mention evidence:
+- `0f4d329 Use poll-based codec API`
+
+Explain:
+- The project did try a poll-based codec boundary.
+- This made suspension explicit.
+- It let the driver ask: “are encoded bytes ready yet?”
+- But it still left pressure around where state lives and how much of Tonic should know about encode internals.
+
+Visual:
+A poll loop:
+`poll_encode(cx) -> Pending`
+`poll_encode(cx) -> Ready(buffer)`
+
+Speaker message:
+Poll encode existed first at the Tonic codec boundary. That design was real, not imaginary.
+
+---
+
+Slide 5 — Why ownership moved into the encoder
+Job:
+Teach the first major correction after poll-based experiments.
+
+Title:
+“Suspension Requires Encoder-Owned State”
+
+Content:
+Mention evidence:
+- `a415231 Make async encode state encoder-owned`
+- `617cd50 Split encoder async state`
+
+Explain:
+State that may survive `Pending` must be owned:
+- message/item
+- destination buffer
+- protobuf field position
+- pending payload copy
+- DSA descriptor/completion
+- retry/drop state
+
+Visual:
+Before/after:
+Before:
+`driver owns too much temporary state`
+After:
+`encoder future owns resumable encode state`
+
+Speaker message:
+Once encoding can suspend, “where does the state live?” becomes the API design question.
+
+---
+
+Slide 6 — Current Tonic boundary: owned future
+Job:
+Explain the final outer API.
+
+Title:
+“Final Tonic Boundary: Encode Returns an Owned Future”
+
+Content:
+Show current conceptual shape:
+
+```rust
+type Encode: Future<Output = Result<EncodeBuffer, Error>>
+    + Send
+    + 'static;
+
+fn encode(
+    self: Pin<&mut Self>,
+    item: Item,
+    dst: EncodeBuffer,
+) -> Result<Self::Encode>;
+```
+
+Explain:
+- `EncodeBuffer` is owned by the encode future.
+- Tonic stores `in_flight: Option<T::Encode>`.
+- Sync encoders return ready futures.
+- Tonic regains the buffer only when encode completes.
+
+Visual:
+`Tonic driver → starts future → polls future → receives EncodeBuffer`
+
+Speaker message:
+The Tonic boundary became future-based because that is the cleanest unit for the body driver to store and poll.
+
+---
+
+Slide 7 — Tonic still owns gRPC framing
+Job:
+Prevent misunderstanding that the encoder owns the whole wire format.
+
+Title:
+“Tonic Still Finalizes the Frame”
+
+Content:
+Explain the driver responsibilities:
+- reserve 5-byte gRPC header before encode
+- poll in-flight encode
+- regain returned `EncodeBuffer`
+- apply compression if needed
+- enforce max message size
+- write final gRPC length header
+- yield bytes downstream
+
+Visual:
+Pipeline:
+`reserve header → async encode body → compression/size check → write header → yield frame`
+
+Speaker message:
+Async encode produces the message body; Tonic still owns protocol framing.
+
+---
+
+Slide 8 — Poll encode did not disappear; it moved down into Prost
+Job:
+State the key nuance clearly.
+
+Title:
+“Poll Encode Migrated Down a Layer”
+
+Content:
+Show contrast:
+
+Outer Tonic boundary:
+
+```rust
+encode(...) -> Future<Output = EncodeBuffer>
+```
+
+Inner Prost engine:
+
+```rust
+Message::poll_encode_raw(...)
+AsyncEncodeTarget
+PollEncodeState
+```
+
+Explain:
+- Tonic wants one owned async operation.
+- Prost needs exact field-level resume points.
+- Therefore poll remains the right abstraction inside protobuf encoding.
+
+Visual:
+Layer diagram:
+
+```text
+Tonic body driver
+  └─ owned encode future
+       └─ Prost poll_encode_raw state machine
+            └─ DSA/CPU payload target
+```
+
+Speaker message:
+Poll encode was not rejected. It was moved to the layer where fine-grained resume state actually belongs.
+
+---
+
+Slide 9 — Prost challenge: exact resume without byte corruption
+Job:
+Teach why protobuf makes async encoding hard.
+
+Title:
+“Protobuf Resume State Must Be Exact”
+
+Content:
+Explain that after `Pending`, the encoder must know:
+- which field it was encoding
+- which repeated/map index
+- whether tag was already written
+- whether length prefix was already written
+- whether payload copy is pending
+- whether nested message/oneof state is active
+
+Failure modes:
+- duplicate tag
+- duplicate length prefix
+- skipped field
+- payload written at wrong offset
+- invalid wire format
+
+Visual:
+A protobuf field split into phases:
+`tag → length → payload`
+with `Pending` only allowed after state records the completed phases.
+
+Speaker message:
+Async protobuf encoding is a resumable compiler for wire-format bytes.
+
+---
+
+Slide 10 — DSA challenge: hardware makes ownership physical
+Job:
+Explain why accelerator support is stricter than ordinary async I/O.
+
+Title:
+“DSA Turns Lifetimes Into Hardware Safety”
+
+Content:
+Explain DSA-specific constraints:
+- source pointer must remain valid
+- destination pointer must remain stable
+- `BytesMut` must not reallocate while DMA owns destination
+- descriptor/completion must stay alive
+- page-fault retry may be needed
+- drop/cancel must drain in-flight work before freeing memory
+
+Visual:
+DMA diagram:
+`owned message memory → DSA descriptor → stable EncodeBuffer storage`
+
+Speaker message:
+With hardware DMA, Rust ownership mistakes become memory corruption risks, not just type errors.
+
+---
+
+Slide 11 — Performance lesson: remove staged copies, but don’t promise universal wins
+Job:
+Connect design to measurement without overclaiming.
+
+Title:
+“Async DSA Enables Measurement, Not Guaranteed Speedup”
+
+Content:
+Explain:
+- Direct async DSA into final encode storage removes staged-copy overhead.
+- This materially changed benchmark regimes.
+- Wins were workload-dependent.
+- The cost model includes:
+  - submission overhead
+  - polling/wakeup
+  - state machine overhead
+  - page-fault/retry
+  - avoided CPU copy size
+
+Visual:
+Balance scale:
+`avoided CPU copy` vs `DSA async overhead`
+
+Speaker message:
+The design makes hardware useful when payload and regime justify it; it does not make every encode faster.
+
+---
+
+Slide 12 — Final takeaway
+Job:
+Leave audience with the design rule they can reuse.
+
+Title:
+“Reusable Design Rule”
+
+Content:
+Main statement:
+
+```text
+If an operation can suspend, anything needed after suspension
+must be owned by the suspended operation.
+```
+
+Apply it here:
+- Tonic owns stream/framing state.
+- Encode future owns message + buffer + hardware state.
+- Prost poll state owns exact wire-format resume position.
+- CPU encode remains a ready future.
+
+Final emphasized sentence:
+“Async encode is owned resumable state plus exact protocol resume points.”
+
+Visual:
+Three ownership boxes:
+`Tonic framing`
+`Encode future`
+`Prost field state`
+
+Speaker message:
+The final architecture works because each layer owns the state at its own granularity.
+```
+</attachment> Create a typst slide presentation based on this; you should try to use existing typst package for making more beautiful slide (such as zebraw or other visualization packages);

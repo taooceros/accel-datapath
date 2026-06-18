@@ -1,0 +1,72 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "88e2300bdbe3",
+  "session_id": "019ed727-74fe-7000-bd78-d69a23493ce5",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-18T18:15:43.009308382Z",
+  "branch": "tonic-dsa",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "presentation/2026-06-17/async-tonic-encode/deck.pdf",
+    "presentation/2026-06-17/async-tonic-encode/deck.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide01.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide02.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide03.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide04.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide05.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide06.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide07.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide08.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide09.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide10.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide11.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide12.typ",
+    "presentation/2026-06-17/async-tonic-encode/plan.md",
+    "presentation/2026-06-17/async-tonic-encode/support.typ",
+    "presentation/AGENTS.md"
+  ],
+  "agent": "Pi",
+  "model": "",
+  "turn_id": "6517dee713aa",
+  "token_usage": {
+    "input_tokens": 243592,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 7843840,
+    "output_tokens": 24358,
+    "api_call_count": 105
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-18T18:15:42.978322862Z",
+    "agent_lines": 9918,
+    "agent_removed": 0,
+    "human_added": 6819,
+    "human_modified": 25,
+    "human_removed": 0,
+    "total_committed": 16762,
+    "total_lines_changed": 16763,
+    "agent_percentage": 59.166020402076,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 23758,
+      "user_lines_removed": 25,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "deck.pdf": 11117,
+        "presentation/2026-06-15/grpc-tonic-stack/deck.pdf": 11064,
+        "presentation/2026-06-15/grpc-tonic-stack/deck.typ": 1409,
+        "presentation/2026-06-15/grpc-tonic-stack/plan.md": 157,
+        "presentation/AGENTS.md": 11
+      },
+      "user_removed_per_file": {
+        "presentation/AGENTS.md": 25
+      }
+    }
+  ]
+}
