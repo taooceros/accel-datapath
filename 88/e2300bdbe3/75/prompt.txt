@@ -1,0 +1,8 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Review the single preview image at local://presentation/2026-06-18/async-tonic-encode-revision-2/assets/previews/preview-slide-1.png as an audience member who knows systems but not Rust async/Tonic internals.
+# Change
+Do not change files. State what you learn from the slide, what remains unclear, and whether the slide motivates async encode.
+# Acceptance
+Return concise feedback: learned message, confusion risk, and one suggested wording/layout improvement. No commands, no formatting, no project-wide checks.

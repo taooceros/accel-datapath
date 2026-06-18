@@ -1,0 +1,121 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "88e2300bdbe3",
+  "session_id": "SlideStoryReviewer",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-18T18:16:09.271054847Z",
+  "branch": "tonic-dsa",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "presentation/2026-06-15/grpc-tonic-stack/deck.pdf",
+    "presentation/2026-06-15/grpc-tonic-stack/deck.typ",
+    "presentation/2026-06-15/grpc-tonic-stack/plan.md",
+    "presentation/2026-06-17/async-tonic-encode/deck.pdf",
+    "presentation/2026-06-17/async-tonic-encode/deck.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide01.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide02.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide03.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide04.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide05.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide06.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide07.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide08.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide09.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide10.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide11.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide12.typ",
+    "presentation/2026-06-17/async-tonic-encode/plan.md",
+    "presentation/2026-06-17/async-tonic-encode/support.typ",
+    "presentation/2026-06-18/async-tonic-encode-revision-2/deck.typ",
+    "presentation/2026-06-18/async-tonic-encode-revision-2/plan.md",
+    "presentation/AGENTS.md",
+    "presentation/slide-plan-guideline.md",
+    "presentation/template.typ"
+  ],
+  "agent": "Pi",
+  "model": "",
+  "turn_id": "2bd424075185",
+  "token_usage": {
+    "input_tokens": 27987,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 100352,
+    "output_tokens": 2596,
+    "api_call_count": 6
+  },
+  "session_metrics": {
+    "turn_count": 4
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-18T18:16:09.264440981Z",
+    "agent_lines": 573,
+    "agent_removed": 1,
+    "human_added": 5873,
+    "human_modified": 24,
+    "human_removed": 0,
+    "total_committed": 6469,
+    "total_lines_changed": 6471,
+    "agent_percentage": 8.870344614433627,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 33907,
+      "user_lines_removed": 237,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "deck.pdf": 11117,
+        "presentation/2026-06-15/grpc-tonic-stack/deck.pdf": 10918,
+        "presentation/2026-06-15/grpc-tonic-stack/deck.typ": 1437,
+        "presentation/2026-06-15/grpc-tonic-stack/plan.md": 158,
+        "presentation/2026-06-17/async-tonic-encode/deck.pdf": 8663,
+        "presentation/2026-06-17/async-tonic-encode/deck.typ": 34,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide01.typ": 65,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide02.typ": 75,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide03.typ": 70,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide04.typ": 72,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide05.typ": 49,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide06.typ": 52,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide07.typ": 85,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide08.typ": 65,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide09.typ": 59,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide10.typ": 66,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide11.typ": 81,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide12.typ": 84,
+        "presentation/2026-06-17/async-tonic-encode/plan.md": 279,
+        "presentation/2026-06-17/async-tonic-encode/support.typ": 139,
+        "presentation/2026-06-18/async-tonic-encode-revision-2/deck.typ": 124,
+        "presentation/2026-06-18/async-tonic-encode-revision-2/plan.md": 65,
+        "presentation/AGENTS.md": 16,
+        "presentation/slide-plan-guideline.md": 132,
+        "presentation/template.typ": 2
+      },
+      "user_removed_per_file": {
+        ".omp/SYSTEM.md": 214,
+        "presentation/AGENTS.md": 23
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 4,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
