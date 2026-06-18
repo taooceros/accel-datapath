@@ -1,0 +1,24 @@
+I want to understand the callstack of a typical uncompressed grpc message going through tonic
+
+---
+
+let's draw a tree like call stack
+
+---
+
+put this into the first page of grpc stack slide; do we have a good typst package that can help visualize this?
+
+---
+
+would using mermaid easier? there is a typst package mmdr
+
+---
+
+let's focus on the tonic stack instead of the grpc; the tonic is migrating to grpc so this can be a bit confusing
+
+---
+
+the first page should be:
+1. how will user use tonic
+2. how going deep down the call to some tonic exported library do (as a call stack)
+3. what's the underlying things that tonic is doing in order to complete the grpc request
