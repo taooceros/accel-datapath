@@ -1,0 +1,8 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Write `presentation/2026-06-17/async-tonic-encode/fragments/slide05.typ` with function `slide_05` only.
+# Change
+Implement Slide 5 titled `Suspension Requires Encoder-Owned State`. Teaching job: teach the correction after poll-codec experiments. Include evidence badges `a415231 Make async encode state encoder-owned` and `617cd50 Split encoder async state`. Visual before/after: `driver owns too much temporary state` → `encoder future owns resumable encode state`. Include state inventory chips: message/item; destination buffer; protobuf field position; pending payload copy; DSA descriptor/completion; retry/drop state.
+# Acceptance
+The slide emphasizes that any state surviving `Pending` must be owned by the encode operation and ends with `speaker[Once encoding can suspend, “where does the state live?” becomes the API design question.]`. No commands.
