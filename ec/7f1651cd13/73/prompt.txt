@@ -1,0 +1,8 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Review deck source for visual/readability consistency across independently implemented slide fragments.
+# Change
+Read `support.typ`, `deck.typ`, and all 12 slide fragments. Check for inconsistent helper usage, likely overcrowding, inconsistent color semantics, or source patterns likely to render poorly in 16:9. Do not edit.
+# Acceptance
+Report blockers and high-value visual fixes with exact slide numbers/files. No commands.
