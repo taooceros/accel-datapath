@@ -1,0 +1,15 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Write `presentation/2026-06-17/async-tonic-encode/fragments/slide08.typ` with function `slide_08` only.
+# Change
+Implement Slide 8 titled `Poll Encode Migrated Down a Layer`. Teaching job: state the core nuance. Show contrast cards: outer Tonic boundary `encode(...) -> Future<Output = EncodeBuffer>`; inner Prost engine with `Message::poll_encode_raw(...)`, `AsyncEncodeTarget`, `PollEncodeState`. Include layer diagram:
+```text
+Tonic body driver
+  └─ owned encode future
+       └─ Prost poll_encode_raw state machine
+            └─ DSA/CPU payload target
+```
+Explain: Tonic wants one owned async operation; Prost needs exact field-level resume points; poll remains right inside protobuf encoding.
+# Acceptance
+The slide explicitly says poll encode was moved, not rejected, and ends with `speaker[Poll encode was not rejected. It was moved to the layer where fine-grained resume state actually belongs.]`. No commands.
