@@ -1,0 +1,132 @@
+what's the main theme of async tonic encode
+
+---
+
+I want to revise the slide one by one; interactively discuss with me about how to present the story
+
+---
+
+we assume too much background of the audience; the audience will be my advisor, which doesn't have much background about rust async and how tonic works
+
+---
+
+I think your story spine is much better; start a new slide based on that; let's start with the plan first (let's name it revision 2)
+
+---
+
+no; start a new folder
+
+---
+
+generate the slide
+
+---
+
+what about slide 2
+
+---
+
+This is not the purpose; why async exist is to make it possible to utilize the concurrent hardware resources
+
+---
+
+this is still a bad theme; we should start from the original path; then why it is not sufficing
+
+---
+
+I don't know what you are trying to present here
+
+---
+
+yes
+
+---
+
+use mermaid to draw the graph
+
+---
+
+typst has a package mmdr
+
+---
+
+fix the layout; We should add some text description based on this
+
+---
+
+then next slide what should we have
+
+---
+
+generate the slide 2 and slide 3, then I will give feedback
+
+---
+
+no unnecessary card
+
+---
+
+invoke the touying skill; revise the code based on touying recommended style
+
+---
+
+don't create so many style; do things simple
+
+---
+
+make it clear that the theme of async is multiplexing
+
+---
+
+next slide; explain the specific codeapth that we changes to async
+
+---
+
+this is very confusing; nobody can understand what's happening; highlight how async work
+
+---
+
+specifically, we want to let the audience know, what we can do when an operation returns pending
+
+---
+
+The difference between a generic AI-generated slide deck and a presentation that looks like it came from a top university lab or investment-banking desk is, in most cases, in the prompt. Most AI presentation tools can produce professional output — but only when the prompt specifies what professional means in that specific discipline.
+
+Before the prompts: if you already have a research paper, financial report, or academic document ready to convert into slides, Tosea.ai accepts any PDF or Word file and generates a structured academic presentation directly from the source material — no prompt engineering required. The eight prompts below are for the case where you are starting from scratch and want the AI to imitate your discipline's visual conventions. For a broader prompt library not specific to academic slides, see our Best AI Prompts for Document to PPT and 60+ Best AI Prompts for PowerPoint Presentations.
+
+The anatomy of a field-specific slide prompt — role, visual style, layout, discipline rules, and typography
+Why Field-Specific Prompts Matter for Academic Presentations
+
+A computational-biology conference deck looks nothing like an investment-banking pitch. A clinical-trial results slide has different visual conventions than a machine-learning architecture diagram. A management-consulting framework slide demands different typography and layout than an engineering simulation result.
+
+According to the University of Cambridge's academic presentation guidelines, effective academic presentations must match the visual conventions and information density expectations of their specific discipline and audience. A slide formatted for NeurIPS will not land correctly at a clinical conference — and vice versa.
+
+The eight prompts below are designed as ready-to-copy starting points for each major academic and professional field. Each prompt specifies visual style, layout rules, content conventions, and output requirements appropriate to that discipline. Copy the prompt that matches your field, add your topic and content, and paste into any AI slide generator or presentation creator tool.
+How to Use These Prompts
+
+Each prompt below is a complete system instruction. To use it:
+
+    Identify your field and occasion — conference paper, thesis defense, lab meeting, or professional presentation.
+    Copy the full prompt text.
+    Add your specific content at the end — paper title, research question, key findings, and any specific slides you need.
+    Paste the combined text into your preferred AI PowerPoint generator, AI slide maker, or presentation AI tool.
+    Review and edit the output for accuracy. No AI presentation tool should be trusted to get specialized data exactly right without verification.
+
+For presentations built from existing documents — research papers, financial reports, technical specifications — upload the source file to Tosea.ai instead of using a prompt. The document-first approach produces more accurate slide content because the AI reads your actual data rather than generating approximations. We covered the underlying reasoning in Hallucination-Free Document to PPT Conversion and the Zero-Hallucination AI Slides Guide.
+Prompt 1: General STEM and Computer Science
+
+Best for: Machine learning papers, software engineering talks, data science presentations, NeurIPS, CVPR, ICML, and similar venues.
+
+    You are a professional academic presentation designer for computer science and STEM research.
+
+    Generate a modern academic-style presentation for a research paper or conference talk. The presentation should feel like a NeurIPS or CVPR submission — clean, precise, and visually authoritative.
+
+    Visual style: minimalist, white or light blue-gray background, primary color palette of white and blue. Use blue for titles, key metrics, architecture diagrams, arrows, and highlighted concepts. Secondary use of light gray and cyan only.
+
+    Layout: one core idea per slide, conclusion-oriented titles, large safe margins, generous whitespace. Prioritize architecture figures, benchmark tables, and ablation study charts. Never use paragraph-heavy slides.
+
+    Technical content rules: code blocks use light gray or deep blue backgrounds styled like modern code editors. Equations are centered with ample whitespace, important symbols highlighted in blue. Benchmark comparison tables use blue headers, light gray row separators, best results highlighted in blue.
+
+    Diagrams: clean flat vector style, thin lines, light blue grids, horizontal process flows, data flow arrows. System architecture figures should be horizontal and editable.
+
+    Typography: Inter or Helvetica for Latin text. Relaxed line spacing. Title weight slightly heavier than body.
