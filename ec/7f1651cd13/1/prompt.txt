@@ -1,0 +1,5 @@
+how to use the obesidian feature in omp
+
+---
+
+reorganized the docs into obesidian vault
