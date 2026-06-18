@@ -1,0 +1,54 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "ec7f1651cd13",
+  "session_id": "DocsLinkScout",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-18T18:35:26.849677135Z",
+  "branch": "tonic-dsa",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".omp/SYSTEM.md"
+  ],
+  "agent": "Pi",
+  "model": "",
+  "turn_id": "981adf327443",
+  "token_usage": {
+    "input_tokens": 69457,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 280064,
+    "output_tokens": 4144,
+    "api_call_count": 8
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-18T18:35:26.83959582Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 4019,
+    "human_modified": 215,
+    "human_removed": 0,
+    "total_committed": 4019,
+    "total_lines_changed": 6312,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 45,
+      "user_lines_removed": 3,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".omp/SYSTEM.md": 1,
+        "agents/plan/2026-06-11/02.prost-transfer-cleanup.plan.md": 20,
+        "docs/plan/2026-06-11/02.prost-transfer-cleanup.plan.md": 24
+      },
+      "user_removed_per_file": {
+        ".omp/SYSTEM.md": 3
+      }
+    }
+  ]
+}

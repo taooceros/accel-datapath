@@ -1,0 +1,8 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Inspect Markdown link styles and metadata across `docs/`, `remark/`, `README.md`, and `Home.md`. Look for Obsidian wikilinks (`[[...]]`), standard Markdown links, YAML frontmatter, tags, embedded images/assets, and backlink/MOC affordances.
+# Change
+No changes. Use repository search/read tools only. Identify reusable patterns and gaps relevant to making `docs/` work well as an Obsidian vault while preserving plain Markdown/GitHub readability.
+# Acceptance
+Return concise findings with exact searches or representative paths and line anchors. Skip tests, formatters, and project-wide commands.
