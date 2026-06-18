@@ -3,7 +3,7 @@
   "checkpoint_id": "88e2300bdbe3",
   "strategy": "manual-commit",
   "branch": "tonic-dsa",
-  "checkpoints_count": 210,
+  "checkpoints_count": 214,
   "files_touched": [
     ".omp/rules/slides-no-unnecessary-cards.md",
     "presentation/2026-06-15/grpc-tonic-stack/deck.pdf",
@@ -249,13 +249,19 @@
       "transcript": "/88/e2300bdbe3/35/full.jsonl",
       "content_hash": "/88/e2300bdbe3/35/content_hash.txt",
       "prompt": "/88/e2300bdbe3/35/prompt.txt"
+    },
+    {
+      "metadata": "/88/e2300bdbe3/36/metadata.json",
+      "transcript": "/88/e2300bdbe3/36/full.jsonl",
+      "content_hash": "/88/e2300bdbe3/36/content_hash.txt",
+      "prompt": "/88/e2300bdbe3/36/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 10668217,
+    "input_tokens": 10883557,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 145915226,
-    "output_tokens": 662676,
-    "api_call_count": 2030
+    "cache_read_tokens": 147692634,
+    "output_tokens": 683122,
+    "api_call_count": 2066
   }
 }

@@ -1,0 +1,11 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Files: `presentation/2026-06-15/grpc-tonic-stack/deck.typ`, `presentation/2026-06-15/grpc-tonic-stack/plan.md`, and preview images `presentation/2026-06-15/grpc-tonic-stack/assets/previews/preview-slide-1.png`, `presentation/2026-06-15/grpc-tonic-stack/assets/previews/preview-slide-2.png`, `presentation/2026-06-15/grpc-tonic-stack/assets/previews/preview-slide-3.png`.
+Deck scope: slides 1-3 only, currently around `deck.typ` lines 427-581. You may adjust helpers used only by these slides (`overview-card`, `compact-code`, `work-bullet`) if necessary, but do not edit Chronos/detail helpers or slides 4-10.
+
+# Change
+Make the first three slides look more polished and intentionally composed. Current issues visible in the contact sheet: large unused lower whitespace; slide 1/2 cards feel small and float high; slide 3 has an anchor but could use stronger visual grouping. Improve hierarchy/spacing, card sizing, and balance. Preserve all technical content, actual tonic symbols, Zebraw code/call-stack rendering, and the split into three slides. Update the corresponding plan sections only if the realized layout/content meaning changes.
+
+# Acceptance
+Slides 1-3 should have a clearer visual anchor, less accidental whitespace, and readable code/call-stack blocks without cramming. No Typst compile/test/formatter commands. Report exactly what you changed and any uncertainty.
