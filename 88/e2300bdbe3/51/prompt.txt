@@ -1,0 +1,12 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Write `presentation/2026-06-17/async-tonic-encode/fragments/slide03.typ` with function `slide_03` only.
+# Change
+Implement Slide 3 titled `Why async fn encode(&mut self, &mut buf) Is the Wrong Shape`. Teaching job: explain the first design trap. Include Zebraw tempting shape:
+```rust
+async fn encode(&mut self, item, dst: &mut EncodeBuf) -> Result<()>
+```
+Include failure bullets: future borrows encoder/destination across `Pending`; Tonic body driver needs an in-flight operation it can store and poll; DSA may retain raw source/destination pointers after `Pending`; `Send + 'static` pushes against borrowed state. Visual: warning diagram where `borrowed &mut buffer` crosses a red `Pending` boundary.
+# Acceptance
+Use `warning-band` or red styling for the Pending boundary, include all four failure reasons, and end with `speaker[The problem is not syntax; it is that suspension turns temporary borrows into long-lived state.]`. No commands.
