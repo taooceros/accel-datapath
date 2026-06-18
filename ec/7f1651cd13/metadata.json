@@ -401,6 +401,12 @@
       "transcript": "/ec/7f1651cd13/64/full.jsonl",
       "content_hash": "/ec/7f1651cd13/64/content_hash.txt",
       "prompt": "/ec/7f1651cd13/64/prompt.txt"
+    },
+    {
+      "metadata": "/ec/7f1651cd13/65/metadata.json",
+      "transcript": "/ec/7f1651cd13/65/full.jsonl",
+      "content_hash": "/ec/7f1651cd13/65/content_hash.txt",
+      "prompt": "/ec/7f1651cd13/65/prompt.txt"
     }
   ],
   "token_usage": {
