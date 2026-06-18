@@ -1,0 +1,14 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Read only the frozen slide image `presentation/2026-06-17/async-tonic-encode/assets/previews/slidepass1-2.png`. Treat it as the slide you see, without using source files to correct your interpretation.
+
+# Change
+Do not edit files. Report:
+1. What you learned from slide 2 in 3-5 bullets.
+2. Where that learned story diverges from the slide 2 goal in the shared contract.
+3. The 3 highest-impact concrete edits for slide 2.
+4. Any visual hierarchy/wording issue that blocks comprehension.
+
+# Acceptance
+Concise actionable report tied to slide 2. Do not run commands.
