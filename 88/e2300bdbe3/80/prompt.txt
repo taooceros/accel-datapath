@@ -1,0 +1,8 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Create `presentation/2026-06-17/async-tonic-encode/deck.typ` only. Read the local `plan.md` and shared `presentation/template.typ`; do not edit `plan.md`, existing decks, PDFs, or previews.
+# Change
+Implement a polished Touying Typst deck with exactly the 12 slides in the plan. Use `#import "../../template.typ": *` or the correct relative import from the target folder, import `@preview/zebraw:0.6.3`, define local visual helpers, and use `#deck(...)[ #slide[...] ... ]`. Use Zebraw for the Rust/API snippets and native Typst boxes/arrows/grids for diagrams. Keep slide text concise and readable; include the speaker-message strip content visibly at the bottom of each slide.
+# Acceptance
+`deck.typ` exists, uses the shared template/Touying slide structure, includes exactly 12 `#slide[...]` entries matching the plan titles/jobs, and has no intentional placeholders/TODOs. Do not run typst compile, tests, lint, or formatters.
