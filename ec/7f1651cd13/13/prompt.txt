@@ -1,0 +1,5 @@
+we are continuely revising the slide of the story of async encode in tonic
+
+---
+
+read the preview image and see whether it matches with the plan goal
