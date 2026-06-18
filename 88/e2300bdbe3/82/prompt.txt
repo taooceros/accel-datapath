@@ -1,0 +1,14 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Inspect the current deck previews at `presentation/2026-06-17/async-tonic-encode/assets/previews/current3-slide-*.png`, plus `plan.md` only if needed to understand intended hierarchy.
+
+# Change
+Do not change files. Report:
+1. The 5 most important visual hierarchy/readability issues, tied to slide numbers.
+2. Concrete visual edits to fix each issue.
+3. Any slides that already work well visually and should not be disturbed.
+4. A concise overall visual direction for the revision.
+
+# Acceptance
+Return a concise, actionable report tied to slide numbers. Do not run typst compile, tests, formatters, or project-wide commands.
