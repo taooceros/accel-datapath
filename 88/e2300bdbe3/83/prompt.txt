@@ -1,0 +1,19 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Review visual design and hierarchy from `presentation/2026-06-17/async-tonic-encode/assets/previews/contact-sheet.png` plus individual previews if needed: `preview-slide-1.png` through `preview-slide-12.png` in that same directory. Also read `presentation/slide-plan-guideline.md`.
+# Change
+Do not edit. For each slide, identify the dominant visual object, primary/secondary text hierarchy, layout issues, and how the plan should describe placement and visual treatment. Flag overcrowding, weak emphasis, or color-semantics issues.
+# Acceptance
+Return actionable per-slide visual-treatment notes suitable for rewriting plan.md. No commands, no verification gates.
+
+---
+
+Complete the assignment below, thoroughly:
+
+# Target
+Review the 10-page revised async Tonic encode deck previews for visual hierarchy, font size, layout clarity, and whether Touying/Typst layout is being used to make the message readable. Non-goal: do not judge Rust correctness except where visual labels confuse the story.
+# Change
+Read the contact sheet and inspect individual preview images only if needed. Report the top layout problems that would materially hurt an audience learning the content, and name exact slide numbers and concrete fixes. Do not edit files. Do not run commands, build, test, or format.
+# Acceptance
+Return a concise list of must-fix issues, should-fix issues, and anything already good enough.
