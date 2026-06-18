@@ -1,4 +1,6 @@
 #import "../../template.typ": *
+#import "support.typ" as support
+
 
 // ─── Theme Metadata Config (Global Show Rules) ───
 #show: deck.with(
@@ -13,15 +15,13 @@
 #set page(fill: rgb("#f7faff"))
 
 // Customize how code blocks look globally (no borders, simple shaded background)
+#show raw: set text(font: "DejaVu Sans Mono", size: 9.5pt, fill: luma(34))
 #show raw.where(block: true): it => block(
   width: 100%,
   radius: 6pt,
   inset: 12pt,
   fill: rgb("#f8fafc"),
-)[
-  #set text(font: "DejaVu Sans Mono", size: 12pt, fill: luma(34))
-  #it
-]
+)[#it]
 
 // Custom helpers for visual layout (no structural borders)
 #let side-by-side(left, right, ratio: (1fr, 1fr)) = grid(
@@ -277,6 +277,117 @@
 = Part IV: Turning Prost Async: Resumable Serialization
 
 // Slide 9
+== How Prost Generates Code
+
+#v(0.6em)
+#side-by-side[
+  #section("1. Protobuf Schema (.proto)", [
+    Prost parses the `.proto` schema to define message layouts and field metadata.
+
+    ```protobuf
+    syntax = "proto3";
+
+    message UserProfile {
+        string name = 1;
+        bytes avatar = 2;
+    }
+    ```
+  ])
+][
+  #section("2. Generated Rust Struct", [
+    `prost-build` compiles it into a standard Rust struct with serialization attributes.
+
+    ```rust
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct UserProfile {
+        #[prost(string, tag = "1")]
+        pub name: ::prost::alloc::string::String,
+        #[prost(bytes = "vec", tag = "2")]
+        pub avatar: ::prost::alloc::vec::Vec<u8>,
+    }
+    ```
+  ])
+]
+
+#v(1.2em)
+#alert-text(
+  [Prost compiles schemas into standard Rust structs. To change serialization behavior, we customize the code generated for these structs.],
+)
+
+
+// Slide 10
+== Sync Serialization: Sequential Path
+
+#v(0.6em)
+#side-by-side[
+  #section("Generated Sync Code", [
+    The standard macro derive generates a simple sequential writer.
+    ```rust
+    // Emitted by #[derive(prost::Message)]
+    fn encode_raw(
+        &self,
+        buf: &mut impl BufMut
+    ) {
+        // field 1: string name
+        string::encode(1, &self.name, buf);
+
+        // field 2: bytes avatar
+        bytes::encode(2, &self.avatar, buf);
+    }
+    ```
+  ])
+][
+  #section("Execution Details", [
+    - *Sequential execution*: All fields are processed in order on the calling CPU thread.
+    - *No suspension*: The execution is continuous and cannot yield back to the caller.
+    - *Synchronous copies*: Large payload copies (`dst.put_slice`) run synchronously, blocking the CPU.
+  ])
+]
+
+#v(1.2em)
+#alert-text(
+  [Simple and fast for CPU-only execution, but blocks the thread during large payload memory copies.],
+)
+
+
+// Slide 11
+== Async Serialization: Resumable Path
+
+#show raw: set text(size: 9pt)
+#v(0.4em)
+#side-by-side[
+  #section("Generated Async Code", [
+    Custom codegen emits a resumable state-machine encoder.
+    ```rust
+    fn poll_encode_raw<S>(&self, sink, state, cx) -> Poll<Result<(), Error>> {
+        if state.field() == 0 {       // string
+            ready!(string::poll_encode(1, &self.name, sink, state, cx))?;
+            state.advance_field();
+        }
+        if state.field() == 1 {       // bytes
+            ready!(bytes::poll_encode(2, &self.avatar, sink, state, cx))?;
+            state.advance_field();
+        }
+        state.clear();
+        Poll::Ready(Ok(()))
+    }
+    ```
+  ])
+][
+  #section("Execution Details", [
+    - *Flat field-indexed loop*: Guarded by `state.field()` cursor to remember position.
+    - *Yield on Pending*: If `poll_encode` returns `Pending`, execution suspends.
+    - *Resume on Wake*: Execution resumes directly at the suspended field, avoiding repeating previous writes.
+  ])
+]
+
+#v(0.8em)
+#alert-text(
+  [`String` and `Bytes` fields use `poll_encode` (may yield); other scalar types write directly without suspending.],
+)
+
+
+// Slide 12
 == Split-Phase Serialization: CPU vs Async
 
 #v(0.6em)
@@ -303,7 +414,7 @@
 )
 
 
-// Slide 10
+// Slide 13
 == State Tracking & Hierarchical Nesting
 
 #v(0.6em)
@@ -338,7 +449,7 @@
 #alert-text([Hierarchical messages enter a nested state: push parent frame, poll sub-message, and pop on completion.])
 
 
-// Slide 11
+// Slide 14
 == The Generated Resumable State Machine
 
 #v(0.6em)
@@ -348,8 +459,7 @@
     - *Branch to Field*: Select field via `state.field()`.
     - *Phase Checkpoint*: Check `state.phase()`. If `0`, perform CPU metadata writes and advance phase to `1`.
     - *Yield/Resume*: Call `poll_write_payload`. If `Pending`, yield. On wakeup, resume directly at phase `1` (skipping metadata writes).
-  ])
-  :][
+  ])][
   #section("Generated Code Pattern", [
     ```rust
     if state.field() == 0 { // string field
@@ -374,3 +484,92 @@
 
 #v(1.2em)
 #alert-text([Phase transitions ensure that metadata prefixes are written exactly once, even across multiple yields.])
+
+
+// Slide 15
+== Reusable Systems Rule
+
+#v(0.1em)
+#block(
+  width: 100%,
+  inset: (x: 12pt, y: 8pt),
+  radius: 8pt,
+  fill: palette.green,
+  stroke: 1pt + rgb("#10b981"),
+)[
+  #align(center)[
+    #text(size: 16pt, weight: "bold", fill: palette.title)[
+      Thread-multiplexing with hardware offloads requires owned resumable state.
+    ]
+  ]
+]
+
+#v(0.3em)
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 18pt,
+  block(
+    width: 100%,
+    inset: (x: 10pt, y: 8pt),
+    fill: rgb("#fdfeff"),
+    stroke: 0.6pt + palette.border,
+  )[
+    #grid(columns: (auto, 1fr), gutter: 6pt, align: horizon)[
+      #rect(width: 3.5pt, height: 13pt, radius: 999pt, fill: palette.accent)
+    ][
+      #text(size: 13.5pt, weight: "bold", fill: palette.title)[Tonic Frame]
+    ]
+    #v(0.4em)
+    #text(size: 11pt, fill: luma(60))[
+      Stream driver owns header reservation, compression, size check, and final gRPC framing.
+    ]
+  ],
+  block(
+    width: 100%,
+    inset: (x: 10pt, y: 8pt),
+    radius: 8pt,
+    fill: rgb("#fdfeff"),
+    stroke: 0.6pt + palette.border,
+  )[
+    #grid(columns: (auto, 1fr), gutter: 6pt, align: horizon)[
+      #rect(width: 3.5pt, height: 13pt, radius: 999pt, fill: palette.accent)
+    ][
+      #text(size: 13.5pt, weight: "bold", fill: palette.title)[Encode Future]
+    ]
+    #v(0.4em)
+    #text(size: 11pt, fill: luma(60))[
+      Suspended operation owns message, `EncodeBuffer`, offload state, and drop/cancel cleanup.
+    ]
+  ],
+  block(
+    width: 100%,
+    inset: (x: 10pt, y: 8pt),
+    radius: 8pt,
+    fill: rgb("#fdfeff"),
+    stroke: 0.6pt + palette.border,
+  )[
+    #grid(columns: (auto, 1fr), gutter: 6pt, align: horizon)[
+      #rect(width: 3.5pt, height: 13pt, radius: 999pt, fill: palette.accent)
+    ][
+      #text(size: 13.5pt, weight: "bold", fill: palette.title)[Prost Wire Checkpoint]
+    ]
+    #v(0.4em)
+    #text(size: 11pt, fill: luma(60))[
+      Inner serialization engine tracks field, index, phase, and sub-message recursion frames.
+    ]
+  ],
+)
+
+#v(0.3em)
+#block(
+  width: 100%,
+  inset: (x: 12pt, y: 8pt),
+  radius: 8pt,
+  fill: rgb("#fff8f1"),
+  stroke: (left: 4pt + rgb("#f97316")),
+)[
+  #text(size: 11.5pt, fill: luma(50))[
+    *Performance Balance Check:* Benchmarks decide whether the offload wins: does avoided CPU staging outweigh submission and bookkeeping overhead?
+  ]
+]
+
