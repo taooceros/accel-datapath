@@ -1,0 +1,10 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Edit only `presentation/2026-06-17/async-tonic-encode/fragments/slide10.typ` and the Slide 10 section of `presentation/2026-06-17/async-tonic-encode/plan.md`.
+
+# Change
+Revise slide 10 so DSA/IAX is clearly a consequence of the owned `T::Encode` future, not a new main topic. Dominant message: `Pending offload means raw addresses outlive the encode call`. Show cause/effect inside owned `T::Encode`: source memory + EncodeBuffer + descriptor/completion stay owned until completion. Reduce hardware detail to three invariants: source valid, destination stable, completion/drop drains work.
+
+# Acceptance
+Files edited for slide 10 only. No commands, compiles, tests, or formatters. Report exactly what changed and assumptions.
