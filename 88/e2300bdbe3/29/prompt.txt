@@ -1,0 +1,11 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Files: `presentation/2026-06-15/grpc-tonic-stack/deck.typ`, `presentation/2026-06-15/grpc-tonic-stack/plan.md`, preview images `presentation/2026-06-15/grpc-tonic-stack/assets/previews/preview-slide-7.png`, `presentation/2026-06-15/grpc-tonic-stack/assets/previews/preview-slide-8.png`, `presentation/2026-06-15/grpc-tonic-stack/assets/previews/preview-slide-9.png`, `presentation/2026-06-15/grpc-tonic-stack/assets/previews/preview-slide-10.png`.
+Deck scope: slides 7-10 and helpers introduced for them, around `deck.typ` lines 910-1406. Do not edit slides 1-6.
+
+# Change
+Reduce excessive card/block styling on dense detail slides. Keep the offload legend and Chronos diagrams, but make right-side sequence/caveat areas lighter: fewer rounded boxes, more open text with accent rules, less nested fill/stroke. Preserve all numbered callout mapping, candidate span colors, and technical boundaries.
+
+# Acceptance
+Slides 7-10 remain parseable but less boxed/card-heavy. No compile/test/formatter commands. Report changed ranges and any uncertainty.
