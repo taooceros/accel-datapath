@@ -1,0 +1,139 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "88e2300bdbe3",
+  "session_id": "019ed80b-22dd-7000-81d5-f4b330e6cda4",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-18T18:15:46.724206126Z",
+  "branch": "tonic-dsa",
+  "checkpoints_count": 5,
+  "files_touched": [
+    "presentation/2026-06-15/grpc-tonic-stack/deck.pdf",
+    "presentation/2026-06-15/grpc-tonic-stack/deck.typ",
+    "presentation/2026-06-15/grpc-tonic-stack/plan.md",
+    "presentation/2026-06-17/async-tonic-encode/deck.pdf",
+    "presentation/2026-06-17/async-tonic-encode/deck.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide01.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide02.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide03.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide04.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide05.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide06.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide07.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide08.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide09.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide10.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide11.typ",
+    "presentation/2026-06-17/async-tonic-encode/fragments/slide12.typ",
+    "presentation/2026-06-17/async-tonic-encode/plan.md",
+    "presentation/2026-06-17/async-tonic-encode/support.typ",
+    "presentation/AGENTS.md",
+    "presentation/slide-plan-guideline.md",
+    "presentation/template.typ"
+  ],
+  "agent": "Pi",
+  "model": "",
+  "turn_id": "5b76991a7a90",
+  "token_usage": {
+    "input_tokens": 962985,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 14160896,
+    "output_tokens": 49343,
+    "api_call_count": 153
+  },
+  "session_metrics": {
+    "turn_count": 5
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-18T18:15:46.705943222Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 6583,
+    "human_modified": 320,
+    "human_removed": 0,
+    "total_committed": 6583,
+    "total_lines_changed": 6903,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 37165,
+      "user_lines_removed": 237,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "deck.pdf": 11117,
+        "presentation/2026-06-15/grpc-tonic-stack/deck.pdf": 10918,
+        "presentation/2026-06-15/grpc-tonic-stack/deck.typ": 1437,
+        "presentation/2026-06-15/grpc-tonic-stack/plan.md": 158,
+        "presentation/2026-06-17/async-tonic-encode/deck.pdf": 11718,
+        "presentation/2026-06-17/async-tonic-encode/deck.typ": 37,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide01.typ": 82,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide02.typ": 80,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide03.typ": 89,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide04.typ": 84,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide05.typ": 102,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide06.typ": 144,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide07.typ": 73,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide08.typ": 101,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide09.typ": 89,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide10.typ": 99,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide11.typ": 82,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide12.typ": 85,
+        "presentation/2026-06-17/async-tonic-encode/plan.md": 404,
+        "presentation/2026-06-17/async-tonic-encode/support.typ": 118,
+        "presentation/AGENTS.md": 16,
+        "presentation/slide-plan-guideline.md": 132
+      },
+      "user_removed_per_file": {
+        ".omp/SYSTEM.md": 214,
+        "presentation/AGENTS.md": 23
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 382,
+      "user_lines_removed": 297,
+      "agent_lines_added": 37165,
+      "agent_lines_removed": 395,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4,
+        "presentation/2026-06-17/async-tonic-encode/plan.md": 157,
+        "presentation/2026-06-17/async-tonic-encode/support.typ": 67
+      },
+      "user_removed_per_file": {
+        "presentation/2026-06-17/async-tonic-encode/plan.md": 252,
+        "presentation/2026-06-17/async-tonic-encode/support.typ": 45
+      }
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 4,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 33718,
+      "agent_lines_removed": 395,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 5,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}

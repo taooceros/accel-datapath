@@ -1,0 +1,25 @@
+revise the presentation based on the touying author skill; you should focus on the content more, instead of the presentation, try to use as much as touying ability to better layout the presentation and you focus on the content you wants to deliver
+
+---
+
+<system-notice>
+Continue.
+
+- You MUST resume the most recent intent and carry the unfinished work to completion.
+- Interrupted mid-step? Pick it back up from where it stopped.
+- You NEVER pause to summarize progress, re-confirm the plan, or ask whether to proceed — just continue.
+</system-notice>
+
+---
+
+<system-notice>
+Continue.
+
+- You MUST resume the most recent intent and carry the unfinished work to completion.
+- Interrupted mid-step? Pick it back up from where it stopped.
+- You NEVER pause to summarize progress, re-confirm the plan, or ask whether to proceed — just continue.
+</system-notice>
+
+---
+
+try spawn a subagent to read the slide; do it really understand what's happening
