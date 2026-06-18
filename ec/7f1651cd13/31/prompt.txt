@@ -1,0 +1,16 @@
+Complete the assignment below, thoroughly:
+
+# Target
+`presentation/2026-06-15/grpc-tonic-stack/deck.typ`, especially shared helper definitions, legend helpers, and the slide currently overflowing around “Send detail A: tonic encode decision points”. Non-goal: do not change hardware/research semantics beyond wording needed to fit.
+
+# Change
+1. Fix the blank/overflow page: the rendered current deck has a page with only the header/legend before the Send detail A content. Adjust vertical sizing, scale, gutters, slide structure, or content density so every slide renders as one intended page.
+2. Make repeated legends smaller on detail slides. Keep the semantics but reduce visual weight to a compact strip such as `orange = IAX compression`, `blue = DSA copy/CRC`, `gray = CPU control`. Keep the longer explanation only where needed.
+3. Shorten dense side text where necessary to prevent overflow, without deleting essential caveats.
+4. Preserve existing visual style: soft background, rounded panels, Touying/template setup.
+
+# Acceptance
+- The Send detail A slide no longer spills onto a separate blank-like page.
+- Repeated legends consume less attention and less height.
+- Layout changes are local and maintain consistent style.
+- Do not run project-wide commands, formatters, or final PDF export.

@@ -197,6 +197,12 @@
       "transcript": "/ec/7f1651cd13/30/full.jsonl",
       "content_hash": "/ec/7f1651cd13/30/content_hash.txt",
       "prompt": "/ec/7f1651cd13/30/prompt.txt"
+    },
+    {
+      "metadata": "/ec/7f1651cd13/31/metadata.json",
+      "transcript": "/ec/7f1651cd13/31/full.jsonl",
+      "content_hash": "/ec/7f1651cd13/31/content_hash.txt",
+      "prompt": "/ec/7f1651cd13/31/prompt.txt"
     }
   ],
   "token_usage": {
