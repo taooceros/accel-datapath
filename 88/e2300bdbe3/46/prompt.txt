@@ -1,0 +1,10 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Edit only `presentation/2026-06-17/async-tonic-encode/fragments/slide02.typ` and the Slide 2 section of `presentation/2026-06-17/async-tonic-encode/plan.md`.
+
+# Change
+Revise slide 2 so the sync baseline is unmistakable: a stack-local borrowed `&mut EncodeBuf` call completes body bytes before returning; only then can Tonic frame/compress/size-check/yield. Make the completed-before-framing flow the dominant visual and make code secondary evidence. Preserve the deck style and speaker-message strip.
+
+# Acceptance
+Files edited for slide 2 only. No commands, compiles, tests, or formatters. Report exactly what changed and any assumptions.
