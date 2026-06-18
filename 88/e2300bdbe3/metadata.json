@@ -3,9 +3,11 @@
   "checkpoint_id": "88e2300bdbe3",
   "strategy": "manual-commit",
   "branch": "tonic-dsa",
-  "checkpoints_count": 28,
+  "checkpoints_count": 39,
   "files_touched": [
     "presentation/2026-06-15/grpc-tonic-stack/deck.pdf",
+    "presentation/2026-06-15/grpc-tonic-stack/deck.typ",
+    "presentation/2026-06-15/grpc-tonic-stack/plan.md",
     "presentation/2026-06-17/async-tonic-encode/deck.pdf",
     "presentation/2026-06-17/async-tonic-encode/deck.typ",
     "presentation/2026-06-17/async-tonic-encode/fragments/slide01.typ",
@@ -22,7 +24,8 @@
     "presentation/2026-06-17/async-tonic-encode/fragments/slide12.typ",
     "presentation/2026-06-17/async-tonic-encode/plan.md",
     "presentation/2026-06-17/async-tonic-encode/support.typ",
-    "presentation/AGENTS.md"
+    "presentation/AGENTS.md",
+    "presentation/slide-plan-guideline.md"
   ],
   "sessions": [
     {
@@ -90,13 +93,19 @@
       "transcript": "/88/e2300bdbe3/10/full.jsonl",
       "content_hash": "/88/e2300bdbe3/10/content_hash.txt",
       "prompt": "/88/e2300bdbe3/10/prompt.txt"
+    },
+    {
+      "metadata": "/88/e2300bdbe3/11/metadata.json",
+      "transcript": "/88/e2300bdbe3/11/full.jsonl",
+      "content_hash": "/88/e2300bdbe3/11/content_hash.txt",
+      "prompt": "/88/e2300bdbe3/11/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 2590481,
+    "input_tokens": 2916511,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 40767232,
-    "output_tokens": 186278,
-    "api_call_count": 597
+    "cache_read_tokens": 46176256,
+    "output_tokens": 221260,
+    "api_call_count": 680
   }
 }

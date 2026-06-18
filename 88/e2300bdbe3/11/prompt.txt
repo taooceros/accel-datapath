@@ -1,0 +1,29 @@
+interactively discuss with me about the design of the slide of async tonic encode page by page
+
+---
+
+I still want the slide to focus on making the encode async (and the ownership is just a challenge)
+
+---
+
+yes
+
+---
+
+we will keep this session modifying the plan file only
+
+---
+
+the plan file should be more detailed; instead of a general goal, we need to have every single word that we are going to write in the presentation in the plan
+
+---
+
+no that's not good; the plan should just state the text; it should include a description about what we are going to put the text; now you teach me how a good slide plan should be written
+
+---
+
+now modify AGENTS.md to refer to a plan file guideline when drafting plan
+
+---
+
+now spawn subagents to review the slide deck and repurpose the plan file
