@@ -1,0 +1,11 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Files: `presentation/2026-06-15/grpc-tonic-stack/deck.typ`, `presentation/2026-06-15/grpc-tonic-stack/plan.md`, preview images `presentation/2026-06-15/grpc-tonic-stack/assets/previews/preview-slide-4.png`, `presentation/2026-06-15/grpc-tonic-stack/assets/previews/preview-slide-5.png`, `presentation/2026-06-15/grpc-tonic-stack/assets/previews/preview-slide-6.png`.
+Deck scope: slides 4-6 and helpers introduced for them, around `deck.typ` lines 624-908. Do not edit slides 1-3 or 7-10.
+
+# Change
+Remove excessive card/block styling from the overview/interpretation slides. Keep Chronos diagrams readable, but reduce heavy framed panels and nested side cards; use open diagram areas, labels, slim accent bars, and lightweight notes. For slide 6, reduce the card-heavy opportunity row/table wrapper without losing scanability; the matrix can stay structured but should not feel like many stacked boxes. Preserve numbered callout mapping and all technical claims.
+
+# Acceptance
+Slides 4-6 look less boxed and more like clean technical slides. No compile/test/formatter commands. Report changed ranges and any uncertainty.
