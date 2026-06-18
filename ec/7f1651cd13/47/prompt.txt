@@ -1,0 +1,8 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Write `presentation/2026-06-17/async-tonic-encode/fragments/slide04.typ` with function `slide_04` only.
+# Change
+Implement Slide 4 titled `Middle Design: Poll-Based Codec Encode`. Teaching job: make the intermediate design explicit. Include historical marker badge `0f4d329 Use poll-based codec API`. Explain: project tried a poll-based codec boundary; suspension became explicit; the driver could ask whether encoded bytes are ready; but state placement and how much Tonic should know about internals remained pressure points. Visual: poll loop with two rows: `poll_encode(cx) -> Pending` and `poll_encode(cx) -> Ready(buffer)`.
+# Acceptance
+The slide makes clear poll encode existed first at the Tonic codec boundary and ends with `speaker[Poll encode existed first at the Tonic codec boundary. That design was real, not imaginary.]`. No commands.
