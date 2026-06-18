@@ -1,0 +1,10 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Edit only `presentation/2026-06-17/async-tonic-encode/fragments/slide03.typ` and the Slide 3 section of `presentation/2026-06-17/async-tonic-encode/plan.md`.
+
+# Change
+Revise slide 3 so the failure is unmistakable: `Pending` tries to carry `&mut self` / `&mut EncodeBuf` from the caller stack into a future, but Tonic needs a storeable `T::Encode: Send + 'static` future per in-flight message. Make the red failure diagram the dominant visual; code should be secondary setup. Preserve deck style and speaker-message strip.
+
+# Acceptance
+Files edited for slide 3 only. No commands, compiles, tests, or formatters. Report exactly what changed and any assumptions.
