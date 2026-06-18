@@ -1,0 +1,8 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Write `presentation/2026-06-17/async-tonic-encode/fragments/slide07.typ` with function `slide_07` only.
+# Change
+Implement Slide 7 titled `Tonic Still Finalizes the Frame`. Teaching job: prevent misunderstanding that the encoder owns the whole wire format. Pipeline visual: `reserve header → async encode body → compression/size check → write header → yield frame`. Explain driver responsibilities: reserve 5-byte gRPC header before encode; poll in-flight encode; regain returned `EncodeBuffer`; apply compression if needed; enforce max message size; write final gRPC length header; yield bytes downstream.
+# Acceptance
+The slide clearly separates message-body encode from Tonic protocol framing and ends with `speaker[Async encode produces the message body; Tonic still owns protocol framing.]`. No commands.
