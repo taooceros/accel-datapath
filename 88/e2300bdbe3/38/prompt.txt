@@ -1,0 +1,8 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Review whether the current 10-slide deck is self-contained and teaches: sync borrowed encode -> owned async future -> Tonic driver lifecycle -> owned future internals -> Prost byte checkpoint -> DSA offload consequence -> reusable rule. Non-goal: aesthetic-only critique unless it blocks understanding.
+# Change
+Read the plan and current preview images. As soon as you identify a must-fix content issue, send it to Main via IRC in plain prose with the slide number and concrete fix. Continue reviewing after each message. Do not edit files. Do not run commands, build, test, lint, or format.
+# Acceptance
+Final report: concise must-fix/should-fix list and whether the slides remain self-contained without speaker notes.
