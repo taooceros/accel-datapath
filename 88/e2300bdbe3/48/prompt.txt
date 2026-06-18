@@ -1,0 +1,12 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Write `presentation/2026-06-17/async-tonic-encode/fragments/slide02.typ` with function `slide_02` only.
+# Change
+Implement Slide 2 titled `Sync Encode: Borrow, Write, Return`. Teaching job: ground why the original design worked. Include Zebraw conceptual code:
+```rust
+fn encode(&mut self, item, dst: &mut EncodeBuf) -> Result<()>
+```
+Explain: encoder borrows output buffer; CPU writes payload immediately; no state survives the call; gRPC framing can happen around a completed buffer. Visual flow: `message → encoder → borrowed EncodeBuf → completed bytes`.
+# Acceptance
+The fragment follows the contract imports/function, uses `codeblock` for the Rust shape, includes the flow visual, and ends with `speaker[The sync design is elegant because all lifetimes are stack-local.]`. No commands.
