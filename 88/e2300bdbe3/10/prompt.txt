@@ -1,0 +1,1 @@
+Locate the slide/file that contains or refers to “async-tonic-encode” in the repository, then revise that slide to improve its presentation across wording, layout, and visuals. Preserve the slide’s intended technical meaning while making it clearer, better organized, and more visually polished.
