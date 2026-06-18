@@ -1,0 +1,1 @@
+install the touying author skill from https://github.com/apcamargo/typst-skills.git
