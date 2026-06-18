@@ -1,0 +1,8 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Review whether the 10-page revised deck teaches the intended content: sync borrowed encode -> owned async future -> Tonic driver lifecycle -> Prost byte checkpoint -> DSA offload consequence -> reusable rule. Non-goal: do not propose aesthetic-only changes.
+# Change
+Read plan.md and the revised 10-page contact sheet. Inspect individual preview images only if needed. Compare what a reader learns from the slides against the plan. Report exact slide numbers where the content is missing, misleading, or out of order. Do not edit files. Do not run commands, build, test, or format.
+# Acceptance
+Return a concise must-fix/should-fix list plus one sentence on whether the deck now focuses on content rather than decoration.
