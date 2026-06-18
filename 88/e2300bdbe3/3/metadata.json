@@ -1,0 +1,68 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "88e2300bdbe3",
+  "session_id": "019ed6c8-c46b-7000-a5b1-fac7f4e16c4c",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-18T18:15:38.659482356Z",
+  "branch": "tonic-dsa",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "presentation/AGENTS.md"
+  ],
+  "agent": "Pi",
+  "model": "",
+  "turn_id": "86cac291eb0e",
+  "token_usage": {
+    "input_tokens": 112241,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 1319680,
+    "output_tokens": 4903,
+    "api_call_count": 26
+  },
+  "session_metrics": {
+    "turn_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-18T18:15:38.648845548Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 8512,
+    "human_modified": 25,
+    "human_removed": 0,
+    "total_committed": 8517,
+    "total_lines_changed": 8538,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 16716,
+      "user_lines_removed": 25,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "deck.pdf": 8030,
+        "presentation/2026-06-15/grpc-tonic-stack/deck.pdf": 7527,
+        "presentation/2026-06-15/grpc-tonic-stack/deck.typ": 1011,
+        "presentation/2026-06-15/grpc-tonic-stack/plan.md": 137,
+        "presentation/AGENTS.md": 11
+      },
+      "user_removed_per_file": {
+        "presentation/AGENTS.md": 25
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 16716,
+      "agent_lines_removed": 183,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    }
+  ]
+}
