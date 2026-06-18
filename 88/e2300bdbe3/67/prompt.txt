@@ -1,0 +1,10 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Edit only `presentation/2026-06-17/async-tonic-encode/fragments/slide09.typ` and the Slide 9 section of `presentation/2026-06-17/async-tonic-encode/plan.md`.
+
+# Change
+Revise slide 9 so the dominant visual is one concrete Prost checkpoint inside `PollEncodeState`: length-delimited field N has `tag already emitted`, `length already emitted`, `payload copy Pending at offset N`, and `next poll resumes payload only`. Attach wrong-checkpoint errors under the corresponding sequence positions. Make it feel like a zoom-in from slide 8's Prost state box.
+
+# Acceptance
+Files edited for slide 9 only. No commands, compiles, tests, or formatters. Report exactly what changed and assumptions.
