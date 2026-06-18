@@ -383,6 +383,12 @@
       "transcript": "/ec/7f1651cd13/61/full.jsonl",
       "content_hash": "/ec/7f1651cd13/61/content_hash.txt",
       "prompt": "/ec/7f1651cd13/61/prompt.txt"
+    },
+    {
+      "metadata": "/ec/7f1651cd13/62/metadata.json",
+      "transcript": "/ec/7f1651cd13/62/full.jsonl",
+      "content_hash": "/ec/7f1651cd13/62/content_hash.txt",
+      "prompt": "/ec/7f1651cd13/62/prompt.txt"
     }
   ],
   "token_usage": {
