@@ -1,0 +1,46 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "0b54ebbf9911",
+  "session_id": "019edbff-db34-7000-869b-d38ec3abfa89",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-18T19:15:16.870610183Z",
+  "branch": "tonic-dsa",
+  "checkpoints_count": 1,
+  "files_touched": [],
+  "agent": "Pi",
+  "model": "",
+  "turn_id": "892d82819c3f",
+  "checkpoint_transcript_start": 106,
+  "transcript_lines_at_start": 106,
+  "token_usage": {
+    "input_tokens": 532266,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 1781737,
+    "output_tokens": 18015,
+    "api_call_count": 20
+  },
+  "session_metrics": {
+    "turn_count": 4
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 158,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    }
+  ]
+}
