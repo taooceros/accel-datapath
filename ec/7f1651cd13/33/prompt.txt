@@ -1,0 +1,8 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Review deck story flow for `presentation/2026-06-17/async-tonic-encode/plan.md` using `presentation/2026-06-17/async-tonic-encode/assets/previews/contact-sheet.png`, `presentation/2026-06-17/async-tonic-encode/plan.md`, and `presentation/slide-plan-guideline.md`.
+# Change
+Do not edit. Identify how the plan should be repurposed slide-by-slide into a blueprint: teaching purpose, audience takeaway, transition logic, and any story-order fixes. Pay special attention to keeping Slide 1 focused on making encode async rather than ownership as the headline.
+# Acceptance
+Return concise slide-by-slide recommendations and any cross-deck narrative changes. No commands, no verification gates.
