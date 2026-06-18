@@ -1,0 +1,8 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Review `presentation/2026-06-15/grpc-tonic-stack/assets/previews/contact-sheet.png`, `presentation/2026-06-15/grpc-tonic-stack/deck.typ`, and the local `plan.md` only. Do not modify files.
+# Change
+Produce a ranked list of concrete revisions that improve readability and visual hierarchy while preserving the plan: especially slide 1 whitespace, detail slide density, legends, side explanations, and any overflow/too-small text.
+# Acceptance
+Report 5-10 actionable edits with slide numbers and source anchors. Skip all commands, formatters, project-wide builds, and tests.
