@@ -1,0 +1,8 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Write `presentation/2026-06-17/async-tonic-encode/fragments/slide09.typ` with function `slide_09` only.
+# Change
+Implement Slide 9 titled `Protobuf Resume State Must Be Exact`. Teaching job: teach why protobuf async encoding is hard. Visual: protobuf field phases `tag → length → payload`, with `Pending` allowed only after state records completed phases. Include resume-state list: which field; repeated/map index; tag already written; length prefix already written; payload copy pending; nested message/oneof state active. Include failure modes: duplicate tag; duplicate length prefix; skipped field; payload written at wrong offset; invalid wire format.
+# Acceptance
+The slide frames async protobuf encoding as an exact wire-format state machine and ends with `speaker[Async protobuf encoding is a resumable compiler for wire-format bytes.]`. No commands.
