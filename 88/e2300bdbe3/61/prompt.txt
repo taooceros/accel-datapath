@@ -1,0 +1,10 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Edit only `presentation/2026-06-17/async-tonic-encode/fragments/slide07.typ` and the Slide 7 section of `presentation/2026-06-17/async-tonic-encode/plan.md`.
+
+# Change
+Revise slide 7 so the dominant teaching object is the boundary: encode future fills only message-body bytes; Tonic stream driver owns frame finalization. Keep one clear pipeline and one buffer shape. Avoid dense bullets. Group Tonic work as three stages: reserve header, poll/regain buffer, finalize size/compression/header/yield.
+
+# Acceptance
+Files edited for slide 7 only. No commands, compiles, tests, or formatters. Report exactly what changed and assumptions.
