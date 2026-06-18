@@ -1,0 +1,8 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Review the single preview image at local://presentation/2026-06-18/async-tonic-encode-revision-2/assets/previews/preview-slide-1.png.
+# Change
+Do not change files. Assess visual hierarchy, readability, and whether the story is understandable to a systems advisor without Rust/Tonic background.
+# Acceptance
+Return 3-5 concrete observations and any must-fix issue. No commands, no formatting, no project-wide checks.
