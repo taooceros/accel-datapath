@@ -1,0 +1,14 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Read the current deck in `presentation/2026-06-17/async-tonic-encode/`, especially `plan.md`, `deck.pdf`, and preview images `assets/previews/current3-slide-*.png`. Treat yourself as a first-time audience member.
+
+# Change
+Do not change files. Report:
+1. What you learned from the deck in 6-9 bullets, phrased as your actual learned story.
+2. Where that learned story diverges from the original goal in the shared contract.
+3. The 5 highest-impact concrete slide edits to make the audience learn the intended story better.
+4. Any slide whose visual hierarchy, wording, or density blocks comprehension.
+
+# Acceptance
+Return a concise, actionable report tied to slide numbers. Do not run typst compile, tests, formatters, or project-wide commands.
