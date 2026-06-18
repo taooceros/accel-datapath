@@ -1,0 +1,10 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Edit only `presentation/2026-06-17/async-tonic-encode/fragments/slide06.typ` and the Slide 6 section of `presentation/2026-06-17/async-tonic-encode/plan.md`.
+
+# Change
+Revise slide 6 into the canonical per-message lifecycle. Make one large sequence dominate: `item + EncodeBuffer` → `encode(item, dst)` moves buffer → `in_flight = Some(T::Encode)` → `poll = Pending` → `poll = Ready(Ok(EncodeBuffer))` → `Tonic finalizes frame`. Keep `type Encode: Future<Output = Result<EncodeBuffer, Error>> + Send + 'static` and the signature as small evidence annotations, not equal code cards. Make `one future per in-flight message` explicit.
+
+# Acceptance
+Files edited for slide 6 only. No commands, compiles, tests, or formatters. Report exactly what changed and assumptions.
