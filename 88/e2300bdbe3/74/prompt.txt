@@ -1,0 +1,13 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Write `presentation/2026-06-17/async-tonic-encode/fragments/slide12.typ` with function `slide_12` only.
+# Change
+Implement Slide 12 titled `Reusable Design Rule`. Teaching job: leave the reusable rule. Main statement:
+```text
+If an operation can suspend, anything needed after suspension
+must be owned by the suspended operation.
+```
+Apply it: Tonic owns stream/framing state; Encode future owns message + buffer + hardware state; Prost poll state owns exact wire-format resume position; CPU encode remains a ready future. Visual: three ownership boxes `Tonic framing`, `Encode future`, `Prost field state`. Final emphasized sentence: `Async encode is owned resumable state plus exact protocol resume points.`
+# Acceptance
+The slide clearly closes the arc with the ownership rule and ends with `speaker[The final architecture works because each layer owns the state at its own granularity.]`. No commands.
