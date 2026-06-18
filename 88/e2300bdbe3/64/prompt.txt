@@ -1,0 +1,10 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Edit only `presentation/2026-06-17/async-tonic-encode/fragments/slide08.typ` and the Slide 8 section of `presentation/2026-06-17/async-tonic-encode/plan.md`.
+
+# Change
+Revise slide 8 so it clearly distinguishes coarse and fine polling: Tonic polls one coarse `T::Encode` future; Prost records exact field/tag/length/payload continuation inside that future. Make a three-layer map with clear arrows and a prominent sentence: `Tonic polls the future; Prost records the byte-level continuation inside it.` Avoid saying “poll moved down” in a way that implies Tonic stops polling.
+
+# Acceptance
+Files edited for slide 8 only. No commands, compiles, tests, or formatters. Report exactly what changed and assumptions.
