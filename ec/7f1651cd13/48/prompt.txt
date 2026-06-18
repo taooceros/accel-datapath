@@ -1,0 +1,10 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Edit only `presentation/2026-06-17/async-tonic-encode/fragments/slide05.typ` and the Slide 5 section of `presentation/2026-06-17/async-tonic-encode/plan.md`.
+
+# Change
+Revise slide 5 so the dominant object is a large cutaway labeled `T::Encode` / `lives across Pending` / `the object Tonic stores`. Put message, `EncodeBuffer`, `Prost PollEncodeState`, DSA/IAX copy state, descriptor/completion, and drop/cancel state inside it. Shrink before/split-state to a warning or small contrast. Make clear this is the answer to slide 4’s ownership question.
+
+# Acceptance
+Files edited for slide 5 only. No commands, compiles, tests, or formatters. Report exactly what changed and assumptions.
