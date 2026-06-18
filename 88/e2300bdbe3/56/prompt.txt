@@ -1,0 +1,10 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Read only the frozen slide image `presentation/2026-06-17/async-tonic-encode/assets/previews/slidepass4-5.png`. Treat it as the slide you see, without source files.
+
+# Change
+Do not edit files. Report: 1) what you learned from slide 5 in 3-5 bullets; 2) divergences from slide 5 goal; 3) 3 highest-impact concrete edits; 4) visual hierarchy/wording blockers.
+
+# Acceptance
+Concise actionable report tied to slide 5. Do not run commands.
