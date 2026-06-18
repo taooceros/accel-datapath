@@ -1,0 +1,96 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "88e2300bdbe3",
+  "session_id": "019ed79e-841c-7000-ba51-892649cdbb6d",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-18T18:15:43.408084292Z",
+  "branch": "tonic-dsa",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "presentation/AGENTS.md"
+  ],
+  "agent": "Pi",
+  "model": "",
+  "turn_id": "6e5fd5522cd9",
+  "token_usage": {
+    "input_tokens": 258062,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 3059968,
+    "output_tokens": 15640,
+    "api_call_count": 61
+  },
+  "session_metrics": {
+    "turn_count": 3
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-18T18:15:43.397066294Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 6825,
+    "human_modified": 25,
+    "human_removed": 0,
+    "total_committed": 6830,
+    "total_lines_changed": 6851,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 36758,
+      "user_lines_removed": 25,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "deck.pdf": 11117,
+        "presentation/2026-06-15/grpc-tonic-stack/deck.pdf": 11064,
+        "presentation/2026-06-15/grpc-tonic-stack/deck.typ": 1409,
+        "presentation/2026-06-15/grpc-tonic-stack/plan.md": 157,
+        "presentation/2026-06-17/async-tonic-encode/deck.pdf": 11731,
+        "presentation/2026-06-17/async-tonic-encode/deck.typ": 37,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide01.typ": 64,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide02.typ": 60,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide03.typ": 106,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide04.typ": 75,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide05.typ": 83,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide06.typ": 49,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide07.typ": 108,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide08.typ": 78,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide09.typ": 104,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide10.typ": 54,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide11.typ": 88,
+        "presentation/2026-06-17/async-tonic-encode/fragments/slide12.typ": 86,
+        "presentation/2026-06-17/async-tonic-encode/plan.md": 152,
+        "presentation/2026-06-17/async-tonic-encode/support.typ": 125,
+        "presentation/AGENTS.md": 11
+      },
+      "user_removed_per_file": {
+        "presentation/AGENTS.md": 25
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 36758,
+      "agent_lines_removed": 183,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 36758,
+      "agent_lines_removed": 183,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    }
+  ]
+}

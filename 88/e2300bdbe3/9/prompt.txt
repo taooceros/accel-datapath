@@ -1,0 +1,48 @@
+review the asycn tonic encode slide and explain how to make it looks better
+
+---
+
+generate a goal prompt to make it better; it should include instruction about how to make the slide aesthetically better
+
+---
+
+Use this as the goal prompt:
+
+```text
+Improve the async tonic encode slide in `presentation/2026-06-15/grpc-tonic-stack/deck.typ`, slide 8: “Send detail B: wait for offload without blocking”.
+
+Goal:
+Make the slide visually clearer, more aesthetic, and easier to explain in a talk while preserving the technical message: async encode/offload is a two-poll ownership pattern where the first poll submits work and returns `Poll::Pending`, owned state keeps buffers alive, completion wakes the task, and the second poll emits DATA or errors.
+
+Required changes:
+1. Update the local `plan.md` first so every visual/content change is justified.
+2. Improve the slide’s visual hierarchy:
+   - Make the top state strip the main story: “First poll → In flight/Pending → Second poll”.
+   - Rename or adjust the slide title if helpful, e.g. “Async encode: two polls, one owned operation”.
+   - Increase whitespace and reduce visual clutter.
+3. Improve color discipline:
+   - Reserve orange only for IAX/compression candidate work.
+   - Do not color the `Pending` state orange; use neutral gray/purple/blue-gray.
+   - Keep DSA blue only for copy/CRC caveats.
+4. Improve the sequence diagram aesthetics:
+   - Enlarge the diagram text/markers enough to be readable.
+   - Visually emphasize the async gap between “return Pending” and “wake body task”.
+   - Consider adding a subtle shaded band labeled “executor free; buffers owned by pending state”.
+   - Consider visually grouping `OwnedPendingOp` and `completion record` as one owned async state region.
+5. Reduce repetition:
+   - Replace the right-side 7-step list with a smaller explanatory box focused on the key invariants:
+     - own src/dst buffers across `Pending`
+     - completion stores status/length and wakes the task
+     - second poll observes success/error and emits DATA
+   - Keep the DSA copy/CRC note as a small caveat, not a main participant.
+6. Keep the slide technically precise:
+   - Do not imply hardware is a Tokio/h2 participant.
+   - Do not imply blocking.
+   - Make clear that DSA copy/CRC uses the same async shape, not an additional numbered flow.
+
+Aesthetic direction:
+Make the slide feel less like a dense protocol trace and more like a polished teaching diagram. Prefer fewer words, stronger grouping, consistent alignment, restrained strokes, readable labels, and a clean left-to-right narrative. The audience should understand the async ownership transition before reading the fine labels.
+
+Verification:
+Compile the deck and regenerate the slide preview PNG for visual inspection. Do not stop at successful Typst compilation; inspect the rendered slide and iterate until the layout is visibly cleaner and readable.
+```
