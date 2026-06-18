@@ -1,0 +1,8 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Review the technical claims in the deck fragments.
+# Change
+Read the assembled deck files and compare key claims against the grounding already in the plan: Tonic `Encoder::Encode` owned future, `in_flight: Option<T::Encode>`, Tonic framing after encode, Prost `poll_encode_raw`/`AsyncEncodeTarget`/`PollEncodeState`, and DSA payload lifetime constraints. Do not edit.
+# Acceptance
+Report inaccurate or overclaimed technical statements, if any, with slide numbers/files. No commands.
