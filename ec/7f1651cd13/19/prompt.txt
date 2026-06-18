@@ -1,0 +1,8 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Read the revised 10-slide async Tonic encode deck like a technical audience member who knows Rust async/Tonic/Prost basics but has not seen this change. Determine whether you genuinely understand what is happening from the slides alone.
+# Change
+First read the slide previews/PDF without reading the plan. Write down the story you infer: what changed, why borrowed async encode fails, what Tonic stores, what Prost tracks, and why DSA/IAX makes ownership physical. Then optionally read plan.md only to identify gaps between intended and inferred story. Do not edit files. Do not run commands, builds, tests, lint, formatters, or git commands.
+# Acceptance
+Return a concise report with: (1) your inferred explanation in your own words; (2) any slide numbers where understanding broke or relied on prior knowledge; (3) whether the deck is self-contained; (4) exact fixes if not.
