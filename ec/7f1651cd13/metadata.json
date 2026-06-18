@@ -203,6 +203,12 @@
       "transcript": "/ec/7f1651cd13/31/full.jsonl",
       "content_hash": "/ec/7f1651cd13/31/content_hash.txt",
       "prompt": "/ec/7f1651cd13/31/prompt.txt"
+    },
+    {
+      "metadata": "/ec/7f1651cd13/32/metadata.json",
+      "transcript": "/ec/7f1651cd13/32/full.jsonl",
+      "content_hash": "/ec/7f1651cd13/32/content_hash.txt",
+      "prompt": "/ec/7f1651cd13/32/prompt.txt"
     }
   ],
   "token_usage": {
