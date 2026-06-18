@@ -184,7 +184,50 @@ Keep this as a mechanism slide, not a code dump. The left multiplexing flow is t
 **Transition**
 Next define the Rust words `borrow` and `own` before using them to justify the async encode design.
 
-### Slide 6 — Why Async Forces Ownership: The 'static Constraint
+### Slide 6 — What is a Rust Future?
+
+**Teaching purpose**
+Briefly introduce the standard Rust `Future` trait and its poll-based execution model to establish the baseline of how async works in Rust before introducing compiler and lifetime constraints.
+
+**Audience takeaway**
+A `Future` in Rust is a lazy state machine that does nothing until polled by an executor. It either returns `Poll::Ready(val)` on completion or `Poll::Pending` to yield control, waking up later when notifier events fire.
+
+**Layout**
+Two-column layout. Left column shows the standard Rust `Future` trait signature. Right column lists the execution and state machine mechanics. Bottom alert summarizes the state machine nature of futures.
+
+**Exact visible text**
+- Title: `What is a Rust Future?`
+- Left title: `Core Trait Definition`
+- Left code:
+  ```rust
+  pub trait Future {
+      type Output;
+      
+      // Polled repeatedly by the executor
+      fn poll(
+          self: Pin<&mut Self>,
+          cx: &mut Context<'_>,
+      ) -> Poll<Self::Output>;
+  }
+  ```
+- Right title: `State Machine Mechanics`
+- Right text:
+  - *Poll-Based*: Futures are lazy; they make no progress unless the executor polls them.
+  - *Poll::Ready(val)*: Computation is complete; returns the final output.
+  - *Poll::Pending*: Computation is blocked (e.g. waiting for hardware DMA). Control yields.
+  - *Waker Notification*: When the event finishes, the executor is notified to poll again.
+- Bottom alert: `A Rust Future is a state machine: it starts, advances on poll, and yields control when waiting for hardware.`
+
+**Visual treatment**
+Gray and soft blue visual styling representing core Rust standard library constructs. Keep spacing balanced and ensure text sizes are matching.
+
+**Speaker message**
+`In Rust, async is poll-based. A Future is simply a state machine. When polled, it does work until it completes or is blocked. If blocked, it returns Pending and yields the thread, getting woken up when hardware or I/O is ready.`
+
+**Transition**
+Next, see why this model requires ownership when scheduling across thread boundaries.
+
+### Slide 7 — Why Async Forces Ownership: The Multiplexing Reality
 
 **Teaching purpose**
 Explain the precise compiler logic that makes ownership mandatory: Tonic's `'static` bound on the future forbids any borrows, forcing the encoder to take ownership of both the buffer and the message.
@@ -196,7 +239,7 @@ Rust's async runtimes need to move futures across thread boundaries. To support 
 Use a two-column logic comparison. Left column shows the trait boundary constraint: Tonic's `type Encode: Future + 'static` requirement and the scheduling reason. Right column shows the code signature conflict: trying to return a future that borrows a buffer (rejected by E0759) versus passing the buffer by value (accepted). Under the columns, list the exact 3-step logic chain and the bottom thesis.
 
 **Exact visible text**
-- Title: `6. Why Async Forces Ownership: The 'static Constraint`
+- Title: `Why Async Forces Ownership: The Multiplexing Reality`
 - Left title: `Tonic constraint: Thread scheduling`
 - Left trait code:
   ```rust
@@ -229,7 +272,7 @@ Use red highlighting for the rejected borrow signature and green for the accepte
 **Transition**
 Next connect the owned future back to the concrete `DsaAsyncProstEncode` fields and the exact resume point inside protobuf encoding.
 
-### Slide 7 — Storing the Resumable State
+### Slide 8 — Storing the Resumable State
 
 **Teaching purpose**
 Detail the concrete struct layout and drop safety of `DsaAsyncProstEncode<T>`.
@@ -264,7 +307,7 @@ Structure-focused blue accents. The drop-order note should be visually separated
 **Transition**
 Next show the synthesis of driver loop polling and Prost resumable checkpoints.
 
-### Slide 8 — Synthesis: How it Works
+### Slide 9 — Synthesis: How it Works
 
 **Teaching purpose**
 Synthesize the interaction between the Tonic driver poll loop and the Prost resumable phase index.
@@ -299,13 +342,13 @@ Contrast driver execution steps on the left with exact compiler resume checkpoin
 **Transition**
 Next, drill down into how the Prost codec split-phase serialization separates structure and payload steps.
 
-### Slide 9 — How Prost Generates Code
+### Slide 10 — How Prost Generates Code
 
 **Teaching purpose**
-Explain the build-time code generation model of Prost: translating `.proto` schemas into standard Rust structs.
+Establish the baseline code generation process for standard Protobuf schemas in Prost.
 
 **Audience takeaway**
-Prost parses protobuf schemas and compiles them into standard Rust structures decorated with serialization attributes, serving as the basis for code generation.
+Prost parses protobuf schemas and compiles them into standard Rust structs decorated with serialization attributes, serving as the basis for code generation.
 
 **Layout**
 Two columns. Left column shows a simple `.proto` message schema. Right column shows the generated Rust struct compiled by `prost-build`. Bottom alert reinforces the generation flow.
@@ -316,7 +359,6 @@ Two columns. Left column shows a simple `.proto` message schema. Right column sh
 - Left code:
   ```protobuf
   syntax = "proto3";
-
   message UserProfile {
       string name = 1;
       bytes avatar = 2;
@@ -336,7 +378,7 @@ Two columns. Left column shows a simple `.proto` message schema. Right column sh
 - Bottom alert: `Prost compiles schemas into standard Rust structs. To change serialization behavior, we customize the code generated for these structs.`
 
 **Visual treatment**
-Clean two-column layout. Gray accents for the schema and generated Rust code. Use blue accents for the `Message` derive and tags to highlight how the compiler maps fields.
+Gray and standard protobuf/compiler theme highlighting layout metadata mapping.
 
 **Speaker message**
 `Prost works by compiling .proto files into clean Rust structs with metadata attributes, letting macro derives or custom codegen handle the serialization trait.`
@@ -344,7 +386,7 @@ Clean two-column layout. Gray accents for the schema and generated Rust code. Us
 **Transition**
 Next, see what the `#[derive(prost::Message)]` macro actually expands into.
 
-### Slide 10 — Sync Serialization: Sequential Path
+### Slide 11 — Sync Serialization: Sequential Path
 
 **Teaching purpose**
 Show the standard synchronous serialization path (`encode_raw`) generated by `#[derive(prost::Message)]` to establish the baseline execution model.
@@ -385,7 +427,7 @@ Gray theme, indicating ordinary synchronous CPU execution. Highlight the direct 
 **Transition**
 Next, let's see how we transform this code to allow asynchronous execution and yield points.
 
-### Slide 11 — Async Serialization: Resumable Path
+### Slide 12 — Async Serialization: Resumable Path
 
 **Teaching purpose**
 Explain the structure of the generated asynchronous serialization path (`poll_encode_raw`) and how it differs from the synchronous version.
@@ -430,7 +472,7 @@ Violet and orange accents to denote state tracking and async execution. Highligh
 **Transition**
 Next, see how this execution splits work between CPU and hardware offload inside the encoders.
 
-### Slide 12 — Split-Phase Serialization: CPU vs Async
+### Slide 13 — Split-Phase Serialization: CPU vs Async
 
 **Teaching purpose**
 Teach how Protobuf encoding is split into CPU-written structure metadata and asynchronously offloaded payload copies.
@@ -458,7 +500,7 @@ Gray accents for CPU metadata, bright orange/violet accents for the offloaded pa
 **Transition**
 Next show how the state cursor keeps track of this split-phase progress.
 
-### Slide 13 — State Tracking & Hierarchical Nesting
+### Slide 14 — State Tracking & Hierarchical Nesting
 
 **Teaching purpose**
 Detail the structure and recursion stack mechanics of `PollEncodeState<S>`.
@@ -495,7 +537,7 @@ Violet accents to represent resumable state metadata.
 **Transition**
 Next, examine the generated code pattern of the compiler's resumable state machine.
 
-### Slide 14 — The Generated Resumable State Machine
+### Slide 15 — The Generated Resumable State Machine
 
 **Teaching purpose**
 Examine a concrete generated code example inside `poll_encode_raw`.
@@ -539,7 +581,7 @@ Green highlight for successful/complete paths, violet for phase states, code-foc
 **Transition**
 Finally, wrap up the presentation with the core systems design takeaway.
 
-### Slide 15 — Reusable Systems Rule
+### Slide 16 — Reusable Systems Rule
 
 **Teaching purpose**
 Provide a general systems engineering lesson: cooperative thread-multiplexing with accelerators requires owned resumable state.

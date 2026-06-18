@@ -179,6 +179,41 @@
 
 = Part III: Memory Safety and Ownership
 
+// Slide 6
+== What is a Rust Future?
+
+#v(0.6em)
+#side-by-side[
+  #section("Core Trait Definition", [
+    A `Future` represents an asynchronous computation that eventually completes.
+    ```rust
+    pub trait Future {
+        type Output;
+
+        // Polled repeatedly by the executor
+        fn poll(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+        ) -> Poll<Self::Output>;
+    }
+    ```
+  ])
+][
+  #section("State Machine Mechanics", [
+    - *Poll-Based*: Futures are lazy; they make no progress unless the executor polls them.
+    - *Poll::Ready(val)*: Computation is complete; returns the final output.
+    - *Poll::Pending*: Computation is blocked (e.g. waiting for hardware DMA). Control yields.
+    - *Waker Notification*: When the event finishes, the executor is notified to poll again.
+  ])
+]
+
+#v(1.2em)
+#alert-text(
+  [A Rust Future is a state machine: it starts, advances on poll, and yields control when waiting for hardware.],
+)
+
+
+// Slide 7
 == Why Async Forces Ownership: The Multiplexing Reality
 
 #v(0.8em)
@@ -216,7 +251,7 @@
 #alert-text([To park a request and multiplex the thread, the future must own its buffer and message.])
 
 
-// Slide 7
+// Slide 8
 == Storing the Resumable State
 
 #v(0.6em)
@@ -244,7 +279,7 @@
 #alert-text([The future must own all data compartments to safely survive suspension crossing `.await`.])
 
 
-// Slide 8
+// Slide 9
 == Synthesis: How it Works
 
 #v(0.6em)
@@ -276,7 +311,7 @@
 
 = Part IV: Turning Prost Async: Resumable Serialization
 
-// Slide 9
+// Slide 10
 == How Prost Generates Code
 
 #v(0.6em)
@@ -315,7 +350,7 @@
 )
 
 
-// Slide 10
+// Slide 11
 == Sync Serialization: Sequential Path
 
 #v(0.6em)
@@ -350,7 +385,7 @@
 )
 
 
-// Slide 11
+// Slide 12
 == Async Serialization: Resumable Path
 
 #show raw: set text(size: 9pt)
@@ -387,7 +422,7 @@
 )
 
 
-// Slide 12
+// Slide 13
 == Split-Phase Serialization: CPU vs Async
 
 #v(0.6em)
@@ -414,7 +449,7 @@
 )
 
 
-// Slide 13
+// Slide 14
 == State Tracking & Hierarchical Nesting
 
 #v(0.6em)
@@ -449,7 +484,7 @@
 #alert-text([Hierarchical messages enter a nested state: push parent frame, poll sub-message, and pop on completion.])
 
 
-// Slide 14
+// Slide 15
 == The Generated Resumable State Machine
 
 #v(0.6em)
@@ -486,7 +521,7 @@
 #alert-text([Phase transitions ensure that metadata prefixes are written exactly once, even across multiple yields.])
 
 
-// Slide 15
+// Slide 16
 == Reusable Systems Rule
 
 #v(0.1em)
