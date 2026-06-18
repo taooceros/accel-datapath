@@ -1,0 +1,10 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Edit only `presentation/2026-06-17/async-tonic-encode/fragments/slide04.typ` and the Slide 4 section of `presentation/2026-06-17/async-tonic-encode/plan.md`.
+
+# Change
+Revise slide 4 into a compact bridge titled around why `poll_encode` was not enough. Make the dominant contrast: readiness answered (`Pending/Ready`) vs ownership unresolved (who owns item/buffer/progress/cancel state?). End with the cutover: Tonic stores one owned `T::Encode` future. Avoid project-history wording like “middle design” as a major visual.
+
+# Acceptance
+Files edited for slide 4 only. No commands, compiles, tests, or formatters. Report exactly what changed and assumptions.
