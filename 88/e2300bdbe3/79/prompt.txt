@@ -1,0 +1,8 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Review technical claims in `presentation/2026-06-17/async-tonic-encode/plan.md` against the slide deck preview `presentation/2026-06-17/async-tonic-encode/assets/previews/contact-sheet.png`. Read `presentation/slide-plan-guideline.md`. You may read exact slide fragment files under `presentation/2026-06-17/async-tonic-encode/fragments/slide01.typ` through `slide12.typ` if needed for text.
+# Change
+Do not edit. Check whether wording accurately frames async encode, borrowed buffers, owned futures, Tonic framing, Prost poll state, DSA lifetime safety, and measurement claims. Suggest exact wording for plan.md where technical claims should be sharpened.
+# Acceptance
+Return concise technical corrections and exact safer wording. No commands, no verification gates.
