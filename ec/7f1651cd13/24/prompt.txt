@@ -1,0 +1,8 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Inspect `docs/` organization and top-level documentation files that affect how an Obsidian user would navigate the vault. Read `docs/AGENTS.md`, `docs/README.md`, `README.md`, `Home.md`, and representative files under `docs/plan`, `docs/report`, `docs/related_work`, and `remark` as needed.
+# Change
+No changes. Identify current organization, index/MOC files, naming conventions, and any friction for Obsidian navigation such as missing indexes, heavy long specs, or duplicated roots.
+# Acceptance
+Return concise findings with file paths and specific anchors/line references when available. Skip tests, formatters, and project-wide commands.
