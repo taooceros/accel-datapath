@@ -1,0 +1,8 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Write `presentation/2026-06-17/async-tonic-encode/fragments/slide10.typ` with function `slide_10` only.
+# Change
+Implement Slide 10 titled `DSA Turns Lifetimes Into Hardware Safety`. Teaching job: explain why accelerator support is stricter than ordinary async I/O. Visual: DMA diagram `owned message memory → DSA descriptor → stable EncodeBuffer storage`. Explain constraints: source pointer remains valid; destination pointer remains stable; `BytesMut` must not reallocate while DMA owns destination; descriptor/completion stays alive; page-fault retry may be needed; drop/cancel drains in-flight work before freeing memory.
+# Acceptance
+The slide makes the physical memory-safety stakes explicit and ends with `speaker[With hardware DMA, Rust ownership mistakes become memory corruption risks, not just type errors.]`. No commands.
