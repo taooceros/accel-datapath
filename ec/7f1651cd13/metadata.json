@@ -92,6 +92,12 @@
       "transcript": "/ec/7f1651cd13/13/full.jsonl",
       "content_hash": "/ec/7f1651cd13/13/content_hash.txt",
       "prompt": "/ec/7f1651cd13/13/prompt.txt"
+    },
+    {
+      "metadata": "/ec/7f1651cd13/14/metadata.json",
+      "transcript": "/ec/7f1651cd13/14/full.jsonl",
+      "content_hash": "/ec/7f1651cd13/14/content_hash.txt",
+      "prompt": "/ec/7f1651cd13/14/prompt.txt"
     }
   ],
   "token_usage": {
