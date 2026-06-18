@@ -1,0 +1,8 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Write `presentation/2026-06-17/async-tonic-encode/fragments/slide11.typ` with function `slide_11` only.
+# Change
+Implement Slide 11 titled `Async DSA Enables Measurement, Not Guaranteed Speedup`. Teaching job: connect design to measurement without overclaiming. Include: direct async DSA into final encode storage removes staged-copy overhead; this changed benchmark regimes; wins are workload-dependent. Visual: balance scale contrasting `avoided CPU copy` with `DSA async overhead`. Cost-model chips: submission overhead; polling/wakeup; state machine overhead; page-fault/retry; avoided CPU copy size.
+# Acceptance
+The slide avoids promising universal speedup and ends with `speaker[The design makes hardware useful when payload and regime justify it; it does not make every encode faster.]`. No commands.
