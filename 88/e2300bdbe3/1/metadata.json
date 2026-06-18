@@ -1,0 +1,134 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "88e2300bdbe3",
+  "session_id": "019ed2ca-95f6-7000-aa84-8fa8744bc45e",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-18T18:15:37.901822957Z",
+  "branch": "tonic-dsa",
+  "checkpoints_count": 5,
+  "files_touched": [
+    "presentation/2026-06-15/grpc-tonic-stack/deck.pdf",
+    "presentation/AGENTS.md"
+  ],
+  "agent": "Pi",
+  "model": "",
+  "turn_id": "e99fe26746fa",
+  "token_usage": {
+    "input_tokens": 321519,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 4063488,
+    "output_tokens": 24150,
+    "api_call_count": 62
+  },
+  "session_metrics": {
+    "turn_count": 5
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-18T18:15:37.892030373Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 9858,
+    "human_modified": 5014,
+    "human_removed": 0,
+    "total_committed": 14533,
+    "total_lines_changed": 14873,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 8169,
+      "user_lines_removed": 25,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "deck.pdf": 7097,
+        "presentation/2026-06-15/grpc-tonic-stack/deck.typ": 938,
+        "presentation/2026-06-15/grpc-tonic-stack/plan.md": 123,
+        "presentation/AGENTS.md": 11
+      },
+      "user_removed_per_file": {
+        "presentation/AGENTS.md": 25
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 158,
+      "user_lines_removed": 0,
+      "agent_lines_added": 15268,
+      "agent_lines_removed": 183,
+      "user_added_per_file": {
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4
+      }
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 3684,
+      "user_lines_removed": 3174,
+      "agent_lines_added": 15268,
+      "agent_lines_removed": 183,
+      "user_added_per_file": {
+        "deck.pdf": 1546,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4,
+        "presentation/2026-06-15/grpc-tonic-stack/deck.pdf": 1962,
+        "presentation/2026-06-15/grpc-tonic-stack/deck.typ": 16,
+        "presentation/2026-06-15/grpc-tonic-stack/plan.md": 2
+      },
+      "user_removed_per_file": {
+        "deck.pdf": 1540,
+        "presentation/2026-06-15/grpc-tonic-stack/deck.pdf": 1618,
+        "presentation/2026-06-15/grpc-tonic-stack/deck.typ": 14,
+        "presentation/2026-06-15/grpc-tonic-stack/plan.md": 2
+      }
+    },
+    {
+      "checkpoint_number": 4,
+      "user_lines_added": 5886,
+      "user_lines_removed": 4271,
+      "agent_lines_added": 15268,
+      "agent_lines_removed": 183,
+      "user_added_per_file": {
+        "deck.pdf": 3320,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4,
+        "presentation/2026-06-15/grpc-tonic-stack/deck.pdf": 2323,
+        "presentation/2026-06-15/grpc-tonic-stack/deck.typ": 83,
+        "presentation/2026-06-15/grpc-tonic-stack/plan.md": 2
+      },
+      "user_removed_per_file": {
+        "deck.pdf": 2587,
+        "presentation/2026-06-15/grpc-tonic-stack/deck.pdf": 1650,
+        "presentation/2026-06-15/grpc-tonic-stack/deck.typ": 32,
+        "presentation/2026-06-15/grpc-tonic-stack/plan.md": 2
+      }
+    },
+    {
+      "checkpoint_number": 5,
+      "user_lines_added": 4549,
+      "user_lines_removed": 3336,
+      "agent_lines_added": 15268,
+      "agent_lines_removed": 183,
+      "user_added_per_file": {
+        "deck.pdf": 2341,
+        "dsa-stdexec/stdexec/devenv.lock": 119,
+        "dsa-stdexec/stdexec/devenv.nix": 35,
+        "dsa-stdexec/stdexec/devenv.yaml": 4,
+        "presentation/2026-06-15/grpc-tonic-stack/deck.pdf": 1963,
+        "presentation/2026-06-15/grpc-tonic-stack/deck.typ": 85,
+        "presentation/2026-06-15/grpc-tonic-stack/plan.md": 2
+      },
+      "user_removed_per_file": {
+        "deck.pdf": 1665,
+        "presentation/2026-06-15/grpc-tonic-stack/deck.pdf": 1635,
+        "presentation/2026-06-15/grpc-tonic-stack/deck.typ": 34,
+        "presentation/2026-06-15/grpc-tonic-stack/plan.md": 2
+      }
+    }
+  ]
+}

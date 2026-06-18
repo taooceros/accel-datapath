@@ -1,0 +1,17 @@
+@presentation/2026-06-15/grpc-tonic-stack/ for the first two pages, introduce more details in the text explaination
+
+---
+
+you should justify every steps (what calling inner functions works)
+
+---
+
+don't keep just 4;
+
+---
+
+you are trying to teach the audience what's happening!!! rethink what you write whether that will achieve the goal
+
+---
+
+is the number in the graph match the text? this is bad;
