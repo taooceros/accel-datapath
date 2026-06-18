@@ -1,0 +1,10 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Edit only `presentation/2026-06-17/async-tonic-encode/fragments/slide01.typ` and the Slide 1 section of `presentation/2026-06-17/async-tonic-encode/plan.md`.
+
+# Change
+Revise slide 1 so the old→new async Tonic encode conversion is the dominant first read. Demote DSA/IAX to a small `why Pending exists`/motivating example cue. Make `one owned T::Encode per in-flight message` and `Ready returns EncodeBuffer` memorable. Preserve the deck style and speaker-message strip.
+
+# Acceptance
+Files edited for slide 1 only. No commands, compiles, tests, or formatters. Report exactly what changed and any assumptions.
