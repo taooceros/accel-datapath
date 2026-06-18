@@ -1,0 +1,11 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Files: `presentation/2026-06-15/grpc-tonic-stack/deck.typ`, `presentation/2026-06-15/grpc-tonic-stack/plan.md`, preview images `presentation/2026-06-15/grpc-tonic-stack/assets/previews/preview-slide-1.png`, `presentation/2026-06-15/grpc-tonic-stack/assets/previews/preview-slide-2.png`, `presentation/2026-06-15/grpc-tonic-stack/assets/previews/preview-slide-3.png`.
+Deck scope: slides 1-3 and helpers used only by them, around `deck.typ` lines 367-422 and 433-622. Do not edit slides 4-10 or shared Chronos/detail helpers.
+
+# Change
+Reduce the excessive card/block look on the intro slides. Keep Zebraw code/call-stack blocks, but make surrounding structure lighter: fewer filled rounded panels, fewer nested blocks, thinner separators/accent rules, more open alignment. Slide 1/2 should not look like cards inside cards; slide 3 should keep the frame anchor but avoid a big boxed protocol-work panel if possible. Preserve all code snippets, call-stack symbols, and technical copy unless shortening repeated visual labels is needed.
+
+# Acceptance
+Slides 1-3 have a cleaner, less card-heavy look while remaining readable. No compile/test/formatter commands. Report changed ranges and any uncertainty.
