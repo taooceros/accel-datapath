@@ -1,0 +1,20 @@
+Complete the assignment below, thoroughly:
+
+# Target
+Write `presentation/2026-06-17/async-tonic-encode/fragments/slide06.typ` with function `slide_06` only.
+# Change
+Implement Slide 6 titled `Final Tonic Boundary: Encode Returns an Owned Future`. Include Zebraw conceptual API:
+```rust
+type Encode: Future<Output = Result<EncodeBuffer, Error>>
+    + Send
+    + 'static;
+
+fn encode(
+    self: Pin<&mut Self>,
+    item: Item,
+    dst: EncodeBuffer,
+) -> Result<Self::Encode>;
+```
+Explain: `EncodeBuffer` is owned by the encode future; Tonic stores `in_flight: Option<T::Encode>`; sync encoders return ready futures; Tonic regains buffer only when encode completes. Visual: `Tonic driver → starts future → polls future → receives EncodeBuffer`.
+# Acceptance
+Use `codeblock` for the API, include the flow and four bullets, and end with `speaker[The Tonic boundary became future-based because that is the cleanest unit for the body driver to store and poll.]`. No commands.

@@ -1,0 +1,39 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "ec7f1651cd13",
+  "session_id": "Slide06OwnedFuture",
+  "strategy": "manual-commit",
+  "created_at": "2026-06-18T18:35:41.234997268Z",
+  "branch": "tonic-dsa",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "deck.pdf"
+  ],
+  "agent": "Pi",
+  "model": "",
+  "turn_id": "a46cda1de15c",
+  "checkpoint_transcript_start": 67,
+  "transcript_lines_at_start": 67,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "session_metrics": {
+    "turn_count": 5
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-06-18T18:35:41.226731912Z",
+    "agent_lines": 7599,
+    "agent_removed": 0,
+    "human_added": 4234,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 11833,
+    "total_lines_changed": 13911,
+    "agent_percentage": 54.62583566961398,
+    "metric_version": 2
+  }
+}
