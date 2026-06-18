@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.6.3",
+  "checkpoint_id": "0b54ebbf9911",
+  "strategy": "manual-commit",
+  "branch": "tonic-dsa",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "deck.pdf",
+    "presentation/2026-06-18/async-tonic-encode-revision-2/deck.pdf",
+    "presentation/2026-06-18/async-tonic-encode-revision-2/deck.typ",
+    "presentation/2026-06-18/async-tonic-encode-revision-2/plan.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0b/54ebbf9911/0/metadata.json",
+      "transcript": "/0b/54ebbf9911/0/full.jsonl",
+      "content_hash": "/0b/54ebbf9911/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
