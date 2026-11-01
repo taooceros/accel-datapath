@@ -1,0 +1,21 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>实验笔记 · DSA 提交流水线</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Noto+Serif+SC:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"><style>
+:root { --paper:#faf9f5; --card:#fffefb; --sunk:#f3f1eb; --ink:#161514; --ink2:#3b3935; --muted:#7a776f; --rule:#e4e0d6; --rule2:#cfcabe;
+  --serif:"Newsreader","Noto Serif SC",Georgia,serif; --sans:"Inter","PingFang SC","Noto Sans SC",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace; }
+@media (prefers-color-scheme: dark) { :root { --paper:#141311; --card:#1b1a17; --sunk:#201f1b; --ink:#ece8df; --ink2:#cfcac0; --muted:#9a958a; --rule:#2f2d29; --rule2:#46433c; } }
+body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.65 var(--sans); -webkit-font-smoothing:antialiased; }
+.wrap { max-width:980px; margin:0 auto; padding:28px 28px 80px; }
+nav.crumb { font:500 12px var(--mono); letter-spacing:.04em; color:var(--muted); margin-bottom:22px; }
+nav.crumb a { color:var(--muted); }
+h1, h2, h3 { font-family:var(--serif); font-weight:500; line-height:1.25; }
+h1 { font-size:30px; margin:0 0 18px; } h2 { font-size:22px; margin:34px 0 10px; padding-top:14px; border-top:1px solid var(--rule); } h3 { font-size:18px; margin:24px 0 8px; }
+a { color:var(--ink); text-decoration-color:var(--rule2); text-underline-offset:3px; }
+code { font:13px var(--mono); background:var(--sunk); padding:1px 4px; border-radius:4px; overflow-wrap:anywhere; }
+pre { background:var(--sunk); padding:12px 14px; border-radius:8px; overflow:auto; } pre code { background:none; padding:0; }
+table { border-collapse:collapse; margin:12px 0; font-size:13.5px; display:block; overflow-x:auto; }
+th, td { border-bottom:1px solid var(--rule); padding:6px 10px; text-align:left; vertical-align:top; }
+th { font:500 12px var(--mono); color:var(--muted); border-bottom:1px solid var(--rule2); }
+blockquote { margin:12px 0; padding:4px 14px; border-left:3px solid var(--rule2); color:var(--ink2); }
+ul.notes { list-style:none; padding:0; } ul.notes li { padding:14px 0; border-bottom:1px solid var(--rule); }
+ul.notes a { font:500 18px var(--serif); } ul.notes .d { color:var(--ink2); } ul.notes .t { font:12px var(--mono); color:var(--muted); }
+.lead { color:var(--ink2); }
+</style></head><body><main class="wrap"><nav class="crumb"><a href="../">DSA 提交流水线</a> · 实验笔记</nav><h1>实验笔记</h1><p class="lead">每份笔记对应一组实验：先写预测，再跑，然后给出结果表、判定和注意事项。笔记里引用的 <code>dsa-lab-runs/…</code> 是原始数据目录的名字，原始数据没有公开。交互页面在 <a href="../">这里</a>。</p><ul class="notes"><li><a href="coreside.html">core 里：store buffer 有多大，为什么 ~116 个以后变慢（P0、P2、P3）</a><div class="t">coreside.md · coreside: is the ~114–116 knee the core store buffer? (P0, P2, P3, Q8, the mid-K anomaly)</div></li><li><a href="cadence.html">写出节拍：mesh 时钟、多核、远近、背景流量（F1、P6、P7、P11）</a><div class="t">cadence.md · cadence group: F1 follow-up, P6, P7, P11 (forks Q5, Q6)</div></li><li><a href="w2xport.html">写出节拍的单位：每个（核, 64 B 地址）一条链，IAA 也一样（P17–P21）</a><div class="t">w2xport.md · w2xport group: what serializes the per-core write transport (Q5 follow-up)</div></li><li><a href="paths.html">Batch 和 shared WQ + ENQCMD（P8、P9）</a><div class="t">paths.md · paths: P8 (Batch descriptor) and P9 (shared WQ + ENQCMD)</div></li><li><a href="capacity.html">WQ 容量、静默丢弃、Drain 计数、engine 数和 WQ 大小（P12、P1、P4、P5）</a><div class="t">capacity.md · capacity: P12, P1, P4, P5 (forks Q2, Q3, Q4, Q7)</div></li><li><a href="w2dev.html">每个 engine 3 个槽、带宽上限在哪、batch 在哪个 engine 上跑（P13–P16、P22–P24）</a><div class="t">w2dev.md · w2dev: device-side follow-ups to wave 1 (Q1 slots via ENQCMD, Q2 slot type, Q3 copy ceiling, Q4 batch engine)</div></li><li><a href="pmu.html">用性能计数器做第二类证据（P10）</a><div class="t">pmu.md · P10: performance counters as second evidence (group `pmu`)</div></li><li><a href="mt_loss.html">多线程同时提交到一个 dedicated WQ 会不会丢：只因 WQ 满丢</a><div class="t">mt_loss.md · mt_loss: are MOVDIR64B descriptors lost only when the DWQ is full?</div></li></ul></main></body></html>

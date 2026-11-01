@@ -1,0 +1,934 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>mt_loss: are MOVDIR64B descriptors lost only when the DWQ is full?</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Noto+Serif+SC:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"><style>
+:root { --paper:#faf9f5; --card:#fffefb; --sunk:#f3f1eb; --ink:#161514; --ink2:#3b3935; --muted:#7a776f; --rule:#e4e0d6; --rule2:#cfcabe;
+  --serif:"Newsreader","Noto Serif SC",Georgia,serif; --sans:"Inter","PingFang SC","Noto Sans SC",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace; }
+@media (prefers-color-scheme: dark) { :root { --paper:#141311; --card:#1b1a17; --sunk:#201f1b; --ink:#ece8df; --ink2:#cfcac0; --muted:#9a958a; --rule:#2f2d29; --rule2:#46433c; } }
+body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.65 var(--sans); -webkit-font-smoothing:antialiased; }
+.wrap { max-width:980px; margin:0 auto; padding:28px 28px 80px; }
+nav.crumb { font:500 12px var(--mono); letter-spacing:.04em; color:var(--muted); margin-bottom:22px; }
+nav.crumb a { color:var(--muted); }
+h1, h2, h3 { font-family:var(--serif); font-weight:500; line-height:1.25; }
+h1 { font-size:30px; margin:0 0 18px; } h2 { font-size:22px; margin:34px 0 10px; padding-top:14px; border-top:1px solid var(--rule); } h3 { font-size:18px; margin:24px 0 8px; }
+a { color:var(--ink); text-decoration-color:var(--rule2); text-underline-offset:3px; }
+code { font:13px var(--mono); background:var(--sunk); padding:1px 4px; border-radius:4px; overflow-wrap:anywhere; }
+pre { background:var(--sunk); padding:12px 14px; border-radius:8px; overflow:auto; } pre code { background:none; padding:0; }
+table { border-collapse:collapse; margin:12px 0; font-size:13.5px; display:block; overflow-x:auto; }
+th, td { border-bottom:1px solid var(--rule); padding:6px 10px; text-align:left; vertical-align:top; }
+th { font:500 12px var(--mono); color:var(--muted); border-bottom:1px solid var(--rule2); }
+blockquote { margin:12px 0; padding:4px 14px; border-left:3px solid var(--rule2); color:var(--ink2); }
+ul.notes { list-style:none; padding:0; } ul.notes li { padding:14px 0; border-bottom:1px solid var(--rule); }
+ul.notes a { font:500 18px var(--serif); } ul.notes .d { color:var(--ink2); } ul.notes .t { font:12px var(--mono); color:var(--muted); }
+.lead { color:var(--ink2); }
+</style></head><body><main class="wrap"><nav class="crumb"><a href="../">DSA 提交流水线</a> · <a href="./">实验笔记</a> · mt_loss</nav><h1>mt_loss: are MOVDIR64B descriptors lost only when the DWQ is full?</h1>
+<p>Probe: <code>dsa-lab/src/bin/mt_loss.rs</code>. Run dirs are relative to <code>dsa-lab-runs/</code>.</p>
+<h2>Question</h2>
+<p>Claim under test: on an Intel DSA dedicated WQ (DWQ), a submitted descriptor is lost <strong>only</strong> when the WQ
+is full. It is never lost because several threads write MOVDIR64B to the same DWQ portal at the same time.</p>
+<h2>Predictions (written before running)</h2>
+<ul>
+<li><strong>H0 (claim):</strong> every MOVDIR64B write from any thread reaches the device intact. A descriptor is lost if
+and only if it arrives while the WQ is full.</li>
+<li><strong>H1 (alternative):</strong> concurrent writes from several cores to one DWQ portal can be lost, merged or
+corrupted, whether or not the WQ is full.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>regime</th>
+<th>H0 predicts</th>
+<th>H1 predicts</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R1: flow-controlled, total in flight ≤ L = 120 &lt; 128 (never full)</td>
+<td>0 lost; PMU FULL = 0; occupancy max &lt; 128</td>
+<td>loss &gt; 0 that grows with thread count or with same-address contention</td>
+</tr>
+<tr>
+<td>R2: uncontrolled bursts, WQ forced full</td>
+<td>missing == PMU FULL exactly, and SUCCESS + FULL == writes + Drains; losses cluster in WQ-full time windows (none before ~140 accepted)</td>
+<td>missing &gt; FULL, or SUCCESS + FULL &lt; writes; losses spread in time, including before the WQ could be full</td>
+</tr>
+<tr>
+<td>R3: flow-controlled boundary, L ∈ {128, 140, 150, 200, 400}</td>
+<td>0 lost and FULL = 0 for L ≤ 140 (capacity 140 = WQ 128 + 3 × 4 engines) for every N; losses only for L &gt; 140 and then missing == FULL</td>
+<td>losses that depend on N rather than on L, or missing ≠ FULL</td>
+</tr>
+<tr>
+<td>integrity (mm64/mm4096, every regime)</td>
+<td>every accepted memmove copies exactly its own tag; no destination written without a completion record</td>
+<td>wrong tag, torn copy, or a destination written for a descriptor that has no record</td>
+</tr>
+</tbody>
+</table>
+<p>Notes on the predictions:</p>
+<ul>
+<li>N = 1 with noops cannot outrun the device (one core ~9.4 M/s; one engine is faster), so R2/R3 noop rows
+with N = 1 may show 0 loss. A 4 KiB memmove (device ~30 GB/s ≈ 136 ns per descriptor) is slower than one
+core's ~106 ns cadence, so N = 1 mm4096 bursts must lose, with missing == FULL.</li>
+</ul>
+<h2>Method</h2>
+<ul>
+<li>One process. N worker threads are pinned to distinct physical cores and share <strong>one</strong> mmap of
+<code>/dev/dsa/wq0.0</code>. A coordinator runs on cpu20. Workers start on a common TSC deadline (500 µs ahead).
+Thread sets: n1 = {2}, n2 = {2,4}, n4 = {2,4,6,8}, n8 = {2,4,…,16} (node 0), and x4 = {2,4} on node 0
+plus {34,36} on node 1. All x4 workers write dsa0.</li>
+<li>Each worker allocates its own memory after pinning: page-aligned regions for descriptors, completion
+records (one 64-byte line each), src, dst and write stamps, every page prefaulted. Address modes:
+<code>same</code> (portal+0) and <code>offsets</code> (portal + 64·t).</li>
+<li>Identity check: for memmove, src[0..64] = (magic, thread, seq) + 6 derived words + checksum. When a
+record arrives, dst must equal the expected tag, and the rest of dst must equal src. Then dst is zeroed.
+Also counted: a destination written with no record (<code>dst_without_record</code>) and records that appear
+after a slot was retired (<code>late</code>).</li>
+<li><strong>flow</strong> (R1, R3). Each thread has at most its share of L descriptors in flight (L split evenly). In
+each pass it polls its own records. Completed slots are verified, cleared and re-tagged; then one
+SFENCE and a resubmit of every free slot. A slot with no record after 20 ms counts as LOST and is
+reused. Each phase runs 2 s (R1) or 1 s (R3).</li>
+<li><strong>blast</strong> (R2). B = 2000 back-to-back MOVDIR64B per thread with no fence, then SFENCE. A TSC stamp
+follows each write.</li>
+<li>After every phase or burst: the coordinator waits until <code>occupancy</code> &lt; 128 (R2 rerun only; ≤ 5.8 µs),
+sends a Drain, every thread scans its records, a second Drain runs, and there is a rescan for late
+records.</li>
+<li>Device PMU: 8 events, all filtered to WQ 0, opened with <code>time_enabled</code>/<code>time_running</code> so that
+multiplexing is detected:
+<ul>
+<li>EV_DWQ_SUCCESS (0x10), EV_DWQ_FULL (0x20), disp_wq (cat 1, 0x20);</li>
+<li>op noop / drain / memmove (cat 3);</li>
+<li>cpl_ok / cpl_err (cat 4).</li>
+</ul>
+</li>
+<li>The coordinator reads the WQ <code>occupancy</code> (sysfs pread, an MMIO read) in a loop while the workers run.
+SWERROR is read before and after each phase.</li>
+<li>Conditions:
+<ul>
+<li><code>dsa-config/4-engine.conf</code>: one DWQ, size 128, 4 engines.</li>
+<li><code>--side both</code>, so dsa2 is idle.</li>
+<li>8 L2 heaters <code>8x1@0</code>, which exclude the worker and coordinator CPUs. Mesh node 0 at 2.19-2.20 GHz
+(R1, R2 rerun), 2.08-2.19 (R3) and 1.99-2.19 (first R2 set); node 1 at 1.90-2.20.</li>
+<li>Worker cores at 2.2-3.9 GHz after <code>warm_up</code>.</li>
+</ul>
+</li>
+</ul>
+<p>Checks computed per row (all in the run JSON, <code>rows[].checks</code>):</p>
+<ul>
+<li><code>success_plus_full_minus_writes_minus_drains</code> = SUCCESS + FULL − writes − Drain attempts (H0: 0).</li>
+<li><code>full_minus_missing_minus_dropped_drains</code> (H0: 0). In the R2 rerun, also <code>full_minus_missing</code>
+(literal, H0: 0).</li>
+<li><code>success_minus_records_minus_completed_drains</code>: every accepted descriptor wrote a record (0).</li>
+</ul>
+<h2>Calibration</h2>
+<p><code>MTL/20261101T072552Z-AB-calib-h8</code>: one thread; K = 100 and 1000 noop or mm64; 5 bursts × 2 reps per
+(op, K), 40 bursts in total. Every record was polled, then 2 Drains.</p>
+<p><strong>Result:</strong></p>
+<ul>
+<li>SUCCESS = K + 2 exactly.</li>
+<li>FULL = 0.</li>
+<li>disp_wq = SUCCESS.</li>
+<li>op_noop or op_memmove = K.</li>
+<li><code>time_running == time_enabled</code> in every row (not multiplexed).</li>
+</ul>
+<p><strong>Calibration facts:</strong></p>
+<ul>
+<li><code>op_drain</code> counts <strong>4 per Drain</strong> (once per engine).</li>
+<li><code>cpl_ok</code> = K + 4 per Drain.</li>
+</ul>
+<p>These two rules hold in every later row; they are checked for all 2,612 rows in the analysis below. The
+first calibration run (<code>MTL/20261101T072528Z-AB-calib</code>) gave the same counts but had 16 heaters, so it
+is superseded.</p>
+<h2>R1: flow-controlled, total in flight ≤ 120 (never full)</h2>
+<p>Runs (<code>--secs 2 --reps 2</code>, so 4 phases of 2 s per config):</p>
+<table>
+<thead>
+<tr>
+<th>thread set</th>
+<th>lab run 1</th>
+<th>lab run 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>n1</td>
+<td><code>MTL-R1/20261101T072615Z-AB-n1-r1</code></td>
+<td><code>…072733Z-AB-n1-r2</code></td>
+</tr>
+<tr>
+<td>n2</td>
+<td><code>…072626Z-AB-n2-r1</code></td>
+<td><code>…072741Z-AB-n2-r2</code></td>
+</tr>
+<tr>
+<td>n4</td>
+<td><code>…072643Z-AB-n4-r1</code></td>
+<td><code>…072758Z-AB-n4-r2</code></td>
+</tr>
+<tr>
+<td>n8</td>
+<td><code>…072659Z-AB-n8-r1</code></td>
+<td><code>…072815Z-AB-n8-r2</code></td>
+</tr>
+<tr>
+<td>x4</td>
+<td><code>…072716Z-AB-x4-r1</code></td>
+<td><code>…072831Z-AB-x4-r2</code></td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>set</th>
+<th>op</th>
+<th>addr</th>
+<th>descriptors</th>
+<th>lost (timeout)</th>
+<th>PMU FULL</th>
+<th>non-0x01 status</th>
+<th>integrity fail</th>
+<th>late</th>
+<th>occupancy max</th>
+<th>aggregate M/s</th>
+<th>ns/write per thread</th>
+<th>95% UB loss rate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>n1</td>
+<td>noop</td>
+<td>same</td>
+<td>71.4 M</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>–</td>
+<td>0</td>
+<td>0</td>
+<td>8.6-9.1</td>
+<td>110-117</td>
+<td>4.2e-8</td>
+</tr>
+<tr>
+<td>n1</td>
+<td>mm64</td>
+<td>same</td>
+<td>42.4 M</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>5.3</td>
+<td>188-189</td>
+<td>7.1e-8</td>
+</tr>
+<tr>
+<td>n2</td>
+<td>noop</td>
+<td>same / offsets</td>
+<td>147.2 / 146.6 M</td>
+<td>0 / 0</td>
+<td>0 / 0</td>
+<td>0</td>
+<td>–</td>
+<td>0</td>
+<td>1 / 1</td>
+<td>18.4 / 18.3</td>
+<td>108-111</td>
+<td>2.0e-8 each</td>
+</tr>
+<tr>
+<td>n2</td>
+<td>mm64</td>
+<td>same / offsets</td>
+<td>80.9 / 75.8 M</td>
+<td>0 / 0</td>
+<td>0 / 0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1 / 1</td>
+<td>9.0-10.8</td>
+<td>184-264</td>
+<td>3.7e-8 / 4.0e-8</td>
+</tr>
+<tr>
+<td>n4</td>
+<td>noop</td>
+<td>same / offsets</td>
+<td>290.7 / 277.4 M</td>
+<td>0 / 0</td>
+<td>0 / 0</td>
+<td>0</td>
+<td>–</td>
+<td>0</td>
+<td>1 / 1</td>
+<td>32.5-36.9</td>
+<td>107-124</td>
+<td>1.0e-8 / 1.1e-8</td>
+</tr>
+<tr>
+<td>n4</td>
+<td>mm64</td>
+<td>same / offsets</td>
+<td>85.1 / 84.8 M</td>
+<td>0 / 0</td>
+<td>0 / 0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1 / 1</td>
+<td>10.4-11.0</td>
+<td>358-397</td>
+<td>3.5e-8</td>
+</tr>
+<tr>
+<td>n8</td>
+<td>noop</td>
+<td>same / offsets</td>
+<td>499.1 / 474.9 M</td>
+<td>0 / 0</td>
+<td>0 / 0</td>
+<td>0</td>
+<td>–</td>
+<td>0</td>
+<td>1 / 1</td>
+<td>55.9-67.6</td>
+<td>113-145</td>
+<td>6.0e-9 / 6.3e-9</td>
+</tr>
+<tr>
+<td>n8</td>
+<td>mm64</td>
+<td>same / offsets</td>
+<td>168.4 / 165.7 M</td>
+<td>0 / 0</td>
+<td>0 / 0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1 / 1</td>
+<td>19.8-23.2</td>
+<td>337-419</td>
+<td>1.8e-8</td>
+</tr>
+<tr>
+<td>x4</td>
+<td>noop</td>
+<td>same / offsets</td>
+<td>218.2 / 214.7 M</td>
+<td>0 / 0</td>
+<td>0 / 0</td>
+<td>0</td>
+<td>–</td>
+<td>0</td>
+<td>1 / 1</td>
+<td>25.7-27.7</td>
+<td>113-207</td>
+<td>1.4e-8</td>
+</tr>
+<tr>
+<td>x4</td>
+<td>mm64</td>
+<td>same / offsets</td>
+<td>81.3 / 81.5 M</td>
+<td>0 / 0</td>
+<td>0 / 0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1 / 1</td>
+<td>9.6-11.4</td>
+<td>325-428</td>
+<td>3.7e-8</td>
+</tr>
+</tbody>
+</table>
+<p><strong>R1 total:</strong></p>
+<ul>
+<li>3,206,182,451 descriptors (0.87 × 10⁹ of them mm64, each tag-and-content verified), 0 lost, PMU FULL 0.</li>
+<li>Every one of the 72 rows has SUCCESS + FULL = writes + Drains and SUCCESS − Drains = records.</li>
+<li>95% upper bound on the loss rate: 3/N = <strong>9.4 × 10⁻¹⁰</strong> over all of R1; ≤ 7.1 × 10⁻⁸ for every single
+config (≥ 4.2 × 10⁷ descriptors each).</li>
+<li>The probe's SWERROR reads never changed during R1 (0 of 72 rows). The value stayed the sticky
+<code>0x532c</code> left by earlier runs.</li>
+<li>Start skew ≤ 291 ns (cross-socket); ≤ 101 ns on node 0.</li>
+</ul>
+<p>Note: the device keeps up with up to 67 M noops/s from 8 cores, so the occupancy register read ≤ 1
+throughout R1. R1 tests concurrency on an almost empty WQ. The near-full but not full case is covered
+by R3 (mm65536 with occupancy up to 127, 0 loss) and by the R2 x4 mm64 bursts (occupancy 61-72, 0 loss).</p>
+<h2>R2: uncontrolled bursts (forced full)</h2>
+<p>Primary set: Drain only after occupancy &lt; 128.</p>
+<table>
+<thead>
+<tr>
+<th>thread set</th>
+<th>lab run 1</th>
+<th>lab run 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>n1</td>
+<td><code>MTL-R2/20261101T073555Z-AB-w-n1-r1</code></td>
+<td><code>…073601Z-AB-w-n1-r2</code></td>
+</tr>
+<tr>
+<td>n2</td>
+<td><code>…073556Z-AB-w-n2-r1</code></td>
+<td><code>…073602Z-AB-w-n2-r2</code></td>
+</tr>
+<tr>
+<td>n4</td>
+<td><code>…073557Z-AB-w-n4-r1</code></td>
+<td><code>…073603Z-AB-w-n4-r2</code></td>
+</tr>
+<tr>
+<td>n8</td>
+<td><code>…073558Z-AB-w-n8-r1</code></td>
+<td><code>…073604Z-AB-w-n8-r2</code></td>
+</tr>
+<tr>
+<td>x4</td>
+<td><code>…073600Z-AB-w-x4-r1</code></td>
+<td><code>…073606Z-AB-w-x4-r2</code></td>
+</tr>
+</tbody>
+</table>
+<p>Each run does B = 2000 per thread, with 10 bursts × 2 reps per (op, addr): 40 bursts per config and
+1,080 bursts in total.</p>
+<table>
+<thead>
+<tr>
+<th>set</th>
+<th>op</th>
+<th>addr</th>
+<th>writes</th>
+<th>missing</th>
+<th>PMU FULL</th>
+<th>rows with FULL ≠ missing</th>
+<th>rows with S+F ≠ writes+Drains</th>
+<th>integrity / dst w/o record / late / non-0x01</th>
+<th>occupancy max</th>
+<th>per-thread first missing index</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>n1</td>
+<td>noop</td>
+<td>same</td>
+<td>80,000</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0/0/0/0</td>
+<td>0</td>
+<td>–</td>
+</tr>
+<tr>
+<td>n1</td>
+<td>mm64</td>
+<td>same</td>
+<td>80,000</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0/0/0/0</td>
+<td>0</td>
+<td>–</td>
+</tr>
+<tr>
+<td><strong>n1</strong></td>
+<td><strong>mm4096</strong></td>
+<td>same</td>
+<td>80,000</td>
+<td><strong>4,247</strong></td>
+<td><strong>4,247</strong></td>
+<td>0</td>
+<td>0</td>
+<td>0/0/0/0</td>
+<td>128</td>
+<td>1176-1676</td>
+</tr>
+<tr>
+<td>n2</td>
+<td>noop</td>
+<td>same / offsets</td>
+<td>160,000 each</td>
+<td>0 / 0</td>
+<td>0 / 0</td>
+<td>0</td>
+<td>0</td>
+<td>0/0/0/0</td>
+<td>1</td>
+<td>–</td>
+</tr>
+<tr>
+<td>n2</td>
+<td>mm64</td>
+<td>same / offsets</td>
+<td>160,000 each</td>
+<td>0 / 0</td>
+<td>0 / 0</td>
+<td>0</td>
+<td>0</td>
+<td>0/0/0/0</td>
+<td>1</td>
+<td>–</td>
+</tr>
+<tr>
+<td>n2</td>
+<td>mm4096</td>
+<td>same / offsets</td>
+<td>160,000 each</td>
+<td>84,281 / 84,249</td>
+<td>84,281 / 84,249</td>
+<td>0</td>
+<td>0</td>
+<td>0/0/0/0</td>
+<td>128</td>
+<td>218-278</td>
+</tr>
+<tr>
+<td>n4</td>
+<td>noop</td>
+<td>same / offsets</td>
+<td>320,000 each</td>
+<td>0 / 567</td>
+<td>0 / 567</td>
+<td>0</td>
+<td>0</td>
+<td>0/0/0/0</td>
+<td>1 / 128</td>
+<td>1261-1804</td>
+</tr>
+<tr>
+<td>n4</td>
+<td>mm64</td>
+<td>same / offsets</td>
+<td>320,000 each</td>
+<td>101 / 2,937</td>
+<td>101 / 2,937</td>
+<td>0</td>
+<td>0</td>
+<td>0/0/0/0</td>
+<td>128</td>
+<td>210-1888</td>
+</tr>
+<tr>
+<td>n4</td>
+<td>mm4096</td>
+<td>same / offsets</td>
+<td>320,000 each</td>
+<td>237,789 / 237,441</td>
+<td>237,789 / 237,441</td>
+<td>0</td>
+<td>0</td>
+<td>0/0/0/0</td>
+<td>128</td>
+<td>77-101</td>
+</tr>
+<tr>
+<td>n8</td>
+<td>noop</td>
+<td>same / offsets</td>
+<td>640,000 each</td>
+<td>75,218 / 91,268</td>
+<td>75,218 / 91,268</td>
+<td>0</td>
+<td>0</td>
+<td>0/0/0/0</td>
+<td>128</td>
+<td>84-243</td>
+</tr>
+<tr>
+<td>n8</td>
+<td>mm64</td>
+<td>same / offsets</td>
+<td>640,000 each</td>
+<td>121,757 / 151,530</td>
+<td>121,757 / 151,530</td>
+<td>0</td>
+<td>0</td>
+<td>0/0/0/0</td>
+<td>128</td>
+<td>37-201</td>
+</tr>
+<tr>
+<td>n8</td>
+<td>mm4096</td>
+<td>same / offsets</td>
+<td>640,000 each</td>
+<td>489,945 / 488,399</td>
+<td>489,945 / 488,399</td>
+<td>0</td>
+<td>0</td>
+<td>0/0/0/0</td>
+<td>128</td>
+<td>41-55</td>
+</tr>
+<tr>
+<td>x4</td>
+<td>noop</td>
+<td>same / offsets</td>
+<td>320,000 each</td>
+<td>10,890 / 14,336</td>
+<td>10,890 / 14,336</td>
+<td>0</td>
+<td>0</td>
+<td>0/0/0/0</td>
+<td>128</td>
+<td>167-1997</td>
+</tr>
+<tr>
+<td>x4</td>
+<td>mm64</td>
+<td>same / offsets</td>
+<td>320,000 each</td>
+<td>13,658 / 16,366</td>
+<td>13,658 / 16,366</td>
+<td>0</td>
+<td>0</td>
+<td>0/0/0/0</td>
+<td>128</td>
+<td>163-1853</td>
+</tr>
+<tr>
+<td>x4</td>
+<td>mm4096</td>
+<td>same / offsets</td>
+<td>320,000 each</td>
+<td>207,917 / 207,391</td>
+<td>207,917 / 207,391</td>
+<td>0</td>
+<td>0</td>
+<td>0/0/0/0</td>
+<td>128</td>
+<td>64-126</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Totals in the primary set:</strong></p>
+<ul>
+<li>2,540,287 descriptors were lost, and the PMU counted exactly 2,540,287 FULL. Every one of the 1,080
+bursts has <code>full_minus_missing</code> = 0 and no dropped Drain.</li>
+<li>SWERROR after each loss burst decodes to code <strong>0x53</strong> (WQ full), WQ 0, with op 0 (noop) or 3 (memmove).</li>
+<li>3.57 M accepted mm64/mm4096 copies were all verified, with 0 failures.</li>
+</ul>
+<p><strong>First set (Drain right after the burst):</strong></p>
+<ul>
+<li>Runs: <code>MTL-R2/20261101T072934Z-AB-n1-r1</code>, <code>…072935Z-n2-r1</code>, <code>…072936Z-n4-r1</code>, <code>…072938Z-n8-r1</code>,
+<code>…072940Z-x4-r1</code>, <code>…072941Z-n1-r2</code>, <code>…072942Z-n2-r2</code>, <code>…072943Z-n4-r2</code>, <code>…072944Z-n8-r2</code>, <code>…072945Z-x4-r2</code>.</li>
+<li>Same results: 2,478,292 lost; FULL = missing + dropped Drains in all 1,080 bursts.</li>
+<li>Three bursts (n4 and n8 mm4096 same) show FULL = missing + 1. In each, the first Drain attempt hit
+the still-full WQ: <code>dropped_drains</code> = 1, and the resubmitted Drain completed. These are the
+119,127 vs 119,129 seen in the n4-r1 summary.</li>
+<li>The rerun above removes this case: it waits for occupancy &lt; 128 before the Drain. All its rows then
+match literally.</li>
+</ul>
+<p><strong>Do losses cluster in WQ-full windows?</strong> Yes, by four measures:</p>
+<ul>
+<li>Within each thread, every loss lies at or after the first missing index. That index is ≥ 37 in every
+multi-thread burst except one (see anomalies), and 1176-1676 for the single thread.</li>
+<li>In every multi-thread burst, 99-100% of the lost writes fall in a time bin (1/20 of the burst) in
+which another thread also lost writes (<code>timeline.lost_in_bins_where_another_thread_lost</code>).</li>
+<li>The per-bin loss fraction is flat during steady state and equal across threads. For example, n8
+mm4096 is ≈ 0.78 in every bin, which matches 1 − μ/λ with μ = 4 KiB at ~31 GB/s and offered
+λ ≈ 33 M/s.</li>
+<li>Occupancy (sampled max per burst): it reached 128 in all but 5 loss bursts (125-126 there). Bursts
+without loss peaked at ≤ 126 (most at 0-1). The sampler has no time alignment with individual losses.</li>
+</ul>
+<p>Single-thread control (n1 mm4096): it loses only in the second half of the burst (bins 14-19), and
+missing = FULL there too.</p>
+<p>A rough cross-check from (SUCCESS − Drains − 140) / burst span gives the implied device service rate:</p>
+<ul>
+<li>8.3 M/s (34 GB/s) for n1 and n2;</li>
+<li>8.0 for n4;</li>
+<li>7.5 for n8;</li>
+<li>7.6-7.8 for x4.</li>
+</ul>
+<p>This is close to the ~30 GB/s copy limit in <a href="capacity.html"><code>capacity.md</code></a>. N = 8 is ~9% lower, but by the device's own
+FULL count those extra losses are still WQ-full drops.</p>
+<h2>R3: boundary (flow control, total in-flight limit L)</h2>
+<p>Runs, each with <code>--reps 2</code> per config:</p>
+<ul>
+<li>noop + mm4096 (<code>--secs 1</code>, mm4096 checked on the tag only, <code>--verify-words 8</code>):
+<code>MTL-R3/20261101T073008Z-AB-n1-r1</code>, <code>…073029Z-n4-r1</code>, <code>…073049Z-n8-r1</code>, <code>…073110Z-n1-r2</code>,
+<code>…073131Z-n4-r2</code>, <code>…073152Z-n8-r2</code>.</li>
+<li>mm65536 (device slow enough that descriptors queue in the WQ): <code>…073228Z-mm64k-n1-r1</code>,
+<code>…073245Z-mm64k-n4-r1</code>, <code>…073302Z-mm64k-n8-r1</code>, <code>…073318Z-mm64k-n1-r2</code>, <code>…073335Z-mm64k-n4-r2</code>,
+<code>…073352Z-mm64k-n8-r2</code>.</li>
+<li>Fine L sweep 150-170: <code>…073417Z-fine-n1-r1</code>, <code>…073439Z-fine-n8-r1</code>, <code>…073500Z-fine-n1-r2</code>,
+<code>…073521Z-fine-n8-r2</code>.</li>
+</ul>
+<p>All addresses are <code>same</code>. Cells give lost / PMU FULL / occupancy max, summed over 4 phases (8 at
+mm65536 L = 150).</p>
+<table>
+<thead>
+<tr>
+<th>op</th>
+<th>N</th>
+<th>L=128</th>
+<th>140</th>
+<th>150</th>
+<th>200</th>
+<th>400</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>noop</td>
+<td>1</td>
+<td>0/0/1</td>
+<td>0/0/1</td>
+<td>0/0/1</td>
+<td>0/0/1</td>
+<td>0/0/0</td>
+</tr>
+<tr>
+<td>noop</td>
+<td>4</td>
+<td>0/0/1</td>
+<td>0/0/1</td>
+<td>0/0/1</td>
+<td>0/0/1</td>
+<td>195/195/128</td>
+</tr>
+<tr>
+<td>noop</td>
+<td>8</td>
+<td>0/0/1</td>
+<td>0/0/1</td>
+<td>0/0/1</td>
+<td>0/0/1</td>
+<td>1052/1052/128</td>
+</tr>
+<tr>
+<td>mm4096</td>
+<td>1</td>
+<td>0/0/1</td>
+<td>0/0/1</td>
+<td>0/0/1</td>
+<td>0/0/1</td>
+<td>0/0/16</td>
+</tr>
+<tr>
+<td>mm4096</td>
+<td>4</td>
+<td>0/0/1</td>
+<td>0/0/1</td>
+<td>0/0/1</td>
+<td>0/0/21</td>
+<td>17458/17458/128</td>
+</tr>
+<tr>
+<td>mm4096</td>
+<td>8</td>
+<td>0/0/1</td>
+<td>0/0/1</td>
+<td>0/0/1</td>
+<td>0/0/21</td>
+<td>17778/17778/128</td>
+</tr>
+<tr>
+<td>mm65536</td>
+<td>1</td>
+<td>0/0/104</td>
+<td>0/0/116</td>
+<td>0/0/126</td>
+<td>9174/9174/128</td>
+<td>49410/49410/128</td>
+</tr>
+<tr>
+<td>mm65536</td>
+<td>4</td>
+<td>0/0/104</td>
+<td>0/0/116</td>
+<td>0/0/126</td>
+<td>9492/9492/128</td>
+<td>49470/49470/128</td>
+</tr>
+<tr>
+<td>mm65536</td>
+<td>8</td>
+<td>0/0/104</td>
+<td>0/0/116</td>
+<td>0/0/126</td>
+<td>9450/9450/128</td>
+<td>49463/49463/128</td>
+</tr>
+</tbody>
+</table>
+<p>mm65536, all L (L = 136, 141, 144 and 151-170 are extra points; N = 4 has none from 151 to 170):</p>
+<table>
+<thead>
+<tr>
+<th>N</th>
+<th>136</th>
+<th>141</th>
+<th>144</th>
+<th>151</th>
+<th>152</th>
+<th>153</th>
+<th>154</th>
+<th>155</th>
+<th>156</th>
+<th>158</th>
+<th>160</th>
+<th>170</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>0/0/112</td>
+<td>0/0/116</td>
+<td>0/0/120</td>
+<td>0/0/126</td>
+<td>0/0/127</td>
+<td>0/0/128</td>
+<td>184/184/128</td>
+<td>205/205/128</td>
+<td>449/449/128</td>
+<td>1000/1000/128</td>
+<td>1266/1266/128</td>
+<td>3271/3271/128</td>
+</tr>
+<tr>
+<td>8</td>
+<td>0/0/112</td>
+<td>0/0/117</td>
+<td>0/0/120</td>
+<td>0/0/127</td>
+<td>0/0/128</td>
+<td>100/100/128</td>
+<td>172/172/128</td>
+<td>453/453/128</td>
+<td>505/505/128</td>
+<td>1100/1100/128</td>
+<td>1500/1500/128</td>
+<td>3362/3362/128</td>
+</tr>
+</tbody>
+</table>
+<p><strong>R3 results:</strong></p>
+<ul>
+<li>For L ≤ 140: 1.06 × 10⁹ descriptors, 0 lost, FULL 0. 95% UB <strong>2.8 × 10⁻⁹</strong>.</li>
+<li>In all 296 R3 rows (summed into the cells above): lost == FULL, every PMU identity holds, 0 non-0x01
+status, 0 late records, and 0 tag failures over 4.8 × 10⁸ tag-checked memmoves.</li>
+<li>With mm65536 the occupancy register reads L − 24 (104 at L = 128, 126 at L = 150). Losses start at the
+first L where it reaches 128: L = 153-154 for N = 1, 152-153 for N = 8.</li>
+<li>The losses grow as ≈ (L − 152.5) per 20 ms timeout cycle (for example, 4,750 per 2 s at L = 200). This
+is the same for N = 1, 4 and 8.</li>
+<li>With noop and mm4096 the poller keeps the device-side backlog small (occupancy ≤ 21 up to L = 200), and
+losses appear only at L = 400.</li>
+</ul>
+<h2>Verdicts (H0 sub-claims)</h2>
+<ol>
+<li><strong>&quot;Every MOVDIR64B write from any thread reaches the device&quot;</strong> (no loss while not full): <strong>supported.</strong>
+<ul>
+<li>Evidence (1), direct count: R1 had 3.21 × 10⁹ descriptors from 1-8 cores, same line and different
+lines, including cross-socket, with 0 timeouts, 0 late records and PMU FULL = 0. Thread count and
+same-address contention had no effect (0 in every cell).</li>
+<li>Evidence (2), device counter: SUCCESS + FULL = writes + Drains in every one of the 2,612 rows. Every
+write was counted by the device as either accepted or dropped-full.</li>
+<li>Upper bound on concurrency-caused loss: &lt; 9.4 × 10⁻¹⁰ per descriptor (95%) on an almost empty WQ, and
+&lt; 2.8 × 10⁻⁹ for R3 L ≤ 140.</li>
+</ul>
+</li>
+<li><strong>&quot;Lost if and only if it arrives while the WQ is full&quot;</strong>: <strong>supported.</strong>
+<ul>
+<li>Evidence (1), counts against the device's own drop counter: missing == EV_DWQ_FULL in all 2,160 R2
+bursts (literally in the 1,080 rerun bursts; in the first set after counting 3 dropped Drains), and
+in all R3 rows.</li>
+<li>Evidence (2), register reads: after every loss phase the probe's SWERROR read decodes to 0x53 (WQ
+full) on WQ 0. That is 1,295 of 1,295 loss rows: 660 in the R2 rerun, plus 635 in the first R2 set
+and R3 together. The sticky copy only shows that a full-drop happened, so this is supporting
+evidence. The sampled occupancy reached 128 in all but 5 loss bursts (125-126 there). In R3 the
+onset of loss tracks the occupancy register reaching 128, within one L step for N = 1 and N = 8.</li>
+<li>Evidence (3), time structure: losses co-occur across threads in shared time windows, and the
+single-thread control loses the same way.</li>
+<li>The R3 prediction &quot;losses only for L &gt; 140&quot; is supported. The actual onset is L ≈ 153 (152-154),
+because the occupancy register reads L − 24 at these rates: ~24 in-flight descriptors are not in the
+WQ. Losses began only once occupancy reached 128.</li>
+</ul>
+</li>
+<li><strong>&quot;Every accepted descriptor is intact&quot;</strong> (integrity): <strong>supported.</strong>
+<ul>
+<li>Evidence (1), byte comparison: 8.7 × 10⁸ mm64 in R1 and 7.2 × 10⁶ mm64/mm4096 in R2 (64 B tag + full
+content), plus 4.8 × 10⁸ mm4096/mm65536 in R3 (tag only). 0 integrity failures, 0 destinations
+written without a record, and only status 0x01 ever seen.</li>
+<li>Evidence (2), counters: op_noop / op_memmove = accepted descriptors of that type, and cpl_err = 0, in
+every row. No merged descriptor (it would make FULL &lt; missing) and no corrupted descriptor (it would
+give a non-0x01 status or a wrong destination) was seen.</li>
+</ul>
+</li>
+</ol>
+<h2>Anomalies and caveats (reported plainly)</h2>
+<ul>
+<li><strong>No anomaly against H0 was found.</strong> There was no loss in R1, no FULL ≠ missing beyond the three
+dropped Drains explained above (which the rerun removed), and no integrity failure.</li>
+<li><strong>disp_wq (EV_NUM_DESC_DISPATCH_WQ) does not equal SUCCESS outside calibration.</strong> It is −1 to −20 in 12
+of 72 R1 rows, +3 (constant) in R2 mm4096 bursts, and down to −29,776 in R3 noop at L ≥ 150. The
+semantics of this counter are not understood. It is not used for any verdict: the record counts equal
+SUCCESS − Drains exactly in every row.</li>
+<li><strong>Timestamp order is not arrival order.</strong> The per-write TSC stamps record instruction issue, which runs
+ahead of portal arrival by the store-buffer drain. Example: one first-set n8 mm4096 burst
+(<code>…072944Z-AB-n8-r2</code>, rep 0 iter 7, start skew 42 µs) shows only 59 writes stamped before its first
+loss, and cpu12's index 0 was lost. The stamp-based <code>global_writes_before_first_loss</code> therefore cannot
+support a strict &quot;≥ 140 accepted before the first loss&quot; inference. It does not contradict the direct
+FULL, occupancy and accounting evidence.</li>
+<li><strong>R2 stamps:</strong> the R2 burst loop takes one <code>rdtsc</code> per write. Per-thread ns/write stayed at 104-111 on
+node 0 (n1-n8 noop/mm64), the same as the uninstrumented cadence in <a href="w2xport.html"><code>w2xport.md</code></a> (~106-110 ns at
+2.2 GHz). So the stamps did not visibly slow the maximum-rate workload.</li>
+<li><strong>Occupancy is sampled</strong> (about one read per µs), so short full intervals can be missed. In 5 R2 loss
+bursts (2 first-set n4 noop-offsets, 3 rerun n4 mm64-same) the sampled max was 125-126; FULL still equaled
+missing.</li>
+<li><strong>Timeout:</strong> 20 ms. No R1 slot ever timed out and no late record appeared, so the choice does not
+affect R1. In R3 the loss counts scale with 1/timeout, and FULL equality shows that no timed-out
+descriptor was merely slow.</li>
+<li><strong>PMU:</strong> 8 events, <code>time_running == time_enabled</code> in all rows (never multiplexed). The PMU is
+device-wide, and only this process submitted (both sides leased).</li>
+<li><strong>Untested:</strong>
+<ul>
+<li>shared WQs / ENQCMD;</li>
+<li>IAA and dsa2;</li>
+<li>more than 8 submitting cores, or SMT siblings submitting together;</li>
+<li>other WQ sizes or engine counts;</li>
+<li>batch descriptors;</li>
+<li>block_on_fault = 1;</li>
+<li>more than 2 + 2 cross-socket cores;</li>
+<li>high-rate multi-core writes while the WQ sits at 120-127. R3 mm65536 reached that occupancy only
+at ~1 M descriptors/s on the same address; R1 ran at up to 67 M/s with an almost empty WQ.</li>
+</ul>
+</li>
+</ul>
+<h2>Side observations</h2>
+<ul>
+<li>
+<p>Same address vs offsets in R2: same-line bursts lose less than offset bursts:</p>
+<ul>
+<li>n4 noop: 0 vs 567;</li>
+<li>n8 noop: 75 k vs 91 k;</li>
+<li>n8 mm64: 122 k vs 152 k.</li>
+</ul>
+<p>The per-thread ns/write is the same (≈ 104-111). [INFERENCE] Writes from several cores to one line
+reach the device somewhat more spread out. This is not a loss mechanism: FULL equals missing in both
+cases.</p>
+</li>
+<li>
+<p>The device runs noops at ≥ 67 M/s (8 cores, flow mode), so an empty WQ never fills with noops from
+≤ 4 cores in flow mode.</p>
+</li>
+<li>
+<p>x4 noop/mm64 bursts lost 0 in the first set and 10-16 k in the rerun, at the same ns/write.
+Run-to-run variation; FULL = missing in both.</p>
+</li>
+</ul>
+<h2>Next question</h2>
+<p>Repeat R1 with a slow op (mm65536), so that multi-core high-rate writes arrive while occupancy sits at
+120-127. Also cover SWQ/ENQCMD, where the device returns retry instead of dropping.</p>
+</main></body></html>

@@ -1,0 +1,450 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>P10: performance counters as second evidence (group `pmu`)</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Noto+Serif+SC:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"><style>
+:root { --paper:#faf9f5; --card:#fffefb; --sunk:#f3f1eb; --ink:#161514; --ink2:#3b3935; --muted:#7a776f; --rule:#e4e0d6; --rule2:#cfcabe;
+  --serif:"Newsreader","Noto Serif SC",Georgia,serif; --sans:"Inter","PingFang SC","Noto Sans SC",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace; }
+@media (prefers-color-scheme: dark) { :root { --paper:#141311; --card:#1b1a17; --sunk:#201f1b; --ink:#ece8df; --ink2:#cfcac0; --muted:#9a958a; --rule:#2f2d29; --rule2:#46433c; } }
+body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.65 var(--sans); -webkit-font-smoothing:antialiased; }
+.wrap { max-width:980px; margin:0 auto; padding:28px 28px 80px; }
+nav.crumb { font:500 12px var(--mono); letter-spacing:.04em; color:var(--muted); margin-bottom:22px; }
+nav.crumb a { color:var(--muted); }
+h1, h2, h3 { font-family:var(--serif); font-weight:500; line-height:1.25; }
+h1 { font-size:30px; margin:0 0 18px; } h2 { font-size:22px; margin:34px 0 10px; padding-top:14px; border-top:1px solid var(--rule); } h3 { font-size:18px; margin:24px 0 8px; }
+a { color:var(--ink); text-decoration-color:var(--rule2); text-underline-offset:3px; }
+code { font:13px var(--mono); background:var(--sunk); padding:1px 4px; border-radius:4px; overflow-wrap:anywhere; }
+pre { background:var(--sunk); padding:12px 14px; border-radius:8px; overflow:auto; } pre code { background:none; padding:0; }
+table { border-collapse:collapse; margin:12px 0; font-size:13.5px; display:block; overflow-x:auto; }
+th, td { border-bottom:1px solid var(--rule); padding:6px 10px; text-align:left; vertical-align:top; }
+th { font:500 12px var(--mono); color:var(--muted); border-bottom:1px solid var(--rule2); }
+blockquote { margin:12px 0; padding:4px 14px; border-left:3px solid var(--rule2); color:var(--ink2); }
+ul.notes { list-style:none; padding:0; } ul.notes li { padding:14px 0; border-bottom:1px solid var(--rule); }
+ul.notes a { font:500 18px var(--serif); } ul.notes .d { color:var(--ink2); } ul.notes .t { font:12px var(--mono); color:var(--muted); }
+.lead { color:var(--ink2); }
+</style></head><body><main class="wrap"><nav class="crumb"><a href="../">DSA 提交流水线</a> · <a href="./">实验笔记</a> · pmu</nav><h1>P10: performance counters as second evidence (group <code>pmu</code>)</h1>
+<p>Probe: <code>dsa-lab/src/bin/p10_pmu.rs</code> (one binary, <code>--mode calib|knee</code>). All runs are under
+<code>dsa-lab-runs/P10/&lt;dir&gt;</code> (below: <code>&lt;dir&gt;</code> only). Config
+<code>dsa-config/{1,2,3,4}-engine.conf</code> (dedicated WQ, size 128). Heaters on (8 threads); uncore
+2.05-2.20 GHz at start, 2.20 at end in every run. Core 3.6-3.9 GHz, except <code>q1-rdpmc-r1/r2</code>,
+which ran at 2.2 GHz. All noop runs: every status 0x01, SWERROR unchanged. 1 MiB runs: an
+unmeasured warm-up runs each slot alone until it returns 0x01. All buffers are prefaulted,
+including the partial last page, and <code>set_mempolicy(MPOL_PREFERRED)</code> is set. In the measured
+runs the only non-0x01 status is 0x00, which is the dropped descriptors. SWERROR records 0x53
+plus overflow, as expected for drops.</p>
+<h2>How the counters are read</h2>
+<ul>
+<li>
+<p><strong>DSA PMU</strong> (<code>dsa0</code>, <code>dsa2</code>; perf type from sysfs; counted on the cpumask CPU 0):
+<code>config = category | events &lt;&lt; 4</code>; <code>config1 = wq | tc &lt;&lt; 32 | pgsz &lt;&lt; 40 | sz &lt;&lt; 44 | eng &lt;&lt; 52</code>
+(bit positions from <code>format/</code>). The idxd driver writes a filter register only when the field is
+non-zero (<code>drivers/dma/idxd/perfmon.c</code>, <code>perfmon_pmu_event_start</code>), so a zero field would keep a
+stale filter. The probe therefore always writes every filter: WQ = the leased WQ only, all
+others all-ones. <strong>8 hardware counters</strong>: with 16 events open, only 8 count (<code>021810Z-A-calib-n16</code>),
+so never open more than 8.</p>
+</li>
+<li>
+<p><strong>IIO</strong>: <code>UNC_IIO_TXN_REQ_BY_CPU.MEM_WRITE</code> (event 0xC1, umask 0x01, ch_mask 0xFF, fc_mask 7;
+intel/perfmon <code>SPR/events/sapphirerapids_uncore.json</code>) opened on all 7 <code>uncore_iio_*</code> PMUs.
+On both sockets only <code>uncore_iio_0</code> counts the DSA portal writes. The other 6 read 0.</p>
+</li>
+<li>
+<p><strong>Core</strong> (user mode, this thread; intel/perfmon <code>SPR/events/sapphirerapids_core.json</code> V1.40,
+repo commit 2ba60f6). There are two read methods:</p>
+<ul>
+<li><code>--core-read syscall</code>: <code>PerfCounter::raw</code> plus <code>read(2)</code>.</li>
+<li><code>--core-read rdpmc</code>: same codes, but read with RDPMC through the perf mmap page. LFENCE and
+then 4 RDPMCs into registers, so there is no store or syscall inside the bracket. A sample is
+dropped if the mmap-page seqlock or index changed. That happened in 0 iterations.</li>
+</ul>
+<p>The syscall bracket is biased. The user-mode stores in the <code>read()</code> path after the timed submit
+wait for SB entries. That stall is counted, so SB stalls appear from K≈90
+(<code>q1-syscall-sb_stall-r1..3</code>). This is why the Q1 verdicts use RDPMC.</p>
+</li>
+</ul>
+<h2>Events used</h2>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Encoding</th>
+<th>Source</th>
+<th>Calibration result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>EV_DWQ_SUCCESS</td>
+<td>dsa cat 0, 0x10</td>
+<td>spec D.1.1</td>
+<td>= K exactly (K = 1/10/100 noops, read before the Drain; <code>021734Z-B-calib-ncounters</code>). Knee runs: K+1 per iter, plus 1 per accepted Drain</td>
+</tr>
+<tr>
+<td>EV_DWQ_FULL</td>
+<td>dsa cat 0, 0x20</td>
+<td>D.1.1</td>
+<td>0 in every noop run. 1 MiB K=200: 62/iter = 61 work drops + 1 dropped Drain, and 61 = missing completions</td>
+</tr>
+<tr>
+<td>EV_CYC_NON_BATCH_DESC_RDY</td>
+<td>dsa cat 0, 0x40</td>
+<td>D.2.1 (VERSION 0x100)</td>
+<td>Exactly 1 cycle per descriptor while the WQ drains immediately. ~4.5 M/iter when 1 MiB backs up the WQ</td>
+</tr>
+<tr>
+<td>EV_CYC_DESC_NOT_RDY</td>
+<td>dsa cat 0, 0x100</td>
+<td>D.2.1</td>
+<td>~0 when idle (352 in 20 ms). 0.995-1.002 per ns while busy (~1.0 count/ns). Not a free-running clock: the event is conditional and inactive when idle. Whether that is clock gating or a qualification in the event is unknown, so the &quot;~1 GHz device clock&quot; reading holds only for busy windows [INFERENCE]. Same count with TC/size/engine/page filters narrowed (<code>022015Z-A-calib-cyc-1m-warm</code>)</td>
+</tr>
+<tr>
+<td>EV_NUM_DESC_DISPATCH_WQ</td>
+<td>dsa cat 1, 0x20 (+eng filter)</td>
+<td>D.1.1</td>
+<td>= K exactly. A Drain counts 1 with all engines selected and 1 per engine with per-engine filters (sum 144 vs 141)</td>
+</tr>
+<tr>
+<td>EV_PIPEFULL_NO_DISPATCH</td>
+<td>dsa cat 1, 0x40</td>
+<td>D.2.1</td>
+<td>Noop: a floor of 2 cycles per descriptor (+6 per Drain), not real stalls. 1 MiB: ≈ the whole busy period on every engine</td>
+</tr>
+<tr>
+<td>EV_STALL_NO_DESC_RDY</td>
+<td>dsa cat 1, 0x80</td>
+<td>D.2.1</td>
+<td>Noop: most cycles. 1 MiB overflow: ~3.6 k/iter</td>
+</tr>
+<tr>
+<td>EV_CL_PROCESSED</td>
+<td>dsa cat 1, 0x1</td>
+<td>D.1.1</td>
+<td>32768 per 1 MiB descriptor = 1 MiB / 32 B (+≤1)</td>
+</tr>
+<tr>
+<td>EV_ATS_RSP_* (any)</td>
+<td>dsa cat 2, 0xF</td>
+<td>D.1.1</td>
+<td>512 per 1 MiB memmove (+~1) = one per 4 KiB page of src+dst</td>
+</tr>
+<tr>
+<td>EV_ATC_ALLOC / HIT_PREV / NO_ALLOC</td>
+<td>dsa cat 2, 0x40/0x100/0x80</td>
+<td>D.2.1</td>
+<td>alloc ≈ ATS + 1/desc. hit ≈ 0.9/desc. no-alloc ≈ 5/desc</td>
+</tr>
+<tr>
+<td>EV_ATS_RSP_PASID_PF, EV_PRS_RSP_SUCCESS, EV_ATS_RSP_DROPS</td>
+<td>dsa cat 2, 0x2/0x10/0x400</td>
+<td>D.1.1/D.2.1</td>
+<td>0: no device page faults after warm-up + mempolicy</td>
+</tr>
+<tr>
+<td>EV_DESC_NOOP</td>
+<td>dsa cat 3, 0x1</td>
+<td>D.1.1</td>
+<td>= K exactly</td>
+</tr>
+<tr>
+<td>EV_NUM_CPL_SUCC / CPL_WRITES</td>
+<td>dsa cat 4, 0x10/0x20</td>
+<td>D.1.1</td>
+<td>= K exactly. One Drain adds <strong>4</strong> (once per engine [INFERENCE])</td>
+</tr>
+<tr>
+<td>UNC_IIO_TXN_REQ_BY_CPU.MEM_WRITE</td>
+<td>uncore_iio_0, see above</td>
+<td>perfmon uncore json</td>
+<td>= K exactly (noop K = 1/10/100, Drain +1). 1 MiB overflow: +2/iter beyond the submits (likely the driver's SWERROR-interrupt MMIO writes [INFERENCE])</td>
+</tr>
+<tr>
+<td>RESOURCE_STALLS.SB</td>
+<td>core 0xA2/0x08</td>
+<td>perfmon core json</td>
+<td>≤4 cycles below the knee. Above it, 1.01-1.05 × the extra cycles (below)</td>
+</tr>
+<tr>
+<td>EXE_ACTIVITY.BOUND_ON_STORES</td>
+<td>core 0xA6/0x40, cmask 2</td>
+<td>perfmon core json</td>
+<td>0.98-0.99 × RESOURCE_STALLS.SB</td>
+</tr>
+<tr>
+<td>MEM_INST_RETIRED.ALL_STORES</td>
+<td>core 0xD0/0x82</td>
+<td>perfmon core json</td>
+<td>K+1 + constant 9: each MOVDIR64B retires as exactly one store</td>
+</tr>
+<tr>
+<td>OFFCORE_REQUESTS.ALL_REQUESTS</td>
+<td>core 0x21/0x80</td>
+<td>perfmon core json</td>
+<td>Does not count MOVDIR64B (1-5 per bracket below the knee). Rises by ~1 per stalled submit above the knee: unexplained</td>
+</tr>
+<tr>
+<td>L1D_PEND_MISS.FB_FULL</td>
+<td>core 0x48/0x02</td>
+<td>perfmon core json</td>
+<td><strong>Unusable here</strong>: 0 in every run. It counts demand requests that wait for a fill buffer, so it tells nothing about MOVDIR64B</td>
+</tr>
+<tr>
+<td>cycles, instructions</td>
+<td>perf generic</td>
+<td>—</td>
+<td>sanity</td>
+</tr>
+</tbody>
+</table>
+<p>CHA: not used. The public SPR list has no IA-side MMIO/WCiL TOR opcode, and the IIO event was
+already exact.</p>
+<h2>P10-a. Calibration (exact K, no Drain inside the window)</h2>
+<p>The probe submits K noops, polls every completion record, and only then reads the counters. The
+Drain is bracketed separately. Runs: <code>021734Z-B-calib-ncounters</code> (K = 1, 10, 100, 5 iters each),
+<code>021810Z-A-calib-n16</code>, <code>022015Z-A-calib-cyc-1m-warm</code> (1 MiB, K = 1, 8). Every count-type event
+above reads K in every iteration (exact, not ±1). <code>021846Z-B-calib-cyc-1m</code> is <strong>invalid</strong>: all
+descriptors faulted (0x03) at the unwritten last partial page of dst. That was a prefault bug,
+fixed afterwards.</p>
+<h2>P10-b. Q1: is the ~114 stall the core store buffer? (X1 sweep with heaters)</h2>
+<p>Predictions (model.js P10, before running): Q1-b says RESOURCE_STALLS.SB ≈ 0 below the knee and ≈
+the extra time above it. Q1-c (device or IIO backpressure) says no SB stalls; the stall would show
+as something else.</p>
+<p>Runs (RDPMC bracket around prefill + timed submit):</p>
+<ul>
+<li><code>022346Z-B-q1-rdpmc-r1</code>, <code>022347Z-B-q1-rdpmc-r2</code> (core 2.2 GHz)</li>
+<li><code>022348Z-B-q1-rdpmc-r3</code> (3.9 GHz)</li>
+<li><code>022355Z-A-q1-rdpmc-fence-control</code> (side A, ~3.9 GHz effective; its main bracket is the same as the others)</li>
+</ul>
+<p>&quot;Extra&quot; = cycles − a linear fit of cycles over K ≤ 108.</p>
+<table>
+<thead>
+<tr>
+<th>K</th>
+<th>submit ns (r3)</th>
+<th>prefill ns (r3)</th>
+<th>cycles (r3)</th>
+<th>SB stall (r3)</th>
+<th>SB / extra: r1, r2, r3, ctl</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0-112</td>
+<td>9-10 (40-80 at K = 32/64, see caveat)</td>
+<td>10-292</td>
+<td>162-1261</td>
+<td>0-4</td>
+<td>—</td>
+</tr>
+<tr>
+<td>114</td>
+<td>10.0</td>
+<td>296</td>
+<td>1765</td>
+<td>496</td>
+<td>–, –, 1.13, 1.10</td>
+</tr>
+<tr>
+<td>116</td>
+<td>97.2</td>
+<td>342</td>
+<td>2538</td>
+<td>1257</td>
+<td>1.05, 1.03, 1.05, 1.04</td>
+</tr>
+<tr>
+<td>120</td>
+<td>98.1</td>
+<td>730</td>
+<td>4027</td>
+<td>2739</td>
+<td>1.03, 1.03, 1.03, 1.03</td>
+</tr>
+<tr>
+<td>128</td>
+<td>98.1</td>
+<td>1503</td>
+<td>7058</td>
+<td>5741</td>
+<td>1.03, 1.03, 1.02, 1.02</td>
+</tr>
+<tr>
+<td>160</td>
+<td>99.0</td>
+<td>4621</td>
+<td>19240</td>
+<td>17787</td>
+<td>1.03, 1.02, 1.01, 1.01</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Above the knee, the SB stall grows by 376 cycles per extra descriptor at 3.9 GHz (96.5 ns), and
+the prefill time grows by 97.3 ns per descriptor. At 2.2 GHz the numbers are 217 cycles = 98.7 ns
+vs 100.4 ns. So one SB-full stall equals one cadence period.</li>
+<li>BOUND_ON_STORES agrees with RESOURCE_STALLS.SB to 1-2%.</li>
+<li>ALL_STORES = K+10, so every MOVDIR64B is a retired store.</li>
+<li>No device drops: DWQ_SUCCESS = K+1 and DWQ_FULL = 0 at every K.</li>
+<li>The knee moves with core speed: SB stalls first appear at K = 114 at 3.9 GHz and at K = 116 at
+2.2 GHz, because a slower prefill lets more stores drain first.</li>
+</ul>
+<p><strong>Verdict: Q1-b survives with two evidence types</strong> (timing, and a count that matches the timing
+within 1-5%). Q1-c is contradicted: the extra time is store-buffer allocation stall in the core.</p>
+<p>Controls and caveats:</p>
+<ul>
+<li><code>--mid</code> runs (<code>022348Z..022350Z-B-q1-rdpmc-mid-r1..3</code>) add an RDPMC snapshot between prefill
+and the timed submit. The compiler spills the snapshot to the stack, and those stores themselves
+stall in the full SB: about 2540-2660 cycles, roughly 7 stores, inside the &quot;timed&quot; segment. That
+segment is perturbed and should not be used. The prefill segment there gives the same picture:
+0 below K≈116, then (K−117)×~390 cycles. The timed submit stays at ~100 ns even after the
+spills, which fits in-order SB drain with the spills queued behind the MOVDIR64Bs [INFERENCE].</li>
+<li>The fence control (SFENCE after the timed submit) is labeled a control only and its result is
+<strong>inconclusive</strong>. The fence window saturates at ~850 ns for K ≥ 114, and SB stalls in that
+window are ~2450 cycles, which coincide with 5 spill stores. Nothing here measures how many
+stores are still outstanding at the SFENCE, so what SFENCE+RDTSCP waits for is not
+established, and the run says nothing about drain depth.</li>
+<li>The submit+1 cost of ~40-80 ns at K = 32/64 (seen in several runs) has SB stall = 0, so it is
+not a store-buffer effect. The cause is still open.</li>
+</ul>
+<h2>P10-c. Do descriptors past the CPU knee reach the device late, or drop? (noop)</h2>
+<p>Runs:</p>
+<ul>
+<li><code>022048Z..022049Z-A-knee-noop-r1..3</code>: DSA counters per K block. The core counters in these runs
+were read serially with <code>read()</code>, so they are not used.</li>
+<li><code>022744Z-A-arr-noop-r1</code>, <code>022745Z-A-arr-noop-r2</code>: a sampler thread on CPU 0 reads
+DWQ_SUCCESS / DISPATCH / IIO back to back (~1.5 µs per read, 3.5-4.6 µs per sample) while the
+submitter never enters the kernel.</li>
+</ul>
+<p>Results:</p>
+<ul>
+<li><strong>No drops.</strong> DWQ_SUCCESS = K+1 and the IIO count = K+2 (with the Drain), DWQ_FULL = 0, and
+completions = K+1 at every K up to 160, in 3 runs.</li>
+<li><strong>The device WQ never queues noops.</strong> EV_CYC_NON_BATCH_DESC_RDY is exactly 1 cycle per
+descriptor, and DISPATCH = DWQ_SUCCESS.</li>
+<li><strong>They arrive late, at the cadence.</strong> Descriptors reach the WQ at 105-110 ns each (fit over 22
+traces). The CPU retires the timed submit at 0.3-1.1 µs (K=96) or 5.6 µs (K=160), but the WQ
+count reaches its final value only at 12-16 µs (K=96) or 19-21 µs (K=160). So ~K−50 (K=160) or
+~K (K=96) descriptors are still in the core when the CPU moves on, both below and above the
+knee. That matches P10-b.</li>
+<li><strong>No queue between the IIO and the WQ.</strong> The IIO TXN count runs ahead of DWQ_SUCCESS by about
+the number of descriptors that arrive during the ~2.5 µs read skew between the two columns,
+i.e. 0 buffered within resolution. [INFERENCE] The pacing is set at or before the IIO's request
+ingress, not at the device's WQ. This is Q5 evidence against a slow device-side acceptance
+stage (Q5-b), though credit backpressure from the IIO itself is not excluded.</li>
+</ul>
+<p>Caveats: the sampler perturbs the run. The K=160 timed submit takes ~320 ns with the sampler
+(~105 without), and prefill is about 5% slower. Columns of one sample are read ~1.5 µs apart, so
+only the first column (DWQ_SUCCESS) has a clean baseline.</p>
+<h2>P10-d. Q4: where do the extra 1 MiB descriptors sit?</h2>
+<p>Predictions (model.js, before running):</p>
+<ul>
+<li>Q4-a: capacity = 128 + E·m, and EV_PIPEFULL_NO_DISPATCH is large for 1 MiB.</li>
+<li>Q4-b: 128 + a constant.</li>
+<li>Q4-c: a counting artifact.</li>
+</ul>
+<p>Runs (memmove 1 MiB, K = 64/128/200, 5 iters, 4 engines):</p>
+<ul>
+<li><code>022640Z..022645Z-A-ovf-wqeng-r1..3</code></li>
+<li><code>022646Z/022648Z-A-ovf-pereng-r1..2</code>: per-engine dispatch + PIPEFULL</li>
+<li><code>022650Z/022652Z-A-ovf-xlat-r1..2</code>: translation</li>
+<li><code>022740Z/022742Z-A-arr-1m-r1..2</code>: sampler time series</li>
+<li><code>022906Z-A-arr-1m-pereng</code>: sampler, per-engine dispatch</li>
+<li><code>022908Z-B-arr-1m-e1</code>, <code>022909Z-A-arr-1m-e2</code>, <code>022910Z-B-arr-1m-e3</code>: engine sweep with the
+sampler</li>
+</ul>
+<p>Results:</p>
+<ul>
+<li>
+<p><strong>Accepted = 140 per iteration</strong> at K=200, in every run, and identical in the device counter and
+the completion records: DWQ_SUCCESS 141 = 140 + 1 Drain, DWQ_FULL 62 = 61 + 1 Drain, completed
+140, missing 61. At K=128 nothing drops (DWQ_FULL 0). <strong>Q4-c is dead.</strong></p>
+</li>
+<li>
+<p><strong>Engine sweep (time series while full, before any completion):</strong></p>
+<table>
+<thead>
+<tr>
+<th>E</th>
+<th>accepted plateau</th>
+<th>dispatched (simultaneous)</th>
+<th>accepted − 128 − dispatched</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>131</td>
+<td>2</td>
+<td>1</td>
+</tr>
+<tr>
+<td>2</td>
+<td>134</td>
+<td>4</td>
+<td>2</td>
+</tr>
+<tr>
+<td>3</td>
+<td>137</td>
+<td>6</td>
+<td>3</td>
+</tr>
+<tr>
+<td>4</td>
+<td>140</td>
+<td>8 (2/2/2/2 per engine)</td>
+<td>4</td>
+</tr>
+</tbody>
+</table>
+<p>So C(E) = 128 + 3E exactly. <strong>Q4-a survives with m = 3, and Q4-b is dead.</strong> Each engine holds 2
+descriptors that the PMU counts as dispatched into its work pipeline. The third is accepted but
+not counted as dispatched. It scales with E, so it is per engine. Its exact location is not
+directly counted [INFERENCE]: it fits &quot;one descriptor staged in the engine waiting for a pipeline
+slot&quot;, which is what EV_PIPEFULL_NO_DISPATCH describes, but it could be any per-engine
+one-entry stage.</p>
+</li>
+<li>
+<p><strong>EV_PIPEFULL_NO_DISPATCH</strong> ≈ 4.6-4.85 M cycles per engine per iteration. That is the whole
+~4.6 ms busy period at ~1 GHz, so the 1 MiB pipelines are always full with a descriptor waiting.
+Noop: 2 cycles/desc. Prediction &quot;Q4-a: PIPEFULL large for 1 MiB&quot; survives.
+EV_CYC_NON_BATCH_DESC_RDY ≈ 4.5 M: the WQ holds ready descriptors for the whole run.</p>
+</li>
+<li>
+<p><strong>Translation:</strong> one ATS translation per 4 KiB page, no page-fault/PRS responses, and ~5
+ATC-no-alloc per descriptor. Translation is not where descriptors wait.</p>
+</li>
+<li>
+<p>Arrival into the WQ during 1 MiB runs is 107-115 ns/desc (sampler on). The WQ fills at 17-20 µs,
+and the CPU finishes at ~10 µs.</p>
+</li>
+<li>
+<p>Core side, 1 MiB K=200: SB stall ≈ 31-32 k cycles (3.9 GHz) of a ~9.5 µs prefill. The timed
+submit takes ~320 ns, not ~100 ns (also at K=128). That 1 MiB timed-submit cost is not explained
+here (Q6/Q8).</p>
+</li>
+</ul>
+<h2>Suggested model.js updates (the lead integrates)</h2>
+<ul>
+<li><strong>Q1-b</strong>: supported → <strong>confirmed by count</strong>: RESOURCE_STALLS.SB = 1.01-1.05 × the extra cycles,
+0 below the knee, slope = one cadence per extra descriptor. Mark Q1-c ruled out by P10.</li>
+<li><strong>Q2</strong>: DWQ_FULL counts every drop (= missing completions). SWERROR shows 0x53 + overflow.</li>
+<li><strong>Q4</strong>: a → supported, m = 3 per engine: C(E) = 128 + 3E measured for E = 1-4. Per engine, 2 are
+counted as dispatched and 1 is per-engine but not counted. b and c → ruled out.
+<code>engine_slots</code> = 3/engine, and the animation fill should be 12 (8 in pipelines + 4 staged), not
+11.</li>
+<li><strong>Q5</strong>: add evidence. Arrivals at the IIO and at the WQ are both paced at ~105-110 ns with no
+queue between them, so the cadence is upstream of the device WQ [INFERENCE: at or before IIO
+ingress].</li>
+<li><strong>Components</strong>: the DSA cycle events count ~1.0 per ns while busy and are inactive when idle
+(a conditional event, not a free-running clock). A Drain completes as 4 completions (one per
+engine [INFERENCE]) and is dispatched to every engine.</li>
+<li><strong>P10 status</strong>: done. The DSA PMU has 8 counters, and the driver's zero-filter-means-stale rule
+must be avoided.</li>
+</ul>
+<h2>Next questions</h2>
+<ul>
+<li>What is the 40-80 ns timed submit at K = 32-64 when SB stall is 0? Candidates: WC/fill-buffer
+merge, or a mesh credit.</li>
+<li>Where exactly is the per-engine 3rd slot? A per-engine occupancy event, or batch descriptors
+(EV_STALL_BATCH_*), might separate the &quot;staged&quot; slot from the pipeline.</li>
+<li>Why are 1 MiB timed submits ~320 ns? The cadence is unchanged, which hints at extra
+non-MOVDIR64B stores or read traffic on the same path (Q6).</li>
+<li>What is the OFFCORE_REQUESTS.ALL_REQUESTS rise of +1 per stalled submit above the knee?</li>
+</ul>
+</main></body></html>

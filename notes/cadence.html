@@ -1,0 +1,726 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>cadence group: F1 follow-up, P6, P7, P11 (forks Q5, Q6)</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Noto+Serif+SC:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"><style>
+:root { --paper:#faf9f5; --card:#fffefb; --sunk:#f3f1eb; --ink:#161514; --ink2:#3b3935; --muted:#7a776f; --rule:#e4e0d6; --rule2:#cfcabe;
+  --serif:"Newsreader","Noto Serif SC",Georgia,serif; --sans:"Inter","PingFang SC","Noto Sans SC",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace; }
+@media (prefers-color-scheme: dark) { :root { --paper:#141311; --card:#1b1a17; --sunk:#201f1b; --ink:#ece8df; --ink2:#cfcac0; --muted:#9a958a; --rule:#2f2d29; --rule2:#46433c; } }
+body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.65 var(--sans); -webkit-font-smoothing:antialiased; }
+.wrap { max-width:980px; margin:0 auto; padding:28px 28px 80px; }
+nav.crumb { font:500 12px var(--mono); letter-spacing:.04em; color:var(--muted); margin-bottom:22px; }
+nav.crumb a { color:var(--muted); }
+h1, h2, h3 { font-family:var(--serif); font-weight:500; line-height:1.25; }
+h1 { font-size:30px; margin:0 0 18px; } h2 { font-size:22px; margin:34px 0 10px; padding-top:14px; border-top:1px solid var(--rule); } h3 { font-size:18px; margin:24px 0 8px; }
+a { color:var(--ink); text-decoration-color:var(--rule2); text-underline-offset:3px; }
+code { font:13px var(--mono); background:var(--sunk); padding:1px 4px; border-radius:4px; overflow-wrap:anywhere; }
+pre { background:var(--sunk); padding:12px 14px; border-radius:8px; overflow:auto; } pre code { background:none; padding:0; }
+table { border-collapse:collapse; margin:12px 0; font-size:13.5px; display:block; overflow-x:auto; }
+th, td { border-bottom:1px solid var(--rule); padding:6px 10px; text-align:left; vertical-align:top; }
+th { font:500 12px var(--mono); color:var(--muted); border-bottom:1px solid var(--rule2); }
+blockquote { margin:12px 0; padding:4px 14px; border-left:3px solid var(--rule2); color:var(--ink2); }
+ul.notes { list-style:none; padding:0; } ul.notes li { padding:14px 0; border-bottom:1px solid var(--rule); }
+ul.notes a { font:500 18px var(--serif); } ul.notes .d { color:var(--ink2); } ul.notes .t { font:12px var(--mono); color:var(--muted); }
+.lead { color:var(--ink2); }
+</style></head><body><main class="wrap"><nav class="crumb"><a href="../">DSA 提交流水线</a> · <a href="./">实验笔记</a> · cadence</nav><h1>cadence group: F1 follow-up, P6, P7, P11 (forks Q5, Q6)</h1>
+<p>All run directories are relative to <code>dsa-lab-runs/</code>. Probes
+(this workspace, <code>dsa-lab/src/bin/</code>):</p>
+<table>
+<thead>
+<tr>
+<th>probe</th>
+<th>what it measures</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>q5_cadence</code></td>
+<td>F1-style steady cadence per <code>cpu:wq</code> target and per descriptor variant, under a list of heater configs; MOVDIR64B×k + MFENCE round trips; X1 knee; <code>--decay-ms</code> mode: long bursts (20 000 submits, 2-5 ms) while uncore frequency scaling walks the mesh from 2.2 to 0.8 GHz, so each burst carries its own mesh GHz</td>
+</tr>
+<tr>
+<td><code>p6_two_submitters</code></td>
+<td>N worker threads (one <code>cpu:wq</code> each), solo and together, start aligned on a TSC deadline; per-thread steady cadence, aggregate rate in the overlap window, missing after Drain, device PMU EV_DWQ_SUCCESS / EV_DWQ_FULL per WQ</td>
+</tr>
+<tr>
+<td><code>p11_dma_background</code></td>
+<td>background thread keeps 16 × 1 MiB memmoves in flight on another WQ; foreground cadence, knee, closed-loop noop throughput, noop latency with the background off/on; also used with DRAM-streaming heaters</td>
+</tr>
+<tr>
+<td><code>cadence_common/mod.rs</code></td>
+<td>shared helpers (heater specs <code>NxMIB@NODE+...</code>, device PMU, prefaulted buffers, <code>pin_mempolicy</code>, burst/round-trip/knee routines)</td>
+</tr>
+</tbody>
+</table>
+<p>Configs added: <code>dsa-config/cadence-2dwq-1g.conf</code> (wq0.0 + wq0.1, size 64, one group, 4 engines),
+<code>cadence-2dwq-2g.conf</code> (wq0.0 + engines 0-1 in group 0; wq0.1 + engines 2-3 in group 1),
+<code>cadence-4dwq-1g.conf</code> (4 × size 32), <code>cadence-8dwq-1g.conf</code> (8 × size 16).</p>
+<p>Every completion status other than 0x01 is reported. The only non-success statuses I saw were
+0x11 on <code>noop-cc</code> / <code>noop-bof</code> (all of them: CC and BOF flags are invalid on a noop / on a WQ with
+block_on_fault=0). No 0x03 anywhere. All probes call <code>set_mempolicy(MPOL_PREFERRED)</code> (lead's NUMA-balancing fix).</p>
+<h2>Measurement notes (read before using the numbers)</h2>
+<ul>
+<li><strong>Mesh GHz per burst.</strong> Reading the CHA counter from the submitter core goes through an IPI that
+takes 5-130 µs (<code>Q5/20261101T021958Z-A-clocktest2</code>: snap cost and skewed readings such as
+1.4/2.9 GHz on a 100 µs window, while node0+node1 still add up to 4.3 GHz). So: short
+F1-style bursts (~50 µs) get the mesh GHz from busy-spinning 20 ms windows before/after each
+target (<code>mesh_both</code>), and the fit uses the decay mode, whose bursts are 2-5 ms long
+(skew &lt; 3-5 %). A <em>sleeping</em> measuring thread also reads below the 0.8 GHz floor (CHA clock
+gated when the package idles), so <code>mesh_both</code> spins.</li>
+<li><strong>Core clock is not controlled.</strong> The same core runs at 2.2 or 3.9 GHz depending on how many
+cores are busy. It matters a little (see F1 fit: c ≈ 11-23 core cycles), e.g. cpu2 → dsa0 at
+2.2 GHz mesh is 110.9 ns with the core at 2.2 GHz and 106.3-107.5 ns at 3.8 GHz. Always compare
+rows taken in the same run.</li>
+<li><strong>Pre-knee submit time is bimodal across runs</strong> (~10-18 ns or ~40 ns at K = 32-112) with no
+link to any knob I varied, including background DMA. I did not chase it; it is not used below.</li>
+</ul>
+<h2>F1 follow-up: cadence = a + b / f_mesh</h2>
+<p><strong>Question.</strong> Does the steady per-submit cadence follow a + b/f_mesh over the whole 0.8-2.2 GHz
+range, what are a and b on side A and side B, why is side B faster at the idle mesh, and does the
+cadence depend on the payload or flags?</p>
+<p><strong>Predictions (before running).</strong> Mesh-paced transport: one b (mesh cycles) and one a fit every
+mesh frequency for a given core with rmse at the ns level. If the 64-byte write transport is the
+limit, then noop, noop without completion record, invalid-flag noops, 64 B and 4 KiB memmove all
+have the same cadence. For A vs B, the options were: (i) different idle mesh clock per socket,
+(ii) the device or IIO side differs, (iii) the submitter core's position on the mesh differs.</p>
+<p><strong>Getting intermediate frequencies.</strong> Heater mixes do not give stable intermediate mesh clocks:
+with both sockets heated (even 1 spinner each), or with any heater on node0, both meshes go to
+2.1-2.2 GHz. With heaters only on node1, node0 stays at 0.80 and node1 sits at ~1.2 GHz
+(<code>F1/20261101T022654Z-AB-mesh-explore</code>, <code>F1/20261101T022547Z-AB-fit-ab</code>). So the coupling is
+asymmetric and depends on history. Instead, decay mode heats both sockets (<code>8x1@0+8x1@1</code>), stops
+the heaters, and then samples 20 000-submit bursts every 40 ms while UFS lowers the mesh to 0.8
+(about 450 ms, with ~10-30 samples in between). After ~2.5 s at 0.8 GHz the
+submit stream itself sometimes pushes UFS back up, which adds more intermediate points.</p>
+<p><strong>Runs.</strong> <code>F1/20261101T022832Z-AB-decay-fit</code> (6 targets, only cpu2 and cpu62 decayed),
+<code>F1/20261101T022932Z-AB-decay-cpu34</code>, <code>...022937Z-AB-decay-cpu2</code>, <code>...022943Z-AB-decay-cpu36</code>,
+<code>...022948Z-AB-decay-cpu12</code>, <code>...022953Z-AB-decay-cpu62</code>, <code>...022958Z-AB-decay-cpu30</code>;
+payload/flags: <code>F1/20261101T023044Z-AB-ops-decay-cpu2</code>, <code>...023052Z-AB-ops-decay-cpu34</code> (mesh
+stayed at 2.0-2.25), <code>...023129Z-AB-ops-decay2-cpu2</code>, <code>...023138Z-AB-ops-decay2-cpu34</code> (full
+0.8-2.2 sweep). Fits use bursts with window &gt; 1.5 ms. No missing completions, no non-success
+statuses in any noop run.</p>
+<p><strong>Fit table</strong> (least squares, ns = a + b/f_mesh; f = mesh GHz of the device's socket; the
+&quot;+core&quot; column adds c/f_core):</p>
+<table>
+<thead>
+<tr>
+<th>side / target</th>
+<th>run</th>
+<th>f range (GHz)</th>
+<th>a (ns)</th>
+<th>b (mesh cycles)</th>
+<th>rmse (ns)</th>
+<th>+core: a, b, c(core cycles)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>A</strong>: cpu2 → dsa0</td>
+<td>decay-fit</td>
+<td>0.80-2.22 (n=179)</td>
+<td>30.6</td>
+<td>169.8</td>
+<td>1.24</td>
+<td>27.2, 167.1, 14.6</td>
+</tr>
+<tr>
+<td><strong>A</strong>: cpu2 → dsa0</td>
+<td>decay-cpu2</td>
+<td>0.80-2.21 (n=66)</td>
+<td>32.3</td>
+<td>168.6</td>
+<td>1.97</td>
+<td>25.6, 165.5, 23.0</td>
+</tr>
+<tr>
+<td>A: cpu2 → dsa0, noop</td>
+<td>ops-decay2-cpu2</td>
+<td>0.90-2.25 (n=33)</td>
+<td>23.6</td>
+<td>184.3</td>
+<td>1.66</td>
+<td></td>
+</tr>
+<tr>
+<td><strong>B</strong>: cpu34 → dsa2</td>
+<td>decay-cpu34</td>
+<td>0.79-2.20 (n=69)</td>
+<td>35.0</td>
+<td>144.6</td>
+<td>1.74</td>
+<td>31.4, 143.6, 11.1</td>
+</tr>
+<tr>
+<td>B: cpu34 → dsa2, noop</td>
+<td>ops-decay2-cpu34</td>
+<td>0.80-2.21 (n=32)</td>
+<td>31.3</td>
+<td>149.3</td>
+<td>1.52</td>
+<td></td>
+</tr>
+<tr>
+<td>node0: cpu12 → dsa0</td>
+<td>decay-cpu12</td>
+<td>0.80-2.21</td>
+<td>30.6</td>
+<td>144.6</td>
+<td>1.39</td>
+<td>27.1, 142.4, 13.6</td>
+</tr>
+<tr>
+<td>node0: cpu30 → dsa0</td>
+<td>decay-cpu30</td>
+<td>0.80-2.25</td>
+<td>31.8</td>
+<td>188.2</td>
+<td>1.34</td>
+<td>28.1, 185.8, 14.3</td>
+</tr>
+<tr>
+<td>node1: cpu36 → dsa2</td>
+<td>decay-cpu36</td>
+<td>0.79-2.10</td>
+<td>31.2</td>
+<td>126.7</td>
+<td>1.77</td>
+<td>26.1, 124.6, 17.5</td>
+</tr>
+<tr>
+<td>node1: cpu62 → dsa2</td>
+<td>decay-cpu62</td>
+<td>0.79-2.10</td>
+<td>32.4</td>
+<td>169.7</td>
+<td>1.92</td>
+<td>28.4, 167.6, 14.9</td>
+</tr>
+<tr>
+<td>node1: cpu62 → dsa2</td>
+<td>decay-fit</td>
+<td>0.80-2.21</td>
+<td>29.8</td>
+<td>172.1</td>
+<td>1.83</td>
+<td>25.2, 168.1, 20.3</td>
+</tr>
+</tbody>
+</table>
+<p>Verdict: the a + b/f_mesh form holds from 0.8 to 2.2 GHz with 1.2-2 ns rmse (F1's two-point
+36 ns + 169 cycles for cpu2 is reproduced: a = 31 ± 4, b = 169-184). <strong>a is the same for every
+core and both sockets (≈ 31 ns, about 27 ns once a core-clock term is added); b depends on the
+submitting core (127-188 mesh cycles).</strong> Adding a core-clock term c/f_core improves the rmse a
+little (c ≈ 11-23 core cycles, ≈ 3-10 ns between 2.2 and 3.9 GHz cores). This is a small
+correction to &quot;core frequency does not matter&quot;. Evidence: timing fit across a manipulated mesh
+clock (UFS decay), repeated on 6 cores and over 2-3 runs for cpu2/cpu34/cpu62.</p>
+<p><strong>Side A ~233-243 vs side B ~204-216 ns at the idle mesh: narrowed to the choice of submitter
+core.</strong> The default cores differ in b: cpu2 has b ≈ 169 and cpu34 has b ≈ 145, which is
+(169 − 145)/0.8 = 30 ns at 0.8 GHz. Swapping the core moves the difference, not the side: cpu12
+on node0 has b = 145 (the same as cpu34), and cpu62 on node1 has b = 170 (the same as cpu2).
+Explanations (i) (different idle mesh clock) and (ii) (device/IIO side) are ruled out as the main
+cause: every fit uses the device socket's own measured mesh clock, both sockets' floor is 0.80 GHz,
+and the same device gives both values depending on the core. The core sweep (P7 below) shows the
+same thing at 2.2 GHz: within a socket, cores span 98-119 ns (node0) and 89-116 ns (node1). The
+node1 median is ~7 ns lower (104.6 vs 111.7), so a small per-socket offset may remain on top of
+the per-core spread. The lead's 204 ns on B is ~10 ns below my 216 at 0.8 GHz. The core clock
+(3.9 vs 2.2 GHz, c term ≈ 2-5 ns) explains part of that; I did not pin down the rest [INFERENCE].</p>
+<p><strong>Payload and flags</strong> (same core, interleaved in each decay iteration, so every op sees the same
+mesh history):</p>
+<table>
+<thead>
+<tr>
+<th>target</th>
+<th>op</th>
+<th>ns @ 2.2 GHz (ops-decay, n≈50)</th>
+<th>a, b over 0.8-2.2 GHz (ops-decay2)</th>
+<th>missing / statuses</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>cpu2 → dsa0</td>
+<td>noop</td>
+<td>106.3</td>
+<td>23.6, 184.3 (rmse 1.7)</td>
+<td>0</td>
+</tr>
+<tr>
+<td></td>
+<td>noop-norc (no completion record)</td>
+<td>106.3</td>
+<td>23.2, 184.9 (1.8)</td>
+<td>n/a</td>
+</tr>
+<tr>
+<td></td>
+<td>noop-cc (invalid flag)</td>
+<td>106.3</td>
+<td>25.3, 181.2 (2.5)</td>
+<td>all 0x11</td>
+</tr>
+<tr>
+<td></td>
+<td>noop-bof (invalid flag)</td>
+<td>106.3</td>
+<td>-</td>
+<td>all 0x11</td>
+</tr>
+<tr>
+<td></td>
+<td>memmove 64 B (CC)</td>
+<td>106.3</td>
+<td>29.0, 175.9 (6.1)</td>
+<td>0</td>
+</tr>
+<tr>
+<td></td>
+<td>memmove 64 B no CC</td>
+<td>106.3</td>
+<td>32.5, 164.3 (4.6)</td>
+<td>~13 800 / 20 000 dropped</td>
+</tr>
+<tr>
+<td></td>
+<td>memmove 4 KiB</td>
+<td>105.7</td>
+<td>(f ≥ 1.26 only)</td>
+<td>~6 800 / 20 000 dropped</td>
+</tr>
+<tr>
+<td>cpu34 → dsa2</td>
+<td>noop / norc / cc / bof / memmove64</td>
+<td>97.2-97.5</td>
+<td>31.3/149.3, 30.7/151.2, 30.6/150.8, -, 31.9/148.7 (rmse 1.5-2.0)</td>
+<td>cc, bof: all 0x11</td>
+</tr>
+<tr>
+<td></td>
+<td>memmove 64 B no CC</td>
+<td>97.5</td>
+<td>42.0, 130.5 (3.9)</td>
+<td>~14 000 dropped</td>
+</tr>
+<tr>
+<td></td>
+<td>memmove 4 KiB</td>
+<td>97.2</td>
+<td>(f ≥ 1.39 only)</td>
+<td>~6 700 dropped</td>
+</tr>
+</tbody>
+</table>
+<p>Verdict: the cadence does not depend on the payload or the (valid) flags. The supporting contrasts
+are all valid descriptors: noop with vs without a completion record (RCR/CRAV off), which match at
+2.2 GHz (106.3 / 106.3 and 97.5 / 97.5 ns) and over the mesh sweep (a, b within 1 ns / 2 cycles); and
+noop vs memmove 64 B (CC) vs memmove 4 KiB, which match within 0.6 ns at 2.2 GHz. The memmove
+64 B CC vs no-CC contrast also matches at 2.2 GHz (106.3 / 106.2). But the no-CC and 4 KiB streams
+had 35-70 % of their descriptors dropped (the device falls behind), so they show only that the
+cadence does not see the device's backlog. They do not show that the payload is free, and their
+low-frequency fits are noisier (rmse 4-6 ns). The invalid-flag noops (CC or BOF on a noop: every
+one completes with 0x11) also run at the same cadence. That is a separate observation (a rejected
+descriptor is written just as fast) and is not used as evidence about valid flags. Overall this fits
+a 64-byte write transport limit. Evidence: timing (cadence) plus a manipulation (payload and RCR flag);
+drop counts are from completion records (<code>missing</code>). The PMU was off in decay mode, so I did not
+confirm that the drops are DWQ_FULL.
+Side note: a 64 B memmove <em>without</em> cache control is served ~3× slower than with CC [INFERENCE: the
+device keeps up with ~30 % of the 9.4 M/s arrivals].</p>
+<p><strong>Next questions.</strong> What sets b per core? A mesh hop-count map (core tile → IIO stack of dsa0/dsa2)
+would predict b. The CPUID/MSR tile coordinates need root. Does a (~27-31 ns) include a fixed
+IIO-side clock domain?</p>
+<h2>P6: two (and more) submitters at once</h2>
+<p><strong>Question.</strong> Is the ~106 ns cadence a per-core serial limit (Q5-a) or a device-entry rate
+(Q5-b)?</p>
+<p><strong>Predictions (model.js, before running).</strong> Q5-a: aggregate ≈ 2 × 9.4 M/s, per-thread cadence
+unchanged. Q5-b: same device capped at ≈ 9.4 M/s, per-thread cadence ≈ 212 ns; a different
+device is unaffected.</p>
+<p><strong>Runs.</strong> <code>P6/20261101T022045Z-A-1g-2core</code>, <code>P6/20261101T022223Z-A-1g-2core-r2</code> (same group,
+two DWQs); <code>P6/20261101T022222Z-A-2g-2core</code>, <code>P6/20261101T023528Z-A-2g-2core-r2</code> (different
+groups); <code>P6/20261101T022230Z-AB-xdev</code>, <code>P6/20261101T023529Z-AB-xdev-r2</code> (dsa0 + dsa2);
+extension to 4 and 8 cores: <code>P6/20261101T022259Z-A-4dwq-4core</code>, <code>P6/20261101T022259Z-A-8dwq-8core</code>.
+4000 back-to-back noops per thread, 5 reps (3 for 4/8 cores) of solo-then-together, heaters
+8x1 on the submitters' socket(s), mesh 2.1-2.2 GHz throughout.</p>
+<table>
+<thead>
+<tr>
+<th>setup</th>
+<th>thread (cpu → wq)</th>
+<th>solo ns/submit</th>
+<th>together ns/submit</th>
+<th>aggregate together (M/s)</th>
+<th>missing / DWQ_FULL / DWQ_SUCCESS per rep</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>same device, same group (2 runs)</td>
+<td>2 → wq0.0</td>
+<td>106.8, 106.5</td>
+<td>106.3, 106.2</td>
+<td><strong>18.93, 18.96</strong> (solo 9.36 + 9.52)</td>
+<td>0 / 0 / 4001</td>
+</tr>
+<tr>
+<td></td>
+<td>4 → wq0.1</td>
+<td>105.0, 104.8</td>
+<td>105.0, 104.8</td>
+<td></td>
+<td>0 / 0 / 4001</td>
+</tr>
+<tr>
+<td>same device, different groups (2 runs)</td>
+<td>2 → wq0.0</td>
+<td>106.1, 110.6</td>
+<td>106.3, 110.4</td>
+<td><strong>18.95, 18.59</strong></td>
+<td>0 / 0 / 4001</td>
+</tr>
+<tr>
+<td></td>
+<td>4 → wq0.1</td>
+<td>104.9, 104.9</td>
+<td>104.9, 104.9</td>
+<td></td>
+<td>0 / 0 / 4001</td>
+</tr>
+<tr>
+<td>different devices (2 runs)</td>
+<td>2 → dsa0</td>
+<td>106.2, 106.6</td>
+<td>106.1, 106.2</td>
+<td><strong>19.70, 19.70</strong></td>
+<td>0 / 0 / 4001</td>
+</tr>
+<tr>
+<td></td>
+<td>34 → dsa2</td>
+<td>97.3, 100.1</td>
+<td>97.3, 97.2</td>
+<td></td>
+<td>0 / 0 / 4001</td>
+</tr>
+<tr>
+<td>same device, 4 cores, 4 DWQs</td>
+<td>2/4/6/8</td>
+<td>106.3/105.1/100.5/109.0</td>
+<td>106.3/104.8/100.6/109.0</td>
+<td><strong>38.07</strong></td>
+<td>0 / 0 / 4001</td>
+</tr>
+<tr>
+<td>same device, 8 cores, 8 DWQs (size 16)</td>
+<td>2…16</td>
+<td>99.8-109.0</td>
+<td>99.8-109.0 (each within 1 ns of solo)</td>
+<td><strong>76.8 (core side)</strong></td>
+<td>together: 1752-2004 missing per thread (PMU multiplexed, counts not used)</td>
+</tr>
+</tbody>
+</table>
+<p>(Within a run most reps are within ±1 ns; a few are up to +4 ns. The second-run differences, e.g. 106.1 vs 110.6 on cpu2,
+follow the core clock: 3.8 vs 2.2 GHz.)</p>
+<p>Verdict: <strong>Q5-a survives and Q5-b (device-entry rate ≈ 9.4 M/s) is ruled out.</strong> Per-thread
+cadence is unchanged within 0.5 ns when 2, 4 or 8 cores submit to the same device, and the
+core-side aggregate scales linearly (19, 38, 77 M writes/s). Evidence 1 (timing plus manipulation):
+the per-thread cadence while the number of concurrent submitters on the same device changes.
+Evidence 2 (device count, clean runs only): with 2 submitters (4 runs) and 4 submitters (1 run, 3
+reps), the device PMU shows EV_DWQ_SUCCESS = 4001 per WQ per rep (4000 + Drain), EV_DWQ_FULL = 0,
+and 0 missing completions. One device therefore accepted and completed <strong>38 M writes/s</strong>, 4× the
+supposed 9.4 M/s entry cap. With 8 submitters the 77 M/s is only the core-side write rate. About
+half the descriptors were then lost (1752-2004 missing per thread per rep, from completion records
+after Drain). The PMU was multiplexed (16 events), so its counts are unscaled and some reps read 0.
+In the reps where both counters of a WQ ran, SUCCESS + FULL = 3936-4002, which fits the writes
+arriving and being dropped as WQ-full, but I do not use those counts as evidence. Device-side noop
+service with 4 engines ≈ 17 200 completions in ~0.42 ms ≈ 41 M/s [INFERENCE: window estimated
+from the submit timestamps; drop location inferred].
+Group membership made no difference (1g vs 2g).</p>
+<p><strong>Next question.</strong> Is the ~41 M/s noop limit per engine (≈10 M/s × 4)? P4 (engine count) can
+answer it with the 8-core stream.</p>
+<h2>P7: near vs far submitter (and the per-core sweep)</h2>
+<p><strong>Question.</strong> Does the per-core cadence grow with the core-to-device path?</p>
+<p><strong>Predictions (model.js, before running).</strong> Q5-a credit round trip: the cadence and the MFENCE
+round trip grow with distance (far socket adds the UPI latency); the knee does not move. Q5-b:
+nothing changes. I added one prediction before the k-write test: if each write is a serial
+handshake, the time for k writes + MFENCE has slope = cadence even with an empty store buffer.</p>
+<p><strong>Runs.</strong> <code>P7/20261101T022336Z-AB-near-far</code>, <code>P7/20261101T022420Z-AB-near-far-r2</code> (heaters on
+both sockets, 7 × 600-submit bursts, knee, round trips); far over the mesh range:
+<code>P7/20261101T023033Z-AB-decay-far-cpu34</code>, <code>P7/20261101T023039Z-AB-decay-far-cpu2</code>; core sweep
+(every physical core to its local device, heaters restarted per core):
+<code>P7/20261101T022444Z-AB-core-sweep-near</code>.</p>
+<table>
+<thead>
+<tr>
+<th>path</th>
+<th>cadence ns (run 1, run 2, decay @2.2)</th>
+<th>knee (last K fast → first K slow)</th>
+<th>MFENCE k=1,2,4,8 (ns, run 2)</th>
+<th>slope / intercept</th>
+<th>submit→completion</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>cpu2 → dsa0 (near)</td>
+<td>107.5, 110.9</td>
+<td>114 → 116; 116 → 118</td>
+<td>170, 279, 502, 945</td>
+<td><strong>110.9</strong> / 58</td>
+<td>374, 399</td>
+</tr>
+<tr>
+<td>cpu34 → dsa0 (far, cross-UPI)</td>
+<td>173.0, 178.2, 177.6</td>
+<td>114 → 116 (both)</td>
+<td>241, 420, 775, 1485</td>
+<td><strong>177.6</strong> / 65</td>
+<td>551, 573</td>
+</tr>
+<tr>
+<td>cpu34 → dsa2 (near)</td>
+<td>97.8, 102.4</td>
+<td>114 → 116 (both)</td>
+<td>138, 241, 446, 854</td>
+<td><strong>102.3</strong> / 36</td>
+<td>417, 391</td>
+</tr>
+<tr>
+<td>cpu2 → dsa2 (far)</td>
+<td>153.6, 156.1, 156.6</td>
+<td>114 → 116 (both)</td>
+<td>214, 369, 682, 1305</td>
+<td><strong>155.9</strong> / 58</td>
+<td>516, 555</td>
+</tr>
+</tbody>
+</table>
+<p>Far adds <strong>+65 to +67 ns per write to dsa0 and +54 to +56 ns per write to dsa2</strong> at a 2.2 GHz
+mesh. The knee stays at 115-117 and nothing is dropped (missing 0, DWQ_FULL 0). The per-write MFENCE slope matches the
+steady cadence to within 0.6 ns on all four paths, even though the store buffer is empty. Single-write
+MFENCE grows by +71 / +76 ns. Over the mesh range (decay runs) the far cadence needs both meshes. A fit
+with one a and separate b for the device-node and cpu-node meshes gives a = 64 / 68 ns (vs ≈ 31
+near) and b_dev + b_cpu = 242 / 191 cycles (rmse 1.9 / 1.8 ns; a single-mesh fit has rmse 12-26).
+The split between the two b's is poorly determined because the two clocks move together
+(r = 0.82 / 0.95). So the far path adds ~35 ns that are not mesh-clocked (UPI) plus extra mesh
+cycles [INFERENCE on the attribution].</p>
+<p>Core sweep at a 2.2 GHz mesh: node0 → dsa0 spans <strong>97.8-119.4 ns</strong> (median 111.7) and node1 → dsa2
+spans <strong>89.3-115.8 ns</strong> (median 104.6). Among the cores that ran at exactly 2.2 GHz the spread is
+still 98-119 / 92-116 ns, so it is not the core clock. For all 64 cores the k-write MFENCE slope
+tracks the cadence (r = 0.992, max |Δ| = 5 ns). The F1 fit shows the spread is in b (mesh
+cycles): cpu36 127, cpu12 145, cpu2 169, cpu30 188, while a stays at ≈ 31 ns.</p>
+<p>Verdict: <strong>the Q5-a prediction holds</strong>: the far cadence grows by roughly a UPI crossing, the
+knee stays put, and the per-write fence round trip grows with it. Evidence types: (1) timing plus
+manipulation (move the core: other socket, other mesh positions), (2) a second independent timing
+signature (k-write MFENCE slope = cadence for every core and path), and the per-core b from the
+mesh-clock manipulation. The cadence is therefore a per-core, per-write serial step whose length is
+the core-to-device path: ≈ 31 ns + b mesh cycles, b set by the core's mesh position, plus
+≈ 35 ns + mesh cycles when the path crosses UPI. It is not a full stop-and-wait. A single write
+takes ~170 ns to be acknowledged while writes complete every ~111 ns, so ~60 ns of each write
+overlaps with the next [INFERENCE: intercept of the k-write fit].
+Caveat: there is one die per socket here (<code>package_00_die_00</code>, <code>package_01_die_01</code>), so &quot;same die /
+other die&quot; is the core position within the mesh.</p>
+<p><strong>Next questions.</strong> Which step is serialized: the core's write-combining buffer / uncore request
+credit, or an ordering ack from the IIO? A test that might separate them: interleave writes to two
+portals (dsa0 + dsa2) from one core. If the step is per core, the combined rate is unchanged; if
+it is per destination, the rate doubles.</p>
+<h2>P11: background DMA vs submission (Q6), and DRAM-streaming CPU heaters</h2>
+<p><strong>Question.</strong> Does DSA's own DMA traffic slow the submit path (cadence, knee, throughput)?</p>
+<p><strong>Predictions (model.js, before running).</strong> Q6-a (shares IIO/mesh resources with the write-out
+path): background traffic makes the cadence &gt; 106 ns or the submit intervals longer. Q6-b
+(unrelated): no change. For the DRAM-heater drops I wrote two hypotheses before running:
+(d1) DRAM traffic slows the device's descriptor processing, so the WQ fills and writes are dropped as WQ-full;
+(d2) descriptors are lost some other way (e.g. NUMA-balancing PROT_NONE on completion records), so
+missing &gt; DWQ_FULL.</p>
+<p><strong>Runs.</strong> Same device, different group (engines 2-3 copy, engines 0-1 serve the noops):
+<code>P11/20261101T023204Z-A-samedev-2g</code>, <code>...023230Z-A-samedev-2g-r5</code>, <code>...023533Z-A-samedev-2g-r3</code>;
+same device, same group (shared engines): <code>...023232Z-A-samedev-1g</code>; other device, its own memory:
+<code>...023259Z-AB-otherdev-local</code>, <code>...023530Z-AB-otherdev-local-r2</code>; other device copying <strong>node0</strong>
+memory (cross-UPI into the foreground socket): <code>...023302Z-AB-otherdev-node0mem</code>. Background:
+16 × 1 MiB memmoves in flight; foreground cpu2 → wq0.0; 3-5 reps of off/on; 5 bursts + knee + 5 ms
+throughput + 200 latency samples per phase.</p>
+<table>
+<thead>
+<tr>
+<th>background</th>
+<th>bg GB/s</th>
+<th>cadence off → on (ns)</th>
+<th>knee</th>
+<th>closed-loop noop Mops off → on</th>
+<th>noop latency p50 off → on (ns)</th>
+<th>fg missing / DWQ_FULL (on)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>same device, other group (3 runs)</td>
+<td>30.1, 30.5, 31.1</td>
+<td>111.1→108.5, 106.6→105.6, 106.8→106.0</td>
+<td>116-120 both</td>
+<td>8.38→7.98, 8.69→8.19, 8.54→8.18 (<strong>−5 %</strong>)</td>
+<td>403→633, 363→614, 356→617 (<strong>+60 %</strong>)</td>
+<td>0 / 0</td>
+</tr>
+<tr>
+<td>same device, same group</td>
+<td>30.6</td>
+<td>106.8→106.7</td>
+<td>116-120 both</td>
+<td>8.68→<strong>0.02</strong></td>
+<td>381→<strong>408 425</strong></td>
+<td>534-536 / 535-537 of 600</td>
+</tr>
+<tr>
+<td>other device, own memory (2 runs)</td>
+<td>31.1, 31.1</td>
+<td>111.0→110.4, 106.7→106.6</td>
+<td>unchanged</td>
+<td>8.30→8.34, 8.47→8.49</td>
+<td>384→400, 375→364</td>
+<td>0 / 0</td>
+</tr>
+<tr>
+<td>other device, writing node0 memory</td>
+<td>29.3</td>
+<td>111.1→108.4</td>
+<td>unchanged</td>
+<td>8.36→8.55</td>
+<td>400→391</td>
+<td>0 / 0</td>
+</tr>
+</tbody>
+</table>
+<p>Verdict for the submit path: <strong>Q6-b survives and Q6-a is ruled out for DSA DMA traffic.</strong> With
+29-31 GB/s of background copies in every placement, the cadence did not get slower: changes are
+−0.1 to −2.7 ns, which is within the core-clock drift between phases, and the knee and missing
+counts are unchanged. Evidence 1 (timing plus manipulation): cadence and knee with the background
+toggled in the same process. Evidence 2 (count): the background rate is confirmed by its completion
+records (no bad statuses, no timeouts), and the foreground shows DWQ_FULL = 0 and missing = 0 except
+when the engines are shared. What the background does slow is the device's <em>processing</em> of the
+foreground noops when they share the device: +60 % completion latency and −5 % closed-loop
+throughput with separate engines, and with shared engines the noops queue behind 1 MiB copies
+(head-of-line), so 535/600 are dropped as WQ-full (PMU count). This is on the WQ → engine →
+completion side, not in the write transport. The model's original Q6-a hint (pre-knee intervals
+grow with 1 MiB payload) was not reproduced with a background on another WQ: the pre-knee level
+(~40 or ~10-18 ns, bimodal) is the same with the background off and on.</p>
+<p><strong>DRAM-streaming CPU heaters.</strong> Runs: <code>P11/20261101T023328Z-AB-dram-heaters</code> (sweep),
+<code>P11/20261101T023415Z-AB-dram-drops-24x64@0</code>, <code>...023421Z-AB-dram-drops-24x64@0--no-mempolicy</code>
+(+ L2-heater controls <code>...023418Z</code>, <code>...023423Z</code>), and the lead's own probe:
+<code>P11/20261101T023438Z-AB-f1-repro-dram</code> (<code>f1_freq_cadence --heaters 8,24</code>, heater-mib 64).</p>
+<table>
+<thead>
+<tr>
+<th>heaters (mesh 2.2 GHz in all)</th>
+<th>cadence median [min-max] ns</th>
+<th>closed-loop Mops</th>
+<th>latency p50 ns</th>
+<th>missing / DWQ_FULL</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>8 × L2 on node0</td>
+<td>110.8 [110.4-110.9]</td>
+<td>6.83</td>
+<td>399</td>
+<td>0 / 0</td>
+</tr>
+<tr>
+<td>+ 4 × DRAM on node0</td>
+<td>108.7 [108.2-114.5]</td>
+<td>6.84</td>
+<td>386</td>
+<td>0 / 0</td>
+</tr>
+<tr>
+<td>+ 8 × DRAM on node0</td>
+<td>119.5 [108.5-156.0]</td>
+<td>6.50</td>
+<td>383</td>
+<td>0 / 0</td>
+</tr>
+<tr>
+<td>+ 22 × DRAM on node0</td>
+<td>129.4 [109.3-209.5]</td>
+<td>5.03</td>
+<td>703</td>
+<td>0 / 0</td>
+</tr>
+<tr>
+<td>+ 22 × DRAM on <strong>node1</strong></td>
+<td>109.2 [108.0-110.5]</td>
+<td>8.48</td>
+<td>387</td>
+<td>0 / 0</td>
+</tr>
+<tr>
+<td>24 × DRAM on node0 (200 bursts, with / without mempolicy)</td>
+<td>131.7 [106.7-350] / 119.1 [104.1-340]</td>
+<td>5.46 / 5.48</td>
+<td>471 / 491</td>
+<td>0 / 0</td>
+</tr>
+</tbody>
+</table>
+<p>(The 6.8 Mops in the first rows of the sweep vs 8.3-8.5 elsewhere is a drift within that run: the
+same <code>8x1@0</code> config gave 8.35 at the end of the run.)</p>
+<p>DRAM streaming by CPU cores <strong>on the submitter's socket</strong> slows the cadence (median +9 to +21 ns,
+tails up to 340 ns) at a constant 2.2 GHz mesh. The same streaming on the other socket does
+nothing. DSA's own 30 GB/s does nothing either. So the write transport is shared with core-side
+memory traffic on the submitter's mesh (CHA/LLC/home path) and is not shared with IIO-originated DMA
+[INFERENCE on the shared structure; the observation itself is timing plus manipulation of where the
+traffic comes from]. <strong>The drops are not reproduced</strong>: 0 missing in 4 probe runs (≥ 200 bursts of 600
+noops under 24 DRAM heaters, with and without the mempolicy fix) and in the lead's own
+<code>f1_freq_cadence</code> run. The lead's original run (<code>F1/20261101T020451Z-A-heaters</code>) ended with
+SWERROR code 0x53 (DWQ full, overflow set). Those drops were therefore WQ-full drops, which fits
+(d1): under same-socket DRAM streaming the device's noop service slows (closed-loop throughput
+−34 to −40 %, latency +20 to +76 % here), and a 600-noop burst outruns it when the slowdown is deep
+enough. (d2) has no support: no 0x03 in any run, and the lead's run reports 0x53 (WQ full). Which condition made the lead's run cross the
+line (side B was not leased, so the other socket may have been busy) is open.</p>
+<h2>Verdicts on the forks</h2>
+<p><strong>Q5 (source of the ~106 ns cadence).</strong></p>
+<ul>
+<li><strong>Q5-a, per-core serial write handshake: supported.</strong> (1) P6: the per-thread cadence is unchanged
+with 2/4/8 concurrent cores on one device (core-side aggregate 19/38/77 M/s), and with 4 cores the
+device PMU counts 38 M/s accepted with zero WQ-full drops (timing plus count). (2) P7: moving the core to the other socket adds
+55-67 ns per write with the knee unchanged; the core's mesh position changes b from 127 to 188 cycles; a k-write
+MFENCE slope equals the cadence on an empty store buffer (manipulation plus a second timing signature).
+Refined form: cadence ≈ 27-31 ns + b(core) mesh cycles (+ ~15 core cycles), b = 127-188 for local
+cores, plus ≈ 35 ns + ~200-240 mesh cycles in total when crossing UPI. It is partly pipelined
+(~60 ns of overlap), not a full stop-and-wait round trip.</li>
+<li><strong>Q5-b, device entry rate: ruled out.</strong> One device accepted and completed 38 M writes/s from 4
+cores with zero WQ-full and zero missing (PMU count plus completion records). The cadence depends on
+the submitting core's position, not on the device.</li>
+<li><strong>Q5-c, engine time: ruled out (again).</strong> Valid noop, noop without completion record and 64 B /
+4 KiB memmove have the same cadence (the memmove streams that overflowed the WQ too, with the
+drop caveat).</li>
+</ul>
+<p><strong>Q6 (does DMA traffic slow submission?).</strong></p>
+<ul>
+<li><strong>Q6-a, shares IIO/mesh resources with the write-out path: ruled out for DSA DMA.</strong> 29-31 GB/s
+of background copies on the same device, the same engines, another device, or another device
+writing the foreground's socket memory leave the cadence and knee unchanged (timing), and the
+foreground has 0 WQ-full drops (count) except with shared engines.</li>
+<li><strong>Q6-b, no effect on the submit path: supported</strong> for the cadence. The device-side service of the
+foreground's descriptors does slow (+60 % latency with the device shared, HOL blocking with engines
+shared), but that is downstream of the WQ.</li>
+<li><strong>New alternative, Q6-c: core-side memory traffic on the submitter's socket slows the write
+transport: supported</strong> (cadence +9-21 ns median with DRAM heaters on the same socket, none from
+the other socket; same mesh clock).</li>
+</ul>
+<h2>Suggested corrections to model.js (the lead edits it)</h2>
+<ul>
+<li><code>c2p_path</code>: the cadence is per core: ≈ 31 ns + b/f_mesh with b = 127-188 mesh cycles depending on
+the core (cpu2 169, cpu34 145), plus a small core-clock term (≈ 15 core cycles). Cross-socket:
+156-178 ns at 2.2 GHz. Remove &quot;节拍来源未定（Q5）&quot; and say per-core serial step.</li>
+<li>Q5: a → supported (P6 + P7), b → ruled_out (P6: 38 M/s accepted by one device from 4 cores,
+PMU-counted, zero drops), c → ruled_out (memmove 64 B / 4 KiB give the noop cadence).</li>
+<li>Q6: a → ruled_out for DSA DMA (P11); b → supported for the cadence; add c &quot;CPU DRAM streaming on the
+submitter's socket slows the cadence&quot; → supported. Keep a note that a shared device slows
+<em>completion</em> (+60 % latency) and shared engines cause HOL blocking.</li>
+<li><code>portal_ingress</code> open question &quot;入口的接收速率是不是就是 106 ns&quot;: no. It accepts at least 38 M
+writes/s (4 cores, PMU-counted, no drops). With 8 cores the core side writes 77 M/s and about half
+are lost behind the WQ; 4 engines serve ≈ 41 M noops/s [INFERENCE] (P6 8-core run).</li>
+<li>P6 animation facts: aggregate 18.6-19.7 M/s with per-core cadence unchanged; 4 cores 38 M/s;
+8 cores 77 M/s written by the cores with about half dropped.</li>
+<li>P7 facts: far cadence 173-178 ns (dsa0 from node1), 154-157 ns (dsa2 from node0); knee stays at
+~116; single-write MFENCE 170 → 241 ns.</li>
+<li>F1 / measurement conditions: &quot;the two sockets' mesh clocks move together&quot; is asymmetric. Heat on node0
+raises both; heat only on node1 left node0 at 0.80 GHz and node1 at ~1.2 GHz in this session.
+The A/B idle-mesh difference is the default cores (cpu2 vs cpu34), not the sockets.</li>
+<li>X1 baseline &quot;~102-106 ns plateau&quot; is core-specific: the standard cpu2 gives 106-111 ns at a 2.2 GHz mesh
+(core 3.8 / 2.2 GHz).</li>
+</ul>
+</main></body></html>

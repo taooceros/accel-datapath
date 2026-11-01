@@ -1,0 +1,520 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>capacity: P12, P1, P4, P5 (forks Q2, Q3, Q4, Q7)</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Noto+Serif+SC:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"><style>
+:root { --paper:#faf9f5; --card:#fffefb; --sunk:#f3f1eb; --ink:#161514; --ink2:#3b3935; --muted:#7a776f; --rule:#e4e0d6; --rule2:#cfcabe;
+  --serif:"Newsreader","Noto Serif SC",Georgia,serif; --sans:"Inter","PingFang SC","Noto Sans SC",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace; }
+@media (prefers-color-scheme: dark) { :root { --paper:#141311; --card:#1b1a17; --sunk:#201f1b; --ink:#ece8df; --ink2:#cfcac0; --muted:#9a958a; --rule:#2f2d29; --rule2:#46433c; } }
+body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.65 var(--sans); -webkit-font-smoothing:antialiased; }
+.wrap { max-width:980px; margin:0 auto; padding:28px 28px 80px; }
+nav.crumb { font:500 12px var(--mono); letter-spacing:.04em; color:var(--muted); margin-bottom:22px; }
+nav.crumb a { color:var(--muted); }
+h1, h2, h3 { font-family:var(--serif); font-weight:500; line-height:1.25; }
+h1 { font-size:30px; margin:0 0 18px; } h2 { font-size:22px; margin:34px 0 10px; padding-top:14px; border-top:1px solid var(--rule); } h3 { font-size:18px; margin:24px 0 8px; }
+a { color:var(--ink); text-decoration-color:var(--rule2); text-underline-offset:3px; }
+code { font:13px var(--mono); background:var(--sunk); padding:1px 4px; border-radius:4px; overflow-wrap:anywhere; }
+pre { background:var(--sunk); padding:12px 14px; border-radius:8px; overflow:auto; } pre code { background:none; padding:0; }
+table { border-collapse:collapse; margin:12px 0; font-size:13.5px; display:block; overflow-x:auto; }
+th, td { border-bottom:1px solid var(--rule); padding:6px 10px; text-align:left; vertical-align:top; }
+th { font:500 12px var(--mono); color:var(--muted); border-bottom:1px solid var(--rule2); }
+blockquote { margin:12px 0; padding:4px 14px; border-left:3px solid var(--rule2); color:var(--ink2); }
+ul.notes { list-style:none; padding:0; } ul.notes li { padding:14px 0; border-bottom:1px solid var(--rule); }
+ul.notes a { font:500 18px var(--serif); } ul.notes .d { color:var(--ink2); } ul.notes .t { font:12px var(--mono); color:var(--muted); }
+.lead { color:var(--ink2); }
+</style></head><body><main class="wrap"><nav class="crumb"><a href="../">DSA 提交流水线</a> · <a href="./">实验笔记</a> · capacity</nav><h1>capacity: P12, P1, P4, P5 (forks Q2, Q3, Q4, Q7)</h1>
+<p>Workspace <code>dsa-exp-capacity</code>. Probes:</p>
+<ul>
+<li><code>dsa-lab/src/bin/p1_overflow.rs</code>: P12, P1, and capacity for P4/P5. Submits N descriptors
+(1 MiB memmove), then a marker (Drain or noop sentinel). It polls every empty record in passes,
+reading the marker first in each pass, and records each record's first-seen pass and time, the
+final status byte, WQ <code>occupancy</code> (sysfs, an MMIO read of WQCFG OCCUP), and the driver's SWERROR
+copy after every iteration. A cleanup Drain plus a re-scan ends each iteration.</li>
+<li><code>dsa-lab/src/bin/p4_rate.rs</code>: P4 throughput. Windowed noop and 1 MiB memmove (at most W
+outstanding), plus a noop burst with drop count.</li>
+<li><code>x1_knee</code> (reference, unchanged) for the P5 noop knee.</li>
+<li>Configs: <code>dsa-config/cap-e{1,2,3,4}-wq128.conf</code> and <code>cap-e{1,4}-wq{32,64,96}.conf</code>, generated from
+<code>4-engine.conf</code>. They differ only in engine count and WQ size.</li>
+</ul>
+<p>Run dirs are relative to <code>dsa-lab-runs/</code>. Unless noted, every run used
+8 heaters, <code>uncore_ghz</code> 2.1-2.2 at start and end, core 2.2-3.9 GHz (<code>warm_up</code>), and dedicated
+<code>wq*.0</code>.</p>
+<h2>Measurement problems found on the way (they affect other groups)</h2>
+<ol>
+<li><strong><code>dsa_lab::touched(len, 0)</code> does not prefault.</strong> <code>vec![0; n]</code> is calloc, so the pages stay
+unmapped. Every 1 MiB memmove to such a destination completes in about 1 us with status
+0x03 (page fault, no block-on-fault). Run <code>P12/20261101T021615Z-A-smoke</code> has 96/96 records
+at 0x03. <code>x1_knee --op memmove</code> has the same problem. Main has been told. My probes fill the
+destination with 0xa5.</li>
+<li><strong>Automatic NUMA balancing (<code>kernel.numa_balancing=1</code>).</strong> About 1 s into a process the
+kernel marks PTEs PROT_NONE. After that, prefaulted buffers fault again in the device
+(0x03/0x83, <code>bytes_completed=0</code>, <code>fault_addr</code> = page base of src or dst). The faulted
+descriptors finish at once, free capacity, and inflate the counts: 186-253 &quot;accepted&quot; in
+<code>P1/20261101T021828Z-B-e4-gap0-r1..r3</code> and <code>...-gap200-r1..r3</code>, last iterations only.
+Fix in both probes: <code>set_mempolicy(MPOL_BIND, {node})</code> at the top of <code>main</code>. MPOL_BIND has no
+MPOL_F_MOF, so the task drops out of NUMA balancing. The probes also prefault src and dst
+again right before every burst. After the fix there were 0 non-success statuses in 253 Drain
+iterations and 71 sentinel iterations. The runs from before the fix are kept only as status
+and SWERROR evidence.</li>
+<li><strong>The SWERROR sysfs copy is sticky and shared.</strong> It survives <code>lab</code>'s disable/reload, so it
+shows the last error from any earlier run by anyone. Examples: <code>0x531c</code>, operation 1 (another
+group's batch run); <code>0x031c</code> with a fault address (my page faults). <code>meta.json</code>
+<code>swerror_changed</code> is therefore false whenever the previous run left the same value. Use the
+per-iteration copy that the probe reads, not before/after equality.</li>
+</ol>
+<h2>P12: Drain descriptor vs noop sentinel (done first)</h2>
+<p><strong>Question.</strong> Does a completed Drain mean every earlier accepted record is already written, and
+how many completions does the old noop-sentinel method miss?</p>
+<p><strong>Predictions</strong> (model.js P12):</p>
+<ul>
+<li>Q4-c: the sentinel misses up to about 3 at N=96, and the capacity rises from ~139 to ~142.</li>
+<li>&quot;Unbiased&quot;: the counts are equal.</li>
+<li>Spec 3.12: no record may be written after the Drain record.</li>
+</ul>
+<p><strong>Runs.</strong></p>
+<ul>
+<li>N=96 (no overflow), markers alternating, E=4: <code>P12/20261101T021811Z-A-n96-both-r1</code>, <code>...021812Z-A-n96-both-r2</code>,
+<code>...021813Z-A-n96-both-r3</code> (10 iterations each).</li>
+<li>Per E: <code>P12/20261101T022123Z-A-n96-both-e1</code>, <code>...022130Z-A-n96-both-e2</code>, <code>...022136Z-A-n96-both-e3</code>,
+<code>...022142Z-A-n96-both-e4</code>.</li>
+<li>Old method with its 1 ms bounded pre-wait, N=96/200/320: <code>P12/20261101T022421Z-A-oldmethod-prewait1ms-r1</code>,
+<code>...022423Z-...-r2</code>, <code>...022425Z-...-r3</code>.</li>
+<li>Overflow (N=200/320) with both markers: the P1 runs below.</li>
+</ul>
+<p><strong>Results.</strong></p>
+<table>
+<thead>
+<tr>
+<th>condition</th>
+<th>Drain: records written after the marker was seen</th>
+<th>sentinel: missed (after marker)</th>
+<th>sentinel timeouts</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>E=4, N=96, 15+15 iterations (before the NUMA fix, but each run &lt; 0.9 s and 0 non-success statuses)</td>
+<td>0 in 15</td>
+<td>3 in 14 of 15 (always indices 93, 94, 95, 0.2-2.7 us late); 1 unresolved (same pass)</td>
+<td>0</td>
+</tr>
+<tr>
+<td>E=1 / 2 / 3 / 4, N=96, 5+5 each</td>
+<td>0</td>
+<td>max 0 / 1 / 2 / 3 (= E-1, always the last E-1 indices)</td>
+<td>0</td>
+</tr>
+<tr>
+<td>E=4, N=200/320, marker right after burst</td>
+<td>0 (first Drain dropped; resubmit at 50 ms completed)</td>
+<td>marker dropped</td>
+<td>24 of 24</td>
+</tr>
+<tr>
+<td>E=4, N=200/320, 1 ms pre-wait (old method)</td>
+<td>0</td>
+<td>0-3, count 137-140 (true 140)</td>
+<td>0</td>
+</tr>
+<tr>
+<td>all Drain iterations after the fix</td>
+<td>253 iterations: 0 after-marker, 0 written during final wait, 0 written after cleanup</td>
+<td></td>
+<td>0 final failures</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Verdict.</strong></p>
+<ul>
+<li>The Drain is a correct barrier. Across 253 iterations no record became visible after the
+Drain record. This is a direct count, at pass resolution of about 1 us.</li>
+<li>The old sentinel undercounts by up to E-1: the last E-1 descriptors are still executing on
+the other engines when the noop finishes on a free engine.</li>
+<li><strong>When the WQ is full, the marker itself is dropped.</strong> The sentinel then times out in every
+case. A Drain must be resubmitted (<code>drain()</code> in lib.rs does this; give each attempt longer
+than the whole backlog).</li>
+<li>Q4-c is half right. Undercounting exists (≤ E-1), but the true E=4 capacity is 140, not
+~142. The old method reproduces the historic &quot;~139&quot; (137-140).</li>
+<li>Counting method for every experiment below: Drain with resubmission, then a full scan plus a
+re-scan after a cleanup Drain.</li>
+</ul>
+<p><strong>Q7 (completion order).</strong></p>
+<ul>
+<li>E=1: 0 order inversions by pass in 10 of 10 iterations (<code>...n96-both-e1</code>).</li>
+<li>E=2/3/4: up to 3/6/13 inversions per iteration.</li>
+<li>1 MiB completions arrive in waves of exactly E, every E × ~33 us: first wave at 35 / 68 / 99 / 133 us
+for E = 1 / 2 / 3 / 4.</li>
+<li>Q7-a is supported, and refined: completion is in order within one engine and out of order
+across engines. Evidence: the inversion count plus the sentinel overtaking exactly E-1.</li>
+</ul>
+<p><strong>Caveats.</strong></p>
+<ul>
+<li>Pass resolution is about 1 us. Records first seen in the same pass as the marker are &quot;unresolved&quot;
+and counted as visible at the marker, which is what the old method did.</li>
+<li>Q7 for small descriptors (noop) is not tested.</li>
+</ul>
+<h2>P1: overflow, per-record status, SWERROR (Q2)</h2>
+<p><strong>Predictions.</strong></p>
+<ul>
+<li>Q2-b: indices past capacity are never written, no record carries an error, SWERROR shows code
+0x53, WQ 0, and Overflow on repeated drops.</li>
+<li>&quot;No record&quot;: sysfs never changes.</li>
+</ul>
+<p><strong>Runs</strong> (E=4, WQ 128, Drain counting, 3 runs × 10 iterations each):</p>
+<ul>
+<li>gap 0: <code>P1/20261101T022021Z-A-e4-gap0-bind-r1</code>, <code>...022024Z-...-r2</code>, <code>...022028Z-...-r3</code>.
+The submit loop takes 9-10 us for 200 and 22 us for 320, so the CPU stalls past the knee.</li>
+<li>gap 200 ns: <code>P1/20261101T022032Z-A-e4-gap200-bind-r1</code>, <code>...022035Z-...-r2</code>, <code>...022039Z-...-r3</code>.
+About 220 ns per submit, no stall.</li>
+<li>Side B (dsa2), before the NUMA fix: iterations 0-1 of <code>P1/20261101T021828Z-B-e4-gap0-r1</code>.</li>
+</ul>
+<p><strong>Results.</strong></p>
+<ul>
+<li>In all 60 iterations (N=200 and N=320, both gaps): completed = 140. Indices 0..139 have status
+0x01 and indices 140..N-1 have status 0x00 (never written). The drop starts exactly at 140 and
+is contiguous (<code>accepted_after_first_drop</code> = 0). No completion during the burst
+(<code>pass0_done</code> = 0). 0 error statuses.</li>
+<li>Peak WQ occupancy read during polling = 128 (= WQ size) in every overflow iteration.</li>
+<li>SWERROR copy, read by the probe after every overflow iteration:
+<code>...,00000003,0000530f</code>.
+<ul>
+<li>word0 = 0x530f: Valid=1, Overflow=1, Descriptor-valid=1, WQ-index-valid=1, code 0x53, WQ
+index 0.</li>
+<li>Operation (bits 39:32) = 0x03, memmove.</li>
+<li>Once it read <code>0x530d</code> with operation 0x02 (Valid, no Overflow, Drain): in that interrupt the
+only drop was the resubmitted Drain. So the copy is refreshed on every new error burst,
+because the driver acks Valid/Overflow after each interrupt (irq.c:458-463).</li>
+</ul>
+</li>
+<li>The <code>lab</code> reads after process exit show <code>0x530c</code>, Valid/Overflow = 0. The copy was refreshed
+once more after the ack. [INFERENCE: a second error-cause interrupt read the register after
+the driver had cleared V/O. Not directly observed.] The lead's F1 run with <code>swerror_after = 0x5308</code>
+fits the same picture (a 0x53 drop on WQ 0, V/O already acked).</li>
+<li>Status bit 7: page-fault records from before the fix read 0x83 or 0x03 (bit 7 =
+write-fault side). No 0x53 ever appears in a completion record.</li>
+</ul>
+<p><strong>Verdict.</strong></p>
+<ul>
+<li>Q2-b is confirmed by two kinds of evidence: per-record counts (silent drop, exactly the
+overflow past capacity) and a direct register decode (0x53 / WQ 0 / Overflow).</li>
+<li>Q2-a (backpressure) stays ruled out: with gap 200 and no CPU stall, the drops are the same.</li>
+<li>Drops are silent to the submitter: no completion record and no status.</li>
+<li>The sysfs copy does change (P1 alternative &quot;no record&quot; is ruled out), but it only proves that
+&quot;a drop happened since the last ack&quot;. It cannot count drops.</li>
+</ul>
+<h2>P4: engines 1..4 (WQ 128) (Q4, Q5)</h2>
+<p><strong>Predictions.</strong></p>
+<ul>
+<li>Q4-a: C(E) − 128 = E·m.</li>
+<li>Q4-b: constant.</li>
+<li>Q5-a/b: noop throughput does not depend on E.</li>
+</ul>
+<p><strong>Runs.</strong></p>
+<ul>
+<li>Capacity: <code>P4/20261101T0221{16,18,19}Z-A-cap-e1-gap200-r{1,2,3}</code>, <code>P4/20261101T022121Z-A-cap-e1-gap0</code>,
+<code>P4/20261101T0221{25,26,27}Z-A-cap-e2-gap200-r*</code>, <code>...022129Z-A-cap-e2-gap0</code>,
+<code>P4/20261101T0221{31,32,34}Z-A-cap-e3-gap200-r*</code>, <code>...022135Z-A-cap-e3-gap0</code>,
+<code>P4/20261101T0221{37,39,40}Z-A-cap-e4-gap200-r*</code>, <code>...022141Z-A-cap-e4-gap0</code>,
+<code>P4/20261101T022746Z-B-cap-e1-gap100-r1</code>, <code>...0227{47,48}Z-A-cap-e1-gap100-r{2,3}</code>,
+<code>...0227{50,51,52}Z-A-cap-e2-gap100-r*</code> (N=200, 5 iterations each).</li>
+<li>Rates: <code>P4/20261101T0222{45,46,47}Z-B-rate-e1-r*</code>, <code>...0222{48,48,49}Z-B-rate-e2-r*</code>,
+<code>...0222{50,51,52}Z-B-rate-e3-r*</code>, <code>...0222{53,54,55}Z-B-rate-e4-r*</code>, plus side A
+<code>P4/20261101T022506Z-A-rate-sideA-e1</code> and <code>...022507Z-A-rate-sideA-e4</code>.</li>
+</ul>
+<p><strong>Capacity C(E).</strong> Definition: C = number of descriptors the device accepted while no
+completion had yet happened (<code>pass0_done</code> = 0, which makes the first-drop index = completed).
+Gap 100 ns gives 115-120 ns per submit, slower than the ~100 ns write-out cadence, so the CPU does
+not stall. The whole N=200 burst takes 23-24 us, less than the first 1 MiB completion (≥ 35 us).</p>
+<table>
+<thead>
+<tr>
+<th>E</th>
+<th>C, non-stalled gap (pass0 = 0)</th>
+<th>C, gap 0 (CPU stalls)</th>
+<th>gap 200 completed (47 us burst)</th>
+<th>WQ occupancy after N=96 + marker (P12 runs)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>131 at gap 100 (15/15)</td>
+<td>131 (5/5)</td>
+<td>132 in 14/15 (one completion inside the burst; first drop 131)</td>
+<td>94 = 97 − 3</td>
+</tr>
+<tr>
+<td>2</td>
+<td>134 at gap 100 (15/15)</td>
+<td>134 (5/5)</td>
+<td>134 in 14/15, 135 in 1/15 (pass0 = 0 there too: a completion arrived just after the first drop)</td>
+<td>91 = 97 − 6</td>
+</tr>
+<tr>
+<td>3</td>
+<td>137 at gap 200 (15/15, no stall, pass0 = 0)</td>
+<td>137 (5/5)</td>
+<td>137 (15/15)</td>
+<td>88 = 97 − 9</td>
+</tr>
+<tr>
+<td>4</td>
+<td>140 at gap 200 (15/15, no stall, pass0 = 0)</td>
+<td>140 (5/5)</td>
+<td>140 (15/15)</td>
+<td>85 = 97 − 12</td>
+</tr>
+</tbody>
+</table>
+<p>C(E) − 128 = 3, 6, 9, 12 = 3·E exactly, with or without CPU stall. Two kinds of evidence:</p>
+<ul>
+<li>the count of written records;</li>
+<li>the occupancy register, which reads exactly (N + marker) − 3E right after the burst. That
+is a direct read, so 3E descriptors had left the WQ for the engines.</li>
+</ul>
+<p>The +1 values at gap 200 are not capacity. A completion freed a slot during the burst, and one
+descriptor past the first-drop boundary was accepted (<code>accepted_after_first_drop</code> = 1).</p>
+<p><strong>Rates.</strong> Medians of 3 runs × 3 reps; spread within ±3 %.</p>
+<table>
+<thead>
+<tr>
+<th>E</th>
+<th>noop W=1 (Mops/s)</th>
+<th>noop W≥16</th>
+<th>noop burst 2000</th>
+<th>drops</th>
+<th>1 MiB W=1 (GB/s)</th>
+<th>1 MiB W=2..8</th>
+<th>1 MiB W=32..64</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>2.87</td>
+<td>10.25</td>
+<td>10.23</td>
+<td>0</td>
+<td>30.5</td>
+<td>31.5</td>
+<td>30.3</td>
+</tr>
+<tr>
+<td>2</td>
+<td>2.83</td>
+<td>10.24</td>
+<td>10.21</td>
+<td>0</td>
+<td>30.6</td>
+<td>31.5</td>
+<td>30.1</td>
+</tr>
+<tr>
+<td>3</td>
+<td>2.90</td>
+<td>10.25</td>
+<td>10.21</td>
+<td>0</td>
+<td>30.1</td>
+<td>31.5</td>
+<td>29.9</td>
+</tr>
+<tr>
+<td>4</td>
+<td>2.85</td>
+<td>10.25</td>
+<td>10.20</td>
+<td>0</td>
+<td>30.0</td>
+<td>31.4</td>
+<td>30.1</td>
+</tr>
+</tbody>
+</table>
+<p>Side A (dsa0, cpu 2), E=1 and E=4: noop 9.41-9.43 Mops/s (W≥16), burst 9.36, W=1 2.73; 1 MiB 30.0-31.5 GB/s.
+The side difference (98 vs 106 ns per noop) matches the lead's A/B plateau difference.</p>
+<p><strong>Verdict.</strong></p>
+<ul>
+<li><strong>Q4-a supported, with m = 3 per engine.</strong> Q4-b (group-shared constant) is ruled out.</li>
+<li>Q5-a/b: noop throughput does not depend on E (10.2 M/s on B, 9.4 M/s on A, ≈ 1/submit
+cadence). No noop drops even with one engine, so a single engine runs noops faster than one
+core can write them. Q5-c (engine) stays ruled out.</li>
+<li>[new] 1 MiB bandwidth is about 30-31.5 GB/s for every E and window, and even one descriptor at a
+time (W=1) gets 30 GB/s. The copy bandwidth limit is not per engine. It lies in a shared stage
+(read buffers, IIO, or memory). Completions come in waves of E every E × 33 us: the E engines
+each run one 1 MiB descriptor at a time and share the 30 GB/s.</li>
+<li>[INFERENCE] So the 3 per-engine slots are mostly queued or pipelined descriptors, not 3
+concurrent copies. If all 3E were copying concurrently, the first completion would come at
+about 3E × 33 us, not E × 33 us.</li>
+</ul>
+<p><strong>Caveats.</strong></p>
+<ul>
+<li>m = 3 may be the engine's &quot;Max Work Descriptors in Progress&quot; (spec 4.4, ENGCAP). ENGCAP is not
+exposed in sysfs here, so this is not verified.</li>
+<li><code>1-engine.conf</code> (the lead's) differs from <code>{2,3,4}-engine.conf</code> in <code>max_transfer_size</code> as well
+(1 GiB vs 2 MiB). I used my own <code>cap-e*</code> confs.</li>
+<li>Only 1 MiB was tested. Smaller descriptors may change how many are dispatched per engine.</li>
+</ul>
+<h2>P5: WQ size 32/64/96/128 (Q3, Q1)</h2>
+<p><strong>Predictions.</strong></p>
+<ul>
+<li>Q3-a: C = size + const.</li>
+<li>Q3-b: C = size.</li>
+<li>Q1-b: knee ≈ 116 for every size.</li>
+<li>Q1-c: the knee moves with size.</li>
+</ul>
+<p><strong>Runs.</strong></p>
+<ul>
+<li>Capacity: <code>P5/20261101T0223{20,21,23}Z-B-cap-e4-wq32-r*</code>, <code>...0223{24,25,26}Z-B-cap-e4-wq64-r*</code>,
+<code>...0223{28,29,30}Z-B-cap-e4-wq96-r*</code>, <code>...0223{32,33,34}Z-B-cap-e1-wq32-r*</code>,
+<code>...022335Z-B-cap-e1-wq64-r1</code>, <code>...0223{39,40}Z-A-cap-e1-wq64-r{2,3}</code>, <code>...0223{41,42,44}Z-A-cap-e1-wq96-r*</code>
+(N=200, gap 200, 5 iterations each).</li>
+<li>Knee (x1_knee, noop): <code>P5/20261101T0223{56,57,57}Z-A-knee-e4-wq32-r*</code>, <code>...0223{58,59,59}Z-A-knee-e4-wq64-r*</code>,
+<code>...0224{00,01,02}Z-A-knee-e4-wq96-r*</code>, <code>...0224{02,03,04}Z-A-knee-e4-wq128-r*</code>.</li>
+</ul>
+<p><strong>Results.</strong></p>
+<table>
+<thead>
+<tr>
+<th>size</th>
+<th>E=4: C (15 iterations, pass0 = 0)</th>
+<th>E=4: first drop</th>
+<th>E=1: first drop = C</th>
+<th>E=1: completed (gap 200: includes 1 completion inside the burst, pass0 = 1)</th>
+<th>peak occupancy</th>
+<th>noop knee K (E=4, 3 runs)</th>
+<th>plateau</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>32</td>
+<td>44</td>
+<td>44</td>
+<td>35</td>
+<td>36 (14/15), 35 (1/15); the extra one = 1 completion in the burst</td>
+<td>32</td>
+<td>116, 118, 116</td>
+<td>101-104 ns</td>
+</tr>
+<tr>
+<td>64</td>
+<td>76</td>
+<td>76</td>
+<td>67</td>
+<td>68</td>
+<td>64</td>
+<td>118, 118, 116</td>
+<td>100-103 ns</td>
+</tr>
+<tr>
+<td>96</td>
+<td>108</td>
+<td>108</td>
+<td>99</td>
+<td>100</td>
+<td>96</td>
+<td>116, 116, 118</td>
+<td>100-104 ns</td>
+</tr>
+<tr>
+<td>128</td>
+<td>140</td>
+<td>140</td>
+<td>131</td>
+<td>132</td>
+<td>128</td>
+<td>116, 118, 118</td>
+<td>100-102 ns</td>
+</tr>
+</tbody>
+</table>
+<p>There were 0 error statuses, 0 noop drops (<code>missing</code> max 0) and 0 Drain failures.</p>
+<p><strong>Verdict.</strong></p>
+<ul>
+<li><strong>Q3-a supported:</strong> C = size + 3E (+12 at E=4, +3 at E=1) for every size, and peak occupancy =
+size. Q3-b is ruled out.</li>
+<li><strong>Q1-b supported, Q1-c ruled out for the WQ:</strong> the knee stays at 116-118 even with a WQ of 32
+(smaller than the knee). Evidence: manipulation (size) plus timing (knee).</li>
+<li>[new] With WQ 32 and noops back to back there are still no drops, because the engines empty
+the WQ faster than one core fills it.</li>
+</ul>
+<h2>Suggested corrections to model.js (for the lead)</h2>
+<ul>
+<li><code>wq</code>:
+<ul>
+<li>Capacity is exactly size + 3E: 140 at E=4/WQ 128, not &quot;~139&quot;.</li>
+<li>Add: occupancy register (sysfs <code>wq*/occupancy</code>) peaks at exactly <code>size</code>.</li>
+<li>Add: overflow drops are contiguous from index C onwards, with no error status in any
+completion record.</li>
+<li>Status → <code>known</code>.</li>
+</ul>
+</li>
+<li><code>swerr</code>:
+<ul>
+<li>Badge: &quot;0x53 seen&quot;. Status → <code>known</code>.</li>
+<li>Evidence: sysfs copy <code>0x530f</code>, op 3; the copy is acked per interrupt and sticky across runs,
+so it cannot count drops. Page faults (0x03) also land there with a fault address.</li>
+</ul>
+</li>
+<li><code>arbiter</code>:
+<ul>
+<li>The evidence &quot;WQ slot freed at dispatch&quot; is now direct: occupancy = N + 1 − 3E right after
+the burst, and C = size + 3E for 4 sizes × 2 E.</li>
+<li>Status → <code>known</code>.</li>
+</ul>
+</li>
+<li><code>engine_slots</code>:
+<ul>
+<li>Badge &quot;3 per engine&quot;.</li>
+<li>Status → <code>known</code> for the count. The mechanism (pipeline depth vs queued) stays <code>partial</code>.</li>
+<li>Replace &quot;139 − 128 − 1–2 ≈ 9–11&quot; with C(E) − size = 3E.</li>
+<li>Add: each engine copies one 1 MiB at a time (completion waves of E).</li>
+</ul>
+</li>
+<li><code>engines</code>:
+<ul>
+<li>E is now known per run.</li>
+<li>1 MiB bandwidth is about 30-31.5 GB/s for every E and window (even W=1), so copy bandwidth is
+limited in a shared stage, not per engine.</li>
+<li>Noop throughput is independent of E.</li>
+</ul>
+</li>
+<li><code>completion</code>:
+<ul>
+<li>The Drain is validated: 0 late records in 253 iterations.</li>
+<li>The sentinel undercounts by exactly up to E−1.</li>
+<li>A sentinel or Drain submitted into a full WQ is itself dropped (timeout); the Drain needs
+resubmission.</li>
+<li>&quot;errors=3&quot; in old data is likely page-fault completions [INFERENCE: two 0x03 causes found,
+unprefaulted calloc dst and NUMA-balancing hint faults].</li>
+</ul>
+</li>
+<li>Forks:
+<ul>
+<li>Q2: b <code>supported</code> → <code>confirmed</code>, with the 0x53 decode.</li>
+<li>Q3: a confirmed, b ruled out (C = size + 3E at 4 sizes).</li>
+<li>Q4: a supported (m = 3, linear in E); b ruled out; c partly true (≤ E−1 undercount; true C = 140).</li>
+<li>Q7: a supported and refined to &quot;in order within an engine (E=1: 0 inversions), out of order
+across engines&quot;.</li>
+<li>Q1-c: ruled out for the WQ (knee independent of size 32..128).</li>
+</ul>
+</li>
+<li>Animation facts:
+<ul>
+<li>The WQ holds <code>size</code>; each engine takes 3.</li>
+<li>A 1 MiB copy finishes in about 33 us × E.</li>
+<li>Noop cadence: about 98 ns (side B) / 106 ns (side A), independent of E.</li>
+</ul>
+</li>
+<li>Measurement note for all groups: bind memory (MPOL_BIND or MPOL_PREFERRED) or disable NUMA
+balancing, and prefault with nonzero writes. Otherwise memmove results become 0x03 faults
+after about 1 s.</li>
+</ul>
+<h2>Next questions</h2>
+<ul>
+<li>Does m = 3 depend on descriptor size, for example 4 KiB copies or noops? An occupancy-based
+probe with a slow first descriptor would show it.</li>
+<li>Can m be changed with GRPCFG &quot;Work Descriptors in Progress Limit&quot;? Not exposed by this kernel's
+sysfs (<code>desc_progress_limit</code> is absent).</li>
+<li>Where is the 30 GB/s cap: read buffers (sweep <code>read_buffers_allowed</code>), the IIO, or memory?
+Does it rise with two devices in parallel?</li>
+<li>Q7 for noops: is completion order across engines also scrambled for short descriptors?</li>
+</ul>
+</main></body></html>

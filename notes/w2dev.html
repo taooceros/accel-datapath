@@ -1,0 +1,1091 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>w2dev: device-side follow-ups to wave 1 (Q1 slots via ENQCMD, Q2 slot type, Q3 copy ceiling, Q4 batch engine)</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Noto+Serif+SC:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"><style>
+:root { --paper:#faf9f5; --card:#fffefb; --sunk:#f3f1eb; --ink:#161514; --ink2:#3b3935; --muted:#7a776f; --rule:#e4e0d6; --rule2:#cfcabe;
+  --serif:"Newsreader","Noto Serif SC",Georgia,serif; --sans:"Inter","PingFang SC","Noto Sans SC",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace; }
+@media (prefers-color-scheme: dark) { :root { --paper:#141311; --card:#1b1a17; --sunk:#201f1b; --ink:#ece8df; --ink2:#cfcac0; --muted:#9a958a; --rule:#2f2d29; --rule2:#46433c; } }
+body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.65 var(--sans); -webkit-font-smoothing:antialiased; }
+.wrap { max-width:980px; margin:0 auto; padding:28px 28px 80px; }
+nav.crumb { font:500 12px var(--mono); letter-spacing:.04em; color:var(--muted); margin-bottom:22px; }
+nav.crumb a { color:var(--muted); }
+h1, h2, h3 { font-family:var(--serif); font-weight:500; line-height:1.25; }
+h1 { font-size:30px; margin:0 0 18px; } h2 { font-size:22px; margin:34px 0 10px; padding-top:14px; border-top:1px solid var(--rule); } h3 { font-size:18px; margin:24px 0 8px; }
+a { color:var(--ink); text-decoration-color:var(--rule2); text-underline-offset:3px; }
+code { font:13px var(--mono); background:var(--sunk); padding:1px 4px; border-radius:4px; overflow-wrap:anywhere; }
+pre { background:var(--sunk); padding:12px 14px; border-radius:8px; overflow:auto; } pre code { background:none; padding:0; }
+table { border-collapse:collapse; margin:12px 0; font-size:13.5px; display:block; overflow-x:auto; }
+th, td { border-bottom:1px solid var(--rule); padding:6px 10px; text-align:left; vertical-align:top; }
+th { font:500 12px var(--mono); color:var(--muted); border-bottom:1px solid var(--rule2); }
+blockquote { margin:12px 0; padding:4px 14px; border-left:3px solid var(--rule2); color:var(--ink2); }
+ul.notes { list-style:none; padding:0; } ul.notes li { padding:14px 0; border-bottom:1px solid var(--rule); }
+ul.notes a { font:500 18px var(--serif); } ul.notes .d { color:var(--ink2); } ul.notes .t { font:12px var(--mono); color:var(--muted); }
+.lead { color:var(--ink2); }
+</style></head><body><main class="wrap"><nav class="crumb"><a href="../">DSA 提交流水线</a> · <a href="./">实验笔记</a> · w2dev</nav><h1>w2dev: device-side follow-ups to wave 1 (Q1 slots via ENQCMD, Q2 slot type, Q3 copy ceiling, Q4 batch engine)</h1>
+<p>Workspace <code>dsa-exp-w2dev</code>. Probes (all new): <code>dsa-lab/src/bin/w2_slots.rs</code> (Q1, Q2),
+<code>w2_bw.rs</code> (Q3), <code>w2_batch_eng.rs</code> (Q4), helpers in <code>w2_common/mod.rs</code> (DSA PMU with every filter
+written, node-bound prefaulted buffers, occupancy). Configs: <code>dsa-config/w2-*.conf</code>.
+Run dirs are relative to <code>dsa-lab-runs/</code>.</p>
+<h2>Q1: per-engine slots seen by ENQCMD (shared WQ, E = 1..4)</h2>
+<p><strong>Question.</strong> P9 found Retry onset = threshold + 6 with 2 engines. Is it threshold + 3E?</p>
+<p><strong>Predictions (written before running).</strong></p>
+<ul>
+<li>Q1-a (3 per engine, slot frees its WQ entry at dispatch): accepted before the first Retry =
+T + 3E = 35 / 38 / 41 / 44 at T = 32, and 76 at T = 64, E = 4. Occupancy right after the
+attempts = T exactly; PMU dispatch = 2 per engine (P10: 2 dispatched + 1 staged per engine).</li>
+<li>Q1-b (a constant +6 in shared mode, e.g. a group-level staging buffer): onset = T + 6 for
+every E.</li>
+<li>Q1-c (shared-mode WQ counts the descriptors in engines against the threshold): onset = T.</li>
+</ul>
+<p><strong>Method.</strong> <code>w2_slots</code> with <code>--heads 0</code>, fillers = 2 MiB memmove (as P9), single ENQCMD
+attempts, 5 reps per config. Configs <code>w2-swq64-t32-e{1,2,3,4}.conf</code> (one group, shared <code>wq0.0</code> of
+size 64, threshold 32, E engines) and <code>w2-swq64-t64-e{1,4}.conf</code>. Validity: no completion before
+the counters are read (<code>fill_done_after_reads</code> = 0).</p>
+<p><strong>Runs</strong> (<code>W2Q1/</code>, 5 reps each, heaters 8, mesh 1.95-2.2 GHz at start and 2.2 at end, core 2.2-3.9 GHz):
+<code>20261101T024914Z-A-swq64-t32-e1-r1</code>, <code>…024915Z-A-swq64-t32-e1-r2</code>, <code>…024915Z-A-swq64-t32-e1-r3</code>,
+<code>…024916Z-A-swq64-t32-e2-r1</code>, <code>…024917Z-A-swq64-t32-e2-r2</code>, <code>…024917Z-A-swq64-t32-e2-r3</code>,
+<code>…024918Z-A-swq64-t32-e3-r1</code>, <code>…024919Z-A-swq64-t32-e3-r2</code>, <code>…024920Z-A-swq64-t32-e3-r3</code>,
+<code>…024920Z-A-swq64-t32-e4-r1</code>, <code>…024921Z-A-swq64-t32-e4-r2</code>, <code>…024922Z-A-swq64-t32-e4-r3</code>,
+<code>…024922Z-A-swq64-t64-e1-r1</code>, <code>…024923Z-A-swq64-t64-e1-r2</code>, <code>…024923Z-A-swq64-t64-e1-r3</code>,
+<code>…024924Z-A-swq64-t64-e4-r1</code>, <code>…024925Z-A-swq64-t64-e4-r2</code>, <code>…024925Z-A-swq64-t64-e4-r3</code>,
+side B: <code>…024931Z-B-swq64-t32-e1-sideB</code>, <code>…024933Z-B-swq64-t32-e4-sideB</code>. Smoke: <code>…024858Z-A-smoke-e4-t32</code>.</p>
+<p><strong>Results.</strong> Every rep of every run gives the same numbers (no spread):</p>
+<table>
+<thead>
+<tr>
+<th>T</th>
+<th>E</th>
+<th>first Retry at attempt (accepted)</th>
+<th>T + 3E</th>
+<th>occupancy right after the attempts</th>
+<th>PMU <code>EV_NUM_DESC_DISPATCH_WQ</code> per engine</th>
+<th>PMU SWQ success</th>
+<th>accepted after first Retry</th>
+<th>completions before the reads</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>32</td>
+<td>1</td>
+<td>35 (15/15 reps, side B too)</td>
+<td>35</td>
+<td>32</td>
+<td>2</td>
+<td>35</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>32</td>
+<td>2</td>
+<td>38 (15/15)</td>
+<td>38</td>
+<td>32</td>
+<td>2, 2</td>
+<td>38</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>32</td>
+<td>3</td>
+<td>41 (15/15)</td>
+<td>41</td>
+<td>32</td>
+<td>2, 2, 2</td>
+<td>41</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>32</td>
+<td>4</td>
+<td>44 (15/15, side B too)</td>
+<td>44</td>
+<td>32</td>
+<td>2, 2, 2, 2</td>
+<td>44</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>64</td>
+<td>1</td>
+<td>67 (15/15)</td>
+<td>67</td>
+<td>64</td>
+<td>2</td>
+<td>67</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>64</td>
+<td>4</td>
+<td>76 (15/15)</td>
+<td>76</td>
+<td>64</td>
+<td>2, 2, 2, 2</td>
+<td>76</td>
+<td>0</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>PMU retries = attempts − accepted (e.g. 61 at E=1, 52 at E=4 of 96 attempts, side B runs).</li>
+<li>All accepted records end with status 0x01; SWERROR does not change.</li>
+<li>The attempts take 27 us (96 × ~285 ns), and the occupancy + PMU reads another ~11 us; the first
+2 MiB completion comes later (≥ 68 us), so all reads see the full state.</li>
+</ul>
+<p><strong>Verdict: Q1-a confirmed</strong> (count + register + PMU, three kinds of evidence).</p>
+<ul>
+<li>The onset is T + 3E at every E (+3 per engine, +12 at E = 4) and at both thresholds.</li>
+<li>The occupancy register reads exactly T, so the 3E extra descriptors have left the WQ.</li>
+<li>The PMU counts 2 dispatched per engine, so the third per engine is accepted out of the WQ but
+not counted as dispatched (the same 2 + 1 split P10 found on a dedicated WQ).</li>
+<li>Q1-b (constant +6) and Q1-c (onset = T) are ruled out.</li>
+<li>P9's +6 was simply E = 2. The shared WQ behaves like the dedicated WQ (P4: C = size + 3E), with
+the threshold in place of the size.</li>
+</ul>
+<h2>Q2: is m = 3 per engine independent of descriptor type and size?</h2>
+<p><strong>Predictions (written before running).</strong></p>
+<ul>
+<li>Q2-a (m = 3 descriptor slots per engine, in order, any type/size): with H slow heads (2 MiB
+memmove) already in the engines, fillers accepted before the first Retry = T + 3E − H, so
+heads + fillers = T + 3E for noop, 4 KiB, 64 KiB and 1 MiB fillers. No filler completes before
+the first head (<code>fill_done_at_first_head</code> = 0). Occupancy = T, dispatch 2 per engine.</li>
+<li>Q2-b (the work pipeline lets short descriptors finish past a slow one): noop / 4 KiB fillers
+complete while heads still run (<code>fill_done_at_first_head</code> &gt; 0), the WQ keeps draining, and the
+Retry onset moves later or disappears within the attempts.</li>
+<li>Q2-c (m depends on the payload, e.g. a byte or read-buffer budget rather than a count): the
+capacity with small fillers differs from T + 3E without any filler completing, and per-engine
+dispatch differs from 2.</li>
+</ul>
+<p><strong>Method.</strong> <code>w2_slots</code> on <code>w2-swq64-t32-e{1,4}.conf</code> (T = 32): <code>--heads H</code> 2 MiB memmoves, then
+<code>--settle-us 20</code>, then 96 single ENQCMD attempts of fillers. H = E (one per engine), also 2E
+and 3E with noop fillers. The PMU snapshot after the heads gives the per-engine dispatch of the
+heads alone.</p>
+<p><strong>Runs</strong> (<code>W2Q2/</code>, 5 reps each; tag = E, H, filler):
+<code>20261101T024958Z-A-e1-h1-noopk</code>, <code>…024959Z-A-e1-h1-memmove4k</code>, <code>…024959Z-A-e1-h1-memmove64k</code>,
+<code>…025000Z-A-e1-h1-memmove1024k</code>, <code>…025001Z-A-e4-h4-noopk</code>, <code>…025001Z-A-e4-h4-memmove4k</code>,
+<code>…025002Z-A-e4-h4-memmove64k</code>, <code>…025002Z-A-e4-h4-memmove1024k</code>, <code>…025003Z-A-e4-h8-noopk</code>,
+<code>…025003Z-A-e4-h12-noopk</code>, <code>…025004Z-A-e1-h2-noopk</code>, <code>…025005Z-A-e1-h3-noopk</code>.</p>
+<p><strong>Results at the onset</strong> (H heads + fillers accepted before the first Retry; reps 1-4, rep 0 below):</p>
+<table>
+<thead>
+<tr>
+<th>E</th>
+<th>H heads (2 MiB)</th>
+<th>filler</th>
+<th>fillers before first Retry</th>
+<th>H + fillers</th>
+<th>T + 3E</th>
+<th>occupancy, read ~4 us after the attempts</th>
+<th>PMU dispatch per engine: heads alone / attempts + reads (read ~11 us after)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>1</td>
+<td>noop</td>
+<td>34</td>
+<td>35</td>
+<td>35</td>
+<td>0</td>
+<td>1 / 34 (head done during the reads, see below)</td>
+</tr>
+<tr>
+<td>1</td>
+<td>1</td>
+<td>4 KiB</td>
+<td>34</td>
+<td>35</td>
+<td>35</td>
+<td>5-25</td>
+<td>1 / 34 (same)</td>
+</tr>
+<tr>
+<td>1</td>
+<td>1</td>
+<td>64 KiB</td>
+<td>34</td>
+<td>35</td>
+<td>35</td>
+<td>30</td>
+<td>1 / 4-5 (same)</td>
+</tr>
+<tr>
+<td>1</td>
+<td>1</td>
+<td>1 MiB</td>
+<td>34</td>
+<td>35</td>
+<td>35</td>
+<td>31-32</td>
+<td>1 / 1-2</td>
+</tr>
+<tr>
+<td>1</td>
+<td>2</td>
+<td>noop</td>
+<td>33</td>
+<td>35</td>
+<td>35</td>
+<td>32</td>
+<td>2 / 0</td>
+</tr>
+<tr>
+<td>1</td>
+<td>3</td>
+<td>noop</td>
+<td>32</td>
+<td>35</td>
+<td>35</td>
+<td>32</td>
+<td>2 / 0</td>
+</tr>
+<tr>
+<td>4</td>
+<td>4</td>
+<td>noop, 4 KiB, 64 KiB, 1 MiB</td>
+<td>40</td>
+<td>44</td>
+<td>44</td>
+<td>32</td>
+<td>1,1,1,1 / 1,1,1,1</td>
+</tr>
+<tr>
+<td>4</td>
+<td>8</td>
+<td>noop</td>
+<td>36</td>
+<td>44</td>
+<td>44</td>
+<td>32</td>
+<td>2,2,2,2 / 0</td>
+</tr>
+<tr>
+<td>4</td>
+<td>12</td>
+<td>noop</td>
+<td>32</td>
+<td>44</td>
+<td>44</td>
+<td>32</td>
+<td>2,2,2,2 / 0</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Threshold = size (T = 64 on the 64-entry WQ, <code>w2-swq64-t64-e{1,4}.conf</code>)</strong>, H = E heads, noop and
+4 KiB fillers: <code>20261101T030142Z-A-t64-e1-h1-noop</code>, <code>…030143Z-A-t64-e1-h1-memmove4k</code>,
+<code>…030145Z-A-t64-e4-h4-noop</code>, <code>…030146Z-A-t64-e4-h4-memmove4k</code>. H + fillers before the first Retry
+= <strong>67 = size + 3 (E = 1)</strong> and <strong>76 = size + 12 (E = 4)</strong> in every clean rep; occupancy 64 at
+E = 4 (1 head + 1 filler dispatched per engine). Rep 0 of the E = 1 noop run accepted all 96
+(the queue drained during the attempts and the head finished: the same first-rep anomaly as
+below) and is excluded; reps 1-4 give 67. So the capacity is size + 3E as well as threshold + 3E.</li>
+<li>No filler had completed when the attempts ended, in any rep (<code>fill_done_when_attempts_ended</code> = 0),
+and no head had completed either. So the onset count is a clean capacity count.</li>
+<li>The heads are dispatched round robin, one per engine (H = E: 1 per engine; H = 2E: 2 per engine).</li>
+<li><strong>After the attempts stop</strong> (occupancy read ~4 us and PMU ~11 us after the last attempt; the two
+reads are not simultaneous):
+<ul>
+<li>E = 1, one head: the WQ drains (noop: occupancy 0, PMU dispatch 34; 4 KiB: occupancy 5-25,
+dispatch 34; 64 KiB: occupancy 30, 4-5 dispatched; 1 MiB: occupancy 31-32, 1-2). <strong>This is
+confounded with the head finishing</strong>: the single 2 MiB head alone takes ~68 us (first head
+seen at 68-75 us after its submit), and settle (20 us) + PMU/occupancy reads after the heads
+<ul>
+<li>27 us of attempts + the post-attempt reads end at about the same time. The head was seen
+done right after the reads in 4/5 (noop, 4 KiB), 2/5 (64 KiB) and 1/5 (1 MiB) reps. So the
+drain cannot be separated from the head's last microseconds or its completion; it is not
+evidence of short descriptors passing a running head.</li>
+</ul>
+</li>
+<li>E = 4, one head per engine (heads take ~260 us, still running): nothing moves within the
+reads for any filler type (occupancy 32, 1 head + 1 filler dispatched per engine).</li>
+<li><code>fill_done_at_first_head</code> (fillers seen done in the poll pass that first sees a head done) is
+34 of 40 for noop fillers at E = 4 and 0 for 4 KiB-1 MiB. That pass reads the heads first and
+the fillers after, so noops written just after the heads are counted too: the completion
+order of noops vs heads is <strong>not resolved</strong> by this probe.</li>
+<li>Two or three heads per engine: nothing moves, E = 1 and E = 4.</li>
+</ul>
+</li>
+<li>Rep 0 of each E = 1 run differs: the queue drained during the attempts, so 51 / 48 / 43 / 35
+were accepted in total (first Retry still at 34 except 64 KiB: 37). [INFERENCE: first-touch of
+the ATC or the filler buffers; reps 1-4 are clean.]</li>
+</ul>
+<p><strong>Verdict.</strong></p>
+<ul>
+<li><strong>Capacity: Q2-a survives.</strong> At the moment the device starts refusing, heads + fillers =
+T + 3E for noop, 4 KiB, 64 KiB and 1 MiB fillers and for 1, 2 or 3 slow heads per engine.
+Evidence: Retry count (manipulation of type, size and H) + occupancy = T + PMU dispatch.
+Whatever occupies the slots (a 2 MiB head or a noop), each engine takes exactly 3 before the WQ
+backs up. So the &quot;3&quot; is a count of descriptors, not bytes.</li>
+<li>While the heads are still running (E = 4 rows, and every onset), nothing beyond 3 per engine
+is pulled out of the WQ for any filler type, so there is no sign of a byte budget (Q2-c not
+supported). Whether short descriptors can complete past a running head (Q2-b) is unresolved:
+the E = 1 drain coincides with the head finishing, and the E = 4 noop count is racy.</li>
+<li>For the model: &quot;3 per engine&quot; holds for any descriptor type and size (noop to 2 MiB).</li>
+</ul>
+<h2>Q3: where is the ~30 GB/s copy ceiling?</h2>
+<p><strong>Candidate limits and what each predicts (written before running).</strong></p>
+<table>
+<thead>
+<tr>
+<th>candidate</th>
+<th>dsa0 + dsa2 at once (each local)</th>
+<th>both devices on node-0 memory</th>
+<th><code>read_buffers_allowed</code> sweep</th>
+<th>src remote (higher read latency)</th>
+<th>dst remote</th>
+<th>transfer size</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>L1 read-buffer pool per device (Little: BW ≈ RB × 64 B / read latency)</td>
+<td>each keeps ~30</td>
+<td>each keeps ~30 (unless memory saturates)</td>
+<td>BW ∝ RB up to the default 96 (no plateau, or plateau only near 96)</td>
+<td>drops by the latency ratio</td>
+<td>~no change (posted writes)</td>
+<td>flat above a few KiB</td>
+</tr>
+<tr>
+<td>L2 device link / IIO stack (fixed GB/s per device)</td>
+<td>each keeps ~30</td>
+<td>each keeps ~30</td>
+<td>flat, then a knee at small RB where L1 takes over</td>
+<td>no change while the link limits</td>
+<td>no change</td>
+<td>flat</td>
+</tr>
+<tr>
+<td>L3 memory / socket fabric</td>
+<td>each keeps ~30 (separate sockets)</td>
+<td>the two share (sum ≈ 30)</td>
+<td>flat</td>
+<td>changes (UPI)</td>
+<td>changes</td>
+<td>flat</td>
+</tr>
+<tr>
+<td>L4 one machine-wide stage</td>
+<td>the two share (sum ≈ 30)</td>
+<td>share</td>
+<td>flat</td>
+<td>–</td>
+<td>–</td>
+<td>–</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Method.</strong> <code>w2_bw</code>: closed-loop memmove, window W outstanding per device, 200 ms per point,
+3 reps; src and dst pools of 256 MiB each (&gt; 60 MB LLC) bound with mbind (no MOF) and
+prefaulted; DSA PMU bytes (<code>cl_processed</code>, <code>cl_write</code>), <code>pipefull</code>, <code>stall_nodesc</code>, WQ-ready
+cycles per device; CHA clock per node during the window. Confs: <code>cap-e4-wq128.conf</code> for the
+default, <code>w2-rb{N}-e{E}.conf</code> (dedicated <code>wq0.0</code> size 128, E engines, <code>read_buffers_allowed</code> N).</p>
+<p><strong>Runs</strong> (<code>W2Q3/</code>; heaters 8 on each leased node, mesh 2.2 GHz during every window, 0 error
+statuses in every row; <code>placement</code> in each JSON confirms the page nodes with move_pages):</p>
+<ul>
+<li>Both devices: <code>20261101T025252Z-AB-smoke-both</code>, <code>…025308Z-AB-both-local-1m</code>,
+<code>…025315Z-AB-both-node0mem-1m</code>.</li>
+<li>Read buffers: <code>…025401Z-A-rb16-e4-1m</code>, <code>…025402Z-A-rb24-e4-1m</code>, <code>…025404Z-A-rb32-e4-1m</code>,
+<code>…025405Z-A-rb48-e4-1m</code>, <code>…025406Z-A-rb64-e4-1m</code>, <code>…025408Z-A-rb96-e4-1m</code>, <code>…025409Z-A-rb4-e1-1m</code>,
+<code>…025412Z-A-rb8-e1-1m</code>, <code>…025413Z-A-rb16-e1-1m</code>, <code>…025415Z-A-rb32-e1-1m</code>, <code>…025416Z-A-rb96-e1-1m</code>.
+The <code>accel-config-dsa0.json</code> snapshot in each dir shows the applied <code>read_buffers_allowed</code>.</li>
+<li>Size: <code>…025430Z-A-size-sweep-e4</code>. Placement: <code>…025443Z-AB-placement-1m-4k</code> (phases A and B,
+each device alone, both sides leased). Device cycles: <code>…025525Z-AB-cycles-placement</code>.</li>
+</ul>
+<p><strong>Results.</strong></p>
+<p>(a) Two devices at once, 1 MiB, each on its own node's memory (3 reps, spread ≤ 0.1 GB/s):</p>
+<table>
+<thead>
+<tr>
+<th>W</th>
+<th>dsa0 alone</th>
+<th>dsa2 alone</th>
+<th>dsa0 + dsa2 together</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>29.15</td>
+<td>28.78</td>
+<td>29.13 + 28.63 = 57.8</td>
+</tr>
+<tr>
+<td>16</td>
+<td>29.83</td>
+<td>29.64</td>
+<td>29.81 + 29.63 = 59.4</td>
+</tr>
+</tbody>
+</table>
+<p>(b) Both devices on <strong>node-0 memory</strong> (src and dst on node 0; dsa2 then reads and writes across
+UPI), W = 16: dsa0 alone 29.8, dsa2 alone 29.5, <strong>together 18.3 + 9.4 = 27.7</strong> (3/3 reps:
+27.62, 27.83, 27.81).</p>
+<p>(c) <code>read_buffers_allowed</code> (1 MiB, W = 16, local; 3 reps, spread ≤ 0.07):</p>
+<table>
+<thead>
+<tr>
+<th>RB</th>
+<th>4</th>
+<th>8</th>
+<th>16</th>
+<th>24</th>
+<th>32</th>
+<th>48</th>
+<th>64</th>
+<th>96 (default, = max)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>E = 4</td>
+<td>– (min 16)</td>
+<td>–</td>
+<td>13.04</td>
+<td>16.85</td>
+<td>19.64</td>
+<td>23.60</td>
+<td>26.33</td>
+<td>29.77</td>
+</tr>
+<tr>
+<td>E = 1</td>
+<td>4.34</td>
+<td>7.97</td>
+<td>13.32</td>
+<td>–</td>
+<td>20.28</td>
+<td>–</td>
+<td>–</td>
+<td>30.00</td>
+</tr>
+</tbody>
+</table>
+<p>Ratios per doubling: 4→8 ×1.84, 8→16 ×1.67, 16→32 ×1.52, 32→64 ×1.34; 64→96 (×1.5 RB) ×1.13.</p>
+<p>(d) Transfer size (E = 4, W = 32, local, 3 reps): 4 KiB 29.5, 16 KiB 29.7, 64 KiB, 256 KiB, 1 MiB,
+2 MiB 29.8 GB/s.</p>
+<p>(e) Placement (W = 32, 3 reps each, both devices give the same within 0.5 GB/s; dsa0 shown):</p>
+<table>
+<thead>
+<tr>
+<th>src / dst</th>
+<th>4 KiB</th>
+<th>1 MiB</th>
+<th>DSA <code>cl_processed</code> per device cycle (1 MiB)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>local / local</td>
+<td>28.9</td>
+<td>29.7</td>
+<td>0.928</td>
+</tr>
+<tr>
+<td>local / remote</td>
+<td>29.9</td>
+<td><strong>31.46</strong></td>
+<td>0.983</td>
+</tr>
+<tr>
+<td>remote / local</td>
+<td>29.6</td>
+<td><strong>31.46</strong></td>
+<td>0.982</td>
+</tr>
+<tr>
+<td>remote / remote</td>
+<td>28.4</td>
+<td>29.1</td>
+<td>0.908</td>
+</tr>
+</tbody>
+</table>
+<p>(f) PMU, same runs: the summed DSA cycle events (<code>0:1c0</code>) run at 1.002 per ns (device clock
+~1.0 GHz, as P10). <code>cl_processed</code> = <code>cl_write</code> = bytes / 32 exactly. With 1 MiB the pipeline-full
+cycles equal the device cycles (<code>pipefull</code> 1.00 per ns) and <code>stall_nodesc</code> = 0; with 4 KiB
+<code>pipefull</code> is 0.09 per ns and the WQ is empty 99.5 % of cycles, at the same bandwidth.</p>
+<p><strong>Verdict</strong> (per candidate):</p>
+<ul>
+<li><strong>L4 (one machine-wide stage) ruled out</strong>: two devices, each on its own memory, get 59.4 GB/s
+together, 2 × the single-device figure.</li>
+<li><strong>L1 in its pure form ruled out</strong>: bandwidth is not proportional to read buffers (concave:
+×1.84 per doubling at small RB, ×1.13 for the last +50 %), and with the default 96 a remote
+source (longer read latency) does not lower it. Read buffers do limit bandwidth when restricted
+(13 GB/s at 16), and the limit is per group, not per engine (E = 1 and E = 4 coincide at 16, 32,
+96). [INFERENCE: the concave curve is Little's law with a read latency that rises as the
+device approaches its ceiling; at 96 the pool is just about enough.]</li>
+<li><strong>L2 (a per-device ceiling) survives, at ~31.5 GB/s = one 32-byte unit per device clock.</strong>
+When src and dst are on different nodes, both devices reach 31.46 GB/s, and the PMU shows
+0.98 × 32 B processed per device cycle (1.002 GHz × 32 B = 32.1 GB/s). Size (4 KiB-2 MiB),
+engine count (P4) and window do not move it. Two evidence types: manipulation (placement,
+size, E, W) + PMU ratio. [INFERENCE: a 32 B/clk datapath or device-fabric port at the ~1 GHz
+device clock; this run cannot tell which, because the device clock was not varied.]</li>
+<li><strong>L3 (memory on one node) is the measured candidate for the gap from 31.5 to ~29.8 and for
+the sharing in (b).</strong> With src and dst on the same node, bandwidth drops 5-8 %; split across
+nodes it reaches the device ceiling; and two devices whose traffic all lands on node 0 share
+~27.7 GB/s (copy rate; ~55 GB/s of reads + writes at node 0). [INFERENCE: node-0 memory
+bandwidth (or its home agent) saturates near ~55-60 GB/s of read + write traffic; not
+confirmed by a memory-side counter.] The split is unfair: the local device gets 2/3.</li>
+<li>So the &quot;30 GB/s ceiling&quot; seen in wave 1 is the device's ~31.5 GB/s limit, shaved by a few
+percent when read and write traffic hit the same memory node.</li>
+</ul>
+<h2>Q4: does one Batch run on a single engine?</h2>
+<p><strong>Predictions (written before running).</strong></p>
+<ul>
+<li>Q4-a (one batch -&gt; one engine): with K = 1 batch of W = 1024 × 4 KiB in flight, all 1024
+works are counted by <code>EV_NUM_DESC_FROM_BATCH</code> on one engine per round; bandwidth ≈ 1/4 of
+the 4-engine figure (~7-9 GB/s) and the same on a 1-engine group. K = 4 spreads over the
+engines (~1024 each) and reaches ~30 GB/s on 4 engines but not on 1.</li>
+<li>Q4-b (works of one batch spread across engines): K = 1 gives ~256 works per engine; the low
+bandwidth then comes from batch processing itself (descriptor-list fetch, serial issue).</li>
+<li>Q4-c (one batch unit per device): K = 4 is no faster than K = 1.</li>
+</ul>
+<p><strong>Method.</strong> <code>w2_batch_eng</code>: K ∈ {1, 2, 4, 8} batches submitted back to back, wait for all, 20
+rounds (+1 warm-up round dropped), PMU read around every round. Event sets: (i)
+<code>from_batch@e0..3,disp_wq@e0..3</code>, (ii) <code>cl_processed@e0..3,pipefull@e0..3</code>. Confs
+<code>cap-e4-wq128.conf</code> (4 engines) and <code>w2-rb96-e1.conf</code> (1 engine).</p>
+<p><strong>Runs</strong> (<code>W2Q4/</code>, 20 rounds each, mesh 1.9-2.2 GHz at start and 2.2 at end, all batch statuses
+0x01 with 1024 descriptors completed, SWERROR unchanged):
+<code>20261101T025633Z-A-e4-w1024-4k-from_batch</code>, <code>…025635Z-A-e4-w1024-4k-cl_processed</code>,
+<code>…025635Z-A-e1-w1024-4k-from_batch</code>, <code>…025636Z-A-e1-w1024-4k-cl_processed</code>,
+shared-source control (<code>--shared-src</code>, all works read the same 4 KiB as P8 did):
+<code>…025707Z-A-e4-w1024-4k-sharedsrc</code>, <code>…025708Z-A-e1-w1024-4k-sharedsrc</code>.
+P8 rerun: <code>…025721Z-A-p8-repro-w128-1024</code> (<code>p8_batch</code> unchanged, <code>4-engine.conf</code>).</p>
+<p><strong>Results</strong> (per round = K batches of 1024 × 4 KiB; per-engine counts per round, 20/20 rounds
+unless a count is given):</p>
+<table>
+<thead>
+<tr>
+<th>E</th>
+<th>K</th>
+<th><code>from_batch</code> per engine (works)</th>
+<th><code>cl_processed</code> per engine</th>
+<th><code>pipefull</code> per engine (cycles)</th>
+<th>round p50</th>
+<th>GB/s</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>4</td>
+<td>1</td>
+<td>1024 on one engine, 0 on the others; e0, e1, e2, e3 each 5 rounds</td>
+<td>131072 on the same engine</td>
+<td>~12.3 k on that engine</td>
+<td>136.6 us</td>
+<td>30.7</td>
+</tr>
+<tr>
+<td>4</td>
+<td>2</td>
+<td>1024 + 1024 on two engines (e0+e3 or e1+e2, 10 rounds each)</td>
+<td>same two</td>
+<td>~224 k each</td>
+<td>271.6 us</td>
+<td>30.9</td>
+</tr>
+<tr>
+<td>4</td>
+<td>4</td>
+<td>1024 on each engine</td>
+<td>131072 each</td>
+<td>~505 k each</td>
+<td>542-553 us</td>
+<td>30.4-31.0</td>
+</tr>
+<tr>
+<td>4</td>
+<td>8</td>
+<td>2048 on each engine</td>
+<td>262144 each</td>
+<td>~1.05 M each</td>
+<td>1084-1120 us</td>
+<td>30.0-31.0</td>
+</tr>
+<tr>
+<td>1</td>
+<td>1, 2, 4, 8</td>
+<td>K × 1024 on e0</td>
+<td>K × 131072</td>
+<td>12.3 k, 24.6 k, 49.3 k, 98.8 k</td>
+<td>136.4, 271.6, 541.8, 1084 us</td>
+<td>30.7, 30.9, 31.0, 31.0</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><code>disp_wq</code> (EV_NUM_DESC_DISPATCH_WQ) counts 0 for the Batch descriptors themselves.</li>
+<li>Shared-source control: K = 1 and 2 give 30.3-31.1 GB/s; K = 4 and 8 give 24.9-27.2 GB/s.</li>
+<li>P8 rerun today: W = 1024 at window 4 gives 20.5 GB/s (P8 reported 9.4); W = 128 gives 21.6
+(P8 reported 30.4).</li>
+</ul>
+<p><strong>Verdict.</strong></p>
+<ul>
+<li><strong>&quot;One batch runs on one engine&quot;: confirmed by direct count.</strong> All 1024 works of a batch are
+counted on a single engine; consecutive batches go round robin over the engines; K = 4 puts
+exactly one batch on each engine. Q4-b (spread) and Q4-c are ruled out.</li>
+<li><strong>But one engine is not what limits a batch.</strong> One batch on one engine reaches 30.7 GB/s, the
+same as 4 batches on 4 engines and the same on a 1-engine group. The engine running one batch
+even has its pipeline full only ~9 % of the time (12.3 k of ~136 k cycles). The ~31 GB/s device
+ceiling (Q3) is the limit at every K.</li>
+<li>So the P8 observation (&quot;W = 1024 reaches only ~1/4&quot;) is <strong>not explained by single-engine
+execution and does not reproduce</strong>: the unchanged <code>p8_batch</code> binary now gives 20.5 GB/s, and
+its W = 128 row also fell from 30.4 to 21.6. [INFERENCE: P8's payload layout (4096 separate
+heap <code>Vec</code>s of 4 KiB, so most destinations are not page- or line-aligned and span two pages) or
+its closed-loop structure costs bandwidth, and that cost varies between runs; not tested.]</li>
+</ul>
+<h2>Suggested model.js corrections (for the lead)</h2>
+<ul>
+<li><code>engine_slots</code>: &quot;3 per engine&quot; now confirmed through ENQCMD as well: shared-WQ Retry onset =
+threshold + 3E for E = 1..4 (35/38/41/44 at T = 32, 67/76 at T = 64), occupancy = T, PMU 2
+dispatched per engine. P9's &quot;+6&quot; = 3 × 2 engines. Add: the count is independent of what fills
+the slots (noop to 2 MiB) while the heads run. Whether a short descriptor can complete past a
+running long one in the same engine is still open (Q2 caveat).</li>
+<li>Wave-1 forks Q3-a (C = size + const) and Q4-a (C = size + E·m) now hold for the shared WQ too,
+with the threshold in place of the size.</li>
+<li><code>engines</code> / bandwidth: replace &quot;copy bandwidth limited in a shared stage&quot; with: a per-device
+ceiling of ~31.5 GB/s ≈ 1 × 32 B per device clock (PMU <code>cl_processed</code>/cycle = 0.98 at the
+ceiling); each device keeps it when both run; independent of size (4 KiB-2 MiB), E and window.
+Same-node src+dst lowers it to ~29.7 (node memory, inferred); two devices on one node's memory
+share ~27.7 GB/s.</li>
+<li>Read buffers: bandwidth vs <code>read_buffers_allowed</code> is concave (13 GB/s at 16, 20 at 32, 26 at 64,
+30 at 96), per group, independent of E. 96 (the maximum) is needed for full bandwidth.</li>
+<li>Batch: one Batch descriptor's works run on one engine (direct PMU count), batches are spread
+round robin, and one engine running one batch reaches the full device bandwidth. Retract the
+P8 &quot;batch limited to 1/4 by one engine&quot; inference.</li>
+<li>Animation: the device data path moves ~32 B per ~1 ns device cycle.</li>
+</ul>
+<h2>Next questions</h2>
+<ol>
+<li>Q2 ordering: can a short descriptor complete past a running long one in the same engine?
+Needs heads long enough to outlive every read (e.g. E = 1 with a longer head) and
+per-record completion timestamps without sysfs polling in between.</li>
+<li>Memory side of Q3: inside a <code>lab run</code>, read the IMC CAS counters during the local/local, split
+and node-0-shared runs to confirm ~55-60 GB/s of DRAM traffic, and record the memory
+population.</li>
+<li>Is the 32 B/clk ceiling the engine datapath or the device's fabric port? Two groups on one
+device with separate WQs cannot separate it (same device); varying the device clock would.</li>
+<li>Why does <code>p8_batch</code> give 20-22 GB/s for 4 KiB batches today (30 in P8)? Compare aligned vs
+heap-allocated destinations in the same binary.</li>
+</ol>
+<h1>W3 (follow-up round)</h1>
+<h2>W3-1: memory side of Q3 (IMC CAS counters)</h2>
+<p><strong>Events.</strong> <code>UNC_M_CAS_COUNT.RD</code> (EventCode 0x05, UMask 0xcf) and <code>UNC_M_CAS_COUNT.WR</code> (0x05,
+0xf0), unit iMC, 64 B per CAS: intel/perfmon <code>SPR/events/sapphirerapids_uncore.json</code> V1.40
+(fetched 2026-11-01). The kernel's <code>uncore_imc_N/events/cas_count_read|write</code> aliases encode the
+same values. Opened on every <code>uncore_imc_N</code> for both sockets on the PMU's cpumask CPU of that socket.
+<code>w2_bw --imc</code> reads them from a sampler thread (pinned to the last CPU of side A's node, off the
+workers) over the middle half of each 200 ms window, plus a 100 ms idle baseline with heaters on.</p>
+<p><strong>Predictions (before running).</strong></p>
+<ul>
+<li>(a) One device copying local at ~29.8 GB/s: node-0 DRAM read ≈ write ≈ 29.8 GB/s (≈ 60 GB/s
+total), node 1 ≈ idle. Split placement (31.5 GB/s): ~31.5 read on one node, ~31.5 write on the
+other.</li>
+<li>(b) Both devices on node-0 memory: node-0 read ≈ write ≈ 27.7 GB/s (sum ≈ 55 GB/s). If this is
+the node's practical ceiling, it should be about equal to or below the read + write total of
+case (a); if (b) is far below (a), the shared limit is not DRAM (e.g. home agent / UPI).</li>
+<li>Alternative: DRAM traffic exceeds copy bytes (e.g. write-allocate reads, directory updates),
+read &gt; copy rate.</li>
+</ul>
+<p><strong>Runs</strong> (<code>W3IMC/</code>, 1 MiB, W = 16, 200 ms windows, 2 reps, heaters 8 on both nodes, mesh 2.2 GHz):
+<code>20261101T034035Z-AB-both-local</code>, <code>…034039Z-AB-both-node0mem</code>, <code>…034042Z-AB-split-A</code>. Idle
+baseline (heaters on, no copy): 0.02-0.04 GB/s read and write per node.</p>
+<p><strong>Results</strong> (GB/s; IMC = sum over the socket's IMC boxes, middle 100 ms of the window; both reps
+agree within 0.05):</p>
+<table>
+<thead>
+<tr>
+<th>case</th>
+<th>copy rate</th>
+<th>node-0 DRAM rd / wr</th>
+<th>node-1 DRAM rd / wr</th>
+<th>active IMC boxes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>(a) dsa0 alone, local</td>
+<td>29.5</td>
+<td>29.7 / 29.5</td>
+<td>0.03 / 0.02</td>
+<td>imc_0, imc_6 on socket 0 (14.8 rd + 14.8 wr each)</td>
+</tr>
+<tr>
+<td>dsa2 alone, local</td>
+<td>29.7</td>
+<td>0.2 / 0.1</td>
+<td>29.7 / 29.7</td>
+<td>imc_0, imc_6 on socket 1</td>
+</tr>
+<tr>
+<td>both, each local</td>
+<td>29.5 + 29.7</td>
+<td>29.7 / 29.5</td>
+<td>29.7 / 29.7</td>
+<td>2 per socket</td>
+</tr>
+<tr>
+<td>dsa0 alone, node-0 memory</td>
+<td>29.5</td>
+<td>29.6 / 29.5</td>
+<td>~0</td>
+<td>2</td>
+</tr>
+<tr>
+<td>dsa2 alone, node-0 memory (remote)</td>
+<td>29.2</td>
+<td>29.4 / 29.3</td>
+<td>~0</td>
+<td>2</td>
+</tr>
+<tr>
+<td><strong>(b) both on node-0 memory</strong></td>
+<td><strong>18.4 + 9.25 = 27.6</strong></td>
+<td><strong>29.3 / 29.2</strong></td>
+<td>~0</td>
+<td>imc_0 15.0 / 15.0, imc_6 14.3 / 14.2</td>
+</tr>
+<tr>
+<td>split (dsa0: src node 0, dst node 1)</td>
+<td>31.4</td>
+<td>31.5 / 0.03</td>
+<td>0.03 / 31.5</td>
+<td>2 per socket</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Verdict.</strong></p>
+<ul>
+<li><strong>Memory is the shared limit in (b): confirmed by count.</strong> Node-0 DRAM moves 58.5 GB/s (29.3
+read + 29.2 write) whether one device or two devices load it, and every case that puts both the
+reads and the writes of a 1 MiB stream on node 0 sits at 58.5-59.2 GB/s. Only 2 IMC boxes per
+socket carry traffic (<code>imc_0</code>, <code>imc_6</code>), each ~14.8 GB/s read + ~14.8 write ≈ 29.6 GB/s per channel.</li>
+<li>The prediction &quot;sum = 2 × 27.7&quot; holds only approximately: in (b) node-0 DRAM traffic is 6 %
+above the copy bytes (29.3 vs 27.6 per direction); with one device it is within 0.5 %.
+[INFERENCE: extra DRAM accesses from the remote device's traffic contending with the local one
+(directory or retry traffic); not identified.]</li>
+<li><strong>New: the single local device is also memory-bound.</strong> One local copy stream already uses
+~59 GB/s of node DRAM, the same as the two-device case; with src and dst on different nodes
+each node carries only ~31.5 one way and the copy rises to the device ceiling (31.4).
+So Q3's 29.5-29.8 &quot;local&quot; figure is the 2-channel memory limit; 31.5 is the device limit.</li>
+<li>[INFERENCE: ~29.6 GB/s per channel would be ~77 % of a DDR5-4800 channel's 38.4 GB/s peak; the
+DIMM speed was not read.]</li>
+</ul>
+<h2>W3-2: why P8's batch bandwidth does not reproduce</h2>
+<p><strong>Facts going in.</strong> P8 (<code>P8/20261101T022317Z-A-mm4096-rcfalse-v3</code>, core 3.8 GHz): 4 KiB batch
+works, closed loop, W = 128 window 32 → 30.4 GB/s, W = 1024 window 4 → 9.4. Same binary today
+(<code>W2Q4/20261101T025721Z-A-p8-repro-w128-1024</code>, core 2.2 GHz): 21.6 and 20.5. <code>w2_batch_eng</code>
+(page-aligned mbind'd buffers, rounds): 30.7-31.0 at every K. P8's payload: one heap <code>Vec</code> of
+4 KiB as the source for every work and 4096 separate heap <code>Vec</code>s of 4 KiB as destinations (glibc
+chunks of 4096 + 16 B: destinations are 16-B aligned, cycle through 4 offsets mod 64, and almost
+all straddle two pages). THP is <code>madvise</code> (heap not madvised, so 4 KiB pages either way).</p>
+<p><strong>Predictions (before running).</strong></p>
+<ul>
+<li>H-a (layout): P8's heap layout reproduced inside <code>w2_batch_eng</code> drops below ~31 GB/s, and the
+translation counters (<code>EV_ATS_RSP_*</code>, ATC alloc/no-alloc) per work rise (an extra page per
+straddling destination), or the line misalignment (partial first/last lines) costs bandwidth.
+Synthetic layouts separate the two: offset 64 stride 4096 (page-straddling, line-aligned) vs
+offset 16 (both) vs offset 0 (neither).</li>
+<li>H-b (loop structure / core clock): P8's closed loop with aligned buffers drops; the layout does
+not matter.</li>
+<li>H-c (NUMA placement of P8's heap pages): heap pages on the far node (checked with move_pages).</li>
+<li>Run-to-run variation of P8 (9.4 vs 20.5, 30.4 vs 21.6) follows whichever factor is not fixed by
+the binary (heap phase, page placement, core clock).</li>
+</ul>
+<p><strong>Runs</strong> (<code>W3P8/</code>, <code>4-engine.conf</code>, W × 4 KiB memmove works, no work RCs; &quot;rounds&quot; = submit K,
+wait all; &quot;closed&quot; = P8's loop, K outstanding, 262144 works, 3 reps; DSA PMU: <code>cl_processed</code>,
+<code>from_batch</code>, ATS responses (<code>2:f</code>), ATC alloc / no-alloc / hit-prev, <code>pipefull</code>). All statuses
+0x01, nothing lost; every buffer on node 0 (move_pages).</p>
+<table>
+<thead>
+<tr>
+<th>run</th>
+<th>layout</th>
+<th>mode, W, K</th>
+<th>GB/s</th>
+<th>ATS per work</th>
+<th>ATC hit per work</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>20261101T034209Z-A-rounds-aligned-w1024</code></td>
+<td>aligned (own src per work)</td>
+<td>rounds 1024, K 1 / 4</td>
+<td>30.7 / 31.0</td>
+<td>2.02</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>…034211Z-A-rounds-heap-w1024</code></td>
+<td>P8 heap</td>
+<td>rounds 1024, K 1 / 4</td>
+<td>28.7 / 28.9</td>
+<td>4.01 / 3.09</td>
+<td>0 / 0.93</td>
+</tr>
+<tr>
+<td><code>…034211Z-A-rounds-heap-w128</code></td>
+<td>P8 heap</td>
+<td>rounds 128, K 32</td>
+<td>29.9</td>
+<td>3.10</td>
+<td>0.92</td>
+</tr>
+<tr>
+<td><code>…034217Z-A-closed-aligned-w1024</code></td>
+<td>aligned</td>
+<td>closed 1024, K 4</td>
+<td>29.8</td>
+<td>2.02</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>…034218Z-A-closed-aligned-w128</code></td>
+<td>aligned</td>
+<td>closed 128, K 32</td>
+<td>31.0</td>
+<td>2.03</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>…034219Z-A-closed-heap-w1024</code></td>
+<td>P8 heap</td>
+<td>closed 1024, K 4</td>
+<td><strong>12.1</strong></td>
+<td>3.10</td>
+<td>0.92</td>
+</tr>
+<tr>
+<td><code>…034404Z-A-closed-heap-w1024-again1</code></td>
+<td>P8 heap</td>
+<td>same, new process</td>
+<td><strong>22.5</strong></td>
+<td>3.13</td>
+<td>0.89</td>
+</tr>
+<tr>
+<td><code>…034405Z-A-closed-heap-w1024-again2</code></td>
+<td>P8 heap</td>
+<td>same, new process</td>
+<td><strong>25.9</strong></td>
+<td>3.12</td>
+<td>0.89</td>
+</tr>
+<tr>
+<td><code>…034220Z-A-closed-heap-w128</code></td>
+<td>P8 heap</td>
+<td>closed 128, K 32</td>
+<td>26.3</td>
+<td>3.10</td>
+<td>0.93</td>
+</tr>
+<tr>
+<td><code>…034245Z-B-closed-o16s4112-sharedlines-w1024</code></td>
+<td>dst like heap (16-B aligned, 4112 stride, shared boundary lines), own src</td>
+<td>closed 1024, K 4</td>
+<td>30.5</td>
+<td>2.20</td>
+<td>0.82</td>
+</tr>
+<tr>
+<td><code>…034247Z-A-closed-o16s4160-unaligned-noshare-w1024</code></td>
+<td>dst unaligned, straddling, no shared lines</td>
+<td>closed 1024, K 4</td>
+<td>30.2</td>
+<td>2.32</td>
+<td>0.70</td>
+</tr>
+<tr>
+<td><code>…034249Z-A-closed-o64s4096-straddle-aligned-w1024</code></td>
+<td>dst line-aligned, every one straddles a page</td>
+<td>closed 1024, K 4</td>
+<td>30.7</td>
+<td>2.05</td>
+<td>0.97</td>
+</tr>
+<tr>
+<td><code>…034300Z-A-closed-aligned-sharedsrc-w1024</code></td>
+<td>one shared src, page-aligned</td>
+<td>closed 1024, K 4</td>
+<td>28.6</td>
+<td>1.02</td>
+<td>1.00</td>
+</tr>
+<tr>
+<td><code>…034302Z-A-closed-aligned-sharedsrc-w128</code></td>
+<td>one shared src, page-aligned</td>
+<td>closed 128, K 32</td>
+<td>31.1</td>
+<td>1.03</td>
+<td>1.00</td>
+</tr>
+<tr>
+<td><code>…034403Z-A-closed-aligned-sharedsrc-off16-w1024</code></td>
+<td><strong>one shared src straddling a page</strong> (offset 16)</td>
+<td>closed 1024, K 4</td>
+<td><strong>20.4</strong></td>
+<td>3.02</td>
+<td><strong>0</strong></td>
+</tr>
+<tr>
+<td><code>…034420Z-A-closed-aligned-sharedsrc-off16-w1024-again</code></td>
+<td>same, new process</td>
+<td>closed 1024, K 1 / K 4</td>
+<td>29.8 / <strong>24.2</strong></td>
+<td>3.02</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>…034422Z-A-rounds-aligned-sharedsrc-off16-w1024</code></td>
+<td>same</td>
+<td>rounds 1024, K 1 / 4</td>
+<td>30.2 / 30.5</td>
+<td>3.02</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<p>(The synthetic-dst rows also ran in rounds mode: 28.8-30.4. The 4112-stride closed run ran on
+side B.)</p>
+<p><strong>Verdict.</strong></p>
+<ul>
+<li><strong>Major contributor found (not a complete explanation): P8's payload layout, in particular its
+single source buffer that straddles a 4 KiB page, combined with several batches in flight in
+P8's closed loop.</strong> Manipulations:
+<ul>
+<li>Aligned buffers give 29.8-31.0 in P8's closed loop.</li>
+<li>P8's heap layout reproduced inside <code>w2_batch_eng</code> gives 12.1, 22.5 and 25.9 GB/s in three
+processes with the same binary and arguments. This matches P8's 9.4 vs 20.5 spread in
+character.</li>
+<li>Changing only the source (one shared 4 KiB source at page offset 16, so it straddles two
+pages; destinations aligned) reproduces the drop (20.4, 24.2). The same source, page-aligned,
+gives 28.6 / 31.1.</li>
+<li>Destination geometry alone (16-B alignment, page straddling, lines shared between neighbours)
+costs ≤ 2 % (30.2-30.7).</li>
+</ul>
+</li>
+<li><strong>PMU signature:</strong> with a page-straddling source the ATC never hits (<code>EV_ATC_HIT_PREV</code> 0 per
+work vs 1.0 for a page-contained shared source), and every work issues 3 ATS translations
+instead of 1 (heap: 3.1-4.0 instead of 2).</li>
+<li><strong>Needs concurrency:</strong> one batch at a time (K = 1, closed 29.8) and the rounds loop (K = 4, all
+batches started together: 30.5) are unaffected. The drop appears only when several batches on
+different engines run staggered in the closed loop. [INFERENCE: concurrent translation misses
+for the same two pages from 4 engines serialize in the translation path; the exact mechanism
+and the process-to-process spread are not explained.]</li>
+<li><strong>Core-clock control</strong> (1.5 s warm-up, layouts alternated, 3 processes each, same lease side):
+<code>20261101T034636Z-A-ctl-closed-heap-w1024-i0</code> … <code>…034653Z-A-ctl-closed-aligned-w1024-i2</code>.
+Aligned: 29.4-31.0 GB/s in every rep (core 3.6-3.9). Straddling shared source: 19.4-21.0, 21.0,
+29.0 (per process; core 3.4-3.9). Heap: 20.5 (core 2.2), 20.6 then 12.9 / 12.9 within one
+process (core 3.6-3.8), 25.6 (core 3.9). So the core clock does not explain the spread, and the
+heap layout can change bandwidth between reps of one process.</li>
+<li>The straddling source alone gives 19-29 GB/s; the heap layout reaches 12-13. Something else in
+the heap layout adds to it (likely the destinations' extra translations, ~4 per work, under
+the same concurrency), and the process-to-process and rep-to-rep spread remains unexplained.
+P8's 9.4 is consistent with the low end of the heap runs, not proven to have the same cause.</li>
+<li>H-a survives with a correction: the source matters most; the destinations alone do not. H-b is true only as an
+interaction (the closed loop with aligned buffers is fine). H-c is ruled out (all pages on
+node 0).</li>
+<li>For P8's notes: W = 1024 &quot;¼ bandwidth&quot; and W = 128 &quot;30.4 GB/s&quot; are both layout-dependent
+measurements. Batch throughput for page-aligned payloads is 30-31 GB/s at every W and K.</li>
+</ul>
+<h2>W3-3: can a short descriptor finish ahead of a long one on the same engine?</h2>
+<p><strong>Predictions (before running).</strong></p>
+<ul>
+<li>O-a (in-order per engine): on a 1-engine group, no noop / 4 KiB filler is seen before the
+2 MiB head completes (<code>fillers_before_first_head</code> = 0); fillers finish within ~1 us after the head.</li>
+<li>O-b (two independent pipeline slots): with one head, fillers flow through the free slot and
+finish within a few us of their submit, long before the head (~68 us); with two heads (both
+slots busy) they wait for a head.</li>
+<li>O-c (a batch head is processed differently): a Batch head (512 × 4 KiB) behaves like O-a or O-b
+independently of the memmove result.</li>
+</ul>
+<p><strong>Method.</strong> <code>w3_order</code> on <code>w2-rb96-e1.conf</code> (dedicated WQ 128, 1 engine): heads, 5 us gap,
+then 16 fillers, all MOVDIR64B; poll every record in passes (heads first), no sysfs/PMU reads
+while polling; 10 reps (+1 warm-up rep dropped).</p>
+<p><strong>Runs</strong> (<code>W3ORD/</code>, 10 reps each, mesh 1.9-2.2 → 2.2 GHz, core 2.2 GHz, all statuses 0x01):
+<code>20261101T034442Z-A-h1-noop</code>, <code>…034444Z-A-h1-4k</code>, <code>…034444Z-A-h2-noop</code>, <code>…034445Z-A-h3-noop</code>,
+<code>…034446Z-A-h1batch-noop</code>, <code>…034446Z-A-h1batch-4k</code>; witness reruns <code>…034516Z-A-w-h1-noop</code>,
+<code>…034516Z-A-w-h1-4k</code>, <code>…034519Z-A-w-h1batch-noop</code>. Pass length ~50 ns. Witness: when a filler
+record is first seen, every head is re-read at once; the filler counts as &quot;passed&quot; only if all
+heads still read 0. (The plain pass comparison reads heads before fillers, so a head that lands
+between the two loops is credited to the next pass; it produced the sporadic &quot;passed&quot; counts in
+the first h1-noop run and is not used.)</p>
+<table>
+<thead>
+<tr>
+<th>head(s) on the 1 engine</th>
+<th>fillers (16, submitted at ~5 us)</th>
+<th>head completion (us)</th>
+<th>filler completion (us)</th>
+<th>passed (witness)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 × 2 MiB memmove</td>
+<td>noop</td>
+<td>67.3</td>
+<td>67.3-68.2 (same pass as the head, or ≤ 1.3 us after)</td>
+<td>0 / 160</td>
+</tr>
+<tr>
+<td>1 × 2 MiB memmove</td>
+<td>4 KiB memmove</td>
+<td>67.5</td>
+<td>67.5-69.8</td>
+<td>0 / 160</td>
+</tr>
+<tr>
+<td>2 × 2 MiB memmove</td>
+<td>noop</td>
+<td>67.5, 134-138</td>
+<td>133.8-137.6 (after the 2nd head)</td>
+<td>0 (pass-based)</td>
+</tr>
+<tr>
+<td>3 × 2 MiB memmove</td>
+<td>noop</td>
+<td>67.5, 134, 200.4</td>
+<td>200.3-200.4 (after the 3rd)</td>
+<td>0 (pass-based)</td>
+</tr>
+<tr>
+<td>1 Batch, 512 × 4 KiB</td>
+<td>noop</td>
+<td>68.6-68.7</td>
+<td>12-15</td>
+<td><strong>160 / 160</strong> (53 us before the batch)</td>
+</tr>
+<tr>
+<td>1 Batch, 512 × 4 KiB</td>
+<td>4 KiB memmove</td>
+<td>70.7</td>
+<td>12-15</td>
+<td>160 / 160 (pass-based)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Verdict.</strong></p>
+<ul>
+<li><strong>Behind a work descriptor, no.</strong> On one engine, noops and 4 KiB copies submitted 5 us after a
+2 MiB memmove complete only when it completes (0 of 160 pass, witness-checked). Two or three
+2 MiB heads complete one after another, 67 us apart, and the fillers complete after the last
+one. Verified: completion is in order within an engine (O-a survives for completion order;
+O-b, short ones finishing early, is ruled out). [INFERENCE: the 67 us spacing at the full
+~30 GB/s fits one copy streaming at a time, but completion records cannot exclude overlapping
+execution inside the pipeline.] This matches P12's
+&quot;waves of E&quot; and Q2's &quot;nothing passes while heads run&quot;.</li>
+<li><strong>Behind a Batch, yes.</strong> Fillers submitted after a 512-work batch complete at 12-15 us, ~53 us
+before the batch (160 / 160, witness-checked; PMU: 512 <code>from_batch</code> + 16 <code>disp_wq</code>). The engine
+interleaves WQ descriptors with the works of a batch it is processing (O-c).</li>
+<li>For the model: per-engine order holds for WQ descriptors; a batch does not block the engine's
+queue.</li>
+</ul>
+</main></body></html>

@@ -1,0 +1,1987 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DSA 提交流水线 · accel-datapath</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Noto+Serif+SC:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #faf9f5; --card: #fffefb; --sunk: #f3f1eb; --ink: #161514; --ink2: #3b3935; --muted: #7a776f;
+  --rule: #e4e0d6; --rule2: #cfcabe; --grid: #ebe7de;
+  --known: #2f8a57; --partial: #c4861d; --hypothesis: #8a6fd6; --unknown: #a9a497; --bad: #d4553b;
+  --timer: #3f6fd8; --count: #1f978b; --knob: #161514; --caveat: #d4553b; --terra: #d9694a; --peri: #6f8ff0;
+  --serif: "Newsreader", "Noto Serif SC", "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", Georgia, serif;
+  --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #141311; --card: #1b1a17; --sunk: #201f1b; --ink: #ece8df; --ink2: #cfcac0; --muted: #9a958a;
+    --rule: #2f2d29; --rule2: #46433c; --grid: #22201d;
+    --known: #5cc08a; --partial: #e0a43e; --hypothesis: #a690ec; --unknown: #8f8a80; --bad: #f0745a;
+    --timer: #7b9cf2; --count: #3cc2b5; --knob: #ece8df; --caveat: #f0745a; --terra: #ee8466; --peri: #8ea7f5;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
+a { color: inherit; }
+button { font: inherit; color: inherit; }
+code { font: 0.88em var(--mono); background: var(--sunk); padding: 1px 5px; border-radius: 4px; }
+.wrap { max-width: 1480px; margin: 0 auto; padding: 0 40px; }
+@media (max-width: 800px) { .wrap { padding: 0 16px; } }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+@keyframes fadein { from { opacity: 0; } }
+@keyframes pop { 0% { opacity: 0; transform: scale(0.2); } 70% { transform: scale(1.12); } }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+@keyframes grow { from { transform: scaleY(0); } }
+@keyframes halo { 0% { opacity: 0.55; transform: scale(1); } 100% { opacity: 0; transform: scale(1.07); } }
+@keyframes stallpulse { 50% { stroke-opacity: 0.35; } }
+@keyframes blink { 50% { opacity: 0.25; } }
+@keyframes spin { to { transform: rotate(-360deg); } }
+
+/* top bar */
+.top { position: sticky; top: 0; z-index: 30; background: color-mix(in srgb, var(--paper) 88%, transparent); backdrop-filter: blur(10px); }
+.topin { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; padding-top: 20px; padding-bottom: 9px; border-bottom: 1px solid var(--ink); }
+.brand { display: flex; align-items: center; gap: 8px; text-decoration: none; font: 500 22px/1 var(--serif); letter-spacing: -0.01em; white-space: nowrap; }
+.brand em { font-style: normal; color: var(--muted); }
+.topmeta { font: 12px/1 var(--mono); color: var(--muted); display: flex; align-items: center; gap: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topmeta .sq { width: 9px; height: 9px; background: var(--ink); flex: none; }
+
+/* title + tabs */
+.titlebar { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px 30px; margin: 30px 0 20px; flex-wrap: wrap; }
+.sk { font: 500 11.5px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 500 clamp(30px, 3.4vw, 44px)/1.05 var(--serif); letter-spacing: -0.02em; margin: 6px 0 8px; }
+.lead { margin: 0; color: var(--ink2); font-size: 15px; max-width: 760px; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.tab { border: 1px solid var(--rule2); background: var(--card); border-radius: 999px; padding: 7px 16px; font: 500 13.5px var(--sans); cursor: pointer; transition: background 0.2s, color 0.2s, border-color 0.2s; }
+.tab:hover { border-color: var(--ink); }
+.tab.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.view { display: none; }
+.view.on { display: block; animation: fadein 0.35s ease both; }
+.stagger > * { animation: rise 0.45s var(--ease) both; animation-delay: calc(min(var(--i, 0), 24) * 32ms); }
+
+/* shared bits */
+.card { background: var(--card); border: 1px solid var(--rule); border-radius: 14px; padding: 20px 22px 22px; }
+.frow { display: grid; grid-template-columns: 64px 1fr auto; gap: 10px; align-items: start; margin: 6px 0; }
+.frow .lab, .lab { font: 500 11px/1 var(--mono); letter-spacing: 0.09em; color: var(--muted); text-transform: uppercase; padding-top: 9px; white-space: nowrap; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: 13px/1.2 var(--sans); border: 1px solid var(--rule2); background: var(--card); color: var(--ink); border-radius: 999px; padding: 6px 12px 6px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; transition: border-color 0.15s, background 0.2s, color 0.2s, opacity 0.2s; }
+.chip:hover { border-color: var(--ink); }
+.chip.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--c, var(--muted)); flex: none; }
+.chip i.hollow { background: transparent; box-shadow: inset 0 0 0 1.6px var(--c); }
+.chip.on i.hollow { box-shadow: inset 0 0 0 1.6px var(--paper); }
+.chip i.sq { border-radius: 3px; }
+.chip .k { font: 500 12px/1.2 var(--mono); }
+.chips.faded .chip:not(.on) { opacity: 0.55; }
+.tag { display: inline-flex; align-items: center; gap: 6px; font: 11px/1.25 var(--mono); letter-spacing: 0.02em; border: 1px solid var(--rule2); border-radius: 4px; padding: 3px 7px; color: var(--ink2); margin: 0 4px 4px 0; white-space: nowrap; background: var(--card); vertical-align: 1px; }
+.tag i { width: 7px; height: 7px; border-radius: 50%; background: var(--c, var(--muted)); flex: none; }
+.ghost { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--rule2); background: var(--card); border-radius: 8px; padding: 6px 11px; font: 600 12.5px var(--sans); cursor: pointer; white-space: nowrap; }
+.ghost:hover { border-color: var(--ink); }
+.ghost svg { width: 13px; height: 13px; }
+.ghost.spin svg { animation: spin 0.6s var(--ease); }
+.note { font-size: 12.5px; color: var(--muted); }
+
+/* pipeline view */
+.figbody { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; margin-top: 14px; align-items: stretch; }
+.detailwrap { position: relative; min-height: 480px; }
+.detailwrap .detail { position: absolute; inset: 0; }
+@media (max-width: 1200px) { .figbody { grid-template-columns: 1fr; } .detailwrap { min-height: 0; } .detailwrap .detail { position: static; max-height: 640px; } }
+.mapbox { border: 1px solid var(--rule); border-radius: 12px 12px 0 0; background: var(--paper); overflow: hidden; }
+.mapblock[hidden], .cmprow[hidden], .frow[hidden] { display: none; }
+.mapblock + .mapblock { margin-top: 18px; }
+.cmphead { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font: 500 12.5px var(--sans); color: var(--ink2); }
+.cmphead b { font: 500 11.5px var(--mono); color: var(--muted); letter-spacing: 0.04em; }
+.abadge { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; font: 600 12px var(--mono); color: var(--paper); background: var(--ink); flex: none; }
+.abadge.b { background: var(--peri); color: #fff; }
+.chip.onB { background: var(--peri); color: #fff; border-color: var(--peri); }
+.chip.onB i, .chip.onB i.hollow { box-shadow: inset 0 0 0 1.6px #fff; background: transparent; }
+.ghost.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.cmpctl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding-top: 3px; }
+.cmpctl select { max-width: 300px; }
+.cmpctl .note { margin-left: 8px; }
+.detail table.cmp td:first-child { font: 500 10.5px var(--mono); letter-spacing: 0.05em; color: var(--muted); white-space: nowrap; width: 64px; }
+.detail table.cmp th .abadge { width: 18px; height: 18px; font-size: 10.5px; }
+.detail ul.diff { list-style: none; padding: 0; margin: 4px 0; }
+.detail ul.diff li { padding: 6px 0 6px 22px; position: relative; border-top: 1px dashed var(--rule); }
+.detail ul.diff li:first-child { border-top: none; }
+.detail ul.diff li::before { content: ""; position: absolute; left: 4px; top: 13px; width: 8px; height: 8px; border-radius: 2px; background: var(--c, var(--muted)); }
+.pmap { display: block; width: 100%; height: auto; }
+.pmap .dom rect { fill: none; stroke: var(--rule2); stroke-dasharray: 3 4; }
+.pmap .dom text { font: 500 11px var(--mono); letter-spacing: 0.06em; fill: var(--muted); }
+.pmap .comp { cursor: pointer; transition: opacity 0.35s; outline: none; }
+.pmap .comp .body { fill: color-mix(in srgb, var(--s) 7%, var(--card)); stroke: color-mix(in srgb, var(--s) 45%, var(--rule2)); stroke-width: 1; transition: stroke 0.2s, stroke-width 0.2s; }
+.pmap .comp:hover .body, .pmap .comp:focus-visible .body { stroke: var(--ink); }
+.pmap .comp.sel .body { stroke: var(--ink); stroke-width: 2.2; }
+.pmap .comp.stalled .body { stroke: var(--bad); stroke-width: 2.4; animation: stallpulse 1s ease-in-out infinite; }
+.pmap .name { font: 600 14.5px var(--sans); fill: var(--ink); }
+.pmap .en { font: 11px var(--mono); fill: var(--muted); }
+.pmap .badge { font: 500 12.5px var(--mono); fill: var(--ink2); transition: fill 0.2s; }
+.pmap .badge.live { fill: var(--ink); font-weight: 600; }
+.pmap .badge.full { fill: var(--bad); }
+.pmap .edge { fill: none; stroke: var(--rule2); stroke-width: 1.3; transition: stroke 0.3s, opacity 0.35s, stroke-width 0.3s; }
+.pmap .edge.drop { stroke: var(--bad); stroke-dasharray: 4 3; }
+.pmap .edge.aux { stroke-dasharray: 2 4; }
+.pmap .edge.hot { stroke: var(--ink2); stroke-width: 1.8; }
+.pmap .edge.hl { stroke: var(--ink); stroke-width: 2; }
+.pmap .elabel { font: 10px var(--mono); fill: var(--muted); paint-order: stroke; stroke: var(--paper); stroke-width: 4px; stroke-linejoin: round; transition: opacity 0.35s; }
+.pmap .dim { opacity: 0.16; }
+.pmap .mark { transform-box: fill-box; transform-origin: center; animation: pop 0.5s var(--ease) both; }
+.pmap .mark text { font: 600 10.5px var(--mono); fill: var(--paper); }
+.pmap .halo { fill: none; stroke: var(--ink); stroke-width: 1.4; transform-box: fill-box; transform-origin: center; animation: halo 1.8s ease-out infinite; pointer-events: none; }
+.pmap .meter-track { fill: var(--rule); }
+.pmap .meter-fill { fill: var(--ink); }
+.pmap .meter-fill.full { fill: var(--bad); }
+.pmap .val { font: 600 12.5px var(--mono); }
+.pmap .val.timer { fill: var(--timer); }
+.pmap .val.count { fill: var(--count); }
+.pmap .waitlbl { font: 600 11px var(--sans); fill: var(--bad); animation: blink 0.9s ease-in-out infinite; }
+.pmap .bubble { animation: pop 0.45s var(--ease) both; transform-box: fill-box; transform-origin: 50% 100%; pointer-events: none; }
+.pmap .bubble rect, .pmap .bubble path { fill: var(--ink); }
+.pmap .bubble text { font: 500 12px var(--sans); fill: var(--paper); }
+.pmap .pkt { pointer-events: none; }
+.pmap .k-desc { fill: var(--ink); }
+.pmap .k-alt { fill: var(--peri); }
+.pmap .k-store { fill: var(--muted); }
+.pmap .k-drop { fill: var(--bad); }
+.pmap .k-done { fill: var(--count); }
+.pmap .k-read { fill: var(--timer); }
+.pmap .k-sentinel { fill: var(--paper); stroke: var(--ink); stroke-width: 1.8; }
+
+/* animation player */
+.player { border: 1px solid var(--rule); border-top: none; border-radius: 0 0 12px 12px; background: var(--card); padding: 12px 16px 14px; }
+.phead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ptitle { font: 500 11.5px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pctl { display: flex; gap: 4px; flex: none; }
+.pbtn { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--rule2); background: var(--card); display: grid; place-items: center; cursor: pointer; padding: 0; transition: border-color 0.15s, background 0.15s; }
+.pbtn:hover { border-color: var(--ink); }
+.pbtn.main { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.pbtn svg { width: 12px; height: 12px; }
+.psteps { display: flex; gap: 6px; margin: 10px 0 8px; }
+.pstep { flex: 1; min-width: 0; cursor: pointer; border: none; background: none; padding: 0; text-align: left; }
+.pstep .bar { height: 3px; background: var(--rule); border-radius: 2px; overflow: hidden; }
+.pstep .bar b { display: block; height: 100%; width: 0; background: var(--ink); }
+.pstep.done .bar b { width: 100%; }
+.pstep .lbl { display: block; font: 12px/1.3 var(--sans); color: var(--muted); margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color 0.2s; }
+.pstep .lbl b { font: 500 11px var(--mono); margin-right: 5px; }
+.pstep.cur .lbl { color: var(--ink); font-weight: 600; }
+.pcap { margin: 4px 0 0; font-size: 15px; line-height: 1.65; color: var(--ink); min-height: 75px; }
+.pcap.anim { animation: rise 0.45s var(--ease) both; }
+.plegend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font: 11.5px var(--mono); color: var(--muted); }
+.plegend span { display: inline-flex; align-items: center; gap: 6px; }
+.plegend i { width: 8px; height: 8px; border-radius: 2px; background: var(--c); }
+.plegend i.c { border-radius: 50%; }
+.plegend i.h { background: transparent; box-shadow: inset 0 0 0 1.6px var(--ink); }
+
+.detail { border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); padding: 18px 20px 20px; overflow: auto; }
+.detail > * { animation: rise 0.4s var(--ease) both; animation-delay: calc(min(var(--i, 0), 14) * 28ms); }
+.detail .dk { font: 500 11px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.detail h3 { font: 500 25px/1.18 var(--serif); letter-spacing: -0.01em; margin: 4px 0 10px; }
+.detail h4 { font: 500 10.5px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin: 18px 0 6px; padding-top: 12px; border-top: 1px solid var(--rule); }
+.detail p, .detail li, .detail td { font-size: 14px; line-height: 1.62; color: var(--ink2); }
+.detail p { margin: 4px 0; }
+.detail ul.ev { list-style: none; padding: 0; margin: 0; }
+.detail ul.ev li { padding: 8px 0; border-top: 1px dashed var(--rule); }
+.detail ul.ev li:first-child { border-top: none; padding-top: 2px; }
+.detail ul.plain { margin: 4px 0; padding-left: 18px; }
+.detail ol.ast { list-style: none; padding: 0; margin: 0; counter-reset: a; }
+.detail ol.ast li { counter-increment: a; display: grid; grid-template-columns: 26px 1fr; padding: 6px 8px; margin: 0 -8px; border-radius: 8px; cursor: pointer; transition: background 0.2s; }
+.detail ol.ast li::before { content: counter(a); font: 600 11px/1.9 var(--mono); color: var(--muted); }
+.detail ol.ast li:hover { background: var(--sunk); }
+.detail ol.ast li.cur { background: var(--sunk); }
+.detail ol.ast li.cur::before { color: var(--ink); }
+.detail ol.ast li b { color: var(--ink); font-weight: 600; }
+.detail table { border-collapse: collapse; width: 100%; }
+.detail td, .detail th { border-top: 1px solid var(--rule); padding: 6px 8px 6px 0; vertical-align: top; text-align: left; }
+.detail th { font: 500 10.5px var(--mono); letter-spacing: 0.06em; color: var(--muted); }
+.src { display: block; font: 11px/1.45 var(--mono); color: var(--muted); word-break: break-all; margin-top: 3px; }
+.detail table.pvr td { font-size: 13px; line-height: 1.45; }
+.detail table.pvr td:last-child { white-space: nowrap; }
+.mk { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--c); color: var(--paper); font: 600 10px var(--mono); margin-right: 6px; vertical-align: 1px; }
+.minifork { border: 1px solid var(--rule); border-radius: 8px; padding: 9px 11px; margin: 6px 0; background: var(--card); }
+.minifork .q { font: 500 15px/1.35 var(--serif); color: var(--ink); margin-bottom: 4px; }
+.minifork .a { font-size: 13px; color: var(--ink2); padding: 2px 0; }
+.minifork .a.out .t { text-decoration: line-through; color: var(--muted); }
+.callout { margin: 12px 0 2px; padding: 10px 12px; border-left: 2px solid var(--terra); background: var(--sunk); border-radius: 0 8px 8px 0; font-size: 13.5px; color: var(--ink2); }
+
+/* tables */
+table.ed { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.ed th { font: 500 10.5px var(--mono); letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); text-align: left; padding: 9px 14px 9px 0; border-bottom: 1px solid var(--ink); }
+table.ed td { padding: 13px 14px 13px 0; border-bottom: 1px solid var(--rule); vertical-align: top; color: var(--ink2); line-height: 1.58; }
+table.ed td.id { font: 500 13px var(--mono); color: var(--ink); white-space: nowrap; }
+table.ed td.id a { cursor: pointer; text-decoration: underline; text-decoration-color: var(--rule2); text-underline-offset: 4px; }
+table.ed td.id a:hover { text-decoration-color: var(--ink); }
+table.ed td .nm { color: var(--ink); font-weight: 500; }
+table.ed td .sel { display: block; font: 11px var(--mono); color: var(--muted); margin-top: 2px; }
+table.ed td.path { font: 11.5px/1.5 var(--mono); color: var(--ink2); word-break: break-all; }
+table.ed tbody tr { transition: background 0.2s; }
+table.ed tbody tr:hover { background: var(--sunk); }
+.tablewrap { overflow-x: auto; }
+
+/* forks */
+.forks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+@media (max-width: 1000px) { .forks { grid-template-columns: 1fr; } }
+.fork { border: 1px solid var(--rule); border-radius: 14px; background: var(--card); padding: 20px 22px; transition: border-color 0.2s, transform 0.25s var(--ease), box-shadow 0.25s; }
+.fork:hover { border-color: var(--rule2); transform: translateY(-2px); box-shadow: 0 8px 24px -16px rgba(0, 0, 0, 0.25); }
+.fork .qid { font: 500 11.5px var(--mono); letter-spacing: 0.08em; color: var(--muted); display: flex; justify-content: space-between; gap: 10px; }
+.fork h3 { font: 500 22px/1.3 var(--serif); letter-spacing: -0.01em; margin: 6px 0 12px; }
+.alt { display: grid; grid-template-columns: 104px 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid var(--rule); font-size: 14.5px; color: var(--ink2); line-height: 1.55; }
+.alt .why { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+.alt.out .t { text-decoration: line-through; text-decoration-color: var(--bad); color: var(--muted); }
+.fork .foot { border-top: 1px solid var(--rule); padding-top: 12px; }
+.fork .comps { font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+.fork .comps a { cursor: pointer; text-decoration: underline; text-decoration-color: var(--rule2); text-underline-offset: 3px; color: var(--ink2); }
+
+/* toy model */
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px 26px; align-items: flex-start; }
+.toolbar .grp { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
+.toolbar .grow1 { flex: 1; display: flex; justify-content: flex-end; }
+.modelnote { font-size: 13.5px; color: var(--muted); margin: 14px 0 0; max-width: 1000px; }
+.tlcard { margin: 18px 0 4px; border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); padding: 14px 16px 12px; }
+.tlhead { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; justify-content: space-between; }
+.tlhead h5 { font: 600 14px var(--sans); margin: 0; }
+.tlhow { font-size: 12.5px; color: var(--muted); margin: 6px 0 10px; line-height: 1.55; max-width: 1100px; }
+.tlhow b { color: var(--ink); }
+.tllegend { display: flex; flex-wrap: wrap; gap: 4px 14px; font: 11.5px var(--mono); color: var(--ink2); }
+.tllegend span { display: inline-flex; align-items: center; gap: 6px; }
+.tllegend i { width: 12px; height: 8px; border-radius: 2px; background: var(--c); }
+.tlwrap { position: relative; }
+.tlwrap canvas { display: block; width: 100%; }
+#tlCur { position: absolute; inset: 0; cursor: crosshair; }
+.tltip { position: absolute; pointer-events: none; z-index: 5; background: var(--ink); color: var(--paper); font: 12px/1.55 var(--sans); padding: 8px 10px; border-radius: 8px; opacity: 0; transform: translateY(4px); transition: opacity 0.12s, transform 0.12s; white-space: nowrap; }
+.tltip.on { opacity: 1; transform: none; }
+.tltip b { font: 600 12px var(--mono); }
+.tltip .r { display: flex; justify-content: space-between; gap: 16px; }
+.tltip .r span:last-child { font-family: var(--mono); }
+.tlstats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 10px; }
+.tlstat { border: 1px solid var(--rule); border-radius: 10px; padding: 8px 10px; background: var(--card); }
+.tlstat .k { font-size: 12px; color: var(--muted); }
+.tlstat .v { font: 500 21px/1.2 var(--serif); margin-top: 2px; }
+.tlstat .v small { font: 11px var(--mono); color: var(--muted); margin-left: 3px; }
+.lanes { display: grid; gap: 7px; margin: 16px 0 12px; padding: 14px 16px; border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); }
+.lane { display: grid; grid-template-columns: 150px 1fr 104px; gap: 14px; align-items: center; }
+.lane .ll { font-size: 13px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lane .ll small { font: 11px var(--mono); color: var(--muted); margin-left: 6px; }
+.cells { position: relative; height: 14px; border-radius: 3px; background: var(--sunk); overflow: hidden; }
+.cells b { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--ink); }
+.cells.full b { background: var(--bad); }
+.cells.eng b { background: var(--peri); }
+.cells.done b { background: var(--count); }
+.cells::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 calc(100% / var(--n) - 1px), var(--paper) calc(100% / var(--n) - 1px) calc(100% / var(--n))); }
+.cells.solid::after { display: none; }
+.lane .lv { font: 500 13px var(--mono); text-align: right; white-space: nowrap; }
+.lane .lv small { color: var(--muted); font-weight: 400; }
+.lane.full .lv { color: var(--bad); }
+.play { display: flex; gap: 14px; align-items: center; font: 12px var(--mono); color: var(--muted); }
+.play input { flex: 1; }
+.stallpill { display: inline-flex; align-items: center; gap: 6px; font: 600 11.5px var(--sans); color: var(--bad); border: 1px solid color-mix(in srgb, var(--bad) 45%, transparent); border-radius: 999px; padding: 3px 10px; opacity: 0; transition: opacity 0.2s; white-space: nowrap; }
+.stallpill.on { opacity: 1; }
+.stallpill i { width: 7px; height: 7px; border-radius: 50%; background: var(--bad); animation: blink 0.9s infinite; }
+input[type=range] { accent-color: var(--ink); }
+details.params { margin-top: 18px; border-top: 1px solid var(--rule); padding-top: 12px; }
+details.params summary { cursor: pointer; font: 500 11.5px var(--mono); letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); list-style: none; }
+details.params summary::before { content: "+ "; }
+details.params[open] summary::before { content: "− "; }
+.ctrl { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px 26px; margin-top: 14px; }
+.ctrl label { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--ink2); }
+.ctrl label b { font: 500 12px var(--mono); color: var(--ink); }
+select { font: 12px var(--mono); padding: 6px 9px; border: 1px solid var(--rule2); border-radius: 999px; background: var(--card); color: var(--ink); cursor: pointer; }
+.charts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 16px; }
+@media (max-width: 1100px) { .charts { grid-template-columns: 1fr; } }
+.chartcard { border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); padding: 15px 15px 8px; }
+.chartcard h5 { font: 600 14px var(--sans); margin: 0; }
+.chartcard .note { margin: 4px 0 2px; line-height: 1.5; min-height: 54px; }
+.chart { width: 100%; height: auto; display: block; }
+.chart .axis line { stroke: var(--rule); }
+.chart .axis .base { stroke: var(--rule2); }
+.chart text { font-family: var(--mono); }
+.chart .axis text { font-size: 11.5px; fill: var(--muted); }
+.chart .lg text { font-size: 11.5px; fill: var(--ink2); }
+.chart .draw { stroke-dasharray: 1 1; stroke-dashoffset: 1; animation: draw 1.3s cubic-bezier(0.45, 0, 0.2, 1) forwards; }
+.chart .pop { transform-box: fill-box; transform-origin: center; animation: pop 0.45s var(--ease) both; }
+.chart .grow { transform-box: fill-box; transform-origin: 50% 100%; animation: grow 0.7s var(--ease) both; }
+.chart circle:hover { stroke: var(--ink); stroke-width: 1.5; }
+
+/* cases (「五个案子」 tab) */
+.cbar { display: flex; align-items: center; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap; margin: 0 0 16px; }
+.cbar .intro { margin: 0; }
+.ccard { background: var(--card); border: 1px solid var(--rule); border-radius: 14px; padding: 22px 26px 16px; scroll-margin-top: 90px; transition: box-shadow 0.6s; }
+.ccard + .ccard { margin-top: 22px; }
+.ccard.flash { box-shadow: 0 0 0 3px color-mix(in srgb, var(--partial) 45%, transparent); }
+.ccard .ck { font: 500 11.5px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.ccard h2 { font: 500 clamp(22px, 2vw, 28px)/1.3 var(--serif); letter-spacing: -0.01em; margin: 4px 0 12px; }
+.cdots { display: flex; flex-wrap: wrap; gap: 5px; margin: 0 0 14px; }
+.cdot { border: 1px solid var(--rule2); background: var(--card); border-radius: 999px; padding: 4px 11px 4px 9px; font: 500 12.5px var(--sans); color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: background 0.2s, color 0.2s, border-color 0.2s; }
+.cdot:hover { border-color: var(--ink); }
+.cdot i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }
+.cdot.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.cdot.on i { box-shadow: 0 0 0 1.5px var(--paper); }
+.call .cdots { display: none; }
+.cstep { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+@media (max-width: 1100px) { .cstep { grid-template-columns: 1fr; } }
+.call .cstep + .cstep { margin-top: 18px; padding-top: 18px; border-top: 1px dashed var(--rule); }
+.cstep.enter { animation: rise 0.35s var(--ease) both; }
+.cfig { border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); padding: 12px 14px 10px; }
+.cfig h4 { font: 600 15px/1.4 var(--sans); margin: 0 0 2px; color: var(--ink); }
+.clg { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 16px; margin: 2px 4px -18px 140px; font-size: 12.5px; color: var(--ink2); position: relative; }
+.clg span { display: inline-flex; align-items: center; gap: 6px; }
+.clg i { width: 11px; height: 11px; border-radius: 2px; flex: none; box-sizing: border-box; }
+.clg.flow { margin: 4px 4px 8px; }
+.cfig svg { display: block; width: 100%; height: auto; }
+.cfig .look { margin: 2px 2px 0; font-size: 14px; line-height: 1.55; color: var(--ink); }
+.ctext { padding-top: 4px; }
+.ctext .kind { display: inline-flex; align-items: center; gap: 7px; font: 600 12px var(--mono); letter-spacing: 0.06em; color: var(--c); }
+.ctext .kind i { width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
+.ctext h3 { font: 500 24px/1.35 var(--serif); letter-spacing: -0.01em; margin: 8px 0 12px; color: var(--ink); }
+.ctext p { margin: 0 0 8px; font-size: 15.5px; line-height: 1.7; color: var(--ink2); }
+.cnav { display: flex; align-items: center; gap: 10px; margin-top: 18px; }
+.cnav .n { font: 12px var(--mono); color: var(--muted); min-width: 72px; text-align: center; }
+.cnav .ghost:disabled { opacity: 0.35; cursor: default; border-color: var(--rule2); }
+.call .cnav { display: none; }
+details.cmore { margin-top: 14px; }
+.cfaq { columns: 2; column-gap: 34px; margin-top: 8px; }
+@media (max-width: 1000px) { .cfaq { columns: 1; } }
+.cfaq .qa { break-inside: avoid; padding: 8px 0 6px; }
+.cfaq .q { font: 500 17px/1.4 var(--serif); color: var(--ink); margin-bottom: 4px; }
+.cfaq .a p { margin: 4px 0 6px; font-size: 14px; line-height: 1.65; color: var(--ink2); }
+.cmore .note { margin: 12px 0 6px; }
+table.fnumt { width: 100%; border-collapse: collapse; margin-top: 10px; }
+table.fnumt td { border-top: 1px solid var(--rule); padding: 8px 14px 8px 0; vertical-align: top; font-size: 13.5px; line-height: 1.58; color: var(--ink2); }
+table.fnumt td:first-child { font: 500 11.5px/1.6 var(--mono); color: var(--muted); white-space: nowrap; width: 130px; }
+.inf { display: inline-block; font: 500 10.5px/1.5 var(--mono); color: var(--hypothesis); border: 1px solid color-mix(in srgb, var(--hypothesis) 50%, transparent); border-radius: 4px; padding: 0 5px; margin-right: 4px; vertical-align: 1px; }
+.csvg text { font-family: var(--sans); font-size: 13px; fill: var(--ink2); }
+.csvg .tick { font: 12px var(--mono); fill: var(--muted); }
+.csvg .axl { font-size: 12.5px; fill: var(--muted); }
+.csvg .vl { font: 600 12.5px var(--mono); fill: var(--ink); }
+.csvg .mk { font-size: 14px; font-weight: 600; fill: var(--bad); }
+.csvg .lg { font-size: 12.5px; fill: var(--ink2); }
+.csvg .ink { fill: var(--ink); }
+.csvg .mut { fill: var(--muted); }
+.csvg .bad { fill: var(--bad); }
+.csvg .b { font-weight: 600; }
+.csvg .mono { font-family: var(--mono); }
+.csvg .grid { stroke: var(--grid); }
+.csvg .base { stroke: var(--rule2); }
+.csvg .box { fill: var(--card); stroke: var(--rule2); }
+.csvg .halo { paint-order: stroke; stroke: var(--paper); stroke-width: 5px; stroke-linejoin: round; }
+.csvg .pulse { animation: blink 1.6s ease-in-out infinite; }
+.csvg .slide { animation: cslide 3s var(--ease) infinite; }
+@keyframes cslide { 0%, 40% { transform: translateX(0); opacity: 1; } 80%, 100% { transform: translateX(46px); opacity: 0; } }
+.csvg .go { animation: cgo 2.6s linear infinite; }
+@keyframes cgo { from { transform: translateX(0); } to { transform: translateX(180px); } }
+
+.intro { color: var(--ink2); max-width: 900px; margin: 0 0 16px; }
+footer { margin: 70px 0 36px; padding-top: 12px; border-top: 1px solid var(--ink); display: flex; justify-content: space-between; gap: 20px; font: 12px var(--mono); color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap topin">
+    <a class="brand" href="#" aria-label="accel-datapath">
+      <svg width="22" height="18" viewBox="0 0 22 18" aria-hidden="true"><g fill="currentColor"><rect x="0" y="0" width="22" height="3"/><rect x="2" y="4" width="2" height="11"/><rect x="6" y="4" width="2" height="11"/><rect x="10" y="4" width="2" height="11"/><rect x="14" y="4" width="2" height="11"/><rect x="18" y="4" width="2" height="11"/><rect x="0" y="15" width="22" height="3"/></g></svg>
+      <span>accel-datapath</span><em>Lab&nbsp;Notes</em>
+    </a>
+    <div class="topmeta" id="topmeta"></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="titlebar">
+    <div><div class="sk">DSA · submit pipeline · model</div><h1 id="h1"></h1><p class="lead" id="lead"></p></div>
+    <nav class="tabs" id="tabs">
+      <button class="tab" data-tab="find"></button>
+      <button class="tab" data-tab="pipe">流水线与实验</button>
+      <button class="tab" data-tab="audit">测量审计</button>
+      <button class="tab" data-tab="forks">设计分叉</button>
+      <button class="tab" data-tab="sim">模型与时间线</button>
+      <button class="tab" data-tab="data">数据清单</button>
+      <a class="tab" href="notes/" style="text-decoration:none;color:inherit">实验笔记 ↗</a>
+    </nav>
+  </div>
+
+  <section class="view" id="view-find">
+    <div class="cbar"><p class="intro" id="casesIntro"></p><div class="chips" id="caseMode"></div></div>
+    <div id="casecards"></div>
+  </section>
+
+  <section class="view" id="view-pipe">
+    <div class="card">
+      <div class="frow"><div class="lab">状态</div><div class="chips" id="legend"></div><div style="display:flex;gap:6px"><button class="ghost" id="cmpToggle" title="并排播放两个实验并列出差别"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="1.5" y="2.5" width="5.5" height="11" rx="1.2"/><rect x="9" y="2.5" width="5.5" height="11" rx="1.2"/></svg>对比两个实验</button><button class="ghost" id="replayMap" title="从第一步重播"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.5 2.5v3.6H9.9"/></svg>重播</button></div></div>
+      <div class="frow cmprow" id="cmpRow" hidden><div class="lab">对比</div>
+        <div class="cmpctl"><span class="abadge">A</span><select id="cmpA"></select><button class="ghost" id="cmpSwap" title="交换 A 和 B">⇄</button><span class="abadge b">B</span><select id="cmpB"></select><span class="note">推荐：</span><div class="chips" id="cmpSuggest"></div></div>
+        <div></div></div>
+      <div class="frow"><div class="lab">已做</div><div class="chips" id="chips-done"></div><div></div></div>
+      <div class="frow"><div class="lab">计划</div><div class="chips" id="chips-plan"></div><div></div></div>
+      <div class="figbody">
+        <div id="mapCol">
+          <div class="mapblock" id="blockMain"></div>
+          <div class="mapblock" id="blockA" hidden></div>
+          <div class="mapblock" id="blockB" hidden></div>
+        </div>
+        <div class="detailwrap"><aside class="detail" id="panel"></aside></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="view" id="view-audit">
+    <p class="intro">逐个读了 hw-eval 的计时和计数代码。下表是每个已做实验实际测的区间，以及报告里的结论还能不能用。点实验编号，会在流水线图上播放它的动画。</p>
+    <div class="card tablewrap"><table class="ed" id="audit-table"></table></div>
+    <p class="intro" style="margin-top:26px">测量陷阱：wave 1 里每一条都改过至少一个 run 的数字，新实验要先避开。</p>
+    <div class="card tablewrap"><table class="ed" id="pitfall-table"></table></div>
+  </section>
+
+  <section class="view" id="view-forks">
+    <p class="intro">先猜出几种合理的硬件设计，再找能把它们分开的实验。“已排除”和“与数据矛盾”都有对应的数据出处；“未定”的分叉列出了下一步要做的实验。</p>
+    <div class="forks" id="forkgrid"></div>
+  </section>
+
+  <section class="view" id="view-sim">
+    <div class="card">
+      <div class="toolbar">
+        <div class="grp"><div class="lab">测量</div><div class="chips" id="presets"></div></div>
+        <div class="grp"><div class="lab">并行异步</div><div class="chips" id="presetsPar"></div></div>
+        <div class="grp"><div class="lab">缓冲在哪</div><div class="chips" id="modeSeg"></div></div>
+        <div class="grp"><div class="lab">CPU 提交</div><div class="chips" id="winSeg"></div></div>
+        <div class="grp"><div class="lab">叠加实测</div><div><select id="overlaySel"></select></div></div>
+        <div class="grow1"><button class="ghost" id="replaySim"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.5 2.5v3.6H9.9"/></svg>重播</button></div>
+      </div>
+      <p class="modelnote">一个确定性的排队模型，用来对照假说和实测，不是 DSA 的真实实现。每轮提交的 store（MOVDIR64B 加上额外的普通 store）一起占用 store buffer；写出按“首个延迟 + 固定间隔”串行进行；设备端是 WQ（满了丢弃）→ engine 侧槽位 → E 个 engine。“CPU 提交”决定异步程度：同步 = 等上一个完成才交下一个；窗口 W = 最多 W 个在途（tonic 的 async encode 就是把 W 从 1 提到多个）；不等 = 一直交。</p>
+      <div class="lanes" id="lanes"></div>
+      <div class="play"><button class="pbtn main" id="simPlay"></button><input type="range" id="tslider" min="0" max="1000" value="1000"><span class="stallpill" id="stallpill"><i></i>CPU 在等空位</span><span id="tlabel"></span></div>
+      <div class="tlcard">
+        <div class="tlhead">
+          <h5>时间线：谁在什么时候干活</h5>
+          <div class="tllegend" id="tlLegend"></div>
+          <div class="chips" id="tlView"></div>
+        </div>
+        <p class="tlhow">每一行是一个 descriptor 的一生，从左到右：红 = CPU 等 store buffer 空位，灰 = 在 core 里排队写出，黄 = 在 WQ 里等，浅灰 = 等 engine，彩色 = 在某个 engine 上执行（颜色 = 哪个 engine）。<b>并行</b>：竖着看任一时刻，E0–E3 有几条同时亮着，就是几个 engine 在并行。<b>异步</b>：CPU 行变绿以后设备还在干活，这段时间 CPU 可以去做别的事；同步提交时 CPU 行大部分是黄色（在等完成）。鼠标移上去看细节。</p>
+        <div class="tlwrap" id="tlWrap"><canvas id="tl"></canvas><canvas id="tlCur"></canvas><div class="tltip" id="tlTip"></div></div>
+        <div class="tlstats" id="tlStats"></div>
+      </div>
+      <div class="charts">
+        <div class="chartcard"><h5>每次 submit 测到的时间</h5><div class="note">x：第几个 submit；y：rdtscp 区间（ns）。线 = 模型，点 = 实测中位数。</div><svg class="chart" id="chartA" viewBox="0 0 400 280"></svg></div>
+        <div class="chartcard"><h5>最终被接受的 descriptor 数</h5><div class="note">x：提交总数；y：最终完成数。点 = 实测（noop sentinel 排空后的计数）。</div><svg class="chart" id="chartB" viewBox="0 0 400 280"></svg></div>
+        <div class="chartcard"><h5>knee 位置 vs 提交间隔</h5><div class="note">模型 knee = 第一次要等空位的 submit；实测 knee = 第一个中位数 ≥ 80 ns 的 K，竖线是 K 网格给出的区间。</div><svg class="chart" id="chartC" viewBox="0 0 400 280"></svg></div>
+      </div>
+      <details class="params"><summary>调参数</summary><div class="ctrl" id="controls"></div></details>
+    </div>
+    <p class="note" style="margin-top:12px">和 hw-eval 旧数据的差别：prefill 加了 gap 以后，模型预测 knee 之后只卡“写出间隔 − 提交间隔”，旧的 X2 实测被计时的那次始终卡约 105 ns。干净计时下模型成立（gap 25 ns 时 63 ns）；旧数据多半是计时窗口里多了一个 store [推断]（Q8）。</p>
+  </section>
+
+  <section class="view" id="view-data">
+    <p class="intro">主数据已经 gzip 进本目录的 <code>data/</code>（<code>data/MANIFEST.tsv</code> 记录原路径、sha256 和运行命令）。其余数据仍在 <code>async-binding-intel-idxd</code> worktree 里，下表是清理建议，删除和归档要先确认。</p>
+    <div class="chips" id="dfilter" style="margin-bottom:12px"></div>
+    <div class="card tablewrap"><table class="ed" id="dtable"></table></div>
+  </section>
+
+  <footer><span>accel-datapath · dsa-pipeline-model · model.js 驱动</span><span id="foot"></span></footer>
+</main>
+
+<script src="model.js"></script>
+<script src="data.js"></script>
+<script>
+"use strict";
+const M = window.DSA_MODEL, D = window.DSA_DATA, S = M.summary;
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const NS = "http://www.w3.org/2000/svg";
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+function el(tag, attrs = {}, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const comp = Object.fromEntries(M.components.map((c) => [c.id, c]));
+const exp = Object.fromEntries(M.experiments.map((x) => [x.id, x]));
+const fork = Object.fromEntries(M.forks.map((f) => [f.id, f]));
+const ALT = { supported: ["支持", "known"], ruled_out: ["已排除", "bad"], contradicted: ["与数据矛盾", "bad"], open: ["未定", "unknown"] };
+const VALID = { ok: ["含义可信", "known"], caveat: ["可用，有注意事项", "partial"], reinterpret: ["数据可信，结论要改", "hypothesis"], broken: ["指标有问题", "bad"] };
+const MARK = { timer: ["计时", "timer"], count: ["计数", "count"], knob: ["参数", "knob"], caveat: ["测量陷阱", "caveat"] };
+const DSC = { canonical: "known", reinterpret: "hypothesis", superseded: "unknown", orphan: "partial", aborted: "bad", huge: "terra", missing: "bad" };
+const ICON_PLAY = '<svg viewBox="0 0 12 12" fill="currentColor"><path d="M3 1.5 10 6l-7 4.5z"/></svg>';
+const ICON_PAUSE = '<svg viewBox="0 0 12 12" fill="currentColor"><rect x="2.5" y="1.5" width="2.6" height="9" rx="0.6"/><rect x="6.9" y="1.5" width="2.6" height="9" rx="0.6"/></svg>';
+const tag = (text, color) => `<span class="tag" style="--c:var(--${color})"><i></i>${esc(text)}</span>`;
+const expColor = (x) => (x.kind === "done" ? VALID[x.validity.level][1] : "timer");
+const expChip = (x, attr = "data-go") => `<button class="chip" ${attr}="x:${x.id}" data-x="${x.id}"><i class="${x.kind === "done" ? "" : "hollow"}" style="--c:var(--${expColor(x)})"></i><span class="k">${x.id}</span>${esc(x.name)}</button>`;
+const stagger = (root) => { root.classList.remove("stagger"); [...root.children].forEach((c, i) => c.style.setProperty("--i", i)); void root.offsetWidth; root.classList.add("stagger"); };
+
+// ---------- header ----------
+document.title = `${S.title} · accel-datapath`;
+$("#h1").textContent = S.title;
+$("#lead").textContent = S.lead;
+$("#topmeta").innerHTML = `<span>更新 ${esc(M.updated)} · ${esc(S.hostShort)}</span><span class="sq"></span>`;
+$("#foot").textContent = `更新于 ${M.updated}`;
+
+// ---------- tabs ----------
+const state = { tab: "find", sel: null, preset: null, statusFilter: null, cmp: null };
+function setTab(t, { push = true } = {}) {
+  state.tab = t;
+  $$("#tabs .tab").forEach((b) => b.classList.toggle("on", b.dataset.tab === t));
+  $$(".view").forEach((v) => v.classList.toggle("on", v.id === "view-" + t));
+  syncPlayers();
+  if (t === "audit") { stagger($("#audit-table tbody")); stagger($("#pitfall-table tbody")); }
+  if (t === "forks") stagger($("#forkgrid"));
+  if (t === "data") stagger($("#dtable tbody"));
+  if (t === "sim") { runSim(true); simPlay(); } else simStop();
+  if (push) writeHash();
+}
+$("#tabs").addEventListener("click", (e) => { if (e.target.dataset.tab) setTab(e.target.dataset.tab); });
+
+// ---------- legend + chips ----------
+const count = (s) => M.components.filter((c) => c.status === s).length;
+$("#legend").innerHTML = Object.entries(M.statuses).map(([k, s]) => `<button class="chip" data-status="${k}" title="${esc(s.hint)}"><i class="sq" style="--c:var(--${k})"></i>${esc(s.label)} · ${count(k)}</button>`).join("");
+$("#chips-done").innerHTML = M.experiments.filter((x) => x.kind === "done").map((x) => expChip(x, "data-toggle")).join("");
+const planned = M.experiments.filter((x) => x.kind === "planned");
+$("#chips-plan").innerHTML = planned.map((x) => expChip(x, "data-toggle")).join("");
+$("#chips-plan").closest(".frow").hidden = !planned.length;
+const PKT_LEGEND = [["desc", "ink", "descriptor（MOVDIR64B）"], ["store", "muted", "普通 store"], ["sentinel", "ink", "sentinel"], ["read", "timer", "CPU 读 status", 1], ["done", "count", "数据 / 完成写回", 1], ["drop", "bad", "被丢弃"], ["alt", "peri", "另一股流"]];
+const PKT_NAME = Object.fromEntries(PKT_LEGEND.map(([k, , t]) => [k, t]));
+
+// ---------- animation helpers ----------
+const RATE = { burst: 150, fast: 260, pace: 480, slow: 900, trickle: 1500 };
+const CAP = { store_buffer: 114, wq: 128, engine_slots: 12, engines: 4 };
+const SPEED = 0.3, GAP = 9, MAXQ = 3;
+const PKT = { desc: [8, "rect"], alt: [8, "rect"], store: [5, "rect"], drop: [7, "rect"], done: [3, "circle"], read: [3, "circle"], sentinel: [9, "rect"] };
+const boxCenter = (id) => { const [x, y, w, h] = comp[id].box; return [x + w / 2, y + h / 2]; };
+const polyCache = new Map();
+function routePoly(route) {
+  const key = route.join(">");
+  if (polyCache.has(key)) return polyCache.get(key);
+  const pts = [], entryIdx = {};
+  for (let i = 0; i + 1 < route.length; i++) {
+    const e = M.edges.find((x) => x.from === route[i] && x.to === route[i + 1]);
+    for (const p of e ? e.pts : [boxCenter(route[i]), boxCenter(route[i + 1])]) pts.push(p);
+    entryIdx[route[i + 1]] = pts.length - 1;
+  }
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const poly = { pts, cum, len: cum[cum.length - 1], ent: Object.fromEntries(Object.entries(entryIdx).map(([k, i]) => [k, cum[i]])) };
+  polyCache.set(key, poly);
+  return poly;
+}
+function pointAt(poly, s) {
+  const { pts, cum } = poly;
+  if (s <= 0) return pts[0];
+  for (let i = 1; i < pts.length; i++) {
+    if (cum[i] >= s) {
+      const f = (s - cum[i - 1]) / (cum[i] - cum[i - 1] || 1);
+      return [pts[i - 1][0] + f * (pts[i][0] - pts[i - 1][0]), pts[i - 1][1] + f * (pts[i][1] - pts[i - 1][1])];
+    }
+  }
+  return pts[pts.length - 1];
+}
+function resolveScript(script) {
+  const out = [];
+  let prev = { flows: [], fill: {}, stall: [], focus: [], note: null, timer: null, count: null };
+  for (const s of script) {
+    const cur = { h: s.h, cap: s.cap };
+    for (const k of ["flows", "stall", "focus"]) cur[k] = k in s ? s[k] || [] : prev[k];
+    cur.fill = "fill" in s ? (s.fill ? { ...prev.fill, ...s.fill } : {}) : prev.fill;
+    cur.note = "note" in s ? s.note : prev.note;
+    for (const k of ["timer", "count"]) cur[k] = k in s ? s[k] : prev[k] ? { ...prev[k], from: prev[k].to } : null;
+    out.push(cur);
+    prev = cur;
+  }
+  return out;
+}
+function scriptComps(script) {
+  const s = new Set();
+  for (const sc of script) {
+    (sc.flows || []).forEach((f) => f.route.forEach((c) => s.add(c)));
+    Object.keys(sc.fill || {}).forEach((c) => s.add(c));
+    (sc.stall || []).forEach((c) => s.add(c));
+    (sc.focus || []).forEach((c) => s.add(c));
+    for (const k of ["note", "timer", "count"]) if (sc[k]) s.add(sc[k].at);
+  }
+  return s;
+}
+const easeOut = (t) => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
+const fmtVal = (v, unit) => (unit === "M/s" ? (v >= 100 ? Math.round(v) : v.toFixed(1)) : Math.round(v)) + (unit ? " " + unit : "");
+
+// ---------- map view (one per diagram) ----------
+let mapUid = 0;
+function createMapView(svg, onComp) {
+  const uid = ++mapUid, v = { svg, compEls: {}, badgeEls: {}, edgeEls: [] };
+  v.marker = (k) => `url(#${k}${uid})`;
+  const defs = el("defs", {}, svg);
+  const pat = el("pattern", { id: `grid${uid}`, width: 25, height: 25, patternUnits: "userSpaceOnUse" }, defs);
+  el("path", { d: "M25 0 L0 0 0 25", fill: "none", stroke: "var(--grid)", "stroke-width": 1 }, pat);
+  for (const [id, color] of [["arr", "rule2"], ["arrhot", "ink2"], ["arrbad", "bad"]]) {
+    const m = el("marker", { id: id + uid, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 6.5, markerHeight: 6.5, orient: "auto-start-reverse" }, defs);
+    el("path", { d: "M0,0 L10,5 L0,10 z", fill: `var(--${color})` }, m);
+  }
+  el("rect", { x: 0, y: 0, width: 1100, height: 600, fill: `url(#grid${uid})` }, svg);
+  const layer = () => el("g", {}, svg);
+  const gDom = layer(), gEdge = layer();
+  v.gFlow = layer();
+  const gComp = layer();
+  v.gOver = layer(); v.gMark = layer(); v.gNote = layer();
+  for (const d of M.domains) {
+    const g = el("g", { class: "dom" }, gDom);
+    const [x, y, w, h] = d.box;
+    el("rect", { x, y, width: w, height: h, rx: 10 }, g);
+    el("text", { x: x + 10, y: y + 17 }, g).textContent = d.label.toUpperCase();
+  }
+  for (const e of M.edges) {
+    const path = el("path", { d: "M" + e.pts.map((p) => p.join(",")).join(" L"), class: "edge " + (e.kind || ""), "marker-end": v.marker(e.kind === "drop" ? "arrbad" : "arr") }, gEdge);
+    let label = null;
+    if (e.label) {
+      const [a, b] = [e.pts[0], e.pts[e.pts.length - 1]];
+      const vertical = a[0] === b[0];
+      label = el("text", { class: "elabel", x: vertical ? a[0] + 6 : (a[0] + b[0]) / 2, y: vertical ? (a[1] + b[1]) / 2 + 4 : a[1] - 6, "text-anchor": vertical ? "start" : "middle" }, gEdge);
+      label.textContent = e.label;
+    }
+    v.edgeEls.push({ e, path, label });
+  }
+  const hover = (id) => { for (const { e, path } of v.edgeEls) path.classList.toggle("hl", !!id && (e.from === id || e.to === id)); };
+  for (const c of M.components) {
+    const [x, y, w, h] = c.box;
+    const g = el("g", { class: "comp", tabindex: 0, role: "button", style: `--s:var(--${c.status})` }, gComp);
+    el("title", {}, g).textContent = `${c.name} · ${M.statuses[c.status].label}`;
+    el("rect", { class: "body", x, y, width: w, height: h, rx: 9 }, g);
+    el("circle", { cx: x + 15, cy: y + 16.5, r: 4.5, fill: `var(--${c.status})` }, g);
+    el("text", { class: "name", x: x + 26, y: y + 21 }, g).textContent = c.name;
+    el("text", { class: "en", x: x + 15, y: y + 38 }, g).textContent = c.en;
+    v.badgeEls[c.id] = el("text", { class: "badge", x: x + 15, y: y + h - 13 }, g);
+    v.badgeEls[c.id].textContent = c.badge;
+    g.addEventListener("click", () => onComp(c.id));
+    g.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); onComp(c.id); } });
+    g.addEventListener("mouseenter", () => hover(c.id));
+    g.addEventListener("mouseleave", () => hover(null));
+    v.compEls[c.id] = g;
+  }
+  return v;
+}
+// Dim what an experiment does not touch, mark its timer / counter points, outline a selected component.
+function paintView(v, { x = null, compSel = null, statusFilter = null }) {
+  const active = x ? new Set([...x.path, ...scriptComps(M.animations[x.id] || [])]) : null;
+  for (const c of M.components) {
+    const off = (active && !active.has(c.id)) || (statusFilter && c.status !== statusFilter);
+    v.compEls[c.id].classList.toggle("sel", c.id === compSel);
+    v.compEls[c.id].classList.toggle("dim", !!off);
+  }
+  for (const { e, path, label } of v.edgeEls) {
+    const hot = !!active && active.has(e.from) && active.has(e.to);
+    const off = (!!active && !hot) || (statusFilter && (comp[e.from].status !== statusFilter || comp[e.to].status !== statusFilter));
+    path.classList.toggle("hot", hot);
+    path.classList.toggle("dim", !!off);
+    if (label) label.classList.toggle("dim", !!off);
+    path.setAttribute("marker-end", v.marker(hot ? "arrhot" : e.kind === "drop" ? "arrbad" : "arr"));
+  }
+  v.gMark.innerHTML = "";
+  if (!x) return;
+  const perComp = {};
+  x.marks.forEach((m, i) => {
+    const [bx, by, bw] = comp[m.c].box;
+    const n = (perComp[m.c] = (perComp[m.c] || 0) + 1);
+    const g = el("g", { class: "mark", style: `animation-delay:${120 + i * 90}ms` }, v.gMark);
+    const cx = bx + bw - 14 - (n - 1) * 24, cy = by;
+    el("circle", { cx, cy, r: 10.5, fill: `var(--${MARK[m.k][1]})`, stroke: "var(--paper)", "stroke-width": 2 }, g);
+    el("text", { x: cx, y: cy + 3.8, "text-anchor": "middle" }, g).textContent = i + 1;
+    el("title", {}, g).textContent = `${MARK[m.k][0]}：${m.label}`;
+  });
+}
+
+// ---------- animation player (map view + step player) ----------
+const ICON_PREV = '<svg viewBox="0 0 12 12" fill="currentColor"><path d="M8.5 1.5 3.5 6l5 4.5z"/></svg>';
+const ICON_NEXT = '<svg viewBox="0 0 12 12" fill="currentColor"><path d="M3.5 1.5 8.5 6l-5 4.5z"/></svg>';
+class Player {
+  constructor(block, name, onComp) {
+    this.name = name;
+    block.innerHTML = (name === "main" ? "" : `<div class="cmphead"><span class="abadge ${name === "B" ? "b" : ""}">${name}</span><span class="cmpname"></span></div>`)
+      + `<div class="mapbox"><svg class="pmap" viewBox="0 0 1100 600" role="img" aria-label="DSA 提交流水线"></svg></div>`
+      + `<div class="player"><div class="phead"><span class="ptitle"></span><div class="pctl">`
+      + `<button class="pbtn" data-act="prev" title="上一步 (←)">${ICON_PREV}</button><button class="pbtn main" data-act="play" title="播放 / 暂停 (空格)"></button><button class="pbtn" data-act="next" title="下一步 (→)">${ICON_NEXT}</button>`
+      + `</div></div><div class="psteps" data-player="${name}"></div><p class="pcap"></p><div class="plegend"></div></div>`;
+    const q = (s) => block.querySelector(s);
+    this.ui = { title: q(".ptitle"), steps: q(".psteps"), cap: q(".pcap"), legend: q(".plegend"), play: q('[data-act="play"]'), name: q(".cmpname") };
+    this.v = createMapView(q("svg"), onComp);
+    q('[data-act="prev"]').addEventListener("click", () => this.jump(this.i - 1));
+    q('[data-act="next"]').addEventListener("click", () => this.jump(this.i + 1));
+    this.ui.play.addEventListener("click", () => this.toggle());
+    Object.assign(this, { key: null, scenes: [], i: 0, t0: 0, elapsed: 0, playing: !reduceMotion, suspended: true, raf: 0, last: 0, streams: [], fillCur: {}, fillFrom: {}, overlay: null });
+  }
+  load(key, step = 0) {
+    const script = M.animations[key] || M.animations.baseline;
+    if (this.key !== key) {
+      this.key = key;
+      this.scenes = resolveScript(script);
+      this.streams.forEach((s) => s.pk.forEach((p) => p.el.remove()));
+      this.streams = [];
+      this.fillCur = {};
+    }
+    this.renderSteps();
+    this.jump(Math.min(step, this.scenes.length - 1));
+  }
+  restart() { const key = this.key; this.key = null; this.load(key, 0); }
+  sceneMs(i) { return Math.min(10000, Math.max(5200, this.scenes[i].cap.length * 75)); }
+  jump(i) {
+    this.i = (i + this.scenes.length) % this.scenes.length;
+    this.t0 = performance.now();
+    this.elapsed = this.playing ? 0 : this.sceneMs(this.i);
+    this.last = 0;
+    this.apply();
+    this.syncUi();
+    this.loop();
+  }
+  apply() {
+    const sc = this.scenes[this.i], v = this.v;
+    const keep = new Map(this.streams.filter((s) => !s.orphan).map((s) => [s.key, s]));
+    const next = [];
+    for (const d of sc.flows) {
+      const key = JSON.stringify(d);
+      if (keep.has(key)) { next.push(keep.get(key)); keep.delete(key); }
+      else next.push({ key, def: d, poly: routePoly(d.route), pk: [], lastSpawn: -1e9, lastRel: performance.now(), spawned: false, orphan: false });
+    }
+    for (const s of keep.values()) { s.orphan = true; next.push(s); }
+    for (const s of this.streams) if (s.orphan && s.pk.length && !next.includes(s)) next.push(s);
+    this.streams = next;
+    const prevFill = this.i > 0 ? this.scenes[this.i - 1].fill : {};
+    const fillVal = (spec) => (Array.isArray(spec) ? spec[0] : spec);
+    this.fillFrom = {};
+    for (const c of Object.keys(sc.fill)) this.fillFrom[c] = c in this.fillCur ? this.fillCur[c] : c in prevFill ? fillVal(prevFill[c]) : 0;
+    this.fillCur = { ...this.fillFrom };
+    for (const c of M.components) v.compEls[c.id].classList.toggle("stalled", sc.stall.includes(c.id));
+    v.gOver.innerHTML = "";
+    v.gNote.innerHTML = "";
+    const ov = { meters: {}, timer: null, count: null, wait: null };
+    for (const c of sc.focus) { const [x, y, w, h] = comp[c].box; el("rect", { class: "halo", x: x - 3, y: y - 3, width: w + 6, height: h + 6, rx: 11 }, v.gOver); }
+    for (const c of M.components) { v.badgeEls[c.id].textContent = c.badge; v.badgeEls[c.id].classList.remove("live", "full"); }
+    for (const c of Object.keys(sc.fill)) {
+      const [x, y, w, h] = comp[c].box;
+      el("rect", { class: "meter-track", x: x + 12, y: y + h - 7, width: w - 24, height: 3.5, rx: 1.75 }, v.gOver);
+      ov.meters[c] = el("rect", { class: "meter-fill", x: x + 12, y: y + h - 7, width: 0, height: 3.5, rx: 1.75 }, v.gOver);
+    }
+    for (const k of ["timer", "count"]) {
+      const val = sc[k];
+      if (!val) continue;
+      const [x, y, w, h] = comp[val.at].box;
+      const shift = k === "count" && sc.timer && sc.timer.at === val.at ? 18 : 0;
+      ov[k] = { el: el("text", { class: `val ${k}`, x: x + w - 12, y: y + h - 13 - shift, "text-anchor": "end" }, v.gOver), v: val };
+    }
+    const sl = comp.submit_loop.box;
+    ov.wait = el("text", { class: "waitlbl", x: sl[0] + sl[2] - 12, y: sl[1] + 21, "text-anchor": "end", visibility: "hidden" }, v.gOver);
+    ov.wait.textContent = "等待空位";
+    if (sc.note) this.drawNote(sc.note);
+    this.overlay = ov;
+  }
+  drawNote({ at, t }) {
+    const [x, y, w, h] = comp[at].box;
+    const g = el("g", { class: "bubble" }, this.v.gNote);
+    const txt = el("text", { x: 0, y: 0, "text-anchor": "middle" }, g);
+    txt.textContent = t;
+    const est = [...t].reduce((s, ch) => s + (ch.charCodeAt(0) > 0x2e80 ? 12.3 : 7), 0);
+    const tw = Math.max(40, est, txt.getComputedTextLength ? txt.getComputedTextLength() : 0);
+    const bw = tw + 22, bh = 24, gap = 10;
+    const clampX = (cx) => Math.min(1100 - bw / 2 - 6, Math.max(bw / 2 + 6, cx));
+    // Try above, below, right, left; keep the first spot that does not cover another component.
+    const spots = [
+      { side: "top", cx: clampX(x + w / 2), by: y - gap - bh },
+      { side: "bottom", cx: clampX(x + w / 2), by: y + h + gap },
+      { side: "right", cx: x + w + gap + bw / 2, by: y + h / 2 - bh / 2 },
+      { side: "left", cx: x - gap - bw / 2, by: y + h / 2 - bh / 2 },
+    ];
+    const hits = (s) => s.by < 4 || s.by + bh > 596 || s.cx - bw / 2 < 4 || s.cx + bw / 2 > 1096
+      || M.components.some((c) => c.id !== at && s.cx + bw / 2 > c.box[0] - 2 && s.cx - bw / 2 < c.box[0] + c.box[2] + 2 && s.by + bh > c.box[1] - 2 && s.by < c.box[1] + c.box[3] + 2);
+    const s = spots.find((p) => !hits(p)) || spots[0];
+    const { cx, by } = s;
+    g.insertBefore(el("rect", { x: cx - bw / 2, y: by, width: bw, height: bh, rx: 6 }), txt);
+    const px = Math.min(Math.max(x + w / 2, cx - bw / 2 + 12), cx + bw / 2 - 12), py = by + bh / 2;
+    const arrow = {
+      top: `M${px - 6} ${by + bh} L${px} ${by + bh + 6} L${px + 6} ${by + bh} Z`,
+      bottom: `M${px - 6} ${by} L${px} ${by - 6} L${px + 6} ${by} Z`,
+      right: `M${cx - bw / 2} ${py - 6} L${cx - bw / 2 - 6} ${py} L${cx - bw / 2} ${py + 6} Z`,
+      left: `M${cx + bw / 2} ${py - 6} L${cx + bw / 2 + 6} ${py} L${cx + bw / 2} ${py + 6} Z`,
+    }[s.side];
+    g.insertBefore(el("path", { d: arrow }), txt);
+    txt.setAttribute("x", cx);
+    txt.setAttribute("y", by + 16);
+    g.style.transformOrigin = { top: "50% 100%", bottom: "50% 0%", right: "0% 50%", left: "100% 50%" }[s.side];
+  }
+  spawn(st, now) {
+    const kind = st.def.kind || "desc";
+    const [sz, shape] = PKT[kind];
+    const elx = shape === "circle" ? el("circle", { r: sz, class: `pkt k-${kind}` }, this.v.gFlow) : el("rect", { x: -sz / 2, y: -sz / 2, width: sz, height: sz, rx: kind === "store" ? 1 : 2, class: `pkt k-${kind}` }, this.v.gFlow);
+    elx.setAttribute("opacity", 0);
+    st.pk.push({ s: 0, born: now, passed: false, wait: false, el: elx });
+  }
+  step(now, dt) {
+    let gated = false;
+    for (const st of this.streams) {
+      const d = st.def, blk = !st.orphan && d.block ? st.poly.ent[d.block.at] : null;
+      const waiting = st.pk.filter((p) => p.wait).length;
+      const isGated = blk != null && waiting >= MAXQ;
+      if (isGated && d.route[0] === "submit_loop") gated = true;
+      if (!st.orphan) {
+        if (d.once) { if (!st.spawned) { this.spawn(st, now); st.spawned = true; } }
+        else if (now - st.lastSpawn >= RATE[d.rate || "fast"]) { if (!isGated) this.spawn(st, now); st.lastSpawn = now; }
+      }
+      if (blk != null && now - st.lastRel >= RATE[d.block.release || "slow"]) {
+        const head = st.pk.find((p) => !p.passed && p.wait);
+        if (head) head.passed = true;
+        st.lastRel = now;
+      }
+      let prev = Infinity;
+      for (const p of st.pk) {
+        let lim = prev - GAP;
+        if (blk != null && !p.passed && p.s <= blk + 0.01) lim = Math.min(lim, blk);
+        const want = p.s + SPEED * dt;
+        const ns = Math.min(want, Math.max(p.s, lim));
+        p.wait = blk != null && !p.passed && ns < want - 0.01;
+        p.s = ns;
+        prev = p.s;
+      }
+      const atEnd = (p) => p.s >= st.poly.len - 0.5 && (blk == null || p.passed || blk < st.poly.len - 0.5);
+      st.pk = st.pk.filter((p) => { if (atEnd(p)) { p.el.remove(); return false; } return true; });
+      const kind = d.kind || "desc";
+      for (const p of st.pk) {
+        const [x, y] = pointAt(st.poly, p.s);
+        const fadeIn = Math.min(1, (now - p.born) / 160);
+        const rest = st.poly.len - p.s;
+        const holding = blk != null && !p.passed && blk >= st.poly.len - 0.5;
+        const op = kind === "drop" ? Math.min(fadeIn, rest / st.poly.len + 0.15) : holding ? fadeIn : Math.min(fadeIn, rest / 22);
+        p.el.setAttribute("transform", kind === "drop" ? `translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${((1 - rest / st.poly.len) * 70).toFixed(0)})` : `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
+        p.el.setAttribute("opacity", Math.max(0, op).toFixed(2));
+      }
+    }
+    this.streams = this.streams.filter((s) => !s.orphan || s.pk.length);
+    if (this.overlay) this.overlay.wait.setAttribute("visibility", gated ? "visible" : "hidden");
+  }
+  tweens(frac) {
+    const sc = this.scenes[this.i], ov = this.overlay;
+    const k = easeOut(frac / 0.6);
+    for (const c of Object.keys(sc.fill)) {
+      const spec = sc.fill[c];
+      const [target, cap] = Array.isArray(spec) ? spec : [spec, CAP[c] || 100];
+      const v = (this.fillFrom[c] ?? 0) + (target - (this.fillFrom[c] ?? 0)) * k;
+      this.fillCur[c] = v;
+      const full = v >= cap - 0.5;
+      ov.meters[c].setAttribute("width", Math.max(0, Math.min(1, v / cap) * (comp[c].box[2] - 24)).toFixed(1));
+      ov.meters[c].classList.toggle("full", full);
+      const b = this.v.badgeEls[c];
+      b.textContent = `${Math.round(v)} / ${cap}`;
+      b.classList.add("live");
+      b.classList.toggle("full", full);
+    }
+    for (const key of ["timer", "count"]) {
+      if (!ov[key]) continue;
+      const { el: t, v } = ov[key];
+      t.textContent = fmtVal(v.from + (v.to - v.from) * easeOut(frac / 0.7), v.unit);
+    }
+  }
+  frame(now) {
+    this.raf = 0;
+    if (this.suspended) return;
+    const dt = Math.min(250, now - (this.last || now));
+    this.last = now;
+    const dur = this.sceneMs(this.i);
+    if (!this.playing) { this.tweens(Math.min(1, this.elapsed / dur)); return; }
+    this.elapsed = now - this.t0;
+    const frac = Math.min(1, this.elapsed / dur);
+    this.step(now, dt);
+    this.tweens(frac);
+    const bar = this.ui.steps.querySelector(".pstep.cur .bar b");
+    if (bar) bar.style.width = (frac * 100).toFixed(1) + "%";
+    if (frac >= 1) { this.jump(this.i + 1); return; }
+    this.loop();
+  }
+  loop() { if (!this.raf && !this.suspended) this.raf = requestAnimationFrame((t) => this.frame(t)); }
+  setPlaying(on) { if (this.playing === on) return; this.playing = on; this.last = 0; if (on) this.t0 = performance.now() - this.elapsed; this.syncUi(); this.loop(); }
+  toggle() { this.setPlaying(!this.playing); }
+  suspend() { this.suspended = true; if (this.raf) cancelAnimationFrame(this.raf); this.raf = 0; }
+  resume() { if (!this.suspended) return; this.suspended = false; this.last = 0; this.t0 = performance.now() - this.elapsed; this.loop(); }
+  renderSteps() {
+    this.ui.steps.innerHTML = this.scenes.map((s, i) => `<button class="pstep" data-step="${i}" title="${esc(s.h)}"><div class="bar"><b></b></div><span class="lbl"><b>${i + 1}</b>${esc(s.h)}</span></button>`).join("");
+    const used = new Set();
+    for (const s of this.scenes) for (const f of s.flows) used.add(f.kind || "desc");
+    this.ui.legend.innerHTML = PKT_LEGEND.filter(([k]) => used.has(k)).map(([k, c, t, round]) => `<span><i class="${round ? "c" : ""} ${k === "sentinel" ? "h" : ""}" style="--c:var(--${c})"></i>${esc(t)}</span>`).join("")
+      + (this.scenes.some((s) => s.timer) ? `<span><i class="c" style="--c:var(--timer)"></i>蓝字 = rdtscp 读数</span>` : "")
+      + (this.scenes.some((s) => s.count) ? `<span><i class="c" style="--c:var(--count)"></i>绿字 = 计数</span>` : "")
+      + (this.scenes.some((s) => s.stall.length) ? `<span><i style="--c:var(--bad)"></i>红框 = 卡住的地方</span>` : "");
+  }
+  syncUi() {
+    const sc = this.scenes[this.i], x = exp[this.key];
+    this.ui.title.textContent = `${x ? `实验 ${x.id} · ${x.name}` : "基线 · 一个 descriptor 的一生"} — 第 ${this.i + 1} / ${this.scenes.length} 步`;
+    [...this.ui.steps.children].forEach((b, i) => { b.classList.toggle("cur", i === this.i); b.classList.toggle("done", i < this.i); b.querySelector(".bar b").style.width = i < this.i ? "100%" : "0%"; });
+    const cap = this.ui.cap;
+    cap.textContent = sc.cap;
+    cap.classList.remove("anim"); void cap.offsetWidth; cap.classList.add("anim");
+    this.ui.play.innerHTML = this.playing ? ICON_PAUSE : ICON_PLAY;
+    $$(`#panel ol.ast[data-player="${this.name}"] li`).forEach((li, i) => li.classList.toggle("cur", i === this.i));
+    if (this.name === "main") writeHash();
+  }
+}
+const PLAYERS = {
+  main: new Player($("#blockMain"), "main", (id) => toggle("c:" + id)),
+  A: new Player($("#blockA"), "A", (id) => { exitCompare(); select("c:" + id); }),
+  B: new Player($("#blockB"), "B", (id) => { exitCompare(); select("c:" + id); }),
+};
+const shownPlayers = () => (state.cmp ? [PLAYERS.A, PLAYERS.B] : [PLAYERS.main]);
+function syncPlayers() {
+  for (const p of Object.values(PLAYERS)) {
+    if (state.tab === "pipe" && shownPlayers().includes(p)) p.resume();
+    else p.suspend();
+  }
+}
+
+// ---------- selection ----------
+function toggle(key) { select(state.sel === key ? null : key); }
+function select(key, step = 0) {
+  state.sel = key;
+  render();
+  const x = key && key.startsWith("x:") ? exp[key.slice(2)] : null;
+  const ak = x ? x.id : "baseline", main = PLAYERS.main;
+  if (main.key !== ak) main.load(ak, step);
+  else main.syncUi();
+  writeHash();
+}
+function go(key) {
+  if (state.cmp) exitCompare();
+  if (state.tab !== "pipe") setTab("pipe", { push: false });
+  select(key);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-toggle]");
+  if (t) {
+    const id = t.dataset.x;
+    if (!state.cmp) toggle(t.dataset.toggle);
+    else if (e.shiftKey) setCompare(id, state.cmp[1] === id ? state.cmp[0] : state.cmp[1]);
+    else if (id !== state.cmp[0]) setCompare(state.cmp[0], id);
+    return;
+  }
+  const pair = e.target.closest("[data-cmp]");
+  if (pair) { const [a, b] = pair.dataset.cmp.split(","); if (state.cmp) setCompare(a, b); else enterCompare(a, b); return; }
+  const a = e.target.closest("[data-go]");
+  if (a) { e.preventDefault(); go(a.dataset.go); return; }
+  const st = e.target.closest("[data-status]");
+  if (st) { state.statusFilter = state.statusFilter === st.dataset.status ? null : st.dataset.status; render(); return; }
+  const sp = e.target.closest("[data-step]");
+  if (sp) PLAYERS[sp.closest("[data-player]")?.dataset.player || "main"].jump(+sp.dataset.step);
+});
+
+function render() {
+  if (state.cmp) { renderCompare(); return; }
+  const [kind, id] = (state.sel || ":").split(":");
+  const x = kind === "x" ? exp[id] : null;
+  paintView(PLAYERS.main.v, { x, compSel: kind === "c" ? id : null, statusFilter: state.statusFilter });
+  $$("[data-toggle]").forEach((b) => { b.classList.toggle("on", kind === "x" && b.dataset.x === id); b.classList.remove("onB"); });
+  $("#chips-done").classList.toggle("faded", !!x);
+  $("#chips-plan").classList.toggle("faded", !!x);
+  $$("#legend [data-status]").forEach((b) => b.classList.toggle("on", b.dataset.status === state.statusFilter));
+  fillPanel(kind === "c" ? compPanel(comp[id]) : x ? expPanel(x) : overviewPanel());
+}
+function fillPanel(html) {
+  const panel = $("#panel");
+  panel.innerHTML = html;
+  [...panel.children].forEach((c, i) => c.style.setProperty("--i", i));
+  panel.scrollTop = 0;
+}
+
+// ---------- compare two experiments ----------
+const findPair = (a, b) => M.comparisons.find((c) => (c.a === a && c.b === b) || (c.a === b && c.b === a));
+function partnerOf(id) {
+  const c = M.comparisons.find((p) => p.a === id || p.b === id);
+  if (c) return c.a === id ? c.b : c.a;
+  const ids = M.experiments.map((x) => x.id);
+  return ids[(ids.indexOf(id) + 1) % ids.length];
+}
+$("#cmpA").innerHTML = $("#cmpB").innerHTML = M.experiments.map((x) => `<option value="${x.id}">${x.id} · ${esc(x.name)}</option>`).join("");
+$("#cmpSuggest").innerHTML = M.comparisons.map((c) => `<button class="chip" data-cmp="${c.a},${c.b}" title="${esc(c.why)}"><span class="k">${c.a} vs ${c.b}</span>${esc(c.t)}</button>`).join("");
+$("#cmpA").addEventListener("change", (e) => setCompare(e.target.value, state.cmp[1]));
+$("#cmpB").addEventListener("change", (e) => setCompare(state.cmp[0], e.target.value));
+$("#cmpSwap").addEventListener("click", () => setCompare(state.cmp[1], state.cmp[0]));
+$("#cmpToggle").addEventListener("click", () => {
+  if (state.cmp) { exitCompare(); return; }
+  const picked = state.sel && state.sel.startsWith("x:") ? state.sel.slice(2) : null;
+  enterCompare(picked || M.comparisons[0].a, picked ? partnerOf(picked) : M.comparisons[0].b);
+});
+function enterCompare(a, b) {
+  state.cmp = [a, b];
+  $("#cmpRow").hidden = false;
+  $("#blockMain").hidden = true;
+  $("#blockA").hidden = $("#blockB").hidden = false;
+  $("#cmpToggle").classList.add("on");
+  setCompare(a, b);
+}
+function exitCompare() {
+  if (!state.cmp) return;
+  const a = state.cmp[0];
+  state.cmp = null;
+  $("#cmpRow").hidden = true;
+  $("#blockMain").hidden = false;
+  $("#blockA").hidden = $("#blockB").hidden = true;
+  $("#cmpToggle").classList.remove("on");
+  syncPlayers();
+  select("x:" + a);
+}
+function setCompare(a, b) {
+  state.cmp = [a, b];
+  syncPlayers();
+  for (const [side, id] of [["A", a], ["B", b]]) {
+    const p = PLAYERS[side];
+    if (p.key !== id) p.load(id, 0);
+    p.ui.name.textContent = `${id} · ${exp[id].name}`;
+  }
+  renderCompare();
+  writeHash();
+}
+function renderCompare() {
+  const [a, b] = state.cmp, A = exp[a], B = exp[b];
+  paintView(PLAYERS.A.v, { x: A, statusFilter: state.statusFilter });
+  paintView(PLAYERS.B.v, { x: B, statusFilter: state.statusFilter });
+  $$("[data-toggle]").forEach((c) => { c.classList.toggle("on", c.dataset.x === a); c.classList.toggle("onB", c.dataset.x === b); });
+  $("#chips-done").classList.add("faded");
+  $("#chips-plan").classList.add("faded");
+  $("#cmpA").value = a;
+  $("#cmpB").value = b;
+  $$("#cmpSuggest [data-cmp]").forEach((c) => { const [x, y] = c.dataset.cmp.split(","); c.classList.toggle("on", (x === a && y === b) || (x === b && y === a)); });
+  $$("#legend [data-status]").forEach((c) => c.classList.toggle("on", c.dataset.status === state.statusFilter));
+  fillPanel(comparePanel(A, B));
+  for (const p of [PLAYERS.A, PLAYERS.B]) p.syncUi();
+}
+// Facts about one experiment's animation that are worth lining up against another one.
+function expFacts(x) {
+  const script = M.animations[x.id] || [], scenes = resolveScript(script);
+  const stalls = new Map(), kinds = new Set(), readings = [];
+  scenes.forEach((s, i) => {
+    s.stall.forEach((c) => stalls.set(c, [...(stalls.get(c) || []), i + 1]));
+    s.flows.forEach((f) => kinds.add(f.kind || "desc"));
+  });
+  script.forEach((s, i) => {
+    for (const k of ["timer", "count"]) if (s[k] && s[k].to !== s[k].from) readings.push({ k, step: i + 1, at: s[k].at, text: fmtVal(s[k].to, s[k].unit) });
+  });
+  return { stalls, kinds, readings, comps: new Set([...x.path, ...scriptComps(script)]), forks: new Set(x.forks) };
+}
+function comparePanel(A, B) {
+  const fa = expFacts(A), fb = expFacts(B);
+  const names = (ids) => [...ids].map((c) => comp[c].name).join("、");
+  const split = (sa, sb) => ({ both: [...sa].filter((v) => sb.has(v)), onlyA: [...sa].filter((v) => !sb.has(v)), onlyB: [...sb].filter((v) => !sa.has(v)) });
+  const diff = [];
+  const st = split(new Set(fa.stalls.keys()), new Set(fb.stalls.keys()));
+  if (st.both.length) diff.push(["ink2", `两个都在 <b>${names(st.both)}</b> 卡住。`]);
+  if (st.onlyA.length) diff.push(["ink", `只有 A 在 <b>${names(st.onlyA)}</b> 卡住。`]);
+  if (st.onlyB.length) diff.push(["peri", `只有 B 在 <b>${names(st.onlyB)}</b> 卡住。`]);
+  if (!st.both.length && !st.onlyA.length && !st.onlyB.length) diff.push(["muted", "两个动画里都没有卡住的地方。"]);
+  const kd = split(fa.kinds, fb.kinds);
+  const pk = (ks) => ks.map((k) => `「${PKT_NAME[k]}」`).join("");
+  if (kd.onlyA.length) diff.push(["ink", `A 的动画里有${pk(kd.onlyA)}，B 没有。`]);
+  if (kd.onlyB.length) diff.push(["peri", `B 的动画里有${pk(kd.onlyB)}，A 没有。`]);
+  const rd = (f) => f.readings.map((r) => `<b>${esc(r.text)}</b>（${esc(comp[r.at].name)}，第 ${r.step} 步）`).join("，") || "没有";
+  if (fa.readings.length || fb.readings.length) diff.push(["timer", `读数：A ${rd(fa)}。B ${rd(fb)}。`]);
+  const fk = split(fa.forks, fb.forks);
+  if (fk.both.length) diff.push(["known", `都用来回答 ${fk.both.join("、")}。`]);
+  if (fk.onlyA.length || fk.onlyB.length) diff.push(["muted", `只有 A 回答：${fk.onlyA.join("、") || "无"}；只有 B 回答：${fk.onlyB.join("、") || "无"}。`]);
+  const cp = split(fa.comps, fb.comps);
+  if (cp.onlyA.length) diff.push(["ink", `只有 A 经过：${names(cp.onlyA)}。`]);
+  if (cp.onlyB.length) diff.push(["peri", `只有 B 经过：${names(cp.onlyB)}。`]);
+  const status = (x) => (x.kind === "done" ? tag("已做", "known") + tag(VALID[x.validity.level][0], VALID[x.validity.level][1]) : tag("计划", "timer") + tag(x.cost, "muted"));
+  const marks = (x) => x.marks.map((m, i) => `<div><span class="mk" style="--c:var(--${MARK[m.k][1]})">${i + 1}</span>${esc(MARK[m.k][0])} · ${esc(comp[m.c].name)}</div>`).join("");
+  const outcome = (x) => (x.kind === "done" ? x.results.map((r) => `<div>· ${esc(r)}</div>`).join("") : x.predictions.map((p) => `<div>· <b>${esc(p.h)}</b>：${esc(p.expect)}</div>`).join(""));
+  const pvr = (x) => (hasOutcome(x) ? x.predictions.map((p) => `<div>${tag(ALT[p.verdict][0], ALT[p.verdict][1])}<b>${esc(p.h)}</b>：${esc(p.outcome)}</div>`).join("") : "—");
+  const steps = (x, side) => `<ol class="ast" data-player="${side}">${(M.animations[x.id] || []).map((s, i) => `<li data-step="${i}"><span><b>${esc(s.h)}</b></span></li>`).join("")}</ol>`;
+  const pair = findPair(A.id, B.id);
+  const row = (k, va, vb) => `<tr><td>${k}</td><td>${va}</td><td>${vb}</td></tr>`;
+  return `<div class="dk">对比 · A vs B</div><h3>${A.id} vs ${B.id}</h3>`
+    + `<div>${tag(A.name, "ink")}${tag(B.name, "peri")}</div>`
+    + (pair ? `<div class="callout"><b>${esc(pair.t)}</b>　${esc(pair.why)}</div>` : "")
+    + `<h4>差别在哪</h4><ul class="diff">${diff.map(([c, t]) => `<li style="--c:var(--${c})">${t}</li>`).join("")}</ul>`
+    + `<h4>逐项对照</h4><table class="cmp"><tr><th></th><th><span class="abadge">A</span></th><th><span class="abadge b">B</span></th></tr>`
+    + row("状态", status(A), status(B))
+    + row("测什么", esc(A.measures), esc(B.measures))
+    + row("标记点", marks(A), marks(B))
+    + row(A.kind === "done" && B.kind === "done" ? "结果" : "结果 / 预测", outcome(A), outcome(B))
+    + (hasOutcome(A) || hasOutcome(B) ? row("预测 vs 结果", pvr(A), pvr(B)) : "")
+    + row("动画", steps(A, "A"), steps(B, "B"))
+    + `</table>`
+    + `<p style="margin-top:14px;color:var(--muted);font-size:12.5px">点上面的实验 = 换 B，Shift + 点 = 换 A。点图里的部件会退出对比，看那个部件的详情。</p>`;
+}
+
+// ---------- panels ----------
+function miniFork(f) {
+  return `<div class="minifork"><div class="q"><span style="font:500 11px var(--mono);color:var(--muted);margin-right:6px">${f.id}</span>${esc(f.q)}</div>`
+    + f.alts.map((a) => `<div class="a ${a.status === "ruled_out" || a.status === "contradicted" ? "out" : ""}">${tag(ALT[a.status][0], ALT[a.status][1])}<span class="t">${esc(a.t)}</span></div>`).join("") + `</div>`;
+}
+const relatedExps = (cid) => M.experiments.filter((x) => x.path.includes(cid)).sort((a, b) => b.marks.some((m) => m.c === cid) - a.marks.some((m) => m.c === cid));
+const hasOutcome = (x) => (x.predictions || []).some((p) => p.outcome);
+const predTable = (x) => `<table class="pvr"><tr><th>假说</th><th>预测</th><th>结果</th><th>判定</th></tr>${x.predictions.map((p) => `<tr><td>${esc(p.h)}</td><td>${esc(p.expect)}</td><td>${esc(p.outcome)}</td><td>${tag(ALT[p.verdict][0], ALT[p.verdict][1])}</td></tr>`).join("")}</table>`;
+function compPanel(c) {
+  const ev = c.evidence.map((e) => `<li>${tag(M.evidenceTypes[e.ev], "muted")}${e.inf ? tag("推断", "hypothesis") : ""}<div>${esc(e.t)}</div><span class="src">${esc(e.src)}</span></li>`).join("");
+  const kinds = new Set(c.evidence.filter((e) => !e.inf).map((e) => e.ev));
+  return `<div class="dk">部件 · ${esc(c.en)}</div><h3>${esc(c.name)}</h3>`
+    + `<div>${tag(M.statuses[c.status].label, c.status)}${tag(`${kinds.size} 类直接证据`, "muted")}${tag(c.badge, "muted")}</div>`
+    + `<h4>是什么</h4><p>${esc(c.what)}</p><h4>一般会怎么设计</h4><p>${esc(c.design)}</p>`
+    + `<h4>我们知道什么</h4>${ev ? `<ul class="ev">${ev}</ul>` : "<p>还没有任何数据。</p>"}`
+    + (c.open.length ? `<h4>还不知道</h4><ul class="plain">${c.open.map((o) => `<li>${esc(o)}</li>`).join("")}</ul>` : "")
+    + (c.forks.length ? `<h4>相关设计分叉</h4>${c.forks.map((f) => miniFork(fork[f])).join("")}` : "")
+    + `<h4>经过这个部件的实验</h4><div class="chips">${relatedExps(c.id).map((x) => expChip(x)).join("")}</div>`;
+}
+function expPanel(x) {
+  const script = M.animations[x.id] || [];
+  const marks = x.marks.map((m, i) => `<li><span class="mk" style="--c:var(--${MARK[m.k][1]})">${i + 1}</span><b>${esc(comp[m.c].name)}</b> · ${esc(MARK[m.k][0])}：${esc(m.label)}</li>`).join("");
+  const pairs = M.comparisons.filter((c) => c.a === x.id || c.b === x.id);
+  let body = `<div class="dk">实验 ${x.id}${x.selector ? " · " + esc(x.selector) : ""}</div><h3>${esc(x.name)}</h3><div>`
+    + (x.kind === "done" ? tag("已做", "known") + tag(VALID[x.validity.level][0], VALID[x.validity.level][1]) : tag("计划", "timer") + tag(x.cost, "muted"))
+    + `</div><h4>动画步骤</h4><ol class="ast" data-player="main">${script.map((s, i) => `<li data-step="${i}"><span><b>${esc(s.h)}</b></span></li>`).join("")}</ol>`
+    + (pairs.length ? `<h4>可以对比</h4><div class="chips">${pairs.map((c) => `<button class="chip" data-cmp="${x.id},${c.a === x.id ? c.b : c.a}" title="${esc(c.why)}"><span class="k">vs ${c.a === x.id ? c.b : c.a}</span>${esc(c.t)}</button>`).join("")}</div>` : "")
+    + `<h4>具体测的是什么</h4><p>${esc(x.measures)}</p><h4>流水线上的标记</h4><ul class="ev">${marks}</ul>`;
+  if (x.kind === "done") {
+    body += `<h4>报告里的说法</h4><p>${esc(x.claimed)}</p><h4>审计结论</h4><p>${esc(x.validity.text)}</p>`
+      + (hasOutcome(x) ? `<h4>预测 vs 结果</h4>${predTable(x)}` : "")
+      + `<h4>结果</h4><ul class="plain">${x.results.map((r) => `<li>${esc(r)}</li>`).join("")}</ul><h4>数据</h4>${x.data.map((d) => `<span class="src">${esc(d)}</span>`).join("")}`;
+  } else {
+    body += `<h4>各假说的预测（先写下，再跑）</h4><table><tr><th>假说</th><th>预期看到</th></tr>${x.predictions.map((p) => `<tr><td>${esc(p.h)}</td><td>${esc(p.expect)}</td></tr>`).join("")}</table>`;
+  }
+  if (x.forks.length) body += `<h4>用来回答</h4>${x.forks.map((f) => miniFork(fork[f])).join("")}`;
+  return body;
+}
+function overviewPanel() {
+  const open = M.forks.filter((f) => f.alts.every((a) => a.status !== "supported"));
+  return `<div class="dk">概览</div><h3>目前最可能的结构</h3>`
+    + `<div>${Object.entries(M.statuses).map(([k, s]) => tag(`${s.label} ${count(k)}`, k)).join("")}</div>`
+    + `<ul class="plain" style="margin-top:10px">${S.structure.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>`
+    + `<div class="callout">${esc(S.openQuestion)}</div>`
+    + `<h4>还没定下来的分叉</h4>${open.map((f) => `<p><span style="font:500 12px var(--mono);color:var(--muted);margin-right:6px">${f.id}</span>${esc(f.q)}</p>`).join("")}`
+    + `<h4>下一步</h4>${S.nextSteps.map((s, i) => `<p style="margin-top:8px"><span style="font:500 12px var(--mono);color:var(--muted);margin-right:6px">0${i + 1}</span>${esc(s.t)}</p><div class="chips" style="margin:4px 0 0 24px">${s.exps.map((e) => expChip(exp[e])).join("")}</div>`).join("")}`
+    + `<h4>值得并排看的实验</h4><div class="chips">${M.comparisons.map((c) => `<button class="chip" data-cmp="${c.a},${c.b}" title="${esc(c.why)}"><span class="k">${c.a} vs ${c.b}</span>${esc(c.t)}</button>`).join("")}</div>`
+    + `<p style="margin-top:16px;color:var(--muted);font-size:13px">左边正在播放基线动画：一个 descriptor 怎么走完流水线。点上面任一实验，看它的数据怎么流、在哪里卡住；点“对比两个实验”并排看两个。</p>`;
+}
+$("#replayMap").addEventListener("click", (e) => {
+  const b = e.currentTarget; b.classList.remove("spin"); void b.offsetWidth; b.classList.add("spin");
+  for (const p of shownPlayers()) p.restart();
+  render();
+});
+document.addEventListener("keydown", (e) => {
+  if (state.tab !== "pipe" || e.target.closest("input, select, textarea")) return;
+  const ps = shownPlayers();
+  if (e.key === "ArrowRight") ps.forEach((p) => p.jump(p.i + 1));
+  else if (e.key === "ArrowLeft") ps.forEach((p) => p.jump(p.i - 1));
+  else if (e.key === " " && !e.target.closest("button, [role=button]")) { e.preventDefault(); const on = !ps[0].playing; ps.forEach((p) => p.setPlaying(on)); }
+});
+
+// ---------- audit / forks / data ----------
+$("#audit-table").innerHTML = `<thead><tr><th>实验</th><th style="width:22%">名称</th><th style="width:32%">实际测的区间</th><th>审计结论</th></tr></thead><tbody>`
+  + M.experiments.filter((x) => x.kind === "done").map((x) => `<tr><td class="id"><a data-go="x:${x.id}">${x.id}</a></td>`
+    + `<td><span class="nm">${esc(x.name)}</span><span class="sel">${esc(x.selector)}</span></td><td>${esc(x.measures)}</td>`
+    + `<td>${tag(VALID[x.validity.level][0], VALID[x.validity.level][1])}<div>${esc(x.validity.text)}</div></td></tr>`).join("") + `</tbody>`;
+$("#pitfall-table").innerHTML = `<thead><tr><th style="width:24%">陷阱</th><th>影响和对策</th><th style="width:28%">出处</th></tr></thead><tbody>`
+  + (M.pitfalls || []).map((p) => `<tr><td><span class="nm">${esc(p.t)}</span></td><td>${esc(p.d)}</td><td class="path">${esc(p.src)}</td></tr>`).join("") + `</tbody>`;
+$("#forkgrid").innerHTML = M.forks.map((f) => {
+  const settled = f.alts.some((a) => a.status === "supported");
+  return `<div class="fork"><div class="qid"><span>${f.id}</span>${tag(settled ? "有倾向" : "未定", settled ? "known" : "unknown")}</div><h3>${esc(f.q)}</h3>`
+    + f.alts.map((a) => `<div class="alt ${a.status === "ruled_out" || a.status === "contradicted" ? "out" : ""}"><div>${tag(ALT[a.status][0], ALT[a.status][1])}</div><div><div class="t">${esc(a.t)}</div>${a.why ? `<div class="why">${esc(a.why)}</div>` : ""}</div></div>`).join("")
+    + `<div class="foot"><div class="chips">${f.exps.map((e) => expChip(exp[e])).join("")}</div>`
+    + `<div class="comps">部件：${f.comps.map((c) => `<a data-go="c:${c}">${esc(comp[c].name)}</a>`).join("、")}</div></div></div>`;
+}).join("");
+let dfilter = null;
+function renderData() {
+  const st = M.datasetStatuses;
+  $("#dfilter").innerHTML = `<button class="chip ${dfilter ? "" : "on"}" data-f="">全部 · ${M.datasets.length}</button>`
+    + Object.entries(st).map(([k, v]) => `<button class="chip ${dfilter === k ? "on" : ""}" data-f="${k}"><i style="--c:var(--${DSC[k]})"></i>${esc(v)} · ${M.datasets.filter((d) => d.status === k).length}</button>`).join("");
+  $$("#dfilter button").forEach((b) => b.addEventListener("click", () => { dfilter = b.dataset.f || null; renderData(); stagger($("#dtable tbody")); }));
+  $("#dtable").innerHTML = `<thead><tr><th>状态</th><th style="width:30%">路径（async-binding-intel-idxd 下）</th><th>内容</th><th>建议</th><th>备注</th></tr></thead><tbody>`
+    + M.datasets.filter((d) => !dfilter || d.status === dfilter).map((d) => `<tr><td>${tag(st[d.status], DSC[d.status])}</td><td class="path">${esc(d.path)}</td><td>${esc(d.what)}</td><td>${esc(d.action)}</td><td>${esc(d.note)}</td></tr>`).join("") + `</tbody>`;
+}
+renderData();
+
+// ---------- toy model ----------
+const P = {
+  mode: "sb", n: 330, kTrace: 330, stepP: 2.8, stepT: 24, mT: 5.5, base: 10, sb: 114, bin: 114,
+  lat: 130, drain: 106, jitter: 0, wq: 128, slots: 11, engines: 4, payload: "noop", noopNs: 50, bw: 7.5, fixed: 200, overlay: "none",
+  window: 0, pollNs: 100,
+};
+// Every preset starts from these, so switching presets never inherits an engine count or window from the last one.
+const PRESET_BASE = { mode: "sb", kTrace: 400, stepT: 24, mT: 5.5, wq: 128, slots: 11, engines: 4, payload: "noop", overlay: "none", window: 0, pollNs: 100 };
+const SLIDERS = [
+  ["n", "提交总数", [20, 400, 1]], ["kTrace", "从第几个起进入 trace 模式", [0, 400, 1]],
+  ["stepP", "prefill：不卡时每个 submit 间隔 (ns)", [1, 200, 0.1]], ["stepT", "trace：不卡时每轮间隔 (ns)", [5, 120, 1]],
+  ["mT", "trace：每轮额外普通 store 项数 m", [0, 10, 0.1]], ["sb", "store buffer 项数", [16, 200, 1]],
+  ["bin", "设备入口缓冲（假说 c）", [16, 200, 1]], ["lat", "单个写出的首个延迟 (ns)", [20, 400, 1]],
+  ["drain", "写出间隔 (ns/个)", [20, 250, 1]], ["jitter", "写出间隔抖动 ±", [0, 0.6, 0.01]],
+  ["wq", "WQ size", [8, 128, 1]], ["slots", "engine 侧在途上限", [1, 64, 1]], ["engines", "engine 数 E", [1, 4, 1]],
+  ["noopNs", "engine 处理 noop (ns)", [5, 400, 1]], ["bw", "每个 engine 带宽 (GB/s)", [1, 30, 0.5]],
+  ["window", "窗口 W：最多几个在途（0 = 不等完成）", [0, 64, 1]], ["pollNs", "完成后 CPU 多久看到 (ns)", [0, 1000, 10]],
+];
+const WINDOWS = [[0, "不等完成，一直交"], [4, "最多 4 个在途"], [1, "同步：等完成再交"]];
+const MODES = [["sb", "b · core store buffer"], ["ingress", "c · 设备入口"]];
+const PAYLOADS = [["noop", "noop"], ["4k", "memmove 4 KiB"], ["1m", "memmove 1 MiB"]];
+function overlayOptions() {
+  const occ = [], seen = new Set();
+  for (const r of D.occupancy) {
+    const key = `occ:${r.workload}:${r.gap}`;
+    if (!seen.has(key)) { seen.add(key); occ.push([key, `prefill · ${r.workload} · gap ${r.gap}`]); }
+  }
+  occ.sort((a, b) => a[1].localeCompare(b[1], "en", { numeric: true }));
+  return [["none", "不叠加"], ["trace_k0_noop", "trace · K=0 开始（noop）"], ["trace_k112_noop", "trace · K=112 开始（noop）"], ...occ];
+}
+function stepFor(workload, gap) {
+  const rows = D.occupancy.filter((r) => r.workload === workload && r.gap === gap && r.k === 96);
+  return rows.length ? +(rows.reduce((s, r) => s + r.step_ns, 0) / rows.length).toFixed(1) : 3;
+}
+const PRESETS = {
+  prefill0: ["prefill noop gap 0", () => ({ n: 330, stepP: stepFor("noop", 0), overlay: "occ:noop:0" })],
+  prefill50: ["prefill noop gap 50", () => ({ n: 330, stepP: stepFor("noop", 50), overlay: "occ:noop:50" })],
+  trace0: ["trace 从 K=0 开始", () => ({ n: 160, kTrace: 0, overlay: "trace_k0_noop" })],
+  trace0c: ["同上，但用假说 c", () => ({ mode: "ingress", n: 160, kTrace: 0, overlay: "trace_k0_noop" })],
+  trace112: ["K=112 后开 trace", () => ({ n: 128, kTrace: 112, stepP: stepFor("noop", 0), overlay: "trace_k112_noop" })],
+  mib300: ["1 MiB gap 300 · WQ 溢出", () => ({ n: 321, stepP: stepFor("memmove1m", 300), payload: "1m", overlay: "occ:memmove1m:300" })],
+  mib0: ["1 MiB gap 0 · 既卡又溢出", () => ({ n: 321, stepP: stepFor("memmove1m", 0), payload: "1m", overlay: "occ:memmove1m:0" })],
+  sync4k: ["同步：4 KiB 等完成再交", () => ({ n: 40, stepP: 3, payload: "4k", window: 1 }), "par"],
+  win4k: ["异步：4 KiB 最多 4 个在途", () => ({ n: 40, stepP: 3, payload: "4k", window: 4 }), "par"],
+  async4k: ["异步：4 KiB 不等完成", () => ({ n: 40, stepP: 3, payload: "4k", window: 0 }), "par"],
+  par1m: ["1 MiB × 4 engine 并行", () => ({ n: 16, stepP: 3, payload: "1m" }), "par"],
+  par1m1: ["同上，只有 1 个 engine", () => ({ n: 16, stepP: 3, payload: "1m", engines: 1 }), "par"],
+};
+function buildControls() {
+  const presetChips = (group) => Object.entries(PRESETS).filter(([, v]) => (v[2] || "measure") === group).map(([k, [t]]) => `<button class="chip" data-p="${k}">${esc(t)}</button>`).join("");
+  $("#presets").innerHTML = presetChips("measure");
+  $("#presetsPar").innerHTML = presetChips("par");
+  $$("#presets button, #presetsPar button").forEach((b) => b.addEventListener("click", () => applyPreset(b.dataset.p)));
+  $("#modeSeg").innerHTML = MODES.map(([v, t]) => `<button class="chip" data-mode="${v}">${esc(t)}</button>`).join("");
+  $$("#modeSeg button").forEach((b) => b.addEventListener("click", () => setParam("mode", b.dataset.mode, true)));
+  $("#winSeg").innerHTML = WINDOWS.map(([v, t]) => `<button class="chip" data-win="${v}">${esc(t)}</button>`).join("");
+  $$("#winSeg button").forEach((b) => b.addEventListener("click", () => setParam("window", +b.dataset.win, true)));
+  $("#overlaySel").innerHTML = overlayOptions().map(([v, t]) => `<option value="${v}">${esc(t)}</option>`).join("");
+  $("#overlaySel").addEventListener("change", (e) => setParam("overlay", e.target.value, true));
+  $("#controls").innerHTML = `<label>操作<select data-k="payload">${PAYLOADS.map(([v, t]) => `<option value="${v}">${esc(t)}</option>`).join("")}</select></label>`
+    + SLIDERS.map(([k, label, [lo, hi, step]]) => `<label>${esc(label)}：<b data-v="${k}"></b><input type="range" data-k="${k}" min="${lo}" max="${hi}" step="${step}"></label>`).join("");
+  $$("#controls [data-k]").forEach((inp) => inp.addEventListener("input", () => setParam(inp.dataset.k, inp.tagName === "SELECT" ? inp.value : +inp.value, inp.tagName === "SELECT")));
+  $("#replaySim").addEventListener("click", (e) => { const b = e.currentTarget; b.classList.remove("spin"); void b.offsetWidth; b.classList.add("spin"); runSim(true); simPlay(); });
+  $("#tlView").innerHTML = [["all", "全程"], ["cpu", "只看提交阶段"]].map(([v, t]) => `<button class="chip" data-view="${v}">${t}</button>`).join("");
+  $$("#tlView button").forEach((b) => b.addEventListener("click", () => { TL.view = b.dataset.view; syncControls(); drawTimeline(); }));
+  $("#tlLegend").innerHTML = [["bad", "等 store buffer"], ["muted", "core 内 / 写出"], ["partial", "WQ 里等 · CPU 等完成"], ["rule2", "等 engine"], ["peri", "E0"], ["count", "E1"], ["terra", "E2"], ["hypothesis", "E3"], ["known", "CPU 空闲"]]
+    .map(([c, t]) => `<span><i style="--c:var(--${c})"></i>${t}</span>`).join("");
+}
+function setParam(k, v, animate) { P[k] = v; state.preset = null; runSim(animate); if (animate) simPlay(); writeHash(); }
+function syncControls() {
+  $$("#controls [data-k]").forEach((inp) => { inp.value = P[inp.dataset.k]; });
+  $$("#controls [data-v]").forEach((b) => { b.textContent = P[b.dataset.v]; });
+  $$("#presets button, #presetsPar button").forEach((b) => b.classList.toggle("on", b.dataset.p === (state.preset || "")));
+  $$("#modeSeg button").forEach((b) => b.classList.toggle("on", b.dataset.mode === P.mode));
+  $$("#winSeg button").forEach((b) => b.classList.toggle("on", +b.dataset.win === P.window));
+  $$("#tlView button").forEach((b) => b.classList.toggle("on", b.dataset.view === TL.view));
+  $("#overlaySel").value = P.overlay;
+}
+function applyPreset(k) { Object.assign(P, PRESET_BASE, PRESETS[k][1]()); state.preset = k; runSim(true); simPlay(); writeHash(); }
+function rng(seed) { let s = seed >>> 0 || 1; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
+const serviceNs = (p) => (p.payload === "noop" ? p.noopNs : p.fixed + (p.payload === "4k" ? 4096 : 1048576) / p.bw);
+// Sequential simulation: descriptor i only depends on earlier descriptors, so the CPU can wait on the
+// completion of descriptor i-W (window / sync submit) and the device side is resolved in arrival order.
+function simulate(p, seed = 1) {
+  const n = p.n, R = rng(seed), T = serviceNs(p);
+  const a = new Float64Array(n), ready = new Float64Array(n), acc = new Float64Array(n), nxt = new Float64Array(n);
+  const out = new Float64Array(n), meas = new Float64Array(n), ent = new Float64Array(n + 1);
+  const fate = new Array(n), wqIn = new Float64Array(n).fill(NaN), wqOut = new Float64Array(n).fill(NaN);
+  const start = new Float64Array(n).fill(NaN), done = new Float64Array(n).fill(NaN), eng = new Int8Array(n).fill(-1);
+  const free = new Array(Math.max(1, p.engines)).fill(0);
+  let next = 0, q = 0, lastDispatch = 0, active = [];
+  for (let i = 0; i < n; i++) {
+    const trace = i >= p.kTrace;
+    ent[i + 1] = ent[i] + (p.mode === "sb" ? 1 + (trace ? p.mT : 0) : 1);
+    // CPU: optionally wait until the completion of descriptor i-W becomes visible
+    ready[i] = next;
+    a[i] = p.window > 0 && i >= p.window ? Math.max(next, (fate[i - p.window] === "ok" ? done[i - p.window] : out[i - p.window]) + p.pollNs) : next;
+    let r = a[i];
+    if (p.mode === "sb") { while (ent[i + 1] - ent[q] > p.sb) q++; if (q > 0) r = Math.max(r, out[q - 1]); }
+    else if (i - p.bin >= 0) r = Math.max(r, out[i - p.bin] + p.lat / 2);
+    acc[i] = r;
+    const d = p.drain * (1 + p.jitter * (2 * R() - 1));
+    out[i] = Math.max(acc[i] + p.lat, i > 0 ? out[i - 1] + d : -Infinity);
+    meas[i] = p.base + (acc[i] - a[i]);
+    next = nxt[i] = acc[i] + (trace ? p.stepT : p.stepP);
+    // device: WQ (drop when full) -> engine-side slots in FIFO order -> earliest-free engine
+    const t0 = out[i];
+    active = active.filter((j) => done[j] > t0);
+    let queued = 0;
+    for (const j of active) if (wqOut[j] > t0) queued++;
+    if (queued >= p.wq) { fate[i] = "drop"; continue; }
+    fate[i] = "ok";
+    wqIn[i] = t0;
+    let t = Math.max(t0, lastDispatch);
+    for (;;) {
+      let busy = 0, soonest = Infinity;
+      for (const j of active) if (wqOut[j] <= t && done[j] > t) { busy++; soonest = Math.min(soonest, done[j]); }
+      if (busy < p.slots) break;
+      t = soonest;
+    }
+    wqOut[i] = lastDispatch = t;
+    let k = 0;
+    for (let e = 1; e < free.length; e++) if (free[e] < free[k]) k = e;
+    start[i] = Math.max(t, free[k]);
+    done[i] = free[k] = start[i] + T;
+    eng[i] = k;
+    active.push(i);
+  }
+  return { p, a, ready, acc, nxt, out, meas, ent, fate, wqIn, wqOut, start, done, eng, T };
+}
+function kneeOf(s) { for (let i = 0; i < s.p.n; i++) if (s.acc[i] - s.a[i] > 1) return i; return null; }
+const MEASURED_KNEE_NS = 80;
+let SIM = null, tFrac = 1, simRaf = 0;
+function runSim(animate) { syncControls(); SIM = simulate(P, 1); drawLanes(); drawTimeline(); drawCharts(animate); }
+function snapshot(s, t) {
+  const p = s.p, n = p.n;
+  let sb = 0, ingress = 0, wq = 0, eng = 0, run = 0, fin = 0, drop = 0, sent = 0, stalled = false;
+  for (let i = 0; i < n; i++) {
+    if (s.acc[i] <= t) sent++;
+    if (s.a[i] <= t && t < s.acc[i] && s.acc[i] - s.a[i] > 1) stalled = true;
+    if (p.mode === "sb") { if (s.acc[i] <= t && t < s.out[i]) sb += s.ent[i + 1] - s.ent[i]; }
+    else if (s.acc[i] + p.lat <= t && t < s.out[i]) ingress++;
+    if (s.wqIn[i] <= t && t < s.wqOut[i]) wq++;
+    if (s.wqOut[i] <= t && t < s.done[i]) eng++;
+    if (s.start[i] <= t && t < s.done[i]) run++;
+    if (s.done[i] <= t) fin++;
+    if (s.fate[i] === "drop" && s.out[i] <= t) drop++;
+  }
+  return { sb, ingress, wq, eng, run, fin, drop, sent, stalled };
+}
+function endTime(s) { let t = 0; for (let i = 0; i < s.p.n; i++) { t = Math.max(t, s.out[i]); if (!isNaN(s.done[i])) t = Math.max(t, s.done[i]); } return t; }
+const fmtT = (ns) => (ns >= 1e6 ? (ns / 1e6).toFixed(2) + " ms" : ns >= 1e3 ? (ns / 1e3).toFixed(1) + " µs" : ns.toFixed(0) + " ns");
+function drawLanes() {
+  const s = SIM, p = s.p, tEnd = endTime(s), t = tEnd * tFrac * tFrac, z = snapshot(s, t);
+  const sbMode = p.mode === "sb";
+  const lane = (label, sub, v, cap, cls = "") => {
+    const full = cap && v >= cap - 0.5 && !/done|solid/.test(cls);
+    return `<div class="lane ${full ? "full" : ""}"><div class="ll">${esc(label)}<small>${esc(sub)}</small></div><div class="cells ${cls} ${full ? "full" : ""}" style="--n:${Math.min(cap || 1, 160)}"><b style="width:${cap ? Math.min(100, (100 * v) / cap) : 0}%"></b></div><div class="lv">${Math.round(v)}<small> / ${cap}</small></div></div>`;
+  };
+  $("#lanes").innerHTML = lane("CPU 已提交", "submit", z.sent, p.n, "solid")
+    + (sbMode ? lane("store buffer", "core", z.sb, p.sb) : lane("设备入口", "假说 c", z.ingress, p.bin))
+    + lane("Work Queue", "dedicated", z.wq, p.wq)
+    + lane("engine 侧在途", "dispatched", z.eng, p.slots)
+    + lane("正在执行", "engines", z.run, p.engines, "eng")
+    + lane("已完成", "completion", z.fin, p.n, "done solid")
+    + `<div class="lane ${z.drop ? "full" : ""}"><div class="ll">被丢弃<small>SWERROR 0x53</small></div><div class="cells solid ${z.drop ? "full" : ""}"><b style="width:${(100 * z.drop) / p.n}%"></b></div><div class="lv">${z.drop}</div></div>`;
+  $("#stallpill").classList.toggle("on", z.stalled);
+  $("#tlabel").textContent = `t = ${fmtT(t)} / ${fmtT(tEnd)} · 每个 descriptor 执行 ${fmtT(s.T)}`;
+  drawCursor();
+}
+function simStop() { if (simRaf) cancelAnimationFrame(simRaf); simRaf = 0; $("#simPlay").innerHTML = ICON_PLAY; }
+function simPlay() {
+  simStop();
+  if (reduceMotion) { tFrac = 1; $("#tslider").value = 1000; drawLanes(); return; }
+  const t0 = performance.now();
+  $("#simPlay").innerHTML = ICON_PAUSE;
+  const tick = (now) => {
+    tFrac = Math.min(1, (now - t0) / 6000);
+    $("#tslider").value = Math.round(tFrac * 1000);
+    drawLanes();
+    if (tFrac < 1) simRaf = requestAnimationFrame(tick); else simStop();
+  };
+  tFrac = 0;
+  simRaf = requestAnimationFrame(tick);
+}
+$("#simPlay").addEventListener("click", () => (simRaf ? simStop() : simPlay()));
+$("#tslider").addEventListener("input", (e) => { simStop(); tFrac = e.target.value / 1000; drawLanes(); });
+
+// ---------- timeline: parallelism and asynchrony ----------
+const TL = { view: "all", lay: null, xMax: 1, hover: null };
+const ENG_COLORS = ["peri", "count", "terra", "hypothesis"];
+const CANVAS_MONO = '"IBM Plex Mono", ui-monospace, Menlo, monospace';
+const cssv = (n) => getComputedStyle(document.documentElement).getPropertyValue("--" + n).trim();
+const cpuEndOf = (s) => s.nxt.reduce((m, v) => Math.max(m, v), 0);
+function niceTicks(max, count) {
+  const raw = max / count, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 5, 10].map((k) => k * mag).find((k) => k >= raw);
+  const out = [];
+  for (let v = 0; v <= max + 1e-9; v += step) out.push(v);
+  return out;
+}
+function drawTimeline() {
+  const s = SIM, W = $("#tlWrap").clientWidth;
+  if (!W || !s) return;
+  const p = s.p, n = p.n, tEnd = endTime(s), cpuEnd = cpuEndOf(s);
+  const xMax = TL.view === "all" ? Math.max(tEnd, cpuEnd) : Math.max(1, Math.min(Math.max(tEnd, cpuEnd), cpuEnd * 1.2));
+  const E = Math.max(1, p.engines), L = 104, R = 16;
+  const lay = { L, R, W, cpu: [8, 20], eng: [] };
+  let y = 8 + 20 + 12;
+  for (let e = 0; e < E; e++) { lay.eng.push([y, 13]); y += 17; }
+  y += 10; lay.wf = [y, 230]; y += 230 + 14; lay.area = [y, 64]; y += 64 + 6; lay.axis = y; y += 24; lay.H = y;
+  TL.lay = lay; TL.xMax = xMax; TL.tEnd = tEnd; TL.cpuEnd = cpuEnd;
+  const dpr = window.devicePixelRatio || 1;
+  for (const c of [$("#tl"), $("#tlCur")]) { c.width = W * dpr; c.height = lay.H * dpr; c.style.height = lay.H + "px"; }
+  const ctx = $("#tl").getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, lay.H);
+  const col = Object.fromEntries(["ink", "ink2", "muted", "rule", "rule2", "sunk", "bad", "partial", "known", "peri", "count", "terra", "hypothesis"].map((k) => [k, cssv(k)]));
+  const X = (t) => L + (Math.min(t, xMax) / xMax) * (W - L - R);
+  const seg = (t0, t1, y0, h, c, alpha = 1, minW = 0) => {
+    if (!(t1 > t0) || t0 >= xMax) return;
+    const x0 = X(t0), x1 = Math.max(X(t1), x0 + minW);
+    ctx.globalAlpha = alpha; ctx.fillStyle = c; ctx.fillRect(x0, y0, x1 - x0, h); ctx.globalAlpha = 1;
+  };
+  const label = (t, yc, c = col.muted) => { ctx.fillStyle = c; ctx.fillText(t, 0, yc); };
+  ctx.font = `500 11px ${CANVAS_MONO}`;
+  ctx.textBaseline = "middle";
+  // CPU lane: issuing / waiting for a store-buffer slot / waiting for a completion / free
+  const [cy, ch] = lay.cpu;
+  ctx.fillStyle = col.sunk; ctx.fillRect(L, cy, W - L - R, ch);
+  label("CPU", cy + ch / 2, col.ink);
+  for (let i = 0; i < n; i++) {
+    seg(s.ready[i], s.a[i], cy, ch, col.partial, 1, 0.6);
+    seg(s.a[i], s.acc[i], cy, ch, col.bad, 1, 0.6);
+    seg(s.acc[i], s.nxt[i], cy, ch, col.ink, 0.85, 0.6);
+  }
+  seg(cpuEnd, xMax, cy, ch, col.known, 0.4);
+  // engine lanes: one bar per descriptor on the engine that ran it
+  lay.eng.forEach(([ey, eh], e) => { ctx.fillStyle = col.sunk; ctx.fillRect(L, ey, W - L - R, eh); label("E" + e, ey + eh / 2, col.ink); });
+  for (let i = 0; i < n; i++) if (s.fate[i] === "ok") {
+    const [ey, eh] = lay.eng[s.eng[i]];
+    seg(s.start[i], s.done[i], ey, eh, col[ENG_COLORS[s.eng[i] % 4]], i % 2 ? 0.7 : 1, 1);
+  }
+  // waterfall: one row per descriptor
+  const [wy, wh] = lay.wf, rh = wh / n;
+  label("descriptor", wy + 7, col.ink);
+  label(`#0 – #${n - 1}`, wy + 21);
+  label("↓ 提交顺序", wy + 35);
+  for (let i = 0; i < n; i++) {
+    const y0 = wy + i * rh, h = Math.max(1, rh * 0.78);
+    seg(s.a[i], s.acc[i], y0, h, col.bad, 1, 0);
+    if (s.fate[i] === "drop") {
+      seg(s.acc[i], s.out[i], y0, h, col.bad, 0.3);
+      ctx.fillStyle = col.bad; ctx.fillRect(X(s.out[i]) - 1, y0 - 0.5, 3, h + 1);
+      continue;
+    }
+    seg(s.acc[i], s.out[i], y0, h, col.muted, 0.5, 0.5);
+    seg(s.out[i], s.wqOut[i], y0, h, col.partial, 0.9);
+    seg(s.wqOut[i], s.start[i], y0, h, col.rule2, 1);
+    seg(s.start[i], s.done[i], y0, h, col[ENG_COLORS[s.eng[i] % 4]], 1, 1);
+  }
+  // in-flight descriptors over time, stacked by where they are
+  const [ay, ah] = lay.area, B = 260, bins = [];
+  let maxTot = 1;
+  for (let b = 0; b < B; b++) {
+    const t = ((b + 0.5) / B) * xMax, c = [0, 0, 0, 0];
+    for (let i = 0; i < n; i++) {
+      if (s.acc[i] <= t && t < s.out[i]) c[0]++;
+      else if (s.fate[i] === "ok") {
+        if (s.out[i] <= t && t < s.wqOut[i]) c[1]++;
+        else if (s.wqOut[i] <= t && t < s.start[i]) c[2]++;
+        else if (s.start[i] <= t && t < s.done[i]) c[3]++;
+      }
+    }
+    bins.push(c);
+    maxTot = Math.max(maxTot, c[0] + c[1] + c[2] + c[3]);
+  }
+  TL.bins = bins;
+  label("在途数", ay + 7, col.ink);
+  label(`最多 ${maxTot}`, ay + 21);
+  const bw = (W - L - R) / B;
+  bins.forEach((c, b) => {
+    let yb = ay + ah;
+    [[col.muted, 0.5], [col.partial, 0.9], [col.rule2, 1], [col.peri, 1]].forEach(([cc, al], k) => {
+      const hh = (c[k] / maxTot) * ah;
+      ctx.globalAlpha = al; ctx.fillStyle = cc; ctx.fillRect(L + b * bw, yb - hh, bw + 0.6, hh); yb -= hh;
+    });
+  });
+  ctx.globalAlpha = 1;
+  // time axis
+  ctx.strokeStyle = col.rule2; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(L, lay.axis + 0.5); ctx.lineTo(W - R, lay.axis + 0.5); ctx.stroke();
+  ctx.textAlign = "center";
+  for (const v of niceTicks(xMax, Math.max(3, Math.floor((W - L - R) / 110)))) {
+    const x = X(v);
+    ctx.fillStyle = col.rule2; ctx.fillRect(x, lay.axis, 1, 4);
+    ctx.fillStyle = col.muted; ctx.fillText(fmtT(v), x, lay.axis + 14);
+  }
+  ctx.textAlign = "left";
+  drawStats(s, tEnd, cpuEnd);
+  drawCursor();
+}
+function drawCursor() {
+  const lay = TL.lay;
+  if (!lay || !SIM) return;
+  const dpr = window.devicePixelRatio || 1, ctx = $("#tlCur").getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, lay.W, lay.H);
+  const X = (t) => lay.L + (Math.min(t, TL.xMax) / TL.xMax) * (lay.W - lay.L - lay.R);
+  const line = (t, color, dash, label) => {
+    const x = X(t);
+    ctx.strokeStyle = color; ctx.lineWidth = 1.2; ctx.setLineDash(dash);
+    ctx.beginPath(); ctx.moveTo(x + 0.5, 2); ctx.lineTo(x + 0.5, lay.axis); ctx.stroke(); ctx.setLineDash([]);
+    if (label) {
+      ctx.font = `600 11px ${CANVAS_MONO}`;
+      const w = ctx.measureText(label).width + 12, lx = Math.min(lay.W - w - 2, Math.max(lay.L, x - w / 2));
+      ctx.fillStyle = color; ctx.beginPath(); ctx.roundRect(lx, lay.axis - 2, w, 18, 5); ctx.fill();
+      ctx.fillStyle = cssv("paper"); ctx.textBaseline = "middle"; ctx.fillText(label, lx + 6, lay.axis + 7);
+    }
+  };
+  const tPlay = TL.tEnd * tFrac * tFrac;
+  if (simRaf || tFrac < 1) line(tPlay, cssv("ink"), [], fmtT(tPlay));
+  if (TL.hover != null) line(TL.hover, cssv("muted"), [3, 3], null);
+}
+function drawStats(s, tEnd, cpuEnd) {
+  const n = s.p.n, E = Math.max(1, s.p.engines);
+  let ok = 0, lat = 0, exec = 0, win = 0, stall = 0, first = Infinity, last = 0;
+  for (let i = 0; i < n; i++) {
+    win += s.a[i] - s.ready[i];
+    stall += s.acc[i] - s.a[i];
+    if (s.fate[i] !== "ok") continue;
+    ok++; lat += s.done[i] - s.a[i]; exec += s.done[i] - s.start[i];
+    first = Math.min(first, s.start[i]); last = Math.max(last, s.done[i]);
+  }
+  const pct = (v) => `${Math.round(100 * v)}<small>%</small>`;
+  const tiles = [
+    s.p.payload === "noop"
+      ? ["完成吞吐", ok ? `${((ok / last) * 1e3).toFixed(2)}<small>M/s</small>` : "—"]
+      : ["完成吞吐（数据）", ok ? `${((ok * (s.p.payload === "4k" ? 4096 : 1048576)) / last).toFixed(1)}<small>GB/s · ${((ok / last) * 1e3).toFixed(2)} M/s</small>` : "—"],
+    ["engine 平均并行度", ok ? `${(exec / (last - first)).toFixed(2)}<small>/ ${E}</small>` : "—"],
+    ["平均延迟（交出 → 完成）", ok ? fmtT(lat / ok) : "—"],
+    ["CPU 等完成", pct(win / cpuEnd)],
+    ["CPU 等 store buffer", pct(stall / cpuEnd)],
+    ["CPU 交完后设备还要干", fmtT(Math.max(0, tEnd - cpuEnd))],
+    ["丢弃", `${n - ok}`],
+  ];
+  $("#tlStats").innerHTML = tiles.map(([k, v]) => `<div class="tlstat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
+}
+const tipRows = (rows) => rows.map(([k, v]) => `<div class="r"><span>${k}</span><span>${v}</span></div>`).join("");
+function descTip(i) {
+  const s = SIM;
+  if (s.fate[i] === "drop") return `<b>#${i}</b> · 被丢弃<br>${tipRows([["CPU 交出", fmtT(s.a[i])], ["到达设备", fmtT(s.out[i])], ["结果", "WQ 已满，丢弃（0x53）"]])}`;
+  return `<b>#${i}</b> · 在 E${s.eng[i]} 上执行<br>` + tipRows([
+    ["CPU 交出", fmtT(s.a[i])], ["等 store buffer", fmtT(s.acc[i] - s.a[i])], ["写出到达设备", fmtT(s.out[i])],
+    ["WQ 里等", fmtT(s.wqOut[i] - s.out[i])], ["等 engine", fmtT(s.start[i] - s.wqOut[i])], ["执行", `${fmtT(s.start[i])} → ${fmtT(s.done[i])}`],
+    ["交出 → 完成", fmtT(s.done[i] - s.a[i])],
+  ]);
+}
+function cpuTip(t) {
+  const s = SIM, n = s.p.n;
+  for (let i = 0; i < n; i++) {
+    if (s.ready[i] <= t && t < s.a[i]) return `<b>CPU</b> · 等 #${i - s.p.window} 完成，才能交 #${i}`;
+    if (s.a[i] <= t && t < s.acc[i]) return `<b>CPU</b> · 交 #${i} 时 store buffer 满了，在等空位`;
+    if (s.acc[i] <= t && t < s.nxt[i]) return `<b>CPU</b> · 正在交 #${i}`;
+  }
+  return t >= TL.cpuEnd ? "<b>CPU</b> · 全部交完。异步：这段时间 CPU 可以去做别的事" : "<b>CPU</b> · 空闲";
+}
+$("#tlCur").addEventListener("mousemove", (e) => {
+  const lay = TL.lay, s = SIM;
+  if (!lay || !s) return;
+  const r = e.currentTarget.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  const tip = $("#tlTip");
+  if (x < lay.L || x > lay.W - lay.R) { tip.classList.remove("on"); TL.hover = null; drawCursor(); return; }
+  const t = ((x - lay.L) / (lay.W - lay.L - lay.R)) * TL.xMax;
+  let html = "";
+  if (y >= lay.wf[0] && y < lay.wf[0] + lay.wf[1]) html = descTip(Math.min(s.p.n - 1, Math.floor((y - lay.wf[0]) / (lay.wf[1] / s.p.n))));
+  else if (y >= lay.cpu[0] - 2 && y < lay.cpu[0] + lay.cpu[1] + 4) html = cpuTip(t);
+  else {
+    const e2 = lay.eng.findIndex(([ey, eh]) => y >= ey - 2 && y < ey + eh + 2);
+    if (e2 >= 0) {
+      let i = -1;
+      for (let j = 0; j < s.p.n; j++) if (s.eng[j] === e2 && s.start[j] <= t && t < s.done[j]) i = j;
+      html = i >= 0 ? descTip(i) : `<b>E${e2}</b> · 空闲`;
+    } else if (y >= lay.area[0] && y < lay.area[0] + lay.area[1]) {
+      const c = TL.bins[Math.min(TL.bins.length - 1, Math.floor((t / TL.xMax) * TL.bins.length))];
+      html = `<b>t = ${fmtT(t)}</b> · 在途 ${c[0] + c[1] + c[2] + c[3]} 个<br>` + tipRows([["core 内 / 写出", c[0]], ["WQ 里等", c[1]], ["等 engine", c[2]], ["正在执行", c[3]]]);
+    }
+  }
+  TL.hover = t;
+  drawCursor();
+  if (!html) { tip.classList.remove("on"); return; }
+  tip.innerHTML = html;
+  tip.classList.add("on");
+  const tw = tip.offsetWidth, th = tip.offsetHeight;
+  tip.style.left = Math.min(lay.W - tw - 4, x + 14) + "px";
+  tip.style.top = Math.max(0, Math.min(lay.H - th, y - th / 2)) + "px";
+});
+$("#tlCur").addEventListener("mouseleave", () => { $("#tlTip").classList.remove("on"); TL.hover = null; drawCursor(); });
+window.addEventListener("resize", () => { if (state.tab === "sim") drawTimeline(); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (state.tab === "sim") drawTimeline(); });
+
+function chart(svg, { x, y, xl, yl, series }, animate) {
+  svg.innerHTML = "";
+  const W = 400, H = 280, L = 44, R = 16, T = 12, B = 36;
+  const sx = (v) => L + ((v - x[0]) / (x[1] - x[0])) * (W - L - R);
+  const sy = (v) => H - B - ((Math.min(Math.max(v, y[0]), y[1]) - y[0]) / (y[1] - y[0])) * (H - T - B);
+  const ax = el("g", { class: "axis" }, svg);
+  const ticks = (lo, hi, n) => { const st = Math.pow(10, Math.floor(Math.log10((hi - lo) / n))); const m = [1, 2, 5, 10].find((k) => (hi - lo) / (k * st) <= n) * st; const r = []; for (let v = Math.ceil(lo / m) * m; v <= hi + 1e-9; v += m) r.push(+v.toFixed(6)); return r; };
+  for (const v of ticks(x[0], x[1], 5)) { el("line", { x1: sx(v), x2: sx(v), y1: T, y2: H - B }, ax); el("text", { x: sx(v), y: H - B + 15, "text-anchor": "middle" }, ax).textContent = v; }
+  for (const v of ticks(y[0], y[1], 5)) { el("line", { x1: L, x2: W - R, y1: sy(v), y2: sy(v), class: v === y[0] ? "base" : "" }, ax); el("text", { x: L - 6, y: sy(v) + 3.5, "text-anchor": "end" }, ax).textContent = v; }
+  el("text", { x: (L + W - R) / 2, y: H - 5, "text-anchor": "middle" }, ax).textContent = xl;
+  el("text", { x: 11, y: (T + H - B) / 2, "text-anchor": "middle", transform: `rotate(-90 11 ${(T + H - B) / 2})` }, ax).textContent = yl;
+  const lg = el("g", { class: "lg" }, svg);
+  let ly = T + 8;
+  for (const s of series) {
+    if (!s.data.length) continue;
+    const col = `var(--${s.color})`;
+    if (s.type === "line") el("path", { d: "M" + s.data.map(([a, b]) => `${sx(a).toFixed(1)},${sy(b).toFixed(1)}`).join(" L"), fill: "none", stroke: col, "stroke-width": 1.9, "stroke-linejoin": "round", pathLength: 1, class: animate ? "draw" : "" }, svg);
+    else if (s.type === "points") s.data.forEach(([a, b], i) => {
+      const c = el("circle", { cx: sx(a), cy: sy(b), r: 3.2, fill: col, "fill-opacity": 0.9, stroke: "var(--paper)", "stroke-width": 0.8, class: animate ? "pop" : "", style: animate ? `animation-delay:${350 + (800 * i) / s.data.length}ms` : "" }, svg);
+      el("title", {}, c).textContent = `${s.label}：${a} → ${b}`;
+    });
+    else if (s.type === "ranges") s.data.forEach(([a, lo, hi], i) => {
+      const l = el("line", { x1: sx(a), x2: sx(a), y1: sy(lo), y2: sy(hi), stroke: col, "stroke-width": 3.4, "stroke-linecap": "round", "stroke-opacity": 0.85, class: animate ? "grow" : "", style: animate ? `animation-delay:${300 + i * 70}ms` : "" }, svg);
+      el("title", {}, l).textContent = `${s.label}：间隔 ${a.toFixed(1)} ns → knee 在 ${lo}–${hi}`;
+    });
+    const lx = L + 12;
+    if (s.type === "line") el("line", { x1: lx, x2: lx + 14, y1: ly - 3, y2: ly - 3, stroke: col, "stroke-width": 2 }, lg);
+    else el("circle", { cx: lx + 7, cy: ly - 3, r: 3.5, fill: col }, lg);
+    el("text", { x: lx + 20, y: ly + 0.5 }, lg).textContent = s.label;
+    ly += 15;
+  }
+}
+function overlaySeries() {
+  const o = P.overlay;
+  if (o === "none") return { a: [], b: [] };
+  if (o.startsWith("trace")) return { a: D.traces[o].points.map((pt) => [pt.i, pt.ns_med]), b: [] };
+  const [, w, g] = o.split(":");
+  const rows = D.occupancy.filter((r) => r.workload === w && r.gap === +g);
+  return { a: rows.map((r) => [r.k, r.extra_ns_med]), b: rows.map((r) => [r.submitted, r.final_completed_med]) };
+}
+function measuredKnees(w) {
+  const out = [];
+  for (const g of [...new Set(D.occupancy.filter((r) => r.workload === w).map((r) => r.gap))]) {
+    const rows = D.occupancy.filter((r) => r.workload === w && r.gap === g);
+    const step = rows.filter((r) => r.k === 96).map((r) => r.step_ns);
+    if (!step.length) continue;
+    const byK = {};
+    for (const r of rows) byK[r.k] = Math.max(byK[r.k] ?? 0, r.extra_ns_med);
+    const ks = Object.keys(byK).map(Number).sort((u, v) => u - v);
+    const hi = ks.find((k) => byK[k] >= MEASURED_KNEE_NS);
+    const lo = [...ks].reverse().find((k) => k < (hi ?? Infinity) && byK[k] < MEASURED_KNEE_NS);
+    out.push([step.reduce((u, v) => u + v) / step.length, lo ?? 0, hi ?? 400]);
+  }
+  return out.sort((u, v) => u[0] - v[0]);
+}
+function drawCharts(animate) {
+  const s = SIM, n = s.p.n, ov = overlaySeries();
+  chart($("#chartA"), { x: [0, n], y: [0, 300], xl: "submit 序号", yl: "ns", series: [
+    { type: "line", color: "ink", label: "模型", data: Array.from(s.meas, (v, i) => [i, v]) },
+    { type: "points", color: "terra", label: "实测中位数", data: ov.a.filter(([i]) => i < n) },
+  ] }, animate);
+  let ok = 0; const accepted = [];
+  for (let i = 0; i < n; i++) { if (s.fate[i] === "ok") ok++; accepted.push([i + 1, ok]); }
+  chart($("#chartB"), { x: [0, n], y: [0, Math.max(n, 10)], xl: "提交总数 K+1", yl: "最终完成数", series: [
+    { type: "line", color: "ink", label: "模型", data: accepted },
+    { type: "points", color: "terra", label: "实测（sentinel 后）", data: ov.b.filter(([k]) => k <= n) },
+  ] }, animate);
+  const simKnee = [];
+  for (let st = 1; st <= 100; st += 3) {
+    const ks = [1, 2, 3, 4, 5].map((seed) => kneeOf(simulate({ ...P, n: 400, kTrace: 1e9, stepP: st }, seed)) ?? 400).sort((u, v) => u - v);
+    simKnee.push([st, ks[2]]);
+  }
+  chart($("#chartC"), { x: [0, 100], y: [0, 400], xl: "不卡时每个 submit 的间隔 (ns)", yl: "knee 序号", series: [
+    { type: "line", color: "ink", label: "模型（5 次中位数）", data: simKnee },
+    { type: "ranges", color: "terra", label: "实测 noop", data: measuredKnees("noop") },
+    { type: "ranges", color: "peri", label: "实测 1 MiB", data: measuredKnees("memmove1m") },
+  ] }, animate);
+}
+
+// ---------- cases tab (「五个案子」) ----------
+// One card per M.cases entry: a stepper over its steps (one figure + at most 2 short lines per step), or every step at
+// once in 「全部展开」 mode. Every string comes from M.casesUi / M.cases; each figure is drawn from its step's `fig` spec
+// (line | bars | strip | schema | code). Schematics use at most one CSS loop, which the reduced-motion rule freezes.
+const rich = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\[推断\]/g, '<span class="inf">推断</span>');
+const CU = M.casesUi;
+const CASE = Object.fromEntries(M.cases.map((c) => [c.id, c]));
+const caseStep = Object.fromEntries(M.cases.map((c) => [c.id, 0]));
+let casesAll = false;
+const TONE = { main: "var(--ink2)", alt: "var(--timer)", hl: "var(--terra)", bad: "var(--bad)", muted: "var(--unknown)", exp: "var(--muted)", ok: "var(--known)" };
+const KIND_C = { phen: "ink", guess: "partial", rule: "bad", truth: "known", check: "timer", so: "terra" };
+const FW = 720;
+const f1 = (v) => (+v).toFixed(1);
+// Approximate rendered label width (CJK ≈ 1 em, Latin ≈ 0.6 em) so annotation boxes fit their text.
+const textW = (s, size) => [...String(s)].reduce((w, ch) => w + (ch.charCodeAt(0) > 0x2e7f ? size : size * 0.6), 0);
+function svgLabel(x, y, s, cls = "", anchor = "middle", style = "") {
+  const ls = String(s).split("\n");
+  return `<text x="${f1(x)}" y="${f1(y)}" class="${cls}" text-anchor="${anchor}"${style ? ` style="${style}"` : ""}>`
+    + ls.map((l, i) => `<tspan x="${f1(x)}" dy="${i ? 15 : 0}">${esc(l)}</tspan>`).join("") + `</text>`;
+}
+function arrowSvg(x1, y1, x2, y2, color, w = 1.6, dash = "") {
+  const a = Math.atan2(y2 - y1, x2 - x1), k = 7;
+  const p = (d) => `${f1(x2 - k * Math.cos(a + d))} ${f1(y2 - k * Math.sin(a + d))}`;
+  return `<line x1="${f1(x1)}" y1="${f1(y1)}" x2="${f1(x2 - 4 * Math.cos(a))}" y2="${f1(y2 - 4 * Math.sin(a))}" stroke="${color}" stroke-width="${w}"${dash ? ` stroke-dasharray="${dash}"` : ""}/>`
+    + `<path d="M${f1(x2)} ${f1(y2)} L${p(0.45)} L${p(-0.45)} Z" fill="${color}"/>`;
+}
+// The 「看这里」 point: an optional ring on the point, a short arrow, and a boxed red label. The box sits in quadrant
+// `dir` (n/s + e/w) 40 units from the point, or centred on (lx, ly) when given.
+function markSvg(px, py, m, H, ring = true) {
+  const dir = m.dir || "nw", sx = dir.includes("e") ? 1 : -1, sy = dir.includes("n") ? -1 : 1;
+  const w = textW(m.label, 14) + 18, h = 26;
+  const bx = Math.max(6, Math.min(FW - 6 - w, m.lx != null ? m.lx - w / 2 : sx > 0 ? px + 40 : px - 40 - w));
+  const by = Math.max(6, Math.min(H - 6 - h, m.ly != null ? m.ly - h / 2 : py + sy * 40 - h / 2));
+  const ax = Math.max(bx, Math.min(bx + w, px)), ay = Math.max(by, Math.min(by + h, py));
+  const ax2 = m.lx != null ? ax : sx > 0 ? bx : bx + w, ay2 = m.lx != null ? ay : by + h / 2;
+  const d = Math.hypot(px - ax2, py - ay2) || 1, gap = ring ? 10 : 2;
+  return (ring ? `<circle cx="${f1(px)}" cy="${f1(py)}" r="8" fill="none" stroke="var(--bad)" stroke-width="2"/>` : "")
+    + arrowSvg(ax2, ay2, px + ((ax2 - px) / d) * gap, py + ((ay2 - py) / d) * gap, "var(--bad)")
+    + `<rect x="${f1(bx)}" y="${f1(by)}" width="${f1(w)}" height="${h}" rx="6" fill="var(--card)" stroke="var(--bad)" stroke-width="1.4"/>`
+    + `<text x="${f1(bx + w / 2)}" y="${f1(by + 18)}" text-anchor="middle" class="mk">${esc(m.label)}</text>`;
+}
+// Legend rows are HTML above the SVG (laid out by the browser): items are [label, color, hollow].
+const legendHtml = (items, flow) => (items.length ? `<div class="clg${flow ? " flow" : ""}">${items.map(([lab, col, hollow]) => `<span><i style="${hollow ? `border:1.5px dashed ${col}` : `background:${col}`}"></i>${esc(lab)}</span>`).join("")}</div>` : "");
+function figLine(f) {
+  const H = 380, L = 62, R = 30, T = 44, B = 56, PW = FW - L - R, PH = H - T - B, cats = f.x.cats;
+  const X = cats ? (v) => L + 24 + (cats.indexOf(v) / (cats.length - 1)) * (PW - 48) : (v) => L + ((v - f.x.min) / (f.x.max - f.x.min)) * PW;
+  const Y = (v) => T + PH - ((v - f.y.min) / (f.y.max - f.y.min)) * PH;
+  let s = svgLabel(12, 20, f.y.label, "axl", "start");
+  for (const t of f.y.ticks) s += `<line class="grid" x1="${L}" x2="${L + PW}" y1="${f1(Y(t))}" y2="${f1(Y(t))}"/><text class="tick" x="${L - 8}" y="${f1(Y(t) + 4)}" text-anchor="end">${t}</text>`;
+  s += `<line class="base" x1="${L}" x2="${L + PW}" y1="${f1(Y(f.y.min))}" y2="${f1(Y(f.y.min))}"/>`;
+  for (const t of cats || f.x.ticks) s += `<text class="tick" x="${f1(X(t))}" y="${T + PH + 19}" text-anchor="middle">${t}</text>`;
+  s += svgLabel(L + PW / 2, H - 10, f.x.label, "axl");
+  for (const v of f.vlines || []) s += `<line x1="${f1(X(v.x))}" x2="${f1(X(v.x))}" y1="${T - 6}" y2="${T + PH}" stroke="${TONE[v.tone || "muted"]}" stroke-width="1.6" stroke-dasharray="5 4"/>` + svgLabel(X(v.x) + 6, T + 8, v.label, "lg b halo", "start");
+  for (const h of f.hlines || []) s += `<line x1="${L}" x2="${L + PW}" y1="${f1(Y(h.y))}" y2="${f1(Y(h.y))}" stroke="${TONE[h.tone || "muted"]}" stroke-width="1.6" stroke-dasharray="5 4"/>` + svgLabel(L + PW - 4, Y(h.y) - 7, h.label, "lg b halo", "end");
+  for (const se of f.series) {
+    const col = TONE[se.tone || "main"], pts = se.pts.map(([x, y]) => [X(x), Y(y)]);
+    if (se.style !== "dots") s += `<polyline fill="none" stroke="${col}" stroke-width="${se.style === "dash" ? 1.8 : 2}"${se.style === "dash" ? ' stroke-dasharray="6 5"' : ""} points="${pts.map((p) => p.map(f1).join(",")).join(" ")}"/>`;
+    if (se.style === "dots" || se.style === "linedots") s += pts.map(([x, y]) => `<circle cx="${f1(x)}" cy="${f1(y)}" r="${se.style === "dots" ? 3.8 : 3.4}" fill="${col}"${se.style === "dots" ? ' fill-opacity="0.75"' : ""}/>`).join("");
+    if (se.vals) s += se.pts.map(([, y], i) => `<text class="vl halo" x="${f1(pts[i][0])}" y="${f1(pts[i][1] - 10)}" text-anchor="middle">${y}</text>`).join("");
+    if (se.label) s += svgLabel(X(se.at[0]), Y(se.at[1]) - 10, se.label, "lg b halo", "start", `fill:${col}`);
+  }
+  if (f.mark) s += markSvg(X(f.mark.x), Y(f.mark.y), f.mark, H);
+  return [H, s, ""];
+}
+function figBars(f) {
+  const H = 370, L = 62, R = 24, T = 40, n = f.cats.length;
+  const lines = Math.max(...f.cats.map((c) => String(c.label).split("\n").length));
+  const B = 30 + lines * 15 + (f.groups ? 30 : 0), PW = FW - L - R, PH = H - T - B;
+  const gapG = f.groups ? 30 : 0, slot = (PW - gapG * ((f.groups || [0]).length - 1)) / n;
+  const grp = (i) => (f.groups ? Math.max(0, f.groups.findIndex((g) => i >= g.from && i <= g.to)) : 0);
+  const cx = (i) => L + slot * (i + 0.5) + gapG * grp(i);
+  const Y = (v) => T + PH - (v / f.y.max) * PH;
+  const hasExp = f.cats.some((c) => c.exp != null), pair = f.mode === "pair" || hasExp;
+  const bw = pair ? Math.min(46, slot * 0.34) : Math.min(80, slot * 0.5);
+  const C1 = TONE.main, C2 = f.mode === "stack" ? TONE.hl : TONE.alt;
+  let s = svgLabel(12, 20, f.y.label, "axl", "start");
+  for (const t of f.y.ticks) s += `<line class="grid" x1="${L}" x2="${L + PW}" y1="${f1(Y(t))}" y2="${f1(Y(t))}"/><text class="tick" x="${L - 8}" y="${f1(Y(t) + 4)}" text-anchor="end">${t}</text>`;
+  // Reference lines go under the bars; their label is centred at category position `x` (e.g. 0.5 = between bars 1 and 2).
+  for (const h of f.hlines || []) s += `<line x1="${L}" x2="${L + PW}" y1="${f1(Y(h.y))}" y2="${f1(Y(h.y))}" stroke="${TONE[h.tone || "exp"]}" stroke-width="1.5" stroke-dasharray="5 4"/>`;
+  const bar = (x, v, col) => `<rect x="${f1(x - bw / 2)}" y="${f1(Y(v))}" width="${f1(bw)}" height="${f1(Y(0) - Y(v))}" rx="3" fill="${col}"/>`;
+  const val = (x, v, txt) => `<text class="vl halo" x="${f1(x)}" y="${f1(Y(v) - 7)}" text-anchor="middle">${esc(txt)}</text>`;
+  const tops = []; // per category: [[x, top, bottom] per bar or segment]
+  f.cats.forEach((c, i) => {
+    const x = cx(i);
+    if (f.mode === "stack") {
+      const tot = +(c.v + (c.v2 || 0)).toFixed(1);
+      s += bar(x, c.v, C1) + (c.v2 ? `<rect x="${f1(x - bw / 2)}" y="${f1(Y(tot))}" width="${f1(bw)}" height="${f1(Y(c.v) - Y(tot))}" rx="3" fill="${C2}"/>` : "");
+      s += val(x, tot, c.vl ?? String(tot));
+      tops.push([[x, Y(c.v), Y(0)], [x, Y(tot), Y(c.v)]]);
+    } else if (pair) {
+      const xa = x - bw / 2 - 2, xb = x + bw / 2 + 2, v2 = hasExp ? c.exp : c.v2;
+      s += bar(xa, c.v, C1) + val(xa, c.v, c.vl ?? String(c.v));
+      s += hasExp
+        ? `<rect x="${f1(xb - bw / 2)}" y="${f1(Y(v2))}" width="${f1(bw)}" height="${f1(Y(0) - Y(v2))}" rx="3" fill="none" stroke="${TONE.exp}" stroke-width="1.5" stroke-dasharray="4 3"/><text class="tick" x="${f1(xb)}" y="${f1(Y(v2) - 7)}" text-anchor="middle">${v2}</text>`
+        : bar(xb, v2, C2) + val(xb, v2, String(v2));
+      tops.push([[xa, Y(c.v), Y(0)], [xb, Y(v2), Y(0)]]);
+    } else {
+      s += bar(x, c.v, C1);
+      if (c.hi != null) s += `<line x1="${f1(x)}" x2="${f1(x)}" y1="${f1(Y(c.v))}" y2="${f1(Y(c.hi))}" stroke="${C1}" stroke-width="1.6"/><line x1="${f1(x - 9)}" x2="${f1(x + 9)}" y1="${f1(Y(c.hi))}" y2="${f1(Y(c.hi))}" stroke="${C1}" stroke-width="1.6"/>`;
+      s += val(x, c.hi ?? c.v, c.vl ?? String(c.v));
+      tops.push([[x, Y(c.v), Y(0)]]);
+    }
+    s += svgLabel(x, T + PH + 19, c.label, "lg");
+  });
+  s += `<line class="base" x1="${L}" x2="${L + PW}" y1="${f1(Y(0))}" y2="${f1(Y(0))}"/>`;
+  for (const g of f.groups || []) {
+    const x1 = cx(g.from) - slot / 2 + 8, x2 = cx(g.to) + slot / 2 - 8, y = T + PH + 19 + lines * 15 - 4;
+    s += `<path d="M${f1(x1)} ${f1(y - 5)} V${f1(y)} H${f1(x2)} V${f1(y - 5)}" fill="none" stroke="var(--rule2)"/>` + svgLabel((x1 + x2) / 2, y + 17, g.label, "lg b");
+  }
+  for (const h of f.hlines || []) s += h.x != null ? svgLabel(L + slot * (h.x + 0.5), Y(h.y) - 7, h.label, "lg b halo") : svgLabel(L + PW - 4, Y(h.y) - 7, h.label, "lg b halo", "end");
+  if (f.mark) {
+    // Point at the side of the bar just under its top, so the value label above the bar stays readable.
+    const [x, top, bot] = tops[f.mark.i][f.mark.which || 0] || tops[f.mark.i][0], sx = (f.mark.dir || "nw").includes("e") ? 1 : -1;
+    s += markSvg(x + (sx * bw) / 2, top + Math.min(14, (bot - top) / 2), f.mark, H, false);
+  }
+  const leg = [[f.keys[0], C1], hasExp ? [f.expName, TONE.exp, true] : [f.keys[1], C2]].filter((q) => q[0]);
+  return [H, s, legendHtml(leg)];
+}
+function figStrip(f) {
+  const cells = f.runs.flatMap(([v, k]) => Array(k).fill(v)), per = f.per, rows = Math.ceil(cells.length / per);
+  const X0 = 64, CW = (FW - X0 - 20) / per, CH = 26, RG = 40, T = 12, rowY = (r) => T + r * (CH + RG), H = rowY(rows) - RG + CH + 10;
+  let s = "";
+  for (let r = 0; r < rows; r++) s += `<text class="tick" x="${X0 - 8}" y="${rowY(r) + 18}" text-anchor="end">${r * per}</text>`;
+  cells.forEach((v, i) => {
+    const x = X0 + (i % per) * CW, y = rowY(Math.floor(i / per));
+    s += v ? `<rect x="${f1(x + 0.6)}" y="${y}" width="${f1(CW - 1.2)}" height="${CH}" rx="1.5" fill="var(--ink2)"/>`
+      : `<rect x="${f1(x + 1.1)}" y="${y + 0.5}" width="${f1(CW - 2.2)}" height="${CH - 1}" rx="1.5" fill="color-mix(in srgb, var(--bad) 10%, transparent)" stroke="var(--bad)" stroke-width="1"/>`;
+  });
+  for (const m of f.marks) {
+    const x = X0 + (m.i % per) * CW, y = rowY(Math.floor(m.i / per)), col = TONE[m.tone];
+    s += `<line x1="${f1(x)}" x2="${f1(x)}" y1="${y - 14}" y2="${y + CH + 5}" stroke="${col}" stroke-width="2.6"/>` + svgLabel(x, y - 19, m.label, `lg b halo${m.tone === "bad" ? " mk" : ""}`, "middle", `fill:${col}`);
+  }
+  return [H, s, legendHtml([[f.keys[0], "var(--ink2)"], [f.keys[1], "var(--bad)", true]], true)];
+}
+function figCode(f) {
+  const H = 40 + f.lines.length * 46;
+  let s = "";
+  f.lines.forEach((l, i) => {
+    const y = 44 + i * 46, col = TONE[l.tone] || "var(--ink2)";
+    if (l.tone) s += `<rect x="14" y="${y - 23}" width="356" height="34" rx="6" fill="color-mix(in srgb, ${col} 12%, transparent)"/>`;
+    s += `<text x="26" y="${y}" class="mono ink" style="font-size:15px;white-space:pre">${esc(l.c)}</text>`;
+    if (l.note) s += arrowSvg(380, y - 5, 418, y - 5, col, 1.4) + `<text x="428" y="${y}" class="lg b${l.tone === "bad" ? " mk" : ""}" style="fill:${col}">${esc(l.note)}</text>`;
+  });
+  return [H, s, ""];
+}
+// Minimal schematics for the 真相 steps; every label comes from fig.labels.
+const SCHEMA = {
+  sb(L) {
+    const N = 24, X0 = 150, X1 = 556, CW = (X1 - X0) / N, BY = 120, BH = 34, H = 200;
+    let s = `<rect class="box" x="16" y="103" width="104" height="68" rx="8"/>` + svgLabel(68, 142, L.core, "ink b");
+    s += arrowSvg(122, BY + BH / 2, X0 - 8, BY + BH / 2, "var(--rule2)");
+    s += `<rect class="box" x="${X0 - 4}" y="${BY - 4}" width="${X1 - X0 + 8}" height="${BH + 8}" rx="5"/>`;
+    for (let i = 0; i < N - 1; i++) s += `<rect x="${f1(X0 + i * CW + 0.6)}" y="${BY}" width="${f1(CW - 1.2)}" height="${BH}" rx="1" fill="var(--ink2)"/>`;
+    s += `<rect class="slide" x="${f1(X1 - CW + 0.6)}" y="${BY}" width="${f1(CW - 1.2)}" height="${BH}" rx="1" fill="var(--ink)"/>`;
+    s += svgLabel(X0, BY + BH + 22, L.buf, "lg b", "start") + svgLabel(X1, BY + BH + 22, L.head, "lg", "end");
+    s += `<rect class="pulse" x="${f1(X0 + 0.6)}" y="52" width="${f1(CW - 1.2)}" height="${BH}" rx="1" fill="var(--terra)"/>`
+      + arrowSvg(X0 + CW / 2, 90, X0 + CW / 2, BY - 7, "var(--terra)", 1.6, "3 3") + svgLabel(X0 + CW + 10, 74, L.wait, "lg b", "start", "fill:var(--terra)");
+    s += `<line x1="${X1 + 8}" y1="${BY + BH / 2}" x2="628" y2="${BY + BH / 2}" stroke="var(--rule2)" stroke-width="9" opacity="0.6"/>` + svgLabel(706, BY - 22, L.out, "lg b", "end");
+    s += `<rect class="box" x="634" y="103" width="72" height="68" rx="8"/>` + svgLabel(670, 142, L.dev, "ink b");
+    return [H, s];
+  },
+  mesh(L) {
+    const H = 290, cols = [200, 275, 350, 425, 500], rows = [95, 160, 225];
+    let s = `<rect class="box" x="16" y="120" width="120" height="70" rx="8"/>` + svgLabel(76, 160, L.core, "ink b") + svgLabel(76, 212, L.coreclk, "mut", "middle");
+    for (const y of rows) s += `<line x1="${cols[0]}" x2="${cols[4]}" y1="${y}" y2="${y}" stroke="var(--rule2)"/>`;
+    for (const x of cols) s += `<line x1="${x}" x2="${x}" y1="${rows[0]}" y2="${rows[2]}" stroke="var(--rule2)"/>`;
+    for (const x of cols) for (const y of rows) s += `<rect x="${x - 13}" y="${y - 11}" width="26" height="22" rx="4" fill="var(--sunk)" stroke="var(--rule2)"/>`;
+    s += svgLabel(350, 62, L.mesh, "ink b") + svgLabel(350, 274, L.clk, "b", "middle", "fill:var(--timer)");
+    s += `<rect class="box" x="580" y="120" width="124" height="70" rx="8"/>` + svgLabel(642, 160, L.io, "ink b");
+    s += arrowSvg(136, 127, 580, 127, "var(--timer)", 3) + svgLabel(350, 145, L.write, "lg b halo", "middle", "fill:var(--timer)");
+    s += arrowSvg(580, 192, 136, 192, "var(--timer)", 2, "6 4") + svgLabel(350, 186, L.ack, "lg b halo", "middle", "fill:var(--timer)");
+    return [H, s];
+  },
+  lanes(L) {
+    const GX = 440, GY = 96, GW = 18, GH = 26, H = 340, COL = ["var(--ink)", "var(--peri)", "var(--count)", "var(--terra)"];
+    let s = `<rect class="box" x="16" y="90" width="112" height="112" rx="8"/>` + svgLabel(72, 140, L.core, "ink b") + svgLabel(72, 162, L.order, "mut", "middle", "font-size:11.5px");
+    s += svgLabel(140, 80, L.lanes, "lg b", "start") + svgLabel(GX, 80, L.page, "lg b", "start");
+    for (let r = 0; r < 4; r++) {
+      const y = GY + r * GH + GH / 2;
+      s += `<line x1="128" x2="${GX - 3}" y1="${y}" y2="${y}" stroke="var(--rule2)" stroke-width="9" stroke-linecap="round" opacity="0.6"/>`;
+      s += `<g transform="translate(${150 + r * 22} ${y})"><g class="go" style="animation-delay:${-0.65 * r}s"><rect x="-11" y="-7" width="22" height="14" rx="3" fill="${COL[r]}"/><text y="4" text-anchor="middle" class="mono b" style="font-size:9.5px;fill:var(--paper)">${r}</text></g></g>`;
+    }
+    for (let k = 0; k < 64; k++) {
+      const x = GX + Math.floor(k / 8) * GW, y = GY + (k % 8) * GH, on = k < 4;
+      s += `<rect x="${x + 0.8}" y="${y + 0.8}" width="${GW - 1.6}" height="${GH - 1.6}" rx="1.5" fill="${on ? "color-mix(in srgb, var(--ink) 18%, var(--card))" : "var(--card)"}" stroke="${on ? "var(--ink)" : "var(--rule2)"}" stroke-width="0.8"/>`;
+    }
+    s += arrowSvg(GX + 8 * GW + 6, GY + 4 * GH, 626, GY + 4 * GH, "var(--rule2)", 1.6);
+    s += `<rect class="box" x="630" y="${GY + 4 * GH - 32}" width="78" height="64" rx="8"/>` + svgLabel(669, GY + 4 * GH - 6, L.wq, "ink b") + svgLabel(669, GY + 4 * GH + 16, L.wqsub, "mut", "middle", "font-size:11.5px");
+    s += svgLabel(GX, GY + 8 * GH + 24, L.ignore, "lg", "start");
+    return [H, s];
+  },
+  wq(L) {
+    const H = 320;
+    let s = svgLabel(40, 30, L.in, "lg b", "start") + arrowSvg(110, 40, 110, 84, "var(--ink2)", 2);
+    s += `<rect x="42" y="104" width="156" height="184" fill="color-mix(in srgb, var(--ink) 14%, transparent)"/><path d="M40 84 V290 H200 V84" fill="none" stroke="var(--ink2)" stroke-width="2"/>` + svgLabel(120, 200, L.wq, "ink b");
+    s += arrowSvg(204, 190, 262, 190, "var(--rule2)", 1.6);
+    for (let r = 0; r < 4; r++) {
+      const y = 108 + r * 50;
+      s += svgLabel(272, y + 20, `${L.eng} ${r}`, "lg", "start");
+      for (let j = 0; j < 3; j++) s += `<rect x="${340 + j * 30}" y="${y}" width="26" height="30" rx="2" fill="var(--ink2)"/>`;
+    }
+    s += svgLabel(383, 96, L.slots, "lg b");
+    s += `<path d="M124 50 H560 V150" fill="none" stroke="var(--bad)" stroke-width="2" stroke-dasharray="6 4"/>`
+      + `<path d="M552 154 L568 170 M568 154 L552 170" stroke="var(--bad)" stroke-width="2.6"/>` + svgLabel(560, 192, L.drop, "lg b", "middle", "fill:var(--bad)");
+    s += `<line x1="560" x2="560" y1="200" y2="226" stroke="var(--rule2)" stroke-dasharray="2 3"/><rect class="box" x="452" y="226" width="256" height="62" rx="8"/>`
+      + svgLabel(580, 252, L.err, "ink b") + svgLabel(580, 274, L.errsub, "mut");
+    return [H, s];
+  },
+  mem(L) {
+    const H = 290, rd = "var(--timer)", wr = "var(--terra)";
+    const box = (x, y, w, h, lab) => `<rect class="box" x="${x}" y="${y}" width="${w}" height="${h}" rx="8"/>` + svgLabel(x + w / 2, y + 28, lab, "ink b");
+    const chans = (x, y, frac, col) => [0, 1].map((j) => `<rect x="${x + j * 60}" y="${y}" width="52" height="9" rx="2" fill="var(--sunk)" stroke="var(--rule2)"/><rect x="${x + j * 60}" y="${y}" width="${f1(52 * frac)}" height="9" rx="2" fill="${col}"/>`).join("");
+    let s = svgLabel(20, 26, L.left, "ink b", "start") + box(40, 50, 96, 50, L.dev) + box(176, 148, 152, 66, L.n0) + chans(192, 192, 1, "var(--bad)");
+    s += arrowSvg(200, 146, 102, 102, rd, 2.4) + svgLabel(138, 136, L.rd, "lg b halo", "end", `fill:${rd}`);
+    s += arrowSvg(138, 80, 290, 146, wr, 2.4) + svgLabel(236, 100, L.wr, "lg b halo", "start", `fill:${wr}`);
+    s += svgLabel(20, 250, L.sumL, "lg b", "start", "fill:var(--bad)");
+    s += `<line x1="360" x2="360" y1="16" y2="276" stroke="var(--rule)" stroke-dasharray="4 4"/>`;
+    s += svgLabel(380, 26, L.right, "ink b", "start") + box(448, 50, 96, 50, L.dev) + box(380, 148, 140, 66, L.n0) + box(556, 148, 140, 66, L.n1);
+    s += chans(390, 192, 0.53, rd) + chans(566, 192, 0.53, wr);
+    s += arrowSvg(440, 146, 476, 102, rd, 2.4) + svgLabel(448, 128, L.rd, "lg b halo", "end", `fill:${rd}`);
+    s += arrowSvg(518, 102, 600, 146, wr, 2.4) + svgLabel(570, 116, L.wr, "lg b halo", "start", `fill:${wr}`);
+    s += svgLabel(380, 250, L.sumR, "lg b", "start", "fill:var(--known)");
+    return [H, s];
+  },
+};
+function figSchema(f) {
+  const [H, s] = SCHEMA[f.draw](f.labels);
+  return [H, s + (f.mark ? markSvg(f.mark.x, f.mark.y, f.mark, H) : ""), ""];
+}
+const FIG = { line: figLine, bars: figBars, strip: figStrip, code: figCode, schema: figSchema };
+function stepHtml(c, i) {
+  const st = c.steps[i], f = st.fig, [H, body, legend] = FIG[f.type](f), n = c.steps.length;
+  return `<div class="cstep" data-i="${i}"><figure class="cfig" style="margin:0"><h4>${esc(f.title)}</h4>${legend}`
+    + `<svg class="csvg" viewBox="0 0 ${FW} ${H}" role="img" aria-label="${esc(f.title)}">${body}</svg><p class="look">${rich(f.look)}</p></figure>`
+    + `<div class="ctext"><div class="kind" style="--c:var(--${KIND_C[st.kind]})"><i></i>${esc(CU.kinds[st.kind])}</div><h3>${esc(st.head)}</h3>${st.text.map((p) => `<p>${rich(p)}</p>`).join("")}`
+    + `<div class="cnav"><button class="ghost" data-cs="${c.id}:prev"${i ? "" : " disabled"}>${esc(CU.prev)}</button><span class="n">${esc(CU.stepOf.replace("{i}", i + 1).replace("{n}", n))}</span>`
+    + `<button class="ghost" data-cs="${c.id}:next"${i < n - 1 ? "" : " disabled"}>${esc(CU.next)}</button></div></div></div>`;
+}
+function caseCard(c, k) {
+  const qa = (q) => `<div class="qa"><div class="q">${esc(q.q)}</div><div class="a">${q.a.map((p) => `<p>${rich(p)}</p>`).join("")}</div>`
+    + `${q.link ? `<button class="ghost" data-cgo="${q.link}">${esc(q.linkText)} →</button>` : ""}</div>`;
+  return `<article class="ccard" id="case-${c.id}"><div class="ck">${esc(CU.caseLabel)} ${k + 1}</div><h2>${esc(c.title)}</h2>`
+    + `<div class="cdots">${c.steps.map((st, i) => `<button class="cdot" data-cs="${c.id}:${i}" style="--c:var(--${KIND_C[st.kind]})"><i></i>${esc(CU.kinds[st.kind])}</button>`).join("")}</div>`
+    + `<div class="cbody"></div>`
+    + `<details class="params cmore"><summary>${esc(CU.faq)}</summary><div class="cfaq">${c.faq.map(qa).join("")}</div></details>`
+    + `<details class="params cmore"><summary>${esc(CU.ev)}</summary><table class="fnumt">${c.ev.map((d) => `<tr><td>${esc(d.k)}</td><td>${rich(d.v)}<span class="src">${esc(d.src)}</span></td></tr>`).join("")}</table>`
+    + `<p class="note">${esc(CU.evChips)}</p><div class="chips">${c.chips.map((id) => expChip(exp[id])).join("")}</div></details></article>`;
+}
+function renderCase(id, enter) {
+  const c = CASE[id], card = $("#case-" + id), body = $(".cbody", card), i = caseStep[id];
+  card.classList.toggle("call", casesAll);
+  body.innerHTML = casesAll ? c.steps.map((_, j) => stepHtml(c, j)).join("") : stepHtml(c, i);
+  $$(".cdot", card).forEach((b, j) => b.classList.toggle("on", j === i));
+  if (enter && !casesAll) body.firstElementChild.classList.add("enter");
+}
+function caseGo(id, i) {
+  caseStep[id] = Math.max(0, Math.min(CASE[id].steps.length - 1, i));
+  renderCase(id, true);
+}
+function setCasesAll(on) {
+  casesAll = on;
+  $$("#caseMode .chip").forEach((b) => b.classList.toggle("on", (b.dataset.cm === "all") === on));
+  M.cases.forEach((c) => renderCase(c.id, false));
+}
+$('#tabs [data-tab="find"]').textContent = CU.tab;
+$("#casesIntro").textContent = CU.intro;
+$("#caseMode").innerHTML = `<button class="chip on" data-cm="step">${esc(CU.modeStep)}</button><button class="chip" data-cm="all">${esc(CU.modeAll)}</button>`;
+$("#caseMode").addEventListener("click", (e) => { const b = e.target.closest("[data-cm]"); if (b) setCasesAll(b.dataset.cm === "all"); });
+$("#casecards").innerHTML = M.cases.map(caseCard).join("");
+M.cases.forEach((c) => renderCase(c.id, false));
+$("#casecards").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-cs]");
+  if (b) { const [id, w] = b.dataset.cs.split(":"); caseGo(id, w === "prev" ? caseStep[id] - 1 : w === "next" ? caseStep[id] + 1 : +w); return; }
+  const g = e.target.closest("[data-cgo]");
+  if (!g) return;
+  const t = $("#case-" + g.dataset.cgo);
+  t.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+  t.classList.add("flash");
+  setTimeout(() => t.classList.remove("flash"), 1800);
+});
+
+// ---------- hash ----------
+function writeHash() {
+  const p = new URLSearchParams();
+  if (state.tab === "find") { history.replaceState(null, "", location.pathname + location.search); return; }
+  p.set("tab", state.tab);
+  if (state.cmp) p.set("cmp", state.cmp.join(","));
+  else if (state.sel) p.set("sel", state.sel);
+  if (!state.cmp && state.tab === "pipe" && state.sel && state.sel.startsWith("x:") && PLAYERS.main.i) p.set("step", PLAYERS.main.i + 1);
+  if (state.preset) p.set("preset", state.preset);
+  const h = p.toString();
+  history.replaceState(null, "", h ? "#" + h : location.pathname + location.search);
+}
+
+// ---------- boot ----------
+buildControls();
+const h = new URLSearchParams(location.hash.slice(1));
+const preset = PRESETS[h.get("preset")] ? h.get("preset") : null;
+Object.assign(P, PRESET_BASE, PRESETS[preset || "trace0"][1]());
+state.preset = preset;
+syncControls();
+runSim(false);
+const sel0 = h.get("sel");
+state.sel = sel0 && ((sel0.startsWith("x:") && exp[sel0.slice(2)]) || (sel0.startsWith("c:") && comp[sel0.slice(2)])) ? sel0 : null;
+const tab0 = { find: "find", pipe: "pipe", audit: "audit", forks: "forks", sim: "sim", data: "data" }[h.get("tab")] || (preset ? "sim" : state.sel || h.get("cmp") ? "pipe" : "find");
+state.tab = tab0; // before render/load, which write the hash
+render();
+PLAYERS.main.load(state.sel && state.sel.startsWith("x:") ? state.sel.slice(2) : "baseline", Math.max(0, (+h.get("step") || 1) - 1));
+setTab(tab0, { push: false });
+const cmp0 = (h.get("cmp") || "").split(",");
+if (cmp0.length === 2 && exp[cmp0[0]] && exp[cmp0[1]]) enterCompare(cmp0[0], cmp0[1]);
+</script>
+</body>
+</html>

@@ -1,0 +1,465 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>coreside: is the ~114–116 knee the core store buffer? (P0, P2, P3, Q8, the mid-K anomaly)</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Noto+Serif+SC:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"><style>
+:root { --paper:#faf9f5; --card:#fffefb; --sunk:#f3f1eb; --ink:#161514; --ink2:#3b3935; --muted:#7a776f; --rule:#e4e0d6; --rule2:#cfcabe;
+  --serif:"Newsreader","Noto Serif SC",Georgia,serif; --sans:"Inter","PingFang SC","Noto Sans SC",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace; }
+@media (prefers-color-scheme: dark) { :root { --paper:#141311; --card:#1b1a17; --sunk:#201f1b; --ink:#ece8df; --ink2:#cfcac0; --muted:#9a958a; --rule:#2f2d29; --rule2:#46433c; } }
+body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.65 var(--sans); -webkit-font-smoothing:antialiased; }
+.wrap { max-width:980px; margin:0 auto; padding:28px 28px 80px; }
+nav.crumb { font:500 12px var(--mono); letter-spacing:.04em; color:var(--muted); margin-bottom:22px; }
+nav.crumb a { color:var(--muted); }
+h1, h2, h3 { font-family:var(--serif); font-weight:500; line-height:1.25; }
+h1 { font-size:30px; margin:0 0 18px; } h2 { font-size:22px; margin:34px 0 10px; padding-top:14px; border-top:1px solid var(--rule); } h3 { font-size:18px; margin:24px 0 8px; }
+a { color:var(--ink); text-decoration-color:var(--rule2); text-underline-offset:3px; }
+code { font:13px var(--mono); background:var(--sunk); padding:1px 4px; border-radius:4px; overflow-wrap:anywhere; }
+pre { background:var(--sunk); padding:12px 14px; border-radius:8px; overflow:auto; } pre code { background:none; padding:0; }
+table { border-collapse:collapse; margin:12px 0; font-size:13.5px; display:block; overflow-x:auto; }
+th, td { border-bottom:1px solid var(--rule); padding:6px 10px; text-align:left; vertical-align:top; }
+th { font:500 12px var(--mono); color:var(--muted); border-bottom:1px solid var(--rule2); }
+blockquote { margin:12px 0; padding:4px 14px; border-left:3px solid var(--rule2); color:var(--ink2); }
+ul.notes { list-style:none; padding:0; } ul.notes li { padding:14px 0; border-bottom:1px solid var(--rule); }
+ul.notes a { font:500 18px var(--serif); } ul.notes .d { color:var(--ink2); } ul.notes .t { font:12px var(--mono); color:var(--muted); }
+.lead { color:var(--ink2); }
+</style></head><body><main class="wrap"><nav class="crumb"><a href="../">DSA 提交流水线</a> · <a href="./">实验笔记</a> · coreside</nav><h1>coreside: is the ~114–116 knee the core store buffer? (P0, P2, P3, Q8, the mid-K anomaly)</h1>
+<p>Machine: Xeon Gold 6438M (SPR / Golden Cove), side A = cpu 2 (SMT sibling 66) + dsa0, side B = cpu 34
+(sibling 98) + dsa2. All device runs use <code>dsa-config/4-engine.conf</code>, noop descriptors, and Drain.
+The heaters ran (8 threads, mesh ~2.2 GHz) unless noted. Every device run had <code>errors_total = 0</code>
+and <code>missing = 0</code>. Run directories are relative to <code>dsa-lab-runs/</code>.</p>
+<p>Probes (committed in this workspace):</p>
+<ul>
+<li><code>src/bin/p0_sb_size.rs</code>: CPU only. A JIT-generated loop runs two pointer-chase chains that miss
+to DRAM through one random cycle in a 512 MiB huge-page buffer, with chain heads carried
+across calls: <code>[SERIALIZE]; mov (%rdi),%rdi; N fillers; mov (%rsi),%rsi</code>. Fillers can be store,
+store64, nop, load or movdir64b. It reads RESOURCE_STALLS.SB and EXE_ACTIVITY.BOUND_ON_STORES.
+<code>--sib compute|store</code> puts a loop on the SMT sibling.</li>
+<li><code>src/bin/cs_knee.rs</code>: X1 with knobs. <code>--m</code> adds plain stores after each prefill MOVDIR64B.
+<code>--sib</code> loads the SMT sibling. <code>--timed-stores j</code> adds plain stores inside the timed window.
+<code>--timed-op</code> swaps in a control op. <code>--gap-ns</code>, <code>--clear all|used|status</code>, <code>--pre zmm|ymm|spin|wb64:&lt;ms&gt;</code>,
+<code>--row-pause-us</code>, <code>--freq</code> (per-iteration core GHz and time), <code>--pmu</code> and <code>--trace</code> are also there.
+The timed submit is one asm block (<code>rdtscp; movdir64b; [j stores]; rdtscp</code>) with no stores in
+between. The binary maps the portal and drains it itself, because a dedicated WQ can only be
+opened once. <code>prefill_ns</code> (t0 − t_start) works as a trace without stores: its increment at K is
+what the K-th prefill submit cost.</li>
+</ul>
+<p>Event codes come from Intel perfmon <code>SPR/events/sapphirerapids_core.json</code> V1.40
+(https://github.com/intel/perfmon/blob/main/SPR/events/sapphirerapids_core.json):
+RESOURCE_STALLS.SB = event 0xA2 umask 0x08, &quot;Cycles stalled due to no store buffers available
+(not including draining form sync)&quot;. EXE_ACTIVITY.BOUND_ON_STORES = 0xA6 / 0x40 / cmask 2.</p>
+<hr />
+<h2>P0: how big is this core's store buffer (no device)?</h2>
+<p><strong>Question.</strong> How many plain stores fit behind a long-latency blocker before allocation stalls?</p>
+<p><strong>Predictions (model.js P0).</strong> The Golden Cove public value is 114. If the result is not ~114,
+the coincidence behind Q1 falls apart.</p>
+<p><strong>Method and validation.</strong> Each iteration runs a DRAM miss, then N fillers, then a second,
+independent DRAM miss, with SERIALIZE at the top of the iteration. If the N fillers fit in the
+resource, the two misses overlap and an iteration costs about one miss latency plus the SERIALIZE
+cost. If they don't fit, the second miss can't be allocated until the first one retires, which adds
+about one more miss latency (~+95 ns). SERIALIZE stops run-ahead into the next iteration, so
+RESOURCE_STALLS.SB is exactly 0 until N stores themselves overflow the SB. That makes the counter
+an independent signal, not a background level.</p>
+<p>Two earlier designs were dropped and are not used in this note:</p>
+<ul>
+<li><code>P0/…021443Z-A-store-v1</code>: a bug made both chains re-walk the same 20k lines, so they hit in the LLC.</li>
+<li><code>P0/…021621Z-A-store-v2</code>: no fence. Run-ahead fills the SB at every N, so the counter reads about
+240 cycles per iteration everywhere and the step is only +20 ns.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>filler (resource)</th>
+<th>runs</th>
+<th>last N that fits</th>
+<th>first slow N</th>
+<th>SB-stall counter onset</th>
+<th>public value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>plain store, 1 line</td>
+<td><code>P0/…021744Z-A-store-ser-fine-r0</code>, <code>-r1</code> (…021746Z), <code>-r2</code> (…021748Z), <code>P0/…021723Z-A-store-ser</code></td>
+<td><strong>112</strong> (all 4)</td>
+<td><strong>113</strong> (fine runs; coarse run: 114)</td>
+<td><strong>112</strong> (all 4)</td>
+<td>SB 114</td>
+</tr>
+<tr>
+<td>plain store, 64 lines</td>
+<td><code>P0/…021817Z-A-store64-ser</code></td>
+<td>112</td>
+<td>113</td>
+<td>112</td>
+<td>SB 114</td>
+</tr>
+<tr>
+<td>MOVDIR64B → WB line</td>
+<td><code>P0/…021821Z-A-movdir64b-ser</code>, <code>P0/…021909Z-A-movdir64b-ser-fine</code></td>
+<td>timing unusable (~150 ns per MOVDIR64B to WB memory, serialized)</td>
+<td>—</td>
+<td><strong>114</strong> (both; 113 → 4.7 cyc, 114 → 331 cyc, then +~560 cyc per extra)</td>
+<td>—</td>
+</tr>
+<tr>
+<td>nop (ROB check: <strong>inconclusive</strong>)</td>
+<td><code>P0/…021805Z-A-nop-ser</code></td>
+<td>step between 496 and 500, but not monotonic: 509–512 cost 347–349 ns, 514–640 only 280–288 ns</td>
+<td>—</td>
+<td>never</td>
+<td>ROB 512</td>
+</tr>
+<tr>
+<td>load (load buffer check)</td>
+<td><code>P0/…021819Z-A-load-ser</code></td>
+<td>190</td>
+<td>191</td>
+<td>never</td>
+<td>LB 192</td>
+</tr>
+<tr>
+<td>store, 2 blocks (A;N;B;N)</td>
+<td><code>P0/…021907Z-A-store-ser-2block</code></td>
+<td>110</td>
+<td>111</td>
+<td><strong>56</strong> (2N ≥ 112)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>At the plain-store knee the step is +91…+106 ns, one extra DRAM latency (for example 183.7 → 278.3 ns
+at 112 → 113 in r0). Below the knee the counter reads exactly 0.</p>
+<p><strong>Result.</strong> In this serialized sequence, 112 plain stores fit behind an outstanding miss and 113 do not. The SB-full event
+first fires at N = 112, and for MOVDIR64B at N = 114 (two runs). That gives a store buffer of
+<strong>~112–114 entries</strong>, and <strong>one MOVDIR64B takes one SB entry</strong>: 114 MOVDIR64B fit before the
+counter fires, where 2 entries per MOVDIR64B would have made it fire at ~57. The 2-entry difference
+between plain stores (112) and MOVDIR64B (114) is <strong>unresolved</strong>; nothing measured here attributes
+it.</p>
+<p>Validation: the same loop finds the load buffer at 191 (public 192), a structure of known size.
+The store64 filler (64 distinct lines) gives the same knee and counter onset as stores to one line.
+The SB counter is 0 for the load filler at every N, and 0 below the knee for the store fillers.
+In the two-block layout the counter fires at 2N ≈ 112, so it tracks total SB occupancy. The
+timing knee moves only to N ≈ 111 (not ~56), which means the second block barely delays the
+second miss here. Why it moves by 1–2 rather than 0 is not explained, so this layout shows the
+counter's meaning but does not by itself validate the timing method. The nop sweep (meant to check the ROB) is <strong>inconclusive</strong>: it has a step
+near 500, but its timing is not monotonic above that (see table), most likely because the
+front end can't keep up with loop bodies of ~500 one-byte nops [INFERENCE]. I don't use it as
+validation.</p>
+<p><strong>Survives:</strong> prediction &quot;≈114&quot;. <strong>Evidence:</strong> timing signature, an independent PMU count, and
+one known-size control (the load buffer) plus the store64 cross-check. <strong>Caveats:</strong> the core clock moved between 2.2 and 3.9 GHz from
+run to run (other agents' load). The knee position did not change, but the latency did.</p>
+<h2>P2: m plain stores after each prefill MOVDIR64B</h2>
+<p><strong>Question.</strong> Do plain stores, which never reach the device, move the knee?</p>
+<p><strong>Predictions (model.js P2).</strong> Q1-b (SB) predicts a knee ≈ 114/(1+m): 114, 57, 38, 23, 13.
+Q1-c (device ingress) predicts no earlier knee.</p>
+<p><strong>Runs.</strong> The final binary, with <code>--clear status</code> (see the anomaly section) and K = 0..130 at every
+K, 30 iterations each:
+<code>P2/…023206Z-B-final-m{0,1}-r0</code>, <code>P2/…02320{7,8,9}Z-A-final-m{2,4,8}-r0</code>, <code>P2/…02321{2,3,4}Z-A-final-m*-r1</code>,
+<code>P2/…0232{17,18,19,20}Z-A-final-m*-r2</code>. An earlier binary (also clean in the timed window, checked
+in its disassembly) was run 3× on side B and A: <code>P2/…022130Z-B-m0</code> … <code>P2/…022239Z-A-m8-r2</code>. The
+PMU runs are <code>P2/…02234{6,7,8,9}Z-A-m{0,1,4}-pmu2-r*</code> and <code>P2/…022350Z-A-m4-pmu2-r1</code>.</p>
+<table>
+<thead>
+<tr>
+<th>m</th>
+<th>predicted (SB)</th>
+<th>first stalled prefill submit K* (3 final runs)</th>
+<th>earlier binary (3 runs)</th>
+<th>timed K+1 knee</th>
+<th>SB-stall onset (PMU, 2 runs)</th>
+<th>write-out cadence above the knee (prefill slope)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>114</td>
+<td><strong>117, 117, 117</strong></td>
+<td>118, 118, 118</td>
+<td>116</td>
+<td>K = 114</td>
+<td>97–107 ns</td>
+</tr>
+<tr>
+<td>1</td>
+<td>57</td>
+<td><strong>59, 60, 60</strong></td>
+<td>60, 60, 60</td>
+<td>58–59</td>
+<td>K = 58</td>
+<td>106 ns (129 in r0: mesh fell to 1.65 GHz)</td>
+</tr>
+<tr>
+<td>2</td>
+<td>38</td>
+<td><strong>41, 41, 41</strong></td>
+<td>41, 41, 41</td>
+<td>none (see below)</td>
+<td>—</td>
+<td>106–111 ns</td>
+</tr>
+<tr>
+<td>4</td>
+<td>23</td>
+<td><strong>26, 25, 25</strong></td>
+<td>25, 25, 25</td>
+<td>none</td>
+<td>K = 24</td>
+<td>106–110 ns</td>
+</tr>
+<tr>
+<td>8</td>
+<td>13</td>
+<td><strong>15, 15, 15</strong></td>
+<td>15, 15, 15</td>
+<td>none</td>
+<td>—</td>
+<td>106–110 ns</td>
+</tr>
+</tbody>
+</table>
+<p>A least-squares fit of K* = C/(1+m) + D over the 15 final runs gives <strong>C = 114.6 entries</strong> and
+<strong>D = 2.45</strong> MOVDIR64B written out during the prefill. It predicts 117.0 / 59.7 / 40.6 / 25.4 / 15.2.
+<code>cs_knee --trace</code> (exactly one store per submit, but the prefill is slower at ~19 ns per submit)
+stalls first at submit 70 (<code>ANOM/…023502Z-A-trace-status-clear</code>). That fits the same model with
+D ≈ 12.7: 1.33 µs of prefill at ~105 ns per write-out. It also explains X3's knee of 21 (about
+5–6 entries per traced submit).</p>
+<p><strong>Survives:</strong> Q1-b. Q1-c is <strong>killed</strong>, because stores that never reach the device move the knee
+exactly as entry counting predicts. <strong>Evidence:</strong> timing (prefill increments, timed submit), counts
+(RESOURCE_STALLS.SB onset at K = 114 / 58 / 24, and ~410 stall cycles at 3.9 GHz ≈ 105 ns per
+extra K, which is one write-out), and a manipulation (m).</p>
+<p><strong>Note on m ≥ 2.</strong> &quot;Timed K+1 &gt; 55 ns&quot; never fires for m ≥ 2, even though the prefill slows to one
+write-out per submit. A write-out frees 1+m entries at once (the plain stores behind the MOVDIR64B
+commit right after it). The stall lands on a plain store in the prefill, and the timed MOVDIR64B
+then finds a free entry. The pressure point has to be read from <code>prefill_ns</code>, not from the timed
+submit.</p>
+<p><strong>Caveats.</strong> D depends on how fast the prefill runs. C rests on the assumption that the write-out
+of the first MOVDIR64B starts right away.</p>
+<h2>P3: SMT sibling idle or busy</h2>
+<p><strong>Question.</strong> Does the knee halve when the hyperthread sibling is active?</p>
+<p><strong>Predictions (model.js P3).</strong> If the SB is statically partitioned (Q1-b), the knee drops to ~57.
+If the limit is in the device (Q1-c), nothing changes. Both CPUs are kept out of the heaters (the
+lib excludes siblings).</p>
+<table>
+<thead>
+<tr>
+<th>sibling (LAB_SIB)</th>
+<th>device: first stalled submit (3 final runs)</th>
+<th>device: timed knee</th>
+<th>earlier binary, side B</th>
+<th>CPU-only P0 (no device): last N that fits / SB onset</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>idle</td>
+<td>119, 117, 117</td>
+<td>118, 116, 116</td>
+<td>118</td>
+<td>112 / 112 (<code>P3/…021919Z-B-cpu-store-ser-sib-none</code>)</td>
+</tr>
+<tr>
+<td>compute loop (imul chain, no memory)</td>
+<td><strong>60, 60, 60</strong></td>
+<td>59, 59, 59</td>
+<td>60</td>
+<td><strong>56 / 56</strong> (<code>P3/…021921Z-B-cpu-store-ser-sib-compute</code>)</td>
+</tr>
+<tr>
+<td>store loop (8 stores per iteration, one line)</td>
+<td><strong>60, 60, 60</strong></td>
+<td>60, 60, 60</td>
+<td>61</td>
+<td><strong>56 / 56</strong> (<code>P3/…021923Z-A-cpu-store-ser-sib-store</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>Device runs: <code>P3/…0232{09,10,11}Z-A-final-sib-{none,compute,store}-r0</code>, <code>…02321{5,6}Z-…-r1</code>,
+<code>…0232{21,22}Z-…-r2</code>, and the earlier <code>P3/…02223{2,3}Z-B-dev-sib-*</code>. The write-out cadence above
+the knee did not change (106–107 ns).</p>
+<p><strong>Survives:</strong> Q1-b with <strong>static partitioning</strong>: a sibling that only computes, with no stores, is
+enough to halve it. Q1-c is killed again. <strong>Evidence:</strong> timing on the device, plus a CPU-only timing
+and PMU count that give the same halving, plus a manipulation (the sibling). [INFERENCE] The knee
+halves to the same 56/60 whether the sibling stores or not, so the effect comes from partitioning,
+not from competition for shared entries.</p>
+<h2>Q1 verdict</h2>
+<p><strong>The ~114–116 X1 knee is the core store buffer filling with MOVDIR64B (Q1-b).</strong> Each MOVDIR64B
+holds one SB entry until it is written out, about every 100 ns (mesh-dependent). The evidence
+comes in three independent kinds:</p>
+<ol>
+<li><strong>Timing signatures:</strong> the CPU-only SB is ~114 (P0). The device knee follows
+114.6/(1+m) + 2.5 for m = 0…8 (P2) and halves with an active sibling (P3), and the CPU-only knee
+halves the same way.</li>
+<li><strong>Counts:</strong> RESOURCE_STALLS.SB is exactly 0 below the knee in both the CPU-only and device runs.
+It turns on at the predicted entry count (P0: 112 stores / 114 MOVDIR64B; device: K = 114 / 58 /
+24 for m = 0/1/4) and grows by one write-out (~410 cycles) per extra descriptor.</li>
+<li><strong>Manipulations:</strong> adding plain stores (P2, and <code>--timed-stores</code> in Q8), an SMT sibling (P3),
+and AVX-512/clear controls (anomaly) each move the result the way the SB model predicts and the
+device-ingress model does not.</li>
+</ol>
+<p>Q1-c (device or IIO ingress buffer) is killed: plain stores can't reach the device, yet they move
+the knee. Q1-a stays ruled out.</p>
+<h2>Q8: why the timed submit costs a full ~105 ns</h2>
+<p>Runs: <code>Q8/…02323{7,8,9}Z-B-timed-stores{0..3}-r0</code>, <code>Q8/…0232{40,41,42}Z-B-timed-stores*-r1</code>, and the
+gap sweep <code>Q8/…02325{3,4,5,7,8}Z-B-gap{0,25,50,75,100,150}</code>.</p>
+<table>
+<thead>
+<tr>
+<th>plain stores inside the timed window (after the MOVDIR64B)</th>
+<th>timed plateau, K ≥ 118 (2 runs)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>92 / 93 ns</td>
+</tr>
+<tr>
+<td>1</td>
+<td>189 / 189 ns</td>
+</tr>
+<tr>
+<td>2</td>
+<td>288 / 286 ns</td>
+</tr>
+<tr>
+<td>3</td>
+<td>383 / 386 ns</td>
+</tr>
+</tbody>
+</table>
+<p>Each store costs one more write-out (~96 ns): once the SB is full, entries free one at a time,
+one per write-out. Before I fixed it, my own probe did this by accident. Rust spilled t0 to the
+stack between the MOVDIR64B and the second rdtscp (<code>mov %rax,-0x288(%rbp)</code> in the disassembly),
+and the plateau became 204–209 ns while the prefill slope stayed at 107 ns
+(<code>ANOM/…022407Z-A-cs-x1ks-r{0,1}</code>). The final binary times inside a single asm block.</p>
+<p>Gap sweep with clean timing: gap 0 gives a timed plateau of 96 ns. Gap 25 ns gives 63 ns
+(cadence − gap − ~8 ns loop overhead), with the knee pushed to K ≈ 192. Gap ≥ 50 ns leaves the SB
+nearly or entirely unfilled (with gap 50 the mesh was at 1.74 GHz and only K = 384 showed 27 ns).
+So <strong>Q8-a holds in a clean measurement</strong>: the timed submit waits only for the next write-out, minus
+the gap. The old X2 result (~105 ns no matter the gap) fits <strong>Q8-b</strong>: one extra store inside the
+timed window adds exactly one write-out. [INFERENCE] hw-eval's <code>measured_call(|| wq.submit(desc))</code>
+may spill like this. Its assembly was not inspected. Q8-c also holds: release is discrete, one
+entry per write-out.</p>
+<h2>Mid-K anomaly (X1 with heaters: submit K+1 ≈ 40 ns for K = 32..96)</h2>
+<p><strong>Question.</strong> Why is the timed submit ~40 ns at K = 32..96 but ~10 ns at K = 0 and K ≥ 104
+(<code>X1/…020842Z-AB-heaters8-v2</code>, <code>X1/…020843Z-AB-heaters8-v2</code>)?</p>
+<p>Hypotheses written down before running:</p>
+<ul>
+<li>(h1) Older stores (the completion-record clear, which misses because the device wrote those
+lines) sit in the SB ahead of the prefill.</li>
+<li>(h2) It depends on mesh clock and gap through how many descriptors have already left the SB.</li>
+<li>(h3) Something that depends on time, not on K.</li>
+</ul>
+<p><strong>Findings.</strong></p>
+<ol>
+<li>
+<p><strong>It depends on time, not K.</strong> It reproduces with unmodified <code>x1_knee</code>
+(<code>ANOM/…02240{5,6}Z-A-x1-repro-r{0,1,2}</code>). With the row order reversed it goes away
+(<code>ANOM/…022443Z-A-x1-rev</code>: K = 96, 64, 32 all at 17 ns). With 16 rows at K = 64, only the first
+~85–100 iterations (≈ 0.6–1.5 ms) are slow (33–47 ns) and the rest are a flat 17 ns
+(<code>ANOM/…022440Z-A-cs-rep64</code>, <code>ANOM/…022442Z-A-x1-rep64</code>, <code>ANOM/…022532Z-A-cs-rep64-freq</code>). X1's
+default K list simply puts K = 32/64/96 in the first ~1 ms after warm-up.</p>
+</li>
+<li>
+<p><strong>It is not tied to K or to SB occupancy.</strong> Inside the window every K in 1..64 costs +23 ns, and
+so does K = 0 when it isn't the first row (<code>ANOM/…02331{1,2}Z-A-kgran-h8-r*</code>,
+<code>ANOM/…022622Z-A-cs-cycleK-freq</code>). (h1) and (h2) are killed.</p>
+</li>
+<li>
+<p><strong>It does not depend on the mesh clock.</strong> At an idle mesh (heaters 0, <code>--side both</code>, uncore 0.24–0.88
+GHz) the excess is the same +23 ns (<code>ANOM/…02331{2,3}Z-AB-kgran-h0-r*</code>). With gap 200 ns the
+window looks shorter (<code>ANOM/…02331{4,5}Z-A-kgran-h8-gap200-r*</code>).</p>
+</li>
+<li>
+<p><strong>It slows the timing instrument, not MOVDIR64B.</strong> An empty <code>rdtscp; rdtscp</code> window, a plain store,
+and a zmm store all take +23 ns in the same rows (<code>ANOM/…02340{0..5}Z-A-ctl-*</code>).
+Per-iteration user-mode core GHz is 13–15% low during the window (e.g. 1.82 vs 2.12, 3.25 vs 3.8).</p>
+</li>
+<li>
+<p><strong>Trigger: the AVX-512 memset in <code>Slots::clear</code>.</strong> glibc 2.35 runs here with
+<code>Prefer_No_AVX512=0</code>, so memset takes the AVX-512 variant.</p>
+<table>
+<thead>
+<tr>
+<th>condition</th>
+<th>anomalous iterations (2 runs)</th>
+<th>runs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>default clear</td>
+<td>112 / 118 of 360</td>
+<td><code>ANOM/…02274{0,4}Z-B-pre-none-r*</code></td>
+</tr>
+<tr>
+<td>scalar clear (status bytes only)</td>
+<td><strong>0 / 0</strong></td>
+<td><code>ANOM/…022906Z-B-clear-status-r0</code>, <code>ANOM/…022910Z-A-clear-status-r1</code></td>
+</tr>
+<tr>
+<td><code>GLIBC_TUNABLES=glibc.cpu.hwcaps=Prefer_No_AVX512</code></td>
+<td><strong>2 / 0</strong> of 240</td>
+<td><code>ANOM/…02300{5,7}Z-A-tun-noavx512-r*</code></td>
+</tr>
+<tr>
+<td>rep_stosb_threshold raised (vector memset)</td>
+<td>still anomalous</td>
+<td><code>ANOM/…02300{5,8}Z-A-tun-nostosb-r*</code></td>
+</tr>
+<tr>
+<td>5 ms zmm <code>vpaddq</code> loop first</td>
+<td><strong>0 / 0</strong></td>
+<td><code>ANOM/…02274{2,5}Z-B-pre-zmm5-r*</code></td>
+</tr>
+<tr>
+<td>5 ms ymm loop / 20 ms spin / 5 ms MOVDIR64B to WB first</td>
+<td>does not help</td>
+<td><code>ANOM/…02274{1,2,3,4,6}Z-*-pre-*</code></td>
+</tr>
+</tbody>
+</table>
+<p>Scalar pauses before each row: 0.3 and 1 ms pauses do not bring it back, while 3 ms and 10 ms
+pauses bring it back at every row, with or without zmm pre-warm
+(<code>ANOM/…0228{23..31}Z-A-pause*</code>).</p>
+</li>
+</ol>
+<p><strong>Explanation [INFERENCE].</strong> The pattern matches an AVX-512 frequency-license or power transition.
+512-bit instructions trigger it (ymm do not), it lasts ~0.5–1.5 ms, and it decays after somewhere
+between 1 and 3 ms without 512-bit work. During the transition the core is partly stalled, and any
+TSC-timed window inflates by about +23 ns. The exact trigger inside the clear (zmm stores vs.
+something else in the AVX-512 string path) is not pinned down. Rows of K = 0 at the very start
+sometimes did not trigger it (<code>ANOM/…02340{0..5}Z-A-ctl-*</code>, rows 0–1), which suggests it depends on
+the zmm store density or on the device-written lines. There is no SPR perfmon event for licenses
+(CORE_POWER.* is absent in V1.40), so this rests on manipulation, not a count.</p>
+<p><strong>Consequences.</strong> Earlier X1 numbers at K ≤ 96 (heaters runs) carry this artifact. The knee and
+plateau rows come later and are unaffected. Probes should avoid AVX-512 clears (scalar status
+clear, or <code>GLIBC_TUNABLES=glibc.cpu.hwcaps=Prefer_No_AVX512</code>) or pre-warm with zmm. The zmm pre-warm
+also lowers the core clock a little (10.9 vs 10.0 ns baseline). All final P2/P3/Q8 runs use
+<code>--clear status</code>.</p>
+<h2>Suggested corrections to model.js</h2>
+<ul>
+<li><code>store_buffer</code>: badge &quot;114 项（实测）&quot;. P0 measured ~114 entries: 112 plain stores fit, and the
+SB-full event fires at 114 MOVDIR64B. One MOVDIR64B = one entry. Entries are statically split in
+half when the SMT sibling is active (P3: 56 CPU-only, 60 device).</li>
+<li>Q1: b → <strong>confirmed</strong>, with P0/P2/P3 as evidence (timing + RESOURCE_STALLS.SB + manipulations).
+c → <strong>ruled_out</strong> (P2: plain stores move the knee as C/(1+m) + D with C = 114.6; P3 halves it).</li>
+<li>Knee arithmetic: knee K ≈ C/(1+m) + D, where D = descriptors written out during the prefill
+(≈2.5 at ~3–5 ns per submit; ≈12.7 in trace mode at ~19 ns per submit). This replaces &quot;114 ÷ 6.5 ≈
+18–21&quot; in the X3 animation with the same formula (C/(1+s) + D).</li>
+<li>Q8: a → <strong>supported</strong> (clean timing: with a gap, timed = cadence − gap, e.g. 63 ns at gap 25 ns).
+b → <strong>likely</strong> for the old X2 numbers (each store in the window adds one write-out: 93/189/288/
+383 ns for 0–3 stores). c → <strong>supported</strong> as discrete release (one entry per write-out).</li>
+<li>Animation fact for the full SB: &quot;每写出一个 descriptor，store buffer 只空出一项（加上它后面的
+普通 store）；被计时的 submit 等下一次写出&quot;.</li>
+<li>X1 note: the &quot;mid-K ~40 ns&quot; values are a start-up AVX-512 transient (~1 ms after the first zmm
+memset), not a pipeline effect.</li>
+</ul>
+<h2>Open / next questions</h2>
+<ul>
+<li>Write-out cadence: 97–107 ns at mesh 2.2 GHz. Its relation to the mesh is not re-measured here
+(r0 m1 at mesh 1.65 GHz gave 129 ns, in line with F1).</li>
+<li>The 2-entry gap between plain stores (112) and MOVDIR64B (114) in P0 is unexplained. Candidates
+(untested): the SERIALIZE at the loop top, a reserved entry, or how the counter is defined.</li>
+<li>Pin down the anomaly's trigger instruction (zmm memset vs. rep stosb over device-written lines)
+and why the first K = 0 rows sometimes don't trigger it.</li>
+<li>Check whether hw-eval's <code>measured_call</code> spills inside the timed window (would confirm Q8-b for X2).</li>
+</ul>
+</main></body></html>

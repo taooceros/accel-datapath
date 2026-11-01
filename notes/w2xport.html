@@ -1,0 +1,1002 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>w2xport group: what serializes the per-core write transport (Q5 follow-up)</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Noto+Serif+SC:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"><style>
+:root { --paper:#faf9f5; --card:#fffefb; --sunk:#f3f1eb; --ink:#161514; --ink2:#3b3935; --muted:#7a776f; --rule:#e4e0d6; --rule2:#cfcabe;
+  --serif:"Newsreader","Noto Serif SC",Georgia,serif; --sans:"Inter","PingFang SC","Noto Sans SC",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace; }
+@media (prefers-color-scheme: dark) { :root { --paper:#141311; --card:#1b1a17; --sunk:#201f1b; --ink:#ece8df; --ink2:#cfcac0; --muted:#9a958a; --rule:#2f2d29; --rule2:#46433c; } }
+body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.65 var(--sans); -webkit-font-smoothing:antialiased; }
+.wrap { max-width:980px; margin:0 auto; padding:28px 28px 80px; }
+nav.crumb { font:500 12px var(--mono); letter-spacing:.04em; color:var(--muted); margin-bottom:22px; }
+nav.crumb a { color:var(--muted); }
+h1, h2, h3 { font-family:var(--serif); font-weight:500; line-height:1.25; }
+h1 { font-size:30px; margin:0 0 18px; } h2 { font-size:22px; margin:34px 0 10px; padding-top:14px; border-top:1px solid var(--rule); } h3 { font-size:18px; margin:24px 0 8px; }
+a { color:var(--ink); text-decoration-color:var(--rule2); text-underline-offset:3px; }
+code { font:13px var(--mono); background:var(--sunk); padding:1px 4px; border-radius:4px; overflow-wrap:anywhere; }
+pre { background:var(--sunk); padding:12px 14px; border-radius:8px; overflow:auto; } pre code { background:none; padding:0; }
+table { border-collapse:collapse; margin:12px 0; font-size:13.5px; display:block; overflow-x:auto; }
+th, td { border-bottom:1px solid var(--rule); padding:6px 10px; text-align:left; vertical-align:top; }
+th { font:500 12px var(--mono); color:var(--muted); border-bottom:1px solid var(--rule2); }
+blockquote { margin:12px 0; padding:4px 14px; border-left:3px solid var(--rule2); color:var(--ink2); }
+ul.notes { list-style:none; padding:0; } ul.notes li { padding:14px 0; border-bottom:1px solid var(--rule); }
+ul.notes a { font:500 18px var(--serif); } ul.notes .d { color:var(--ink2); } ul.notes .t { font:12px var(--mono); color:var(--muted); }
+.lead { color:var(--ink2); }
+</style></head><body><main class="wrap"><nav class="crumb"><a href="../">DSA 提交流水线</a> · <a href="./">实验笔记</a> · w2xport</nav><h1>w2xport group: what serializes the per-core write transport (Q5 follow-up)</h1>
+<p>Run directories are relative to <code>dsa-lab-runs/</code>. Probe:
+<code>dsa-lab/src/bin/w2_xport.rs</code>. One core writes a round-robin <em>pattern</em> of streams
+(<code>wq0.0</code>, <code>wq0.0@64</code> = 64-byte offset in the portal page, <code>wq0.0@lines4</code> = 4 streams at offsets
+0/64/128/192, <code>mem</code> = an ordinary write-back page). Noop descriptors are built byte by byte, so
+they are identical for DSA and IAA. Each stream has its own completion records; after every burst the probe
+Drains every WQ of the pattern and counts records. <code>--pmu</code> adds device EV_DWQ_SUCCESS / EV_DWQ_FULL
+per WQ. Modes: <code>steady</code> (F1 cadence per pattern and per variant <code>plain</code> / <code>sfence</code> after each write,
+plus the k-write + MFENCE sweep k = 0..16), <code>decay</code> (long bursts and k-sweeps, each carrying the mesh
+and core GHz of its own 2-5 ms window, while UFS lowers the mesh) and <code>offsets</code>.
+All runs: <code>--side both</code>, <code>dsa-config/cadence-2dwq-1g.conf</code> (dsa0: wq0.0 + wq0.1, dsa2: wq2.0 + wq2.1, size
+64 each, 4 engines), heaters <code>8x1@0+8x1@1</code> (mesh 2.2 GHz on both sockets) unless noted.</p>
+<h2>Summary of verdicts</h2>
+<ul>
+<li><strong>W2-1: per destination line, not per core, WQ, device or IIO stack.</strong> One core alternating between
+two portals writes at half the solo time. That holds for two WQs on one device, for dsa0 + dsa2,
+and also for <strong>two 64-byte offsets of the same WQ portal page</strong>. N distinct lines give c/N per
+write, down to a floor of ~5-6.5 ns at 16-32 lines. The PMU counts every write as accepted or WQ-full, and
+none are lost with 1 or 2 streams (completion records). The serial step (≈ 31 ns + b mesh cycles) is a
+per-(core, destination line) chain, and the chains run concurrently.</li>
+<li><strong>W2-2 (IAA): not DSA-specific.</strong> The IAA portal (iax1, same root bus as dsa0) shows the same
+per-line serial step: the same a + b/f_mesh form with a ≈ 29 ns, the same halving with two lines, and the same SFENCE
+behavior. On the 8 sampled offsets (every 8th line), its per-line cadences match dsa0's with the offsets mirrored
+(IAA offset o ↔ DSA offset o XOR 0xE00): within 0.4 ns at 2.2 GHz, and within 1 mesh cycle of b over
+0.8-2.2 GHz for the two pairs fitted. So the step length follows the destination line, not the device type
+[INFERENCE that it is set by the physical address via a hash]. Every write in the single-stream and DSA + IAA
+patterns was accepted (IAA PMU and completion records); the IAA multi-offset rows overflowed the 1-engine WQ.</li>
+<li><strong>W2-3: t(k) = t0 + (L − c) + k·c, linear from k = 1.</strong> The 56 ns intercept at 2.2 GHz is mostly
+the rdtscp + MFENCE overhead t0 = 36.7 ns (≈ 78 core cycles, not mesh-clocked). The true overlap
+per write is L − c = 14.2 ns + 11.7 mesh cycles (19.5 ns at 2.2 GHz, 29 ns at 0.8 GHz), not ~60 ns.
+So only ~5 ns of the intercept is mesh-clocked at 2.2 GHz. A single write takes L = 47.6 ns + 181 mesh
+cycles (130 ns at 2.2 GHz) to be acknowledged; the slope is c = 36.0 + 165.4 mesh cycles.
+SFENCE after every write removes all cross-line concurrency: ns/write ≈ L + 3-7 ns.</li>
+</ul>
+<h2>Predictions (written before any run)</h2>
+<h3>W2-1: per core or per destination?</h3>
+<p>One core (cpu2, node0) alternates MOVDIR64B between two portals. Solo cadences at a 2.2 GHz
+mesh from wave 1: cpu2 → dsa0 ≈ 107-111 ns, cpu2 → dsa2 (far) ≈ 154-157 ns.</p>
+<table>
+<thead>
+<tr>
+<th>hypothesis</th>
+<th>(a) wq0.0 + wq0.1 (same dsa0)</th>
+<th>(b) dsa0 + dsa2 (near + far)</th>
+<th>(c) two 64-B offsets of one portal page</th>
+<th>(d) dsa0 + iax1 (same IIO stack, root bus 75)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>H-core: per-core serial step, its length set by the path</td>
+<td>= solo (~110)</td>
+<td>mean of solos ≈ 133</td>
+<td>= solo</td>
+<td>= solo</td>
+</tr>
+<tr>
+<td>H-dest: per destination WQ/portal page</td>
+<td>≈ 55 (max/2)</td>
+<td>≈ 78 (max(near, far)/2)</td>
+<td>= solo</td>
+<td>≈ 55</td>
+</tr>
+<tr>
+<td>H-dev: per device</td>
+<td>= solo</td>
+<td>≈ 78</td>
+<td>= solo</td>
+<td>≈ 55</td>
+</tr>
+<tr>
+<td>H-IIO: per IIO stack</td>
+<td>= solo</td>
+<td>≈ 78</td>
+<td>= solo</td>
+<td>= solo</td>
+</tr>
+<tr>
+<td>H-addr: same-address (same line) hazard</td>
+<td>≈ 55</td>
+<td>≈ 78</td>
+<td>≈ 55</td>
+<td>≈ 55</td>
+</tr>
+</tbody>
+</table>
+<p>Second evidence: every write is accepted (missing = 0 per stream after Drain); the k-write + MFENCE
+slope for an alternating pattern should show the same per-write time as the steady cadence.</p>
+<h3>W2-2: is the handshake specific to DSA portals?</h3>
+<p>IAA (iax1 on root bus 75 with dsa0; iax3 on f2 with dsa2) gets the same noop. Generic
+core → IIO posted-write step: the IAA portal shows the same cadence as DSA for the same core at
+2.2 GHz (within ~2 ns), the same a + b(core)/f_mesh form over the mesh range, and the same b
+ordering across cores (cpu12 &lt; cpu2 &lt; cpu30). DSA-specific (a device-side ack): IAA differs.</p>
+<h3>W2-3: overlap structure</h3>
+<p>t(k) = time for k writes + MFENCE on an empty WQ. Wave 1: t(k) ≈ 58 + 111 k at 2.2 GHz (cpu2 → dsa0).
+Model: write j leaves the core at j·c and is acknowledged L after it leaves; t(k) = o + L + (k−1)c,
+so intercept I = o + L − c, with o = rdtscp + empty MFENCE (k = 0, core-clocked). Predictions:
+t(k) is linear from k = 1 (no kink, i.e. only one write is in the serial step at a time); slope =
+steady cadence at both mesh clocks; if L and c are both mesh-paced, (I − o) scales with 1/f_mesh;
+if only c is mesh-paced (the ack latency is fixed), (I − o) grows as the mesh slows less than c.
+SFENCE between writes: wave 1 shows 1 write + SFENCE ≈ 20 ns (rdtscp pair ≈ 15), so SFENCE does not
+wait for the ack; prediction: the cadence is unchanged with SFENCE between writes.</p>
+<h2>W2-0: does a portal page accept writes at every 64-byte offset?</h2>
+<p>Spec (DSA 9.3): &quot;bits 11:6 are ignored; any 64-byte-aligned address on the page can be used with the
+same effect&quot;. Run <code>W2X/20261101T025111Z-AB-offsets</code>: one noop to each of the 64 offsets of wq0.0,
+wq0.1 and wq2.0. Result: <strong>64/64 offsets complete with status 0x01 on all three WQs</strong>, and the Drain
+after them completes. Evidence: completion records.</p>
+<h2>W2-1: per core or per destination?</h2>
+<p><strong>Runs.</strong> cpu2: <code>W2X/20261101T025134Z-AB-interleave-cpu2</code> (r1), <code>...025355Z-AB-interleave-cpu2-r2</code>,
+<code>...025358Z-AB-interleave-cpu2-r3</code> (r2/r3 with <code>--pmu</code>); cpu34: <code>...025411Z-AB-interleave-cpu34</code>
+(<code>--pmu</code>). 600 writes per burst (timed after 200), 7 reps per pattern and variant, patterns
+interleaved within each rep. Core clock 2.2 GHz (cpu2) and 3.9 GHz (cpu34) in every row; mesh 2.2 / 2.1-2.2 GHz
+at start and end.</p>
+<p><strong>cpu2 (node0), ns per write, p50 of 7 reps in r1 / r2 / r3 (rep spread ≤ 0.5 ns unless noted):</strong></p>
+<table>
+<thead>
+<tr>
+<th>pattern</th>
+<th>plain</th>
+<th>SFENCE after each write</th>
+<th>H-core prediction</th>
+<th>per-line prediction (max/N)</th>
+<th>missing (r1-r3)</th>
+<th>PMU per rep set (r2, r3): DWQ_SUCCESS / DWQ_FULL</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>wq0.0 (dsa0, near)</td>
+<td>110.6 / 110.4 / 110.5</td>
+<td>132.6 / 132.6 / 132.5</td>
+<td></td>
+<td></td>
+<td>0</td>
+<td>4207 / 0</td>
+</tr>
+<tr>
+<td>wq0.1 (dsa0, near)</td>
+<td>107.6 / 107.7 / 107.5</td>
+<td>132.9 / 132.9 / 132.9</td>
+<td></td>
+<td></td>
+<td>0</td>
+<td>4207 / 0</td>
+</tr>
+<tr>
+<td>wq2.0 (dsa2, far)</td>
+<td>154.4 / 155.1 / 154.3</td>
+<td>177.0 / 178.0 / 176.8</td>
+<td></td>
+<td></td>
+<td>0</td>
+<td>4207 / 0</td>
+</tr>
+<tr>
+<td>wq2.1 (dsa2, far)</td>
+<td>168.3 (r1)</td>
+<td>189.6</td>
+<td></td>
+<td></td>
+<td>0</td>
+<td></td>
+</tr>
+<tr>
+<td><strong>(a)</strong> wq0.0 + wq0.1</td>
+<td><strong>55.2 / 55.1 / 55.1</strong></td>
+<td>132.9 / 133.1 / 132.9</td>
+<td>≈ 109</td>
+<td>55.3</td>
+<td>0</td>
+<td>4214 / 0</td>
+</tr>
+<tr>
+<td><strong>(b)</strong> wq0.0 + wq2.0 (near + far)</td>
+<td><strong>77.1 / 77.6 / 77.0</strong></td>
+<td>154.8 / 155.4 / 154.8</td>
+<td>≈ 132.5 (mean)</td>
+<td>77.4</td>
+<td>0</td>
+<td>4214 / 0</td>
+</tr>
+<tr>
+<td>wq2.0 + wq2.1 (far, one device)</td>
+<td>84.3 (r1)</td>
+<td>183.3</td>
+<td>≈ 161</td>
+<td>84.2</td>
+<td>0</td>
+<td></td>
+</tr>
+<tr>
+<td><strong>(c)</strong> wq0.0@0 + wq0.0@64</td>
+<td><strong>55.1 / 55.2 / 56.9</strong></td>
+<td>132.8 / 132.8 / 132.8</td>
+<td>≈ 110</td>
+<td>≈ 55</td>
+<td>0</td>
+<td>4207 / 0</td>
+</tr>
+<tr>
+<td>(c) wq0.0@0 + wq0.0@2048</td>
+<td>55.9 (r1)</td>
+<td>140.2</td>
+<td>≈ 110</td>
+<td>≈ 55</td>
+<td>0</td>
+<td></td>
+</tr>
+<tr>
+<td>wq0.0@lines3</td>
+<td>36.7 / 36.7</td>
+<td>132.9 / 132.9</td>
+<td>≈ 110</td>
+<td>36.8</td>
+<td>1379, 177 (WQ-full)</td>
+<td>2828/1383; 4030/181</td>
+</tr>
+<tr>
+<td>wq0.0@lines4</td>
+<td>28.1 / 28.1</td>
+<td>134.9 / 134.9</td>
+<td>≈ 110</td>
+<td>27.6</td>
+<td>0, 241</td>
+<td>4207/0; 3966/245</td>
+</tr>
+<tr>
+<td>wq0.0@lines8</td>
+<td>14.1 / 14.1</td>
+<td>135.2 / 133.5</td>
+<td>≈ 110</td>
+<td>13.8</td>
+<td>0, 1688</td>
+<td>4207/0; 2519/1694</td>
+</tr>
+<tr>
+<td>wq0.0@lines16</td>
+<td>6.5 / 6.5 / 6.5</td>
+<td>131.4 / 131.4 / 130.1</td>
+<td>≈ 110</td>
+<td>6.9</td>
+<td>1727, 793, 1758</td>
+<td>3414/794; 2449/1765</td>
+</tr>
+<tr>
+<td>wq0.0@lines32</td>
+<td>5.3 / 6.1 (range 5.0-6.5)</td>
+<td>131.4 / 130.8</td>
+<td>≈ 110</td>
+<td>3.5</td>
+<td>928, 1691</td>
+<td>3279/930; 2516/1698</td>
+</tr>
+<tr>
+<td>wq0.0@lines4 + wq0.1@lines4</td>
+<td>14.0 / 14.0</td>
+<td>135.0 / 134.9</td>
+<td>≈ 109</td>
+<td>13.8</td>
+<td>0, 769</td>
+<td>4214/0; 3445/776</td>
+</tr>
+</tbody>
+</table>
+<p>(PMU columns: 4200 writes per pattern and variant + 7 Drains per WQ. SUCCESS + FULL ≥ written in every
+row; the excess over 4207/4214 is Drains that were dropped and resubmitted.)</p>
+<p><strong>cpu34 (node1, core 3.9 GHz):</strong> wq2.0 97.2, wq2.1 108.0, wq0.0 (far) 172.7. Pairs: wq2.0 + wq2.1
+<strong>54.0</strong> (max/2 = 54.0), wq2.0 + wq0.0 <strong>86.4</strong> (max/2 = 86.4; mean = 135), wq2.0@0 + wq2.0@64 <strong>54.0</strong>,
+wq2.0@lines4 26.9. With SFENCE: 112.5 / 127.6 / 190.5 solo, pairs 119.5 / 151.0 / 119.4 (151.0 ≈ mean of
+112.5 and 190.5). Missing 0 and DWQ_FULL 0 in every row.</p>
+<p><strong>Second timing signature (k-write + MFENCE, p50 ns, k = 1, 2, 3, ...; cpu2, 2.2 GHz, r1-r3 agree within 3 ns):</strong></p>
+<table>
+<thead>
+<tr>
+<th>pattern</th>
+<th>t(1..8)</th>
+<th>reading</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>wq0.0</td>
+<td>167, 278, 389, 498, 611, 720, 828, 941</td>
+<td>one chain, +110.6 per write</td>
+</tr>
+<tr>
+<td>wq0.0 + wq0.1</td>
+<td>167, 169, 278, 280, 387, 389, 499, 499</td>
+<td>two chains; writes to the 2nd line add ~2 ns</td>
+</tr>
+<tr>
+<td>wq0.0@0 + wq0.0@64</td>
+<td>168, 170, 279, 279, 390, 391, 503, 500</td>
+<td>same, within one portal page</td>
+</tr>
+<tr>
+<td>wq0.0@lines4</td>
+<td>167, 170, 173, 179, 280, 279, 281, 291</td>
+<td>four writes to four lines finish together</td>
+</tr>
+<tr>
+<td>wq0.0 + wq2.0</td>
+<td>166, 213, 277, 368, 388, 524, 523, 678</td>
+<td>near chain 167 + 110.6 j, far chain 211 + 154 j; t(k) = the later chain</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Verdict W2-1.</strong> H-core (one serial credit per core) is <strong>ruled out</strong>: alternating two destinations halves ns/write
+((a) 55.1-55.2 vs 107.5-110.6 solo; it would have stayed ~110). For near + far ((b)) the per-write time is
+77.0-77.6 = max(near, far)/2, not the mean (132.5). H-dest (per WQ / portal page), H-dev and H-IIO are
+also <strong>ruled out</strong>: two offsets of the <em>same</em> WQ portal page give the same halving as two WQs or two
+devices ((c) 55.1-56.9). <strong>Surviving: the serial step applies to consecutive MOVDIR64B to the same
+64-byte destination line; writes to different lines run concurrently.</strong> N lines give c/N per write
+(3, 4, 8, 16 lines: 36.7, 28.1, 14.1, 6.5 ns vs 110.5/N = 36.8, 27.6, 13.8, 6.9) down to a floor of about
+5-6.5 ns per write at 16-32 lines, which is then the core's own MOVDIR64B issue rate [INFERENCE: ~11-14 core cycles
+at 2.2 GHz]. Evidence: (1) timing under manipulation of the destination set (3 runs on cpu2, 1 on
+cpu34, two cores with different b); (2) counts: for every 1- and 2-stream pattern, 0 missing completions
+and DWQ_SUCCESS = writes + Drains, DWQ_FULL = 0. With ≥ 3 lines to one WQ, the device's noop service
+(4 engines, WQ size 64) cannot keep up with 36-190 M writes/s, and the losses are WQ-full drops counted by
+the PMU (SUCCESS + FULL = all writes). The losses do not come from the transport. (3) a second timing signature: in the k-write + MFENCE sweep, writes to
+different lines complete together, and each line forms its own +c chain.
+Caveat: these are posted writes from one core. Whether two <em>cores</em> writing the same line also serialize
+(core-local hazard vs a shared, address-hashed agent) is the next question below.</p>
+<p><strong>SFENCE after every write</strong> (prediction &quot;unchanged&quot; is <strong>ruled out</strong>): it removes all cross-line
+concurrency. Every pattern then runs at ~130-135 ns per write on near lines (cpu2), and near + far gives the
+mean of the two SFENCE solos (154.8-155.4 vs (132.6 + 177.0)/2 = 154.8). This is the per-core serial
+behavior that H-core predicted, but it only appears when the core is forced to order the writes. Per
+write it is L + 3-7 ns (see W2-3) [INFERENCE: the next write waits for the previous write's completion,
+the event MFENCE waits for, plus fence issue cost]. A single write + SFENCE is still only ~20 ns (wave 1),
+so SFENCE blocks the <em>next store</em>, not the instruction stream.</p>
+<p><strong>Address dependence of the step (side observation).</strong> Run <code>W2X/20261101T025503Z-AB-line-scan-cpu2-12</code>
+(each of the 64 lines of wq0.0 alone, 3 reps, cpu2 and cpu12, 0 missing): cpu2 → wq0.0 lines span
+<strong>91.7-113.3 ns</strong> (median 104.6). cpu12 → wq0.0 spans <strong>80.5-110.6</strong> (median 104.6). Far cpu2 → wq2.0 every 8th line spans
+154-193. The per-line pattern differs between the two cores (r = −0.14 over 64 lines). So wave 1's &quot;b
+depends on the core&quot; was measured on line 0 only: <strong>b is a property of the (core, destination line)
+pair</strong> [INFERENCE: consistent with the line's address being homed at an address-hashed agent at a
+core-dependent mesh distance; not tested further].</p>
+<p><strong>MOVDIR64B to ordinary memory (side observation, not an answer to W2-2).</strong> <code>mem</code> (one anonymous
+write-back page on node0) in r2/r3: one line 136.1 / 125.9 ns per write, two lines 69.9 / 63.4, with
+SFENCE 172 / 158. Same-line serialization with the same halving, so the per-line chain is not specific to
+device portals. This path does not cross an IIO, so it says nothing about the IAA question.</p>
+<h2>W2-2: is the handshake specific to DSA portals?</h2>
+<p><strong>Setup and provenance.</strong> iax1 is on root bus 0000:75 with dsa0 (75:02.0 vs 75:01.0; BAR2
+0x21bffff00000 vs 0x21bffff20000, i.e. the two wq0 portal pages differ in physical address bit 17); iax3 is on f2 with dsa2.
+The first config load (<code>W2X/20261101T025055Z-AB-iax-load</code>, <code>--side both --no-conf --no-launch</code>: disable
+iax1/iax3, <code>sudo -n accel-config load-config -c dsa-config/iax-hw-eval.conf -e</code>) created
+<code>/dev/iax/wq1.0</code> and <code>wq3.0</code> as <code>root:root 0600</code>. <code>udevadm info</code> shows IAA cdevs have <code>SUBSYSTEM=dsa</code>, but the
+udev rule said <code>SUBSYSTEM==&quot;iax&quot;</code>, so it never matched. Main/the user fixed the rule. <strong>Reportable runs</strong>
+(each one lease, <code>--side both --no-conf</code>: inside the lease the command disables iax1/iax3, reloads
+<code>iax-hw-eval.conf</code>, waits until both nodes are writable, logs <code>ls -l /dev/iax /dev/dsa</code> and each WQ's
+mode/size/state to stderr, then execs the probe): <code>W2X/20261101T032840Z-AB-iax-noconf-cpu2-12-r1</code>,
+<code>...032842Z-...-r2</code> (steady, cpu2 and cpu12), <code>W2X/20261101T032926Z-AB-iax-decay-cpu2-r2</code> (decay; an
+earlier decay <code>...032856Z-AB-iax-decay-cpu2</code> only reached 1.40 GHz and is not used for the fit). The DSA WQs in
+these runs were the config already in place (stderr: wq0.0 / wq2.0 dedicated, size 64). An exploratory
+first run with <code>--conf dsa-config/cadence-2dwq-1g.conf</code> (<code>W2X/20261101T032746Z-AB-iax-cadence-cpu2-12</code>)
+gives the same numbers within 0.5 ns except one far row (wq3.0 from cpu12: 183.2 there, 183.3 / 174.7 in r1/r2);
+it is only a third repeat. The IAA WQs: dedicated, size 128, 1 engine each. Descriptors: the same bytes as
+for DSA (No-op, RCR|CRAV, 64-byte record). IAA PMU events EV_DWQ_SUCCESS/FULL open and count on iax1/iax3 like on dsa0.</p>
+<p><strong>ns per write at 2.2 GHz mesh (p50 of 7 reps, r1 / r2; cpu2 core 2.2 GHz, cpu12 core 3.9 GHz):</strong></p>
+<table>
+<thead>
+<tr>
+<th>pattern</th>
+<th>cpu2</th>
+<th>cpu12</th>
+<th>missing</th>
+<th>PMU SUCCESS / FULL per 4200 writes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DSA wq0.0 (line 0)</td>
+<td>110.3 / 110.5</td>
+<td>95.1 / 95.4</td>
+<td>0</td>
+<td>4207 / 0</td>
+</tr>
+<tr>
+<td><strong>IAA wq1.0 (line 0)</strong></td>
+<td><strong>103.1 / 103.2</strong></td>
+<td><strong>101.1 / 101.3</strong></td>
+<td>0</td>
+<td>4207 / 0</td>
+</tr>
+<tr>
+<td>DSA wq2.0 (far)</td>
+<td>153.9 / 155.1</td>
+<td>153.0 / 153.5</td>
+<td>0</td>
+<td>4207 / 0</td>
+</tr>
+<tr>
+<td>IAA wq3.0 (far)</td>
+<td>187.7 / 189.5</td>
+<td>183.3 / 174.7</td>
+<td>0</td>
+<td>4207 / 0</td>
+</tr>
+<tr>
+<td>DSA + IAA alternating (wq0.0 + wq1.0)</td>
+<td>54.9 / 55.2 (max/2 = 55.2)</td>
+<td>50.5 / 50.7 (max/2 = 50.6)</td>
+<td>0</td>
+<td>4214 / 0</td>
+</tr>
+<tr>
+<td>IAA two offsets (wq1.0@0 + @64)</td>
+<td>51.5 / 51.6</td>
+<td>50.6 / 50.6</td>
+<td>cpu2 177, 0; cpu12 381, 0</td>
+<td>WQ-full = missing</td>
+</tr>
+<tr>
+<td>IAA 4 lines (wq1.0@lines4)</td>
+<td>25.7 / 25.8</td>
+<td>25.4 / 25.5</td>
+<td>cpu2 0, 0; cpu12 0, 994</td>
+<td>WQ-full = missing</td>
+</tr>
+<tr>
+<td>SFENCE after each write: wq0.0 / wq1.0 / wq3.0</td>
+<td>132.1-132.6 / 132.8-133.3 / 222.4-224.3</td>
+<td>115.6-115.8 / 125.1-125.6 / 207.0-209.0</td>
+<td>0</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>(The IAA drops with ≥ 2 lines are WQ-full drops on a 1-engine device: PMU FULL equals missing in every case,
+SUCCESS + FULL = writes + Drains.)</p>
+<p><strong>Per-line values, every 8th line (offsets 0, 512, ..., 3584), cpu2 r1:</strong></p>
+<table>
+<thead>
+<tr>
+<th>offset</th>
+<th>0</th>
+<th>512</th>
+<th>1024</th>
+<th>1536</th>
+<th>2048</th>
+<th>2560</th>
+<th>3072</th>
+<th>3584</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>IAA wq1.0</td>
+<td>103.1</td>
+<td>113.2</td>
+<td>101.5</td>
+<td>111.6</td>
+<td>105.7</td>
+<td>107.2</td>
+<td>106.1</td>
+<td>110.1</td>
+</tr>
+<tr>
+<td>DSA wq0.0</td>
+<td>110.3</td>
+<td>106.1</td>
+<td>107.5</td>
+<td>105.7</td>
+<td>111.7</td>
+<td>101.3</td>
+<td>113.2</td>
+<td>103.0</td>
+</tr>
+<tr>
+<td>DSA wq0.0 at offset XOR 0xE00</td>
+<td>103.0</td>
+<td>113.2</td>
+<td>101.3</td>
+<td>111.7</td>
+<td>105.7</td>
+<td>107.5</td>
+<td>106.1</td>
+<td>110.3</td>
+</tr>
+</tbody>
+</table>
+<p>The IAA row equals the DSA row read at offset XOR 0xE00 (here also 3584 − o) to within 0.4 ns, for both cores
+and in all three runs (cpu12 r1: IAA 101.1 107.9 99.9 106.7 102.6 92.6 104.4 95.2; DSA mirrored 101.1 108.0 99.9
+106.7 102.5 92.7 104.4 95.1).</p>
+<p><strong>Mesh sweep (decay, cpu2, 4 patterns interleaved in every iteration, 14 000-write bursts, mesh 0.80-2.27, core 2.05-3.89;
+robust fit dropping residuals &gt; max(3 MAD, 2 ns), 95-98 of 107 kept per pattern):</strong></p>
+<table>
+<thead>
+<tr>
+<th>line</th>
+<th>a (ns)</th>
+<th>b (mesh cycles)</th>
+<th>rmse</th>
+<th>+ core term: a, b, c</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DSA wq0.0 @0</td>
+<td>28.8</td>
+<td>172.0</td>
+<td>1.01</td>
+<td>33.3, 178.3, −27.0</td>
+</tr>
+<tr>
+<td>IAA wq1.0 @3584 (mirror of DSA @0)</td>
+<td>28.3</td>
+<td>171.9</td>
+<td>0.49</td>
+<td>27.6, 171.0, 3.8</td>
+</tr>
+<tr>
+<td>IAA wq1.0 @0</td>
+<td>29.0</td>
+<td>157.3</td>
+<td>0.44</td>
+<td>28.5, 156.6, 3.0</td>
+</tr>
+<tr>
+<td>DSA wq0.0 @3584 (mirror of IAA @0)</td>
+<td>29.5</td>
+<td>156.3</td>
+<td>0.44</td>
+<td>28.2, 155.0, 6.6</td>
+</tr>
+</tbody>
+</table>
+<p>0 missing, 0 bad statuses in all 428 bursts.</p>
+<p><strong>k-write + MFENCE (steady runs, cpu2):</strong> IAA wq1.0 t(1) = 167-168 ns (DSA wq0.0: 168-169), slope 103.7
+(steady 103.1-103.2), intercept 62.2-64.4. DSA + IAA alternating: t(1..4) = 167, 168, 277, 277: two concurrent chains, as for two DSA lines.</p>
+<p><strong>Verdict W2-2.</strong> The prediction &quot;generic core → IIO posted-write step&quot; <strong>holds</strong>, and is sharpened:
+the IAA portal has the same a + b/f_mesh form (a = 28-29 ns for both device types) and the same per-line
+concurrency. On the 8 sampled offsets its per-line cadence matches the DSA line at the mirrored offset
+(o XOR 0xE00) within 0.4 ns, and the two fitted mirrored pairs have the same a and b. The two portal pages
+differ in physical address bit 17 (BAR2 delta 0x20000). That correlation, not a demonstrated mechanism, is
+what links the step to the address. A DSA-specific handshake (e.g. a portal acknowledgement whose timing
+depends on the device) is <strong>ruled out</strong>. Evidence: (1) timing under manipulation of the destination
+device and line, two cores, three runs; (2) a fit over the manipulated mesh clock (a, b equal within 1 ns and 1 cycle for the
+mirrored pairs); (3) counts: IAA DWQ_SUCCESS = writes + Drains, 0 missing for single-stream and DSA+IAA
+patterns (the IAA 2-offset and 4-line rows had WQ-full drops on its single engine and are not used as count
+evidence). [INFERENCE: the step depends on the line's physical address through a hash in which address bit 17 and
+offset bits 9-11 interact, which is what an address-hashed home agent (CHA/LLC slice) selection would do. The
+per-line cadence is then set by the core-to-home-agent distance. Not tested directly.]
+Caveat: the far IAA row varies between runs on cpu12 (174.7-183.3), unlike any near row.</p>
+<h2>W2-3: overlap structure (k-write + MFENCE, cpu2 → wq0.0 line 0)</h2>
+<p><strong>Runs.</strong> Heated vs idle in one process: <code>W2X/20261101T025517Z-AB-overlap-hot-idle-cpu2-r1</code>, <code>...025522Z-...-r2</code>
+(heat <code>8x1@0+8x1@1</code> then <code>0</code> with 2 s settle; k = 0..16, 100 iterations per k, 3 µs gap, every
+completion checked: failed 0). Mesh sweep: <code>W2X/20261101T025557Z-AB-overlap-decay-cpu2</code> (3 heat-and-decay
+cycles; each sample = one 20 000-write burst + one k-sweep with 25 iterations per k, 2.0-2.7 ms window,
+mesh and core GHz over the window; 221 samples, 0 missing, 0 failed). Only cycle 0 decayed (core at 2.05-2.13 GHz,
+mesh 0.80-2.20, n = 67). In cycles 1-2 the core ran at 3.6-3.8 GHz and the mesh stayed at 2.15-2.25. They are
+used only as a core-clock contrast.</p>
+<p>t0 = k = 0 (rdtscp + MFENCE with nothing pending), L = t(1) − t0 (single write acknowledged), I and c
+= intercept and slope of t(k) over k = 1..16.</p>
+<table>
+<thead>
+<tr>
+<th>condition</th>
+<th>mesh / core GHz</th>
+<th>t0</th>
+<th>t(1)</th>
+<th>L</th>
+<th>slope c</th>
+<th>steady cadence</th>
+<th>I</th>
+<th>I − t0 = L − c</th>
+<th>SFENCE between: slope, I</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>r1 heated</td>
+<td>2.20 / 2.20</td>
+<td>40.9</td>
+<td>167.1</td>
+<td>126.2</td>
+<td>110.6 (rmse 0.9)</td>
+<td>110.4</td>
+<td>56.6</td>
+<td>15.7</td>
+<td>132.8, 39.8</td>
+</tr>
+<tr>
+<td>r2 heated</td>
+<td>2.20 / 2.20</td>
+<td>37.2</td>
+<td>166.9</td>
+<td>129.7</td>
+<td>110.5 (0.7)</td>
+<td>110.3</td>
+<td>56.2</td>
+<td>19.0</td>
+<td>132.8, 39.4</td>
+</tr>
+<tr>
+<td>r1 idle</td>
+<td><strong>0.80</strong> / 2.17</td>
+<td>36.3</td>
+<td>312.3</td>
+<td>276.0</td>
+<td>242.3 (1.4)</td>
+<td>242.2</td>
+<td>68.0</td>
+<td>31.7</td>
+<td>281.2, 35.0</td>
+</tr>
+<tr>
+<td>r2 idle (invalid: mesh rose 0.80 → 1.43 during the run, core 3.9)</td>
+<td>1.10-1.43 / 3.88</td>
+<td>20.9</td>
+<td>223.2</td>
+<td>202.3</td>
+<td>178.0</td>
+<td>179.3</td>
+<td>46.8</td>
+<td>25.9</td>
+<td>194.8, 21.9</td>
+</tr>
+</tbody>
+</table>
+<p>Fit over the decay (cycle 0, n = 67, x = 1/f_mesh):</p>
+<table>
+<thead>
+<tr>
+<th>quantity</th>
+<th>fixed (ns)</th>
+<th>mesh cycles</th>
+<th>rmse (ns)</th>
+<th>at 2.2 GHz</th>
+<th>at 0.8 GHz</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>slope c</td>
+<td>36.0</td>
+<td>165.4</td>
+<td>1.3</td>
+<td>111.2</td>
+<td>242.8</td>
+</tr>
+<tr>
+<td>L = t(1) − t0</td>
+<td>47.6</td>
+<td>180.9</td>
+<td>1.9</td>
+<td>129.8</td>
+<td>273.7</td>
+</tr>
+<tr>
+<td>I − t0 = L − c</td>
+<td><strong>14.2</strong></td>
+<td><strong>11.7</strong></td>
+<td>2.1</td>
+<td>19.5</td>
+<td>28.9</td>
+</tr>
+<tr>
+<td>t0 (rdtscp + MFENCE)</td>
+<td>36.6</td>
+<td>0.3</td>
+<td>0.4</td>
+<td>36.7</td>
+<td>37.0</td>
+</tr>
+<tr>
+<td>I</td>
+<td>50.8</td>
+<td>12.0</td>
+<td>2.1</td>
+<td>56.3</td>
+<td>65.8</td>
+</tr>
+</tbody>
+</table>
+<p>Same mesh (2.2 GHz), core 3.6-3.8 instead of 2.1 GHz (cycles 1-2, n = 147): t0 = 20.9 (vs 36.7, i.e.
+78 core cycles in both), c = 106.1 (vs 111.2), L = 123.3 (vs 129.8), L − c = 16.0 (vs 19.5).
+The steady cadence from the 20 000-write bursts equals the k-sweep slope taken right after it (57 pairs with stable mesh:
+median difference +0.13 ns, p10-p90 −0.15 to +1.1).</p>
+<p><strong>Verdict W2-3.</strong></p>
+<ul>
+<li>t(k) is <strong>linear from k = 1</strong> (fits over k ≥ 1 and k ≥ 2 give the same intercept within 0.6 ns; rmse 0.7-1.4
+ns at a fixed mesh). There is no kink, so only one write of a line is inside the serial step at a time (prediction holds).</li>
+<li>slope = steady cadence at every mesh clock (prediction holds; now shown over 0.8-2.2 GHz, not only at 2.2).</li>
+<li><strong>Intercept: the ~56 ns at 2.2 GHz is ~37 ns of measurement overhead (rdtscp + MFENCE, t0, which is
+core-clocked: 78 cycles at 2.1 and at 3.75 GHz, and does not move with the mesh) plus the true overlap
+L − c ≈ 19.5 ns. Of that, ~12 mesh cycles (5.3 ns at 2.2 GHz, 14.6 ns at 0.8 GHz) are mesh-clocked; the
+remaining 14.2 ns is not.</strong> The core-clock contrast lowers L − c by 3.5 ns at the same mesh, so part of the
+14.2 ns is core-clocked [INFERENCE, ~17 core cycles from two core clocks only]. The two-point heated/idle
+comparison (r1) agrees: L − c = 15.7-19.0 → 31.7.</li>
+<li>Correction to wave 1: a single write is acknowledged after <strong>L ≈ 126-130 ns</strong> at 2.2 GHz (47.6 ns + 181 mesh
+cycles), not ~170 ns. 170 included t0. The overlap is <strong>~16-20 ns per write</strong>, not ~60 ns. The next
+write to the same line leaves c after the previous one, about 12 mesh cycles + ~14 ns before the
+previous write's acknowledgement reaches the core.</li>
+<li>SFENCE between writes: slope = L + 3-7 ns at both mesh clocks (132.8 vs L 126-130 hot; 281.2 vs 276.0
+idle), and the intercept falls to ≈ t0, i.e. each write waits for the previous one's acknowledgement
+[INFERENCE: the 3-7 ns may be fence issue cost, so this is &quot;no overlap&quot;, not a separate latency measurement].</li>
+</ul>
+<h2>Suggested corrections to model.js (the lead edits it)</h2>
+<ul>
+<li><code>c2p_path</code> / Q5: replace &quot;per-core serial step&quot; with <strong>&quot;per (core, destination 64-byte line) serial
+step; different lines (any offset of the same portal page, other WQs, other devices) proceed
+concurrently&quot;</strong>. Q5-a as worded (per-core) → refined: per-line chain (W2-1). Per-write step
+c ≈ 36 ns + 165 mesh cycles for cpu2 → wq0.0 line 0; b depends on the (core, line) pair (92-113 ns
+across wq0.0's 64 lines from cpu2 at 2.2 GHz).</li>
+<li>W2-2: the same step applies to IAA portals (iax1: a ≈ 29 ns, b set by the line address; an IAA line and the
+DSA line at the mirrored offset have the same a and b). Treat it as the generic core → IIO posted-write
+path, not as a DSA portal property.</li>
+<li>Overlap: single-write acknowledgement L ≈ 130 ns at 2.2 GHz (47.6 + 181 mesh cycles); overlap L − c ≈ 20 ns
+(14 ns + 12 mesh cycles); the k-write MFENCE intercept includes ~37 ns of rdtscp + MFENCE overhead.
+Replace &quot;~60 ns overlap&quot;.</li>
+<li>Submission rate: one core can submit to one DWQ at ~28 ns per descriptor (4 portal offsets, 0 drops in
+one of two runs at WQ size 64) or ~14 ns (8 offsets, device-limited: WQ-full drops). The ~110 ns cadence is
+a same-line limit, not a submit-rate limit. Software that rotates portal offsets (spec 9.3: bits 11:6
+ignored) avoids it. Ordering is then lost: spec 3.9 guarantees execution in receive order only for
+one-engine groups and descriptors &quot;submitted to the same WQ using the same portal address&quot;. W3-2
+measured it: on a one-engine group, 2 or 4 rotated offsets reorder the completion order in ~200/200 trials
+(displacement ≤ lines − 1), while one offset stays in order (clean run: 0 inversions in 400 trials).</li>
+<li>W3-1: the per-line serialization is inside each core. Several cores writing the same portal line do not
+slow each other (2 cores 18.2-19.8 M/s, 4 cores 37.5 M/s on one line). Do not model it as a shared per-address agent.</li>
+<li>SFENCE after each MOVDIR64B costs ~15-22 ns per write at one line (cpu2 110 → 133; cpu34 97 → 112) and removes all
+cross-line concurrency.</li>
+</ul>
+<h2>Next questions</h2>
+<ul>
+<li>Core-local or shared hazard: answered in W3-1 (core-local).</li>
+<li><strong>What sets b?</strong> The per-line cadence follows the physical line address (W2-2 mirror). Map the 64 lines of
+one portal page against cores (b per (core, line)) and compare with the CHA a line is homed at
+(e.g. uncore_cha TOR occupancy counters per CHA while one line is written).</li>
+<li>Descriptor ordering across offsets: answered in W3-2 (it breaks). Open: a data-based second detector
+(e.g. two descriptors writing the same destination with different sources; the final content names
+the later one), and whether an SFENCE every N writes is enough to bound reordering at less cost.</li>
+</ul>
+<h2>W3 (second round, Main's request)</h2>
+<h3>Predictions (written before running)</h3>
+<p><strong>W3-1: is the same-line hazard core-local or shared?</strong> Two cores on node0 (cpu2, cpu4; heaters
+<code>8x1@0+8x1@1</code> exclude both and the coordinating thread's core), each with its own descriptors and
+completion records, start writing on a common TSC deadline. Phases (interleaved, several reps):
+A alone on line X (wq0.0@0), B alone on X, B alone on Y (wq0.0@64), A + B both on X, A on X + B on Y,
+A on wq0.0 + B on wq0.1 (P6 control).</p>
+<ul>
+<li>Core-local hazard (each core's own same-line rule): A + B on X keep their solo ns/write, aggregate
+≈ 2/c (≈ 18 M/s), same as X + Y.</li>
+<li>Shared, address-hashed agent holding the whole step: A + B on X each slow to ≈ 2c (≈ 220 ns),
+aggregate stays ≈ 1/c (≈ 9 M/s), while X + Y keeps 2/c.</li>
+<li>Shared agent holding only part of the step (e.g. the home agent's share, without the core-to-agent
+transit): aggregate between 1/c and 2/c; 1/aggregate is the length of the shared part.
+Second evidence: completions per thread after Drain (0 missing) and DWQ_SUCCESS = writes + Drains.</li>
+</ul>
+<p><strong>W3-2: does rotating portal offsets break submit order?</strong> One-engine group (<code>dsa-config/1-engine.conf</code>:
+wq0.0 size 128, engine0.0). 32 descriptors per trial, submitted back to back, round-robin over 1 (control,
+same address: spec 3.9 guarantees order), 2 or 4 offsets of wq0.0. Two order detectors:
+(i) slow descriptors (memmove 64 KiB, ~µs each on one engine), the order in which completion records
+become visible to a polling loop; (ii) a data chain: descriptor i copies 8 bytes from slot i to slot i+1,
+starting from a token in slot 0; any descriptor that runs before its predecessor has written breaks the chain.
+Prediction: the control is in order in every trial (and the chain is complete unless the engine pipelines
+reads ahead of earlier writes; the control calibrates that). Writes to different lines leave the core
+concurrently (W2-1), so arrival at the device may be reordered: rotated offsets → some inversions,
+mostly within a group of consecutive descriptors on different lines. If the device keeps arrival order and
+the core emits lines in program order, no inversions.</p>
+<h3>W3-1 results: two (and four) cores on the same line</h3>
+<p>Probe mode <code>twocore</code> (<code>w2_xport --mode twocore --cpus A,B[,..] --main-cpu 20 --patterns 'specA|specB;...'</code>): one
+worker thread per core, spinning between phases (core clock stays at 2.11-2.21 GHz); the coordinator on cpu20
+zeroes records, releases each phase with a TSC deadline 200 µs ahead, waits, Drains, counts, reads the PMU.
+3000 writes per core per phase (timed after 500), 7 reps, phases interleaved within each rep, heaters
+<code>8x1@0+8x1@1</code> excluding the workers and cpu20, mesh 2.2 GHz at start and end. Measured start skew 5-21 ns;
+the timed regions overlap 84-100 %.</p>
+<table>
+<thead>
+<tr>
+<th>run</th>
+<th>phase</th>
+<th>ns/write per core (p50 of 7)</th>
+<th>aggregate M/s</th>
+<th>missing</th>
+<th>PMU SUCCESS / FULL</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>W3/20261101T034159Z-AB-twocore-2-4</code></td>
+<td>cpu2 alone on X (wq0.0@0) / on Y (@64)</td>
+<td>110.3 / 107.4</td>
+<td>9.07 / 9.31</td>
+<td>0</td>
+<td>21007 / 0</td>
+</tr>
+<tr>
+<td></td>
+<td>cpu4 alone on X / Y</td>
+<td>109.3 / 106.5</td>
+<td>9.15 / 9.39</td>
+<td>0</td>
+<td>21007 / 0</td>
+</tr>
+<tr>
+<td></td>
+<td><strong>cpu2 + cpu4 both on X</strong></td>
+<td><strong>108.7 / 108.5</strong></td>
+<td><strong>18.41</strong></td>
+<td>0</td>
+<td>42007 / 0</td>
+</tr>
+<tr>
+<td></td>
+<td>cpu2 on X + cpu4 on Y</td>
+<td>110.3 / 106.5</td>
+<td>18.45</td>
+<td>0</td>
+<td>42007 / 0</td>
+</tr>
+<tr>
+<td></td>
+<td>cpu2 on wq0.0 + cpu4 on wq0.1</td>
+<td>110.2 / 106.8</td>
+<td>18.44</td>
+<td>0</td>
+<td>42014 / 0</td>
+</tr>
+<tr>
+<td><code>...034222Z-AB-twocore-2-4-r2</code></td>
+<td>alone: cpu2 / cpu4 on X</td>
+<td>110.3 / 109.0</td>
+<td>9.07 / 9.17</td>
+<td>0</td>
+<td>21007 / 0</td>
+</tr>
+<tr>
+<td></td>
+<td><strong>both on X</strong></td>
+<td><strong>112.0 / 108.3</strong></td>
+<td><strong>18.16</strong></td>
+<td>0</td>
+<td>42007 / 0</td>
+</tr>
+<tr>
+<td></td>
+<td>X + Y</td>
+<td>110.0 / 106.4</td>
+<td>18.49</td>
+<td>0</td>
+<td>42007 / 0</td>
+</tr>
+<tr>
+<td><code>...034221Z-AB-twocore-2-12</code></td>
+<td>alone: cpu2 / cpu12 on X</td>
+<td>110.3 / 97.3</td>
+<td>9.07 / 10.28</td>
+<td>0</td>
+<td>21007 / 0</td>
+</tr>
+<tr>
+<td></td>
+<td><strong>both on X</strong></td>
+<td><strong>107.7 / 95.1</strong></td>
+<td><strong>19.80</strong></td>
+<td>0</td>
+<td>42007 / 0</td>
+</tr>
+<tr>
+<td></td>
+<td>X + Y</td>
+<td>110.2 / 95.1</td>
+<td>19.59</td>
+<td>519 / 590</td>
+<td>40898 / 1109</td>
+</tr>
+<tr>
+<td></td>
+<td>wq0.0 + wq0.1</td>
+<td>110.2 / 95.6</td>
+<td>19.53</td>
+<td>446 / 1104</td>
+<td>40464 / 1550</td>
+</tr>
+<tr>
+<td><code>...034223Z-AB-fourcore-sameline</code></td>
+<td>alone: cpu2 / 4 / 6 / 8 on X</td>
+<td>110.3 / 109.3 / 110.9 / 108.1</td>
+<td>9.02-9.25</td>
+<td>0</td>
+<td>21007 / 0 each</td>
+</tr>
+<tr>
+<td></td>
+<td><strong>all four on X</strong></td>
+<td><strong>107.0 / 106.1 / 108.0 / 105.5</strong></td>
+<td><strong>37.51</strong></td>
+<td>96 / 95 / 97 / 98</td>
+<td>83621 / 386</td>
+</tr>
+</tbody>
+</table>
+<p>(Missing completions equal PMU FULL in every row, and SUCCESS + FULL = writes + Drains: every write reached the
+device; the losses are WQ-full drops when ~19.5-37.5 M/s arrive at one size-64 WQ. The 2-12 run's SWERROR
+changed to code 0x53 (WQ full) on WQ index 1, matching its wq0.1 drops.)</p>
+<p><strong>Verdict W3-1: the same-line hazard is core-local.</strong> Two cores writing the <em>same</em> portal line each keep
+their solo ns/write (within −2.6 to +1.7 ns), and the aggregate doubles (18.2-19.8 M/s vs 9.1-10.3 alone),
+exactly as for two different lines or two WQs. Four cores on one line give 37.5 M/s, 4× one core. The
+&quot;shared agent holds the whole step&quot; prediction (aggregate stays ≈ 9 M/s) is <strong>ruled out</strong>. A shared per-address
+stage, if any, holds each write for at most 1/37.5 M/s ≈ 27 ns, and the device's WQ limit is reached first.
+Evidence: (1) timing under manipulation (same line vs different line vs WQ; core pairs cpu2+cpu4 (2 runs) and
+cpu2+cpu12, plus one 4-core set; 4 runs);
+(2) counts: PMU SUCCESS + FULL = all writes; no missing on the same-line 2-core phases.
+This revises the W2 [INFERENCE]: the <em>serialization</em> (one outstanding MOVDIR64B per destination line) is
+kept inside each core. Only the step <em>length</em> depends on the line's address (W2-1 line scan, W2-2 mirror),
+e.g. because the response the core waits for comes from an address-dependent place [INFERENCE].</p>
+<h3>W3-2 results: execution order with rotated offsets</h3>
+<p>Probe mode <code>order</code>: one-engine group (<code>dsa-config/1-engine.conf</code>: wq0.0 size 128, engine0.0), cpu2, no
+heaters (ordering, not timing). Per trial: 32 memmove descriptors of 64 KiB each (Cache Control set; distinct
+destinations, common source), written back to back, round-robin over the pattern's offsets; then a loop
+polls all 32 completion records and notes the sweep in which each first appears (~1500-2800 sweeps per
+trial, ~50 sweeps between consecutive completions). An inversion = a pair i &lt; j with j seen in an earlier sweep than i.
+200 trials per pattern. Runs: <code>W3/20261101T034337Z-A-order-memmove-r2</code>, <code>...034402Z-...-r3</code>,
+<code>...034403Z-...-r4</code>, <code>...034415Z-A-order-memmove-r5-touched</code>. In r2-r4 the same-address control had a 0x03
+on descriptor 31 in every trial: a probe artifact (the destination buffer's trailing partial page was not faulted in).
+r5 uses <code>touched()</code> buffers and has no bad statuses. Ordering numbers are the same in all four runs.</p>
+<table>
+<thead>
+<tr>
+<th>pattern</th>
+<th>trials with an inversion (r2 / r3 / r4 / r5)</th>
+<th>inverted pairs per trial (r5)</th>
+<th>max displacement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>one offset @0 (control: spec 3.9 guarantees order)</td>
+<td>0 / 0 / 0 / 0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>one offset @64</td>
+<td>0 / 1 / 0 / 0</td>
+<td>0</td>
+<td>0 (1 in r3)</td>
+</tr>
+<tr>
+<td><strong>2 adjacent lines (@0, @64)</strong></td>
+<td><strong>200 / 200 / 200 / 200</strong></td>
+<td>14.8</td>
+<td>1</td>
+</tr>
+<tr>
+<td><strong>4 adjacent lines (@0..@192)</strong></td>
+<td><strong>200 / 199 / 200 / 200</strong></td>
+<td>15.5</td>
+<td>3 (6 once in r3)</td>
+</tr>
+<tr>
+<td>2 lines @0, @2048</td>
+<td>71 / 107 / 3 / 4</td>
+<td>0.03</td>
+<td>1</td>
+</tr>
+</tbody>
+</table>
+<p>Example (2 lines, r2 trial 1): completion order 0 1 3 2 5 4 7 6 9 8 11 10 13 12 15 14 ..., i.e. the completion record
+of the descriptor written to @64 becomes visible before that of the one written just before it to @0. The two are
+~40 sweeps (~1 µs) apart, so this is not a polling artifact.</p>
+<p><strong>Verdict W3-2: with rotated portal offsets, completions no longer follow submit order, even on a one-engine
+group.</strong> With one portal address, the completion order matched submit order in every clean-run trial (r5: 0
+inversions in 400 trials, 200 at @0 and 200 at @64). Over all four runs: @0 had 0 inversions in 800 trials (the r2-r4
+0x03 artifact hit only the last descriptor), and @64 had 1 inverted pair in one of 800 trials. With 2 or 4 adjacent
+offsets almost every trial is reordered, bounded within a round of consecutive writes to different lines
+(displacement ≤ lines − 1, with one exception). The observation is completion-record visibility order.
+[INFERENCE: on a one-engine group this reflects execution order, and the reordering arises because the
+writes reach the device in a different order from program order. That fits W2-1: writes to different lines leave the core
+concurrently and are not ordered with respect to each other.] How often a pair swaps depends on the two lines:
+adjacent @0/@64 swap in nearly every pair, @0/@2048 rarely [INFERENCE: it follows each line's
+latency]. This matches spec 3.9, which promises order only for &quot;the same portal address&quot;. Evidence: one type
+(completion-record visibility order with ~1 µs separation). A data-based second detector was tried and
+failed: descriptor i copies 8 bytes from slot i to i+1 (<code>W3/20261101T034245Z-A-order-chain</code>). It breaks at slot 2 in
+every trial even for the same-address control, because the engine reads the next source before the previous write is
+visible. So it detects engine read-ahead, not reordering, and is not used. (The first memmove run
+<code>...034245Z-A-order-memmove</code> agrees with the table.)
+Practical consequence: software that rotates offsets to beat the ~110 ns same-line step must not rely on
+submit order. Whether an SFENCE between writes restores the order was not tested here. It does remove the
+cross-line concurrency (W2-1), at ~130 ns per write.</p>
+</main></body></html>

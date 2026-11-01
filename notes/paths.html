@@ -1,0 +1,839 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>paths: P8 (Batch descriptor) and P9 (shared WQ + ENQCMD)</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Noto+Serif+SC:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"><style>
+:root { --paper:#faf9f5; --card:#fffefb; --sunk:#f3f1eb; --ink:#161514; --ink2:#3b3935; --muted:#7a776f; --rule:#e4e0d6; --rule2:#cfcabe;
+  --serif:"Newsreader","Noto Serif SC",Georgia,serif; --sans:"Inter","PingFang SC","Noto Sans SC",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace; }
+@media (prefers-color-scheme: dark) { :root { --paper:#141311; --card:#1b1a17; --sunk:#201f1b; --ink:#ece8df; --ink2:#cfcac0; --muted:#9a958a; --rule:#2f2d29; --rule2:#46433c; } }
+body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.65 var(--sans); -webkit-font-smoothing:antialiased; }
+.wrap { max-width:980px; margin:0 auto; padding:28px 28px 80px; }
+nav.crumb { font:500 12px var(--mono); letter-spacing:.04em; color:var(--muted); margin-bottom:22px; }
+nav.crumb a { color:var(--muted); }
+h1, h2, h3 { font-family:var(--serif); font-weight:500; line-height:1.25; }
+h1 { font-size:30px; margin:0 0 18px; } h2 { font-size:22px; margin:34px 0 10px; padding-top:14px; border-top:1px solid var(--rule); } h3 { font-size:18px; margin:24px 0 8px; }
+a { color:var(--ink); text-decoration-color:var(--rule2); text-underline-offset:3px; }
+code { font:13px var(--mono); background:var(--sunk); padding:1px 4px; border-radius:4px; overflow-wrap:anywhere; }
+pre { background:var(--sunk); padding:12px 14px; border-radius:8px; overflow:auto; } pre code { background:none; padding:0; }
+table { border-collapse:collapse; margin:12px 0; font-size:13.5px; display:block; overflow-x:auto; }
+th, td { border-bottom:1px solid var(--rule); padding:6px 10px; text-align:left; vertical-align:top; }
+th { font:500 12px var(--mono); color:var(--muted); border-bottom:1px solid var(--rule2); }
+blockquote { margin:12px 0; padding:4px 14px; border-left:3px solid var(--rule2); color:var(--ink2); }
+ul.notes { list-style:none; padding:0; } ul.notes li { padding:14px 0; border-bottom:1px solid var(--rule); }
+ul.notes a { font:500 18px var(--serif); } ul.notes .d { color:var(--ink2); } ul.notes .t { font:12px var(--mono); color:var(--muted); }
+.lead { color:var(--ink2); }
+</style></head><body><main class="wrap"><nav class="crumb"><a href="../">DSA 提交流水线</a> · <a href="./">实验笔记</a> · paths</nav><h1>paths: P8 (Batch descriptor) and P9 (shared WQ + ENQCMD)</h1>
+<p>Group <code>paths</code>, workspace <code>dsa-exp-paths</code>. Forks: Q5 (where the ~106 ns MOVDIR64B cadence comes
+from) and Q1 (what the ~114-116 knee buffer is).
+Probes: <code>dsa-lab/src/bin/p8_batch.rs</code> and <code>dsa-lab/src/bin/p9_enqcmd.rs</code>.
+Configs: <code>dsa-config/p9-swq32.conf</code>, <code>p9-swq64.conf</code>, <code>p9-swq64-thr16.conf</code> (new) and
+<code>enqcmd-vs-movdir64b.conf</code> (existing). All run dirs are under
+<code>dsa-lab-runs/</code>.</p>
+<p>Standard conditions unless noted: 8 L2 heaters, mesh 2.20 GHz measured at start and end of every
+run, submitter core warmed to 3.7-3.9 GHz, and every buffer the device writes is prefaulted. Each
+probe calls <code>set_mempolicy(MPOL_PREFERRED, local node)</code> first (see &quot;Fault trap&quot;).</p>
+<h2>Fault trap found on the way (affects every memmove probe)</h2>
+<ul>
+<li><strong>Symptom.</strong> With every page prefaulted, memmove works still completed with status 0x03 (page
+fault, BOF=0). It started about 1 s into the process, and from then on every batch failed.
+<ul>
+<li>Run with prefault, without the fix: <code>P8/20261101T021734Z-A-mm4096-rctrue-prefault</code>. The first
+failed work's <code>work_status_hist</code> shows <code>0x03</code>.</li>
+</ul>
+</li>
+<li><strong>Cause.</strong> Automatic NUMA balancing is on (<code>/proc/sys/kernel/numa_balancing</code> = 1). After its
+scan delay (~1 s) it marks pages PROT_NONE. Pages that only the device touches are never
+re-faulted by the CPU, so DSA faults on them.</li>
+<li><strong>Manipulation.</strong> Same binary and arguments, with a task mempolicy that has no MPOL_F_MOF
+(<code>pin_mempolicy</code>, so <code>task_numa_work</code> skips the VMAs): 0 errors in every row.
+<ul>
+<li>Run with the fix: <code>P8/20261101T021916Z-A-mm4096-rctrue-mempol</code>.</li>
+</ul>
+</li>
+<li>Reported to Main. It is separate from the <code>touched(len, 0)</code> calloc problem; both need fixing.</li>
+<li>Runs before 021916Z that show errors are not used below.</li>
+</ul>
+<h2>P8: Batch descriptor (one 64-byte write carries W work descriptors)</h2>
+<p><strong>Question.</strong> Is the ~106 ns cadence a property of each 64-byte write (the submit path), or of
+the engines' work rate?</p>
+<p><strong>Predictions</strong> (written before running; model.js P8 and the assignment):</p>
+<ul>
+<li>The cadence is in the 64-byte write path (Q5-a or Q5-b). Then each Batch descriptor costs the
+same ~106 ns, and per-work throughput rises about W × 9.4 M/s, far above the single-descriptor
+rate, until something else saturates.</li>
+<li>The limit is the engines. Then per-work throughput barely changes with W.</li>
+</ul>
+<p><strong>Method</strong> (<code>p8_batch</code>, config <code>4-engine.conf</code>: dedicated WQ size 128, 4 engines,
+max_batch_size 1024):</p>
+<ul>
+<li><strong>Submit cost per top-level descriptor.</strong> 126 descriptors (Batch, or single for W=1) are sent
+back to back, which stays below the WQ depth, so nothing is dropped. Fill region: submits
+0..118, below the store-buffer knee. Steady region: submits 118..126, above it. 10 reps.</li>
+<li><strong>Throughput.</strong> A closed loop keeps <code>window</code> descriptors outstanding and reuses a slot once its
+completion record arrives. It runs ≥ 262144 works or ≥ 4000 tops, 3 reps.
+<ul>
+<li>Reported: work M/s, top-level M/s, and the fraction of time the CPU waited for a free slot.</li>
+</ul>
+</li>
+<li><strong>memmove destinations.</strong> In the closed (throughput) loop every in-flight work has its own
+destination buffer (pool of 4096 buffers, indexed by slot × W + j). The window is capped at
+4096/W, so two works in flight never share a destination: window 32 at W=128 and 4 at W=1024.
+The 126-descriptor stream (submit-cost measurement) does not have this guarantee: for 126 × W &gt;
+4096 (W ≥ 64) its works reuse destinations. That affects only device-side work, not the posted
+submit timing reported from it.</li>
+<li><strong>W = 1 is single descriptors, not a Batch.</strong> GENCAP is <code>0x40915f0107</code>, so Batch1 Support (bit
+52) is 0. A Batch of 1 completes with status 0x14 (&quot;descriptor count out of range&quot;); a Batch of 2
+completes with 0x01.
+<ul>
+<li>Shown by <code>P8/20261101T021521Z-A-noop-rc</code> (<code>batch_small</code>). The final runs do not submit it.</li>
+</ul>
+</li>
+<li><strong>Validity of the final matrix.</strong> Every top-level completion record (Batch or single) has
+status 0x01. A successful Batch status means every work in it succeeded. Per-work records exist
+only in the work-RC runs, and there they are all 0x01 too. There are 0 missing descriptors and
+SWERROR does not change.</li>
+</ul>
+<p><strong>Results</strong> (final matrix, <code>*-v3</code>):</p>
+<p><strong>noop, no work RC</strong>: <code>P8/20261101T022313Z-A-noop-rcfalse-v3</code> (mesh 2.20→2.20 GHz, core 3.86 GHz)</p>
+<table>
+<thead>
+<tr>
+<th>W</th>
+<th>submit below knee (ns/top)</th>
+<th>submit above knee (ns/top, p50 [p10,p90])</th>
+<th>work M/s</th>
+<th>top M/s</th>
+<th>ns/top</th>
+<th>CPU wait frac</th>
+<th>window</th>
+<th>errors/missing</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 (single)</td>
+<td>4.0</td>
+<td>106.1 [106,107]</td>
+<td>9.2</td>
+<td>9.20</td>
+<td>109</td>
+<td>0.39</td>
+<td>64</td>
+<td>0</td>
+</tr>
+<tr>
+<td>2</td>
+<td>4.0</td>
+<td>106.2 [106,107]</td>
+<td>18.8</td>
+<td>9.41</td>
+<td>106</td>
+<td>0.70</td>
+<td>64</td>
+<td>0</td>
+</tr>
+<tr>
+<td>4</td>
+<td>4.1</td>
+<td>106.7 [106,108]</td>
+<td>37.6</td>
+<td>9.41</td>
+<td>106</td>
+<td>0.70</td>
+<td>64</td>
+<td>0</td>
+</tr>
+<tr>
+<td>8</td>
+<td>4.0</td>
+<td>106.2 [105,107]</td>
+<td>75.3</td>
+<td>9.41</td>
+<td>106</td>
+<td>0.69</td>
+<td>64</td>
+<td>0</td>
+</tr>
+<tr>
+<td>16</td>
+<td>4.0</td>
+<td>106.5 [105,107]</td>
+<td>150.6</td>
+<td>9.41</td>
+<td>106</td>
+<td>0.69</td>
+<td>64</td>
+<td>0</td>
+</tr>
+<tr>
+<td>32</td>
+<td>4.2</td>
+<td>106.3 [4,107]</td>
+<td>198.2</td>
+<td>6.19</td>
+<td>161</td>
+<td>0.50</td>
+<td>64</td>
+<td>0</td>
+</tr>
+<tr>
+<td>64</td>
+<td>4.0</td>
+<td>105.5 [105,107]</td>
+<td>199.1</td>
+<td>3.11</td>
+<td>321</td>
+<td>0.69</td>
+<td>64</td>
+<td>0</td>
+</tr>
+<tr>
+<td>128</td>
+<td>4.1</td>
+<td>106.5 [106,108]</td>
+<td>199.4</td>
+<td>1.56</td>
+<td>642</td>
+<td>0.86</td>
+<td>64</td>
+<td>0</td>
+</tr>
+<tr>
+<td>256</td>
+<td>4.0</td>
+<td>106.2 [105,107]</td>
+<td>199.6</td>
+<td>0.78</td>
+<td>1283</td>
+<td>0.93</td>
+<td>64</td>
+<td>0</td>
+</tr>
+<tr>
+<td>1024</td>
+<td>4.1</td>
+<td>107.5 [105,108]</td>
+<td>200.3</td>
+<td>0.20</td>
+<td>5112</td>
+<td>0.97</td>
+<td>64</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<p><strong>noop, work RC</strong> (a completion record on every work): <code>P8/20261101T022325Z-A-noop-rctrue-v3</code></p>
+<table>
+<thead>
+<tr>
+<th>W</th>
+<th>submit below knee</th>
+<th>submit above knee p50 [p10,p90]</th>
+<th>work M/s</th>
+<th>top M/s</th>
+<th>ns/top</th>
+<th>CPU wait</th>
+<th>errors/missing</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 (single)</td>
+<td>4.0</td>
+<td>105.2 [104,107]</td>
+<td>9.2</td>
+<td>9.21</td>
+<td>109</td>
+<td>0.40</td>
+<td>0</td>
+</tr>
+<tr>
+<td>2</td>
+<td>4.1</td>
+<td>107.6 [107,108]</td>
+<td>18.8</td>
+<td>9.39</td>
+<td>106</td>
+<td>0.18</td>
+<td>0</td>
+</tr>
+<tr>
+<td>4</td>
+<td>4.0</td>
+<td>106.5 [106,107]</td>
+<td>37.5</td>
+<td>9.38</td>
+<td>107</td>
+<td>0.17</td>
+<td>0</td>
+</tr>
+<tr>
+<td>8</td>
+<td>4.2</td>
+<td>106.2 [105,106]</td>
+<td>35.4</td>
+<td>4.42</td>
+<td>226</td>
+<td>0.63</td>
+<td>0</td>
+</tr>
+<tr>
+<td>16</td>
+<td>4.3</td>
+<td>106.2 [105,107]</td>
+<td>42.7</td>
+<td>2.67</td>
+<td>375</td>
+<td>0.82</td>
+<td>0</td>
+</tr>
+<tr>
+<td>32</td>
+<td>4.7</td>
+<td>107.4 [107,109]</td>
+<td>87.3</td>
+<td>2.73</td>
+<td>367</td>
+<td>0.79</td>
+<td>0</td>
+</tr>
+<tr>
+<td>64</td>
+<td>4.8</td>
+<td>106.4 [105,107]</td>
+<td>89.5</td>
+<td>1.40</td>
+<td>715</td>
+<td>0.86</td>
+<td>0</td>
+</tr>
+<tr>
+<td>128</td>
+<td>5.5</td>
+<td>106.9 [105,108]</td>
+<td>90.3</td>
+<td>0.71</td>
+<td>1418</td>
+<td>0.92</td>
+<td>0</td>
+</tr>
+<tr>
+<td>1024</td>
+<td>8.1</td>
+<td>106.4 [105,107]</td>
+<td>90.9</td>
+<td>0.09</td>
+<td>11266</td>
+<td>0.91</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<p><strong>memmove</strong>: per-work M/s in the closed loop (GB/s in brackets). The submit cost above the knee is
+105.6-107.6 ns in every row except one: 4 KiB with work RC at W=1024 has p50 123.8 and p90 139.</p>
+<table>
+<thead>
+<tr>
+<th>W</th>
+<th>64 B, no RC</th>
+<th>64 B, RC</th>
+<th>4 KiB, no RC</th>
+<th>4 KiB, RC</th>
+<th>window</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 (single)</td>
+<td>9.2</td>
+<td>9.2</td>
+<td>7.2 (29.4)</td>
+<td>7.1 (29.2)</td>
+<td>64</td>
+</tr>
+<tr>
+<td>2</td>
+<td>18.8</td>
+<td>18.8</td>
+<td>7.3 (29.9)</td>
+<td>7.0 (28.8)</td>
+<td>64</td>
+</tr>
+<tr>
+<td>4</td>
+<td>21.5</td>
+<td>25.4</td>
+<td>7.4 (30.3)</td>
+<td>7.1 (29.1)</td>
+<td>64</td>
+</tr>
+<tr>
+<td>8</td>
+<td>21.5</td>
+<td>25.5</td>
+<td>7.4 (30.4)</td>
+<td>7.2 (29.4)</td>
+<td>64</td>
+</tr>
+<tr>
+<td>16</td>
+<td>21.5</td>
+<td>25.6</td>
+<td>7.4 (30.5)</td>
+<td>5.7 (23.4)</td>
+<td>64</td>
+</tr>
+<tr>
+<td>32</td>
+<td>21.5</td>
+<td>25.6</td>
+<td>7.4 (30.4)</td>
+<td>5.6 (22.9)</td>
+<td>64</td>
+</tr>
+<tr>
+<td>64</td>
+<td>21.5</td>
+<td>25.7</td>
+<td>7.4 (30.4)</td>
+<td>5.4 (22.2)</td>
+<td>64</td>
+</tr>
+<tr>
+<td>128</td>
+<td>21.5</td>
+<td>25.7</td>
+<td>7.4 (30.4)</td>
+<td>4.4 (18.2)</td>
+<td>32</td>
+</tr>
+<tr>
+<td>1024</td>
+<td>5.6</td>
+<td>27.0</td>
+<td>2.3 (9.4)</td>
+<td>2.3 (9.2)</td>
+<td>4</td>
+</tr>
+</tbody>
+</table>
+<p>Runs: <code>P8/20261101T022314Z-A-mm64-rcfalse-v3</code>, <code>…022326Z-A-mm64-rctrue-v3</code>,
+<code>…022317Z-A-mm4096-rcfalse-v3</code>, <code>…022328Z-A-mm4096-rctrue-v3</code>. All have 0 errors and 0 missing.</p>
+<p><strong>Survived: the cadence is in the 64-byte write path (timing signature + direct manipulation).</strong></p>
+<ul>
+<li><strong>Submit cost.</strong> A Batch descriptor costs the same as a single descriptor at the same mesh
+clock. Above the knee it is 105.5-107.6 ns for every W from 1 to 1024 and every op.
+<ul>
+<li>The device only accepts the write; the cost does not depend on how much work the write
+carries (2 to 1024 works, up to 4 MiB of data).</li>
+<li>Below the knee a submit costs 4.0-8.1 ns (~4 ns, rising to 5-8 ns with work RCs at W ≥ 64).</li>
+</ul>
+</li>
+<li><strong>Throughput.</strong> Up to W=16 (noop, no RC), the device takes one top-level descriptor per cadence
+(9.41 M tops/s). Work throughput is exactly W × 9.41: 150.6 M/s at W=16, 16× the single rate.
+It saturates at ~200 M works/s for W ≥ 32.
+<ul>
+<li>So the 4 engines can do ≥ 20× more noops than the submit path delivers. The engine is not
+what limits single descriptors (Q5-c, already ruled out, now ruled out with a 20× margin).</li>
+</ul>
+</li>
+<li><strong>The &quot;engine limit&quot; prediction holds only where real data movement dominates.</strong>
+<ul>
+<li>4 KiB memmove is bandwidth-bound at ~30 GB/s: 7.4 M/s for every W, the same as single
+descriptors (7.2 M/s). Batching cannot help when the engine or memory is the limit.</li>
+<li>64 B memmove saturates at 21.5 M/s (no RC) or 25.6 M/s (RC), ~2.3-2.8× the single rate.</li>
+</ul>
+</li>
+</ul>
+<p><strong>Secondary observations.</strong></p>
+<ul>
+<li><strong>Per-work completion records cost throughput.</strong> With per-work RCs, noop throughput caps at ~90
+M/s, versus 200 M/s without.
+<ul>
+<li>There is a reproducible dip at W=8-16: 35-43 M/s, against 37.5 M/s at W=4. It repeats in
+<code>P8/20261101T021601Z-A-noop-sweep-rctrue</code> (W=6 39.5, W=8 36.0, W=16 38.0 M/s).</li>
+<li>[INFERENCE] The 32-byte record writes, two per cache line and written by different engines,
+become the bottleneck.</li>
+</ul>
+</li>
+<li><strong>One large batch seems to run in one engine.</strong> At window=4, W=1024 4 KiB memmove reaches only
+9.2-9.4 GB/s, about a quarter of the 30 GB/s that 4 engines give.
+<ul>
+<li>[INFERENCE] A batch's works run in one engine with limited parallelism. Parallelism comes from
+multiple batches in flight.</li>
+<li>The W=1024 memmove rows are window-limited (only 4 in flight, because destinations must stay
+distinct). Do not compare them with the other rows.</li>
+</ul>
+</li>
+</ul>
+<p><strong>Caveats.</strong></p>
+<ul>
+<li>W=32 noop, no RC, has a steady-region p10 of 4 ns: in one rep the 8-submit steady region did not
+reach the knee. The median is unaffected.</li>
+<li>The closed-loop CPU wait fraction for singles is 0.4-0.7, yet throughput equals the cadence. The
+stall moved from the submit instruction into the completion poll: completion i can only be
+written after descriptor i leaves the store buffer.</li>
+<li><strong>Discarded runs:</strong>
+<ul>
+<li>021521-021738: calloc and NUMA-balancing faults.</li>
+<li>021900: stale binary.</li>
+<li>022204-022252 (<code>-final</code>, <code>-final2</code>): destinations shared across in-flight batches, or stream
+overflow drops.</li>
+</ul>
+</li>
+</ul>
+<p><strong>Next question.</strong> P8 cannot separate Q5-a (per-core write round trip) from Q5-b (device-entry
+rate), because both predict this result. P9 and P7 (two cores) can.</p>
+<h2>P9: shared WQ + ENQCMD</h2>
+<p><strong>Question.</strong> ENQCMD is non-posted, so its time is one round trip to the device. Is that round
+trip about the MOVDIR64B cadence (Q5-b, device entry)? Where does Retry start compared with the WQ
+size (direct device capacity)? Does ENQCMD show the ~116 knee (Q1)?</p>
+<p><strong>Predictions</strong> (model.js P9 and the assignment, written before running):</p>
+<ul>
+<li>Q1-b (store buffer): ENQCMD shows no knee at ~114-116, and Retry starts at the WQ size.</li>
+<li>Q5-b (device-entry cadence): the ENQCMD round trip ≈ the MOVDIR64B cadence (~106 ns at 2.2 GHz
+mesh).</li>
+</ul>
+<p><strong>Method</strong> (<code>p9_enqcmd</code>; dedicated wq0.0 of size 64 on 2 engines, plus shared wq0.1 on 2 engines):</p>
+<ul>
+<li><strong>ENQCMD isolated (<code>lat</code>).</strong> One ENQCMD timed with rdtscp, then wait for its completion, then
+1 µs gap, so the queue is empty every time. 2000 samples heated, 200 per idle cycle.</li>
+<li><strong>References in the same process.</strong>
+<ul>
+<li>ENQCMD back to back: steady region of 400 submits, starting at 150.</li>
+<li>MOVDIR64B isolated, and MOVDIR64B followed by MFENCE.</li>
+<li>MOVDIR64B steady cadence on the dedicated WQ.</li>
+</ul>
+</li>
+<li><strong>Idle mesh.</strong> The probe's own polling raises the mesh within ~1 s.
+<ul>
+<li>With <code>--heaters 0</code> and a long loop the mesh stays at 2.2 GHz:
+<code>P9/20261101T022408Z-AB-lat-mesh-sweep</code>, which is therefore NOT an idle-mesh measurement.</li>
+<li>Fix: sleep 2.5 s, then take a short sample (F1 method), with <code>--side both</code>.</li>
+<li>Mesh GHz is measured by the CHA clock over each ≥ 0.5 ms isolated loop. The CHA reading over
+~40 µs bursts is not trustworthy: it reported 3-5 GHz.</li>
+</ul>
+</li>
+<li><strong>Retry onset (<code>onset</code>).</strong> Single ENQCMD attempts (no retry loop) of 2 MiB memmoves. These are
+slow enough that nothing completes during the ~80 µs of attempts (<code>completed_when_attempts_ended</code>
+= 0). The index of the first Retry is the number of descriptors the device holds when it starts
+refusing. 5 reps per config.</li>
+<li><strong>Knee (<code>knee</code>).</strong> X1-style: prefill K, time submit K+1. ENQCMD on the shared WQ and MOVDIR64B on
+the dedicated WQ, same K list, 30 iterations each.</li>
+</ul>
+<h3>P9 results: ENQCMD latency vs mesh clock (and core clock)</h3>
+<table>
+<thead>
+<tr>
+<th>condition (run)</th>
+<th>mesh GHz</th>
+<th>core GHz</th>
+<th>ENQCMD isolated p50 [p10,p90]</th>
+<th>ENQCMD back-to-back ns/submit</th>
+<th>MOVDIR64B steady cadence</th>
+<th>MOVDIR64B+MFENCE isolated</th>
+<th>MOVDIR64B isolated</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>heated, warm core (<code>P9/20261101T022100Z-A-swq64-all</code>)</td>
+<td>2.20</td>
+<td>3.91</td>
+<td>205.1 [202,207]</td>
+<td>186.2</td>
+<td>106.1</td>
+<td>138.8</td>
+<td>10.0</td>
+</tr>
+<tr>
+<td>heated, warm core (<code>P9/20261101T022623Z-AB-lat-2x2</code>, h=8)</td>
+<td>2.20</td>
+<td>2.18</td>
+<td>230.7 [227,233]</td>
+<td>211.9</td>
+<td>110.5</td>
+<td>160.7</td>
+<td>17.3</td>
+</tr>
+<tr>
+<td>heated, cold core (same run, cold cycle 1)</td>
+<td>2.21</td>
+<td>0.79</td>
+<td>336.0 [331,346]</td>
+<td>295.8</td>
+<td>121.9</td>
+<td>249.8</td>
+<td>46.3</td>
+</tr>
+<tr>
+<td>idle mesh, core ~2.1 (same run, idle cycles 1-5, median)</td>
+<td>0.80</td>
+<td>2.08-2.14</td>
+<td>360.6 [353,367]</td>
+<td>341.4</td>
+<td>242.3</td>
+<td>309.7</td>
+<td>17.3</td>
+</tr>
+<tr>
+<td>idle mesh, core ~0.75 (<code>P9/20261101T022520Z-AB-lat-idle-vs-heated</code>, idle cycles 1-3)</td>
+<td>0.80-0.81</td>
+<td>0.74-0.78</td>
+<td>463-466 [450,475]</td>
+<td>420</td>
+<td>258</td>
+<td>399</td>
+<td>46.3</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>0 retries, 0 non-success statuses and 0 missing descriptors in every row.</li>
+<li>The idle-mesh MOVDIR64B cadence reproduces F1 (243 ns at 0.82 GHz).</li>
+</ul>
+<p><strong>Fit</strong> (two-clock decomposition):</p>
+<ul>
+<li><strong>MOVDIR64B steady cadence</strong>, from the matched-core rows (core ≈ 2.1-2.2): (242.3 − 110.5) /
+(1/0.80 − 1/2.20) → <strong>~166 mesh cycles + 35 ns</strong>. This is F1's 169 + 36. Core sensitivity is
+small: 110.5 → 121.9 ns from a 2.2 to a ~0.8 GHz core.</li>
+<li><strong>ENQCMD isolated</strong>: <strong>~163 mesh cycles + ~130 core cycles + ~98 ns</strong>.
+<ul>
+<li>Checks: 3.9 / 2.2 GHz core at 2.2 GHz mesh → 205 / 231 ns. Cold core at 2.2 GHz mesh → 336
+(model 337). Idle mesh, core 2.14 → 361 (model 362).</li>
+<li>About 36 of the 130 core cycles are rdtscp overhead (MOVDIR64B isolated: 10 / 17 / 46 ns at
+3.9 / 2.2 / 0.79 GHz).</li>
+</ul>
+</li>
+<li><strong>ENQCMD back to back</strong> ≈ isolated minus the rdtscp overhead: 186 vs 205 ns, 341 vs 361 ns.
+ENQCMDs from one core do not overlap; one is outstanding at a time (timing signature).</li>
+</ul>
+<p><strong>Verdict for Q5-b (&quot;ENQCMD round trip ≈ cadence&quot;): its literal prediction fails.</strong> The round trip
+is 1.9-2.2× the cadence with a hot mesh (205-231 vs 106-110 ns) and 1.5× with an idle mesh (361 vs
+242).</p>
+<ul>
+<li><strong>Signature:</strong> the mesh-clocked part is the same in both: ~163 mesh cycles for the ENQCMD round
+trip and ~166 for the posted cadence.</li>
+<li>[INFERENCE] The posted cadence pays the full mesh-side round trip of one 64-byte write per
+submit. It does not pay the ~98 ns that scales with neither clock (PCIe/IIO-side or the device's
+accept decision), nor the core-side ENQCMD cost.</li>
+<li>This fits Q5-a (each core's posted MMIO write waits for one mesh-level credit/ack round trip
+before the next leaves) better than Q5-b (a device acceptance rate). Under Q5-b the device's own
+response time would be in the cadence.</li>
+<li>Not excluded: an IIO-side acceptance stage clocked by the mesh, shared by cores. P7 (two cores,
+same device) separates the two.</li>
+<li>MOVDIR64B + MFENCE isolated (~187 mesh cycles + ~76 ns) is the time until one posted write is
+acknowledged. It is about one cadence plus ~35-40 ns, which fits the same picture.</li>
+</ul>
+<h3>P9 results: Retry onset vs WQ size and threshold (direct manipulation + count)</h3>
+<p>Shared WQ on 2 engines; 2 MiB memmove fillers; single ENQCMD attempts; 5 reps each.</p>
+<table>
+<thead>
+<tr>
+<th>config (run)</th>
+<th>SWQ size</th>
+<th>threshold</th>
+<th>first Retry at attempt (accepted before it)</th>
+<th>accepted after the first Retry</th>
+<th>completed during the attempts</th>
+<th>statuses</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>p9-swq32</code> (<code>P9/20261101T022404Z-A-onset-p9-swq32</code>)</td>
+<td>32</td>
+<td>32</td>
+<td><strong>38</strong> (5/5 reps)</td>
+<td>0</td>
+<td>0</td>
+<td>38 × 0x01</td>
+</tr>
+<tr>
+<td><code>p9-swq64</code> (<code>P9/20261101T022405Z-B-onset-p9-swq64</code>; also <code>P9/20261101T022100Z-A-swq64-all</code>)</td>
+<td>64</td>
+<td>64</td>
+<td><strong>70</strong> (5/5, both runs)</td>
+<td>0</td>
+<td>0</td>
+<td>70 × 0x01</td>
+</tr>
+<tr>
+<td><code>p9-swq64-thr16</code> (<code>P9/20261101T022406Z-B-onset-p9-swq64-thr16</code>)</td>
+<td>64</td>
+<td>16</td>
+<td><strong>22</strong> (5/5)</td>
+<td>0</td>
+<td>0</td>
+<td>22 × 0x01</td>
+</tr>
+<tr>
+<td><code>enqcmd-vs-movdir64b</code> (<code>P9/20261101T022406Z-B-onset-enqcmd-vs-movdir64b</code>)</td>
+<td>64</td>
+<td>1</td>
+<td><strong>7</strong> (5/5)</td>
+<td>0</td>
+<td>0</td>
+<td>7 × 0x01</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>The accept pattern is a clean step: all 1s, then all 0s.</li>
+<li>An accepted ENQCMD costs ~260-290 ns and a Retry ~275-305 ns. With 2 MiB memmoves streaming,
+both are ~50 ns slower than idle-queue noops.</li>
+</ul>
+<p><strong>Verdict.</strong> Retry starts at <strong>threshold + 6</strong> in all four configs. The WQ size matters only
+because the threshold is capped at it.</p>
+<ul>
+<li>With threshold = size (the user-space usable capacity), the device refuses at size + 6: 38 and
+70. Both are far below the ~114-116 knee (manipulation of size and of threshold, with counts).</li>
+<li>[INFERENCE] The +6 is constant across sizes 32/64 and thresholds 1-64. These are descriptors
+already pulled out of the WQ into the 2 engines: ~3 per engine, which frees their WQ entries
+(Q3-a).
+<ul>
+<li>This matches the ~11 extra seen in X4 with 4 engines (139 − 128 ≈ 3 × 4 − 1) and supports
+Q4-a (per-engine slots, m ≈ 3).</li>
+<li>A 4-engine shared-WQ run would test it (prediction: threshold + 12).</li>
+</ul>
+</li>
+<li>The prediction &quot;Retry starts at the WQ size&quot; survives, refined to WQ threshold + engine slots.
+The device's capacity is not the ~114 that stalls the core.</li>
+</ul>
+<h3>P9 results: knee check</h3>
+<p>Submit K+1 after prefilling K (p50 ns, 30 iterations; <code>P9/20261101T022405Z-B-onset-p9-swq64</code>):</p>
+<table>
+<thead>
+<tr>
+<th>K</th>
+<th>0</th>
+<th>32</th>
+<th>64</th>
+<th>96</th>
+<th>104</th>
+<th>108</th>
+<th>112</th>
+<th>114</th>
+<th>116</th>
+<th>118</th>
+<th>120</th>
+<th>128</th>
+<th>160</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ENQCMD (shared WQ, size 64)</td>
+<td>248</td>
+<td>219</td>
+<td>218</td>
+<td>230</td>
+<td>231</td>
+<td>231</td>
+<td>232</td>
+<td>230</td>
+<td>231</td>
+<td>230</td>
+<td>231</td>
+<td>231</td>
+<td>230</td>
+</tr>
+<tr>
+<td>MOVDIR64B (dedicated WQ, size 64, same process)</td>
+<td>17</td>
+<td>17</td>
+<td>16</td>
+<td>17</td>
+<td>17</td>
+<td>17</td>
+<td>17</td>
+<td>114</td>
+<td>312</td>
+<td>417</td>
+<td>416</td>
+<td>417</td>
+<td>416</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>The same holds in the other three configs (swq32, thr16, thr1): ENQCMD is flat at 187-233 ns for
+every K, while MOVDIR64B steps up at K=112-116.</li>
+<li>ENQCMD prefill and timed submits never retried, and nothing was missing or failed: the noops
+drain faster than one ENQCMD round trip.</li>
+<li>The ENQCMD trace (every submit timed, K up to 160) is flat at 182-233 ns after the first submit.
+The first submit costs 380-730 ns.</li>
+</ul>
+<p><strong>Verdict.</strong></p>
+<ul>
+<li><strong>ENQCMD shows no knee.</strong> Survives, but it is weak evidence for Q1-b by itself: ENQCMD holds one
+outstanding write per core, so it cannot fill any buffer, store buffer or downstream.</li>
+<li><strong>The stronger Q1 evidence is two observations together:</strong>
+<ul>
+<li>The knee location is 112-116 with a 64-entry dedicated WQ. X1 reference runs on this config
+and on the 128-entry <code>4-engine.conf</code> both put it at ~116: <code>P9/20261101T022747Z-B-x1-ref-p9-swq64</code>
+and <code>P9/20261101T022748Z-B-x1-ref-4-engine</code>.</li>
+<li>The device starts refusing at 38/70, not 114.</li>
+<li>Together they say the ~114 buffer is not WQ or device capacity. This fits Q1-b (core store
+buffer) and is against a device-entry buffer sized by the WQ (Q1-c).</li>
+</ul>
+</li>
+</ul>
+<p><strong>Caveat (open).</strong> The MOVDIR64B plateau above the knee is ~390-440 ns in <code>p9_enqcmd</code>'s knee loop,
+but ~94-99 ns in <code>x1_knee</code> on the same config and side.</p>
+<ul>
+<li>It does not come from using ENQCMD. It is still ~389 ns in a process that never executes
+ENQCMD: <code>P9/20261101T022907Z-B-knee-mov-only-noenq</code>. In <code>P9/20261101T022908Z-A-knee-mov-then-enq</code>
+it is ~424 ns.</li>
+<li>So something in this probe's loop makes the store buffer appear to drain in bursts of ~4. It is
+not understood.</li>
+<li>The knee location agrees with X1 and the ENQCMD rows are unaffected. Do not use P9's MOVDIR64B
+plateau numbers.</li>
+</ul>
+<p><strong>Discarded P9 runs.</strong></p>
+<ul>
+<li><code>022408Z-AB-lat-mesh-sweep</code>: the mesh was not idle at h=0 (2.20 GHz measured).</li>
+<li><code>022509Z-AB-lat-idle-vs-heated</code>: stale binary; the build had failed.</li>
+</ul>
+<h2>Suggested model.js corrections (for the lead)</h2>
+<ul>
+<li><strong>Q5:</strong>
+<ul>
+<li>Set c (engine) as ruled out with a 20× margin (P8: 150 M works/s at the cadence with W=16;
+~200 M/s cap).</li>
+<li>Q5-b's ENQCMD prediction failed in its literal form: the round trip is 1.9-2.2× the cadence.
+Both have the same ~165 mesh-cycle component; ENQCMD adds ~98 ns that scales with neither
+clock, plus core cycles.</li>
+<li>Add the decomposition: MOVDIR64B cadence ≈ 35 ns + 166 mesh cycles; ENQCMD round trip ≈ 98 ns
+<ul>
+<li>130 core cycles + 163 mesh cycles.</li>
+</ul>
+</li>
+<li>Move Q5-a toward &quot;supported, not yet confirmed&quot;: a mesh-level ack round trip per posted write.
+P7 decides.</li>
+</ul>
+</li>
+<li><strong>Q1:</strong> add the P9 evidence. Retry onset is threshold + 6 (38/70 for size 32/64). The knee is at
+112-116 with WQ size 64 as well as 128. So the 114 buffer is not WQ capacity, which strengthens
+b against c.</li>
+<li><strong>Q3/Q4:</strong> P9 onset gives a direct count of &quot;WQ entries + descriptors in engines&quot; = threshold +
+6 with 2 engines. Use it as evidence for Q3-a and Q4-a (m ≈ 3 per engine) [INFERENCE until a
+4-engine shared-WQ run shows +12].</li>
+<li><strong>Animation facts:</strong>
+<ul>
+<li>A Batch descriptor costs the same 106 ns write as a single one.</li>
+<li>One write can carry up to 1024 works; the device runs noops at ~200 M/s without RCs and ~90
+M/s with per-work RCs.</li>
+<li>ENQCMD waits ~205-230 ns per submit (2.2 GHz mesh, warm core); Retry is a clean step at
+threshold + 6.</li>
+</ul>
+</li>
+<li><strong>Probe hygiene (all groups):</strong> set the NUMA mempolicy first in main (see &quot;Fault trap&quot;). Measure
+the mesh over ≥ 0.5 ms windows; the CHA counter over ~40 µs windows is wrong.</li>
+</ul>
+<h2>Next questions</h2>
+<ol>
+<li><strong>4-engine shared WQ onset.</strong> Is it threshold + 12? That tests Q4-a directly.</li>
+<li><strong>P7 (two cores, one device).</strong> Does each core keep its 106 ns cadence (Q5-a, consistent with
+the mesh-cycle match), or is the total capped (Q5-b)?</li>
+<li><strong>Why one large batch seems to run in one engine</strong> (W=1024 at window 4 reaches ¼ of the
+bandwidth). Measure with the DSA PMU per-engine events.</li>
+<li><strong>The P9 knee-loop plateau of ~400 vs ~98 ns.</strong> Bisect the loop differences against <code>x1_knee</code>.</li>
+</ol>
+</main></body></html>
