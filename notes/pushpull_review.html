@@ -1,0 +1,737 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>pushpull review (audit of PPO, PPA, PPM; 2026-11-02)</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Noto+Serif+SC:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"><style>
+:root { --paper:#faf9f5; --card:#fffefb; --sunk:#f3f1eb; --ink:#161514; --ink2:#3b3935; --muted:#7a776f; --rule:#e4e0d6; --rule2:#cfcabe;
+  --serif:"Newsreader","Noto Serif SC",Georgia,serif; --sans:"Inter","PingFang SC","Noto Sans SC",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace; }
+@media (prefers-color-scheme: dark) { :root { --paper:#141311; --card:#1b1a17; --sunk:#201f1b; --ink:#ece8df; --ink2:#cfcac0; --muted:#9a958a; --rule:#2f2d29; --rule2:#46433c; } }
+body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.65 var(--sans); -webkit-font-smoothing:antialiased; }
+.wrap { max-width:980px; margin:0 auto; padding:28px 28px 80px; }
+nav.crumb { font:500 12px var(--mono); letter-spacing:.04em; color:var(--muted); margin-bottom:22px; }
+nav.crumb a { color:var(--muted); }
+h1, h2, h3 { font-family:var(--serif); font-weight:500; line-height:1.25; }
+h1 { font-size:30px; margin:0 0 18px; } h2 { font-size:22px; margin:34px 0 10px; padding-top:14px; border-top:1px solid var(--rule); } h3 { font-size:18px; margin:24px 0 8px; }
+a { color:var(--ink); text-decoration-color:var(--rule2); text-underline-offset:3px; }
+code { font:13px var(--mono); background:var(--sunk); padding:1px 4px; border-radius:4px; overflow-wrap:anywhere; }
+pre { background:var(--sunk); padding:12px 14px; border-radius:8px; overflow:auto; } pre code { background:none; padding:0; }
+table { border-collapse:collapse; margin:12px 0; font-size:13.5px; display:block; overflow-x:auto; }
+th, td { border-bottom:1px solid var(--rule); padding:6px 10px; text-align:left; vertical-align:top; }
+th { font:500 12px var(--mono); color:var(--muted); border-bottom:1px solid var(--rule2); }
+blockquote { margin:12px 0; padding:4px 14px; border-left:3px solid var(--rule2); color:var(--ink2); }
+ul.notes { list-style:none; padding:0; } ul.notes li { padding:14px 0; border-bottom:1px solid var(--rule); }
+ul.notes a { font:500 18px var(--serif); } ul.notes .d { color:var(--ink2); } ul.notes .t { font:12px var(--mono); color:var(--muted); }
+.lead { color:var(--ink2); }
+</style></head><body><main class="wrap"><nav class="crumb"><a href="../">DSA 提交流水线</a> · <a href="./">实验笔记</a> · pushpull_review</nav><h1>pushpull review (audit of PPO, PPA, PPM; 2026-11-02)</h1>
+<p>Auditor: PushPullAudit.</p>
+<p><strong>Audited:</strong></p>
+<ul>
+<li>the Results section of <a href="pushpull.html"><code>pushpull.md</code></a>;</li>
+<li>the probes <code>src/bin/pp_occ.rs</code>, <code>src/bin/pp_arrival.rs</code> and <code>src/bin/arb_sat_chk.rs</code>;</li>
+<li>the raw runs listed below.</li>
+</ul>
+<p>Event encodings were checked against Intel perfmon SPR V1.40 (<code>sapphirerapids_uncore{,_experimental}.json</code>). The check probe is
+<code>src/bin/pp_chk.rs</code>. Run directories are relative to <code>dsa-lab-runs/</code>. Where this file
+and <a href="pushpull.html"><code>pushpull.md</code></a> disagree, this file supersedes.</p>
+<table>
+<thead>
+<tr>
+<th>run</th>
+<th>binary (sha256 prefix)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PPO/20261102T072543Z-A-cal1</code>, <code>…072619Z-A-cal2</code>, <code>…072640Z-A-load1</code></td>
+<td>pp_occ <code>125ebd96</code>: old fixed-counter window</td>
+</tr>
+<tr>
+<td><code>PPO/20261102T072942Z-A-load2-8dwq</code>, <code>…073030Z-AB-cal-far-n1</code>, <code>…073032Z-AB-cal-far-n0</code></td>
+<td>pp_occ <code>3bd575ab</code> (= current source)</td>
+</tr>
+<tr>
+<td><code>PPA/20261102T073316Z-AB-r1</code></td>
+<td>pp_arrival <code>991c5576</code> (= current source)</td>
+</tr>
+<tr>
+<td><code>PPM/20261102T073355Z-AB-idle-1core</code></td>
+<td>arb_sat_chk <code>e697e88c</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Run status.</strong> Every run has rc 0, unchanged SWERROR and successful drains. There is no <code>073050Z</code> far-n0 run; the run is
+<code>073032Z</code>, as cited in the notes.</p>
+<h2>Verdicts</h2>
+<table>
+<thead>
+<tr>
+<th>claim (pushpull.md)</th>
+<th>verdict</th>
+<th>raw values</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Calibration counts (WCiLF = K + Drain on cha_12; WCIL and MMIO 0; M2P CHA_NCB 20 001, NCS 0, IDI 2; IIO MEM_WRITE 20 001, CL_REQS 20 003–20 012; IRP NCS 20 001–20 003, OUTBOUND 20 007)</td>
+<td>CONFIRMED</td>
+<td>cal1 p0/p3/p4, cal2 p0/p1. 6 of the 20 012 CL_REQS are on iio_7 (cal1 p4r1).</td>
+</tr>
+<tr>
+<td>Only one TOR_OCCUPANCY event per CHA box counts at a time</td>
+<td>CONFIRMED</td>
+<td>Counter 0 only in the Intel list. The events rotate rather than one staying off; see §1.</td>
+</tr>
+<tr>
+<td>Unloaded TOR residency 224–234 cycles = 101–106 ns, against a step of 106–111 ns</td>
+<td>cycles CONFIRMED; ns WRONG</td>
+<td>223.6 / 233.6 / 223.9 cycles at each burst's own mesh (2.005 / 2.205 / 2.105 GHz) = 111.5 / 105.9 / 106.4 ns, against steps of 115.8 / 110.7 / 109.8 ns. The gap is 3.4–4.8 ns.</td>
+</tr>
+<tr>
+<td>IIO clock 1.000 GHz while writes flow, ~0.03 GHz idle</td>
+<td>CONFIRMED</td>
+<td>0.999–1.000 GHz in the load runs (window-biased, see §2); 1.001 GHz in re-run R1; 0.027 GHz idle.</td>
+</tr>
+<tr>
+<td>Far core: WCiLF goes to a node-1 CHA (20 000 inserts; node-0 CHAs 0)</td>
+<td>CONFIRMED</td>
+<td>far-n1 p0: 20 000 on cha_12. far-n0 p0: 1 on cha_12, which is the main thread's Drain from cpu 0.</td>
+</tr>
+<tr>
+<td>Far TOR residency 169–172 ns, against a step of 174–176 ns</td>
+<td>CONFIRMED</td>
+<td>378.5 / 373.5 cycles at 2.206 GHz; steps 175.6 / 173.6 ns (far-n1).</td>
+</tr>
+<tr>
+<td>Far writes enter M2PCIe as UPI_NCB = 20 000, UPI_NCS = 0</td>
+<td>CONFIRMED</td>
+<td>far-n0 p1: m2pcie_0 UPI_NCB 20 000, CHA_NCB 1–7 (Drain). Node-1 M2PCIe counted 0 (far-n1 p1).</td>
+</tr>
+<tr>
+<td>load1 <code>arrival_mps</code> ~3 % high</td>
+<td>CONFIRMED but incomplete</td>
+<td>arrival_mps / IIO rate = 1.026–1.032. The same bug inflates load1 <code>mesh_ghz</code>, and that value was used (§2).</td>
+</tr>
+<tr>
+<td>&quot;reps agree to ≤ 1 %&quot;</td>
+<td>WRONG</td>
+<td>load1 1×1: 9.02 vs 9.41 M/s and 233.9 vs 226.2 TOR cycles. The core clock was 2.20 GHz in one rep and 3.91 GHz in the other.</td>
+</tr>
+<tr>
+<td>Results-table cells derived from load1 (TOR ns, outside-TOR, avg occupancy, per-CHA 5.7–7.7)</td>
+<td>WRONG (biased)</td>
+<td>Converted with load1's per-window mesh of 2.255–2.267 GHz. The run's own CHA clock read 2.2033 / 2.2034 GHz at start and end.</td>
+</tr>
+<tr>
+<td>Results-table cells derived from load2</td>
+<td>CONFIRMED</td>
+<td>§2 table.</td>
+</tr>
+<tr>
+<td>(a) TOR residency tracks the per-line cycle up to 64 lines</td>
+<td>CONFIRMED, and tighter than stated</td>
+<td>load2 gap: 4.5 ns (1×1), 5.7–6.1 (1×16), 9.3–11.1 (4×16), 8.1–8.4 (16×4). The notes give 5–21 ns.</td>
+</tr>
+<tr>
+<td>TOR holds ~1 entry per outstanding line (30/32, 61–63/64)</td>
+<td>CONFIRMED</td>
+<td>load2: 62.5–62.9 of 64. The 1×32 value (30.2–30.3) comes from load1 only and is ~3 % low.</td>
+</tr>
+<tr>
+<td>H-recv supported, H-send ruled out (count evidence)</td>
+<td>CONFIRMED for ≤ 64 lines</td>
+<td></td>
+</tr>
+<tr>
+<td>H-cap only at 256 lines; CHA admission limit [INFERENCE]</td>
+<td>OVERSTATED</td>
+<td>One load point, so no cap is shown. The per-CHA shortfall is not uniform (§2).</td>
+</tr>
+<tr>
+<td>Message class: CHA_NCB (local) or UPI_NCB (remote), one per write</td>
+<td>CONFIRMED (count evidence)</td>
+<td>cal1 p3, far-n0 p1</td>
+</tr>
+<tr>
+<td>(b) IRP TxS avg occupancy / residency (assumes IRP clock = IIO clock)</td>
+<td>CONFIRMED by re-run R1</td>
+<td>irp_0 / iio_0 clockticks = 1.000 at every load. Avg occupancy on the IRP's own clock is 7.711–7.714.</td>
+</tr>
+<tr>
+<td>&quot;IRP outbound queue holds at most ~8&quot;</td>
+<td>UNSUPPORTED as a maximum</td>
+<td>7.71 is a plateau of averages; the maximum is not measured. Acceptable if marked [INFERENCE].</td>
+</tr>
+<tr>
+<td>&quot;residency 54.0 = 7.71 × 7.0&quot;</td>
+<td>identity, not evidence</td>
+<td>Little's law within one window.</td>
+</tr>
+<tr>
+<td>M2PCIe &quot;2.0 (always)&quot;: ingress never empty with ≥ 4 cores</td>
+<td>CONFIRMED by R1; the column's normalization is unresolved</td>
+<td>At saturation the plain count is exactly 2.000 per M2P clock. With thresh = 1 (and thresh = 2) the event fires in 1.000 of cycles. Why a cycles-not-empty event counts 2 per clock is unexplained.</td>
+</tr>
+<tr>
+<td>(c) &quot;exactly 7.00 IIO cycles per write&quot;</td>
+<td>CONFIRMED</td>
+<td>6.999–7.003 (load1, load2); 7.000–7.003 (R1).</td>
+</tr>
+<tr>
+<td>&quot;… at 1.000 GHz (142.8 M/s)&quot;</td>
+<td>WRONG (−0.15 %)</td>
+<td>143.0 M/s = 6.99 ns/write; IIO clock 1.001 GHz (§3).</td>
+</tr>
+<tr>
+<td>&quot;Earlier 141–143 M/s were window artefacts; the steady value is 142.8&quot;</td>
+<td>WRONG / UNSUPPORTED</td>
+<td>143.0–143.3 (L1 source, no RCR) is reproduced by load2's DSA counter and by PPM. The RCR numbers (141.4–142.1) were not tested.</td>
+</tr>
+<tr>
+<td>&quot;mesh 2.20 GHz in every burst&quot;; &quot;heaters on node 0 (except PPM)&quot;</td>
+<td>WRONG in detail</td>
+<td>Cal bursts ran at 2.005 and 2.105 GHz. load1 recorded 2.26–2.27 GHz (artefact). In cal1 p1/p2 the CHA-0 clock dropped out (0.000 / 0.063 / 1.251). far-n1 had its heaters on node 1.</td>
+</tr>
+<tr>
+<td>PPA table, Δc 64.0, Δ(write+MFENCE) 66.3, Δarrival 35.4 / 22.7 / 36.0 / 29.4, ratio 0.35–0.56</td>
+<td>CONFIRMED (arithmetic)</td>
+<td>PPA r1</td>
+</tr>
+<tr>
+<td>&quot;10 blocks × 300 trials per submitter, alternating&quot;</td>
+<td>OVERSTATED wording; harmless</td>
+<td>pp_arrival runs every block in one fixed order (near 4/12/20, then far 34/44/54), so order is confounded with near/far. R2 reversed the order every other round: Δarrival 37.4 ns (near first) vs 37.3 ns (far first).</td>
+</tr>
+<tr>
+<td>H-push supported (timing evidence)</td>
+<td>CONFIRMED by re-run R2</td>
+<td>With a symmetric skew estimate: Δarrival 30.6–38.6 ns, ratio 0.48–0.60 (§4).</td>
+</tr>
+<tr>
+<td>&quot;Measured skews within ±17 ns&quot;; the result holds for every skew choice</td>
+<td>OVERSTATED</td>
+<td>Same-home ping-pong skews are biased and depend on the line layout. In the re-run they give ratios 0.19–0.77.</td>
+</tr>
+<tr>
+<td>PPM table; H-cap16 ruled out</td>
+<td>CONFIRMED</td>
+<td>§5</td>
+</tr>
+</tbody>
+</table>
+<h2>1. PPO calibration</h2>
+<ul>
+<li><strong>Encodings.</strong> Every config matches SPR V1.40:
+<ul>
+<li>CHA, M2PCIe and IRP: config = UMaskExt &lt;&lt; 32 | UMask &lt;&lt; 8 | EventCode.</li>
+<li>IIO: ch_mask 0xff (bits 36–47) and fc_mask 7 (bits 48–50).</li>
+<li>The CHA TOR_OCCUPANCY events can only use counter 0. IRP boxes have 2 counters.</li>
+</ul>
+</li>
+<li><strong>Multiplexing.</strong> In cal1 passes 1 and 2, two occupancy events share each box. The kernel rotates them every 4 ms
+(<code>perf_event_mux_interval_ms</code> = 4), so windows hold partial counts:
+<ul>
+<li>p1r0: occ_IA counted only on cha_0.</li>
+<li>p1r1: occ_IA and occ_MMIO are both partial (mux = true).</li>
+<li>p2r0: occ_WCILF was not scheduled on cha_12 (count 0).</li>
+</ul>
+</li>
+<li><strong>CHA-0 clock dropouts.</strong> The rotation also descheduled the fixed CHA-0 clock: p1r0 idle mesh 0.063, p1r1 burst mesh
+0.000, p2r0 idle mesh 1.251. <code>Fixed::read</code> compares cumulative time_enabled with time_running, so <code>fixed_mux</code> stays
+true for the rest of the run and cannot identify the affected windows.</li>
+<li><strong>Impact.</strong> The notes use only clean windows: p0 inserts, p2r1 occ_WCILF (mux false), p3 and p4. No number is affected.</li>
+<li><strong>Unloaded residency.</strong> Converting each burst with its own CHA clock gives a residency 3.4–4.8 ns shorter than the
+per-line step. The notes' 101–106 ns divides every burst by about 2.205 GHz.</li>
+</ul>
+<h2>2. PPO load runs</h2>
+<p><strong>Window alignment, load1</strong> (old binary). The DSA and CHA-0 counters were read outside the uncore snapshots but divided
+by <code>win_ns</code>. arrival_mps / IIO rate is 1.026–1.032, and <code>mesh_ghz</code> (2.255–2.267) carries the same error.</p>
+<ul>
+<li>
+<p>Every load1 TOR ns and average-occupancy value in the notes was converted with these inflated mesh values. Those
+values are biased low by about 3 %, and outside-TOR is biased high by about 3 % of the TOR residency.</p>
+</li>
+<li>
+<p>The per-window mesh cannot be recovered from the raw data, so load1 ns and occupancy values cannot be corrected
+exactly. They are listed below as cycles only.</p>
+</li>
+<li>
+<p>In CHA cycles load1 and load2 agree to ≤ 1 % on the shared cases:</p>
+<table>
+<thead>
+<tr>
+<th>case</th>
+<th>load1 cycles</th>
+<th>load2 cycles</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1×16</td>
+<td>233.9–234.1</td>
+<td>233.9–236.0</td>
+</tr>
+<tr>
+<td>64 lines</td>
+<td>962.6–970.5</td>
+<td>963.0–969.2</td>
+</tr>
+<tr>
+<td>16×16, 1 WQ</td>
+<td>3287–3317</td>
+<td>3298–3314</td>
+</tr>
+</tbody>
+</table>
+</li>
+<li>
+<p>The ranges that mix the two runs are widened by this artefact alone: 4×16 &quot;427–440&quot; and &quot;8–21&quot;; 16×16 &quot;1454–1505&quot;,
+&quot;287–339&quot; and &quot;208–215&quot;.</p>
+</li>
+</ul>
+<p><strong>Window alignment, load2.</strong> The fixed counters are bracketed by their own TSC reads. The uncore snapshot itself takes
+82–92 µs (73 reads), and the first snapshot is 5–8 µs slower than the second.</p>
+<ul>
+<li>Events read last (the IIO events) therefore get a window about 0.2 % shorter than <code>win_ns</code>.</li>
+<li>IIO-window rate: 142.67–142.89 M/s. The TSC-bracketed DSA counter gives 142.94–143.00 M/s for the same cases.</li>
+<li>Ratios of counts read together (occ/ins, iio_clk/iio_txn_wr) are not affected.</li>
+<li>No event was multiplexed or unscheduled in any load or far-calibration window.</li>
+</ul>
+<p><strong>Little's law.</strong> occ/ins summed over the 32 boxes, in CHA cycles, then divided by the measured CHA-0 GHz: the method is
+correct. Average occupancy = occ / (mesh × window): also correct. Only load1's mesh value is wrong.</p>
+<table>
+<thead>
+<tr>
+<th>case</th>
+<th>per-line cycle ns</th>
+<th>TOR occ/ins (CHA cycles)</th>
+<th>load2: TOR ns / outside ns / avg occ</th>
+<th>notes</th>
+<th>verdict</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1×1</td>
+<td>106.3–110.8</td>
+<td>226.2–233.9</td>
+<td>106.1–106.2 / 4.5 / 0.96</td>
+<td>9.0 M/s, 111, 103–106, 5–8, 0.9–1.0</td>
+<td>rate should be 9.0–9.4 M/s and the cycle 106–111 ns; ns and outside-TOR cells are load1-biased</td>
+</tr>
+<tr>
+<td>1×4</td>
+<td>112.6–112.7</td>
+<td>235.7</td>
+<td>load1 only</td>
+<td>104 / 9 / 3.7</td>
+<td>biased (TOR ns and occupancy low, outside high)</td>
+</tr>
+<tr>
+<td>1×8</td>
+<td>112.7</td>
+<td>235.4</td>
+<td>load1 only</td>
+<td>104 / 9 / 7.4</td>
+<td>biased</td>
+</tr>
+<tr>
+<td>1×16</td>
+<td>112.3–112.9</td>
+<td>233.9–236.0</td>
+<td>106.2–107.2 / 5.7–6.1 / 15.1–15.2</td>
+<td>103–107 / 6–9 / 14.7–15.2</td>
+<td>load1 part biased</td>
+</tr>
+<tr>
+<td>1×32</td>
+<td>224.1</td>
+<td>476.5–477.7</td>
+<td>load1 only</td>
+<td>211–212 / 12–13 / 30.3</td>
+<td>biased</td>
+</tr>
+<tr>
+<td>4×16</td>
+<td>447.9–448.6</td>
+<td>962.6–970.5</td>
+<td>437.4–438.6 / 9.3–11.1 / 62.5–62.7</td>
+<td>427–440 / 8–21 / 61–63</td>
+<td>load1 part biased</td>
+</tr>
+<tr>
+<td>16×4</td>
+<td>448.2–448.4</td>
+<td>968.2–969.2</td>
+<td>439.8–440.2 / 8.1–8.4 / 62.8–62.9</td>
+<td>440 / 8 / 62.9</td>
+<td>CONFIRMED</td>
+</tr>
+<tr>
+<td>16×16, 64 shared addresses</td>
+<td>1791.8–1793.3</td>
+<td>3287–3317</td>
+<td>1497.8–1505.3 / 287–295 / 214.0–215.1</td>
+<td>1454–1505 / 287–339 / 208–215</td>
+<td>load1 part biased</td>
+</tr>
+<tr>
+<td>16×16, 256 distinct addresses</td>
+<td>1792.9–1793.1</td>
+<td>3291–3295</td>
+<td>1495.1–1496.7 / 296–298 / 213.6–213.8</td>
+<td>as raw</td>
+<td>CONFIRMED</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Cells that match the raw data in every row:</strong></p>
+<ul>
+<li>
+<p>M2P non-empty: 0.008, 0.034, 0.068, 0.144–0.147, 0.143, then 1.998–2.000.</p>
+</li>
+<li>
+<p>IRP occupancy / residency:</p>
+<table>
+<thead>
+<tr>
+<th>case</th>
+<th>avg occ</th>
+<th>residency (cycles)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1×1</td>
+<td>0.17</td>
+<td>18.7–18.9</td>
+</tr>
+<tr>
+<td>1×4</td>
+<td>0.69</td>
+<td>19.5</td>
+</tr>
+<tr>
+<td>1×8</td>
+<td>1.44</td>
+<td>20.2</td>
+</tr>
+<tr>
+<td>1×16</td>
+<td>2.96–3.10</td>
+<td>20.9–21.8</td>
+</tr>
+<tr>
+<td>1×32</td>
+<td>3.59–3.67</td>
+<td>25.1–25.7</td>
+</tr>
+<tr>
+<td>≥ 4 cores</td>
+<td>7.709–7.716</td>
+<td>53.97–54.00</td>
+</tr>
+</tbody>
+</table>
+</li>
+<li>
+<p>IIO cycles per write: 106.2–110.7, 28.1, 14.1, 7.02–7.05, 7.000, 6.999–7.003.</p>
+</li>
+</ul>
+<p><strong>Claim (a) without the mesh.</strong> The comparison also holds in CHA cycles alone. TOR residency is about 235 cycles at 1–16
+lines on one core; at 32 lines it is 2.04× that, while the per-line cycle grows 1.99×.</p>
+<p><strong>Per-CHA occupancy (load2).</strong></p>
+<ul>
+<li>1 line per CHA: 0.87–0.97 entries.</li>
+<li>2 lines per CHA: 1.93–1.98.</li>
+<li>16×16: 5.9–8.0 of 8 (not 5.7–7.7). The shortfall is concentrated on some CHAs: CHAs 8, 9 and 12 hold 7.7–8.0, while
+CHAs 16–31 hold 5.9–6.5.</li>
+</ul>
+<p><strong>Implication for the 256-line case.</strong> The ~300 ns spent before TOR insertion is an average over CHAs whose individual
+pre-TOR time runs from about 5 to about 470 ns. A uniform per-CHA admission cap does not fit this pattern. H-cap is
+therefore OVERSTATED; the [INFERENCE] label on the admission limit is correct.</p>
+<h2>3. Downstream: IRP, M2PCIe, IIO (claims b and c)</h2>
+<p><strong>(b) IRP clock.</strong> In the load passes <code>irp_clk</code> was on <code>uncore_irp_1</code>, an idle stack gated at 0.023–0.027 GHz. It says
+nothing about irp_0, and irp_0's 2 counters were already taken by TxS occupancy and inserts. The cal2 burst count
+(2 229 269 irp_0 ticks over a 2.21 ms write phase) was consistent with 1 GHz but was not a same-window comparison.</p>
+<p>Re-run R1 measured <code>irp_clk</code> on irp_0 in its own passes:</p>
+<ul>
+<li>irp_0 / iio_0 clockticks = 1.000 at 1×1, 1×16, 1×32, 4×16 and 16×16.</li>
+<li>IRP cycles per write = IIO cycles per write (7.000 when saturated).</li>
+<li>TxS_NCS inserts / IIO writes = 1.000.</li>
+<li>TxS average occupancy on the IRP's own clock: 0.172–0.176 (1×1), 2.93–3.12 (1×16), 3.35–3.65 (1×32), 7.711–7.714
+(≥ 4 cores).</li>
+</ul>
+<p>The notes' IRP numbers stand. &quot;At most ~8&quot; remains an inference from the 7.71 plateau.</p>
+<p><strong>M2PCIe non-empty.</strong> At 1×1 every insert adds exactly 2.000 to the not-empty count. R1 adds thresholds:</p>
+<table>
+<thead>
+<tr>
+<th>case</th>
+<th>not-empty / cycle</th>
+<th>thresh = 1</th>
+<th>thresh = 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1×1</td>
+<td>0.008</td>
+<td>0.008</td>
+<td>0.000</td>
+</tr>
+<tr>
+<td>1×16</td>
+<td>0.146–0.151</td>
+<td>0.132–0.135</td>
+<td>0.014–0.016</td>
+</tr>
+<tr>
+<td>1×32</td>
+<td>0.141–0.143</td>
+<td>0.133–0.134</td>
+<td>0.008–0.010</td>
+</tr>
+<tr>
+<td>4×16, 16×16</td>
+<td>2.000</td>
+<td>1.000</td>
+<td>1.000</td>
+</tr>
+</tbody>
+</table>
+<p>With thresh = 1 the event fires in every M2P clock, so by Intel's description the CHA_NCB ingress was never empty with
+≥ 4 cores. Why the plain count is exactly 2 per clock is not explained by the event description, so the column is not a
+fraction and its normalization is unresolved.</p>
+<p><strong>(c) 7.00 cycles and the rate.</strong></p>
+<ul>
+<li>
+<p>7.000 IIO cycles per write is a count ratio (6.999–7.003) and is CONFIRMED.</p>
+</li>
+<li>
+<p>The rate and clock in the notes come from the window-biased IIO counts.</p>
+</li>
+<li>
+<p>Unbiased measurements:</p>
+<table>
+<thead>
+<tr>
+<th>source</th>
+<th>rate</th>
+<th>per write</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>load2 DSA counter, TSC-bracketed</td>
+<td>142.94–143.00 M/s</td>
+<td>–</td>
+</tr>
+<tr>
+<td>R1, 4-event passes (negligible snapshot time)</td>
+<td>142.96–143.04 M/s (IIO clock 1.001 GHz)</td>
+<td>–</td>
+</tr>
+<tr>
+<td>PPM slope</td>
+<td>143.05–143.06 M/s</td>
+<td>6.98–6.99 ns (fenced)</td>
+</tr>
+</tbody>
+</table>
+</li>
+<li>
+<p>The cap is therefore 143.0 M/s, 7.000 cycles of a 1.001 GHz IIO clock. The location is correctly marked [INFERENCE].</p>
+</li>
+</ul>
+<h2>4. PPA (claim d and push vs pull)</h2>
+<p><strong>Arithmetic.</strong> Every table entry matches the raw data:</p>
+<ul>
+<li>medians 389.5 … 434.0;</li>
+<li>skews −1.4 … 16.8;</li>
+<li>cadences 97.8 … 177.4;</li>
+<li>write + MFENCE 164.3 … 242.4.</li>
+</ul>
+<p>The derived values Δc = 63.97, Δ(write + MFENCE) = 66.28, Δarrival = 35.41 and 22.70 / 36.02 / 29.36 after correction
+all check out.</p>
+<p><strong>Method findings:</strong></p>
+<ul>
+<li>
+<p><strong>Stamp placement is sound.</strong> Both sides use lfence; rdtsc; lfence, and the submitter has MFENCE'd before
+MOVDIR64B, so its store buffer is empty. The poller's detection latency is common to near and far submitters.</p>
+</li>
+<li>
+<p><strong>The submitter's core clock enters the arrival time.</strong> About 100 core cycles lie between the stamp and the write
+leaving the core. In re-run R2, far blocks where the submitter ran at 2.8–3.4 GHz arrived 11–15 ns earlier than the
+same core's 2.2 GHz blocks:</p>
+<ul>
+<li>cpu 44: 410–414 vs 424.8 ns;</li>
+<li>cpu 54: 420–425 vs 435.7 ns.</li>
+</ul>
+<p>PPA records only the warm-up clock, which was 2.19–2.20 GHz for every block, so the clocks were probably matched but
+this was not verified during the trials.</p>
+</li>
+<li>
+<p><strong>The clock effect is large.</strong> A first pp_chk version kept all 8 submitter threads alive (run R2a). Its near cores ran
+at 2.2 GHz and its far cores at 3.9 GHz, and it gave raw Δarrival = 18.1 ns. It is superseded; it only shows the size
+of this effect.</p>
+</li>
+<li>
+<p><strong>Block order.</strong> pp_arrival's blocks always run near cores 4/12/20 before far cores 34/44/54 (<code>subs</code> = near ++ far),
+so any within-block drift would bias Δarrival. R2 reversed the order every other round: near-first rounds give
+37.4 ns and far-first rounds 37.3 ns, so the order has no measurable effect.</p>
+</li>
+<li>
+<p><strong>Homes.</strong> PPA placed pages by first touch and did not verify them. R2 bound pages with mbind and read them back with
+move_pages: ping-pong pages on node 0 and node 1, completion record and control lines on node 0.</p>
+</li>
+<li>
+<p><strong>Skew.</strong> Ping-pong with both lines on one node is asymmetric for a cross-socket pair, and the bias depends on the line
+layout.</p>
+<ul>
+<li>PPA put x, y and the record in adjacent lines of one page. Far-core skews (P − S): +12.7…+16.8 (both lines on
+node 0) and −3.2…+2.3 (both on node 1).</li>
+<li>R2 placed x and y 2 KiB apart. Same-home skews: +23.1…+26.8 (node 0) and −10.9…−12.3 (node 1).</li>
+<li>In the two split arrangements each direction mirrors the other. Far pairs gave +2.3…+8.2 (each line homed at its
+reader) and −0.5…+4.5 (each line homed at its writer).</li>
+<li>Near pairs share one socket, so their true skew is 0. They gave −1.4…+5.4 across all four arrangements.</li>
+<li>Conclusion: the inter-socket TSC offset (P − S) is about +2…+6 ns, with about ±5 ns method noise.</li>
+</ul>
+</li>
+</ul>
+<p><strong>Results of R2</strong> (20 blocks × 300 trials per core, block order reversed every other round, mesh 2.20 / 2.10 GHz as in
+PPA):</p>
+<table>
+<thead>
+<tr>
+<th>quantity</th>
+<th>R2</th>
+<th>PPA</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>raw Δarrival, cores 4/12/20/28 vs 34/44/54/60</td>
+<td>36.3 ns</td>
+<td>–</td>
+</tr>
+<tr>
+<td>raw Δarrival, PPA's 3 + 3 cores</td>
+<td>36.0 ns</td>
+<td>35.4 ns</td>
+</tr>
+<tr>
+<td>raw Δarrival, 2.2 GHz blocks only (4 + 4 cores)</td>
+<td>37.7 ns</td>
+<td>–</td>
+</tr>
+<tr>
+<td>Δc</td>
+<td>64.1 ns</td>
+<td>64.0 ns</td>
+</tr>
+<tr>
+<td>Δ(write + MFENCE)</td>
+<td>66.7 ns</td>
+<td>66.3 ns</td>
+</tr>
+</tbody>
+</table>
+<p>With the symmetric split-home skew, the corrected Δarrival is 30.6–38.6 ns, a ratio of 0.48–0.60. With the same-home
+skews it would be 12.0–49.6 ns, a ratio of 0.19–0.77. The per-core-pair raw ratio is 0.45–0.74 (PPA: 0.37–0.66).</p>
+<p><strong>Verdict.</strong> H-push is CONFIRMED (timing evidence): the ratio sits at the push prediction (0.5) and far from pull
+(1.5). Reaching pull needs a −60 ns skew, which every estimate excludes.</p>
+<p>The robustness claim is OVERSTATED. PPA's 0.35–0.56 range comes from biased same-home skews. In R2 the node-1-homed
+estimate alone would give 0.74–0.77, which is the undecided boundary.</p>
+<p><strong>Model caveat [INFERENCE].</strong> Consider a pull variant in which the far CHA also waits for an acknowledgement of the data.
+It predicts Δc ≈ 2 cross-socket round trips and a ratio of about 0.75. The ratio rule does not exclude it.</p>
+<p>It is excluded because Δc (64 ns) and Δ(write + MFENCE) (66 ns) are about one round trip. Far-minus-near ping-pong
+round trips are about 270 ns, roughly 8 socket crossings, so one crossing is about 34 ns.</p>
+<h2>5. PPM</h2>
+<p>The table matches the raw data:</p>
+<table>
+<thead>
+<tr>
+<th>lines</th>
+<th>mesh (GHz)</th>
+<th>slope (M/s)</th>
+<th>fenced (ns/write)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>0.80, 0.90, 2.00, 1.20</td>
+<td>4.16–8.63</td>
+<td>115.8–240.5</td>
+</tr>
+<tr>
+<td>16</td>
+<td>0.999–1.198</td>
+<td>77.9–92.1</td>
+<td>10.87–12.85</td>
+</tr>
+<tr>
+<td>32</td>
+<td>1.099–1.199</td>
+<td>143.05–143.06</td>
+<td>6.99</td>
+</tr>
+<tr>
+<td>64</td>
+<td>0.799–1.198</td>
+<td>143.06</td>
+<td>6.98–6.99</td>
+</tr>
+</tbody>
+</table>
+<p><strong>H-cap16 ruled out: CONFIRMED.</strong></p>
+<ul>
+<li>Rate evidence: 16 lines give 78 M/s at a 1.0 GHz mesh, and 32 or 64 lines reach the device cap even at 0.8–1.2 GHz.</li>
+<li>Count evidence: one core holds ≥ 30 WCiLF in the TORs at 1×32. That value is from load1 and biased low.</li>
+</ul>
+<p>The prose &quot;the burst lifts the mesh to 0.8–1.2 GHz&quot; misses one 1-line burst at 2.0 GHz.</p>
+<h2>6. Evidence labels</h2>
+<ul>
+<li><strong>Warranted labels.</strong> H-recv and H-send are count evidence; H-push is timing evidence; H-cap16 rests on rate plus
+count evidence. The 256-line admission limit is marked [INFERENCE].</li>
+<li><strong>Inferences that should be marked:</strong>
+<ul>
+<li>&quot;the CHA retires the entry … only after the write has gone downstream&quot; (from residency ≈ cycle − 4…11 ns);</li>
+<li>&quot;~8-entry&quot; IRP queue;</li>
+<li>&quot;Pushed&quot; for the local CHA→IIO leg, which rests only on the message class;</li>
+<li>&quot;from the node-1 CHA straight to the DSA's M2PCIe&quot; (remote-source TOR inserts at node-0 CHAs were not counted);</li>
+<li>&quot;earlier estimates were artefacts&quot; (untested).</li>
+</ul>
+</li>
+</ul>
+<h2>Re-runs</h2>
+<ul>
+<li><strong>R1</strong> <code>PPX/20261102T075249Z-A-irpclk-m2pne</code>: pp_occ <code>3bd575ab</code>, unchanged.
+<ul>
+<li>Passes: (irp_0 clk + TxS_NCS + iio_0 clk + MEM_WRITE), (irp_0 clk + TxS_OCC + iio_0 clk + MEM_WRITE), and M2P
+CHA_NCB not-empty with thresh 0/1/2 + M2P clk.</li>
+<li>Cases 1×1, 1×16, 1×32, 4×16, 16×16; 2 reps; no multiplexing.</li>
+</ul>
+</li>
+<li><strong>R2a</strong> <code>PPX/20261102T075819Z-AB-ppa-chk</code>: first pp_chk version (<code>d7770324</code>), all submitters alive and interleaved per
+trial. Superseded because the near and far core clocks did not match (2.2 vs 3.9 GHz).</li>
+<li><strong>R2</strong> <code>PPX/20261102T075934Z-AB-ppa-chk-blocks</code>: pp_chk <code>c1eebe44</code> (= current source).
+<ul>
+<li>Arrival: dsa0, poller cpu 6, near cores 4/12/20/28, far cores 34/44/54/60; one submitter at a time, 20 rounds × 300
+trials, order reversed every other round.</li>
+<li>Skew: four verified ping-pong home arrangements, 20 000 rounds each.</li>
+<li>Yardsticks: 20 000-write cadence and 2 000 write + MFENCE samples per core.</li>
+</ul>
+</li>
+</ul>
+<h2>Corrected numbers</h2>
+<ol>
+<li>Device cap: 143.0 M/s (6.99 ns/write) = 7.000 cycles of a 1.001 GHz IIO clock, not 142.8 M/s at 1.000 GHz.</li>
+<li>Unloaded TOR residency: 106–112 ns, 3.4–4.8 ns below the per-line step (not 101–106 ns).</li>
+<li>1×1: 9.0–9.4 M/s, per-line cycle 106–111 ns. load2: TOR 106.1–106.2 ns, 4.5 ns outside the TOR.</li>
+<li>64 lines (load2): TOR 437.4–440.2 ns, 8.1–11.1 ns outside, 62.5–62.9 of 64 entries. 1×16 (load2): 106.2–107.2 ns,
+5.7–6.1 ns outside, 15.1–15.2 of 16.</li>
+<li>256 lines, shared addresses (load2): TOR 1497.8–1505.3 ns, 287–295 ns outside, 214.0–215.1 of 256 entries.
+Per-CHA: 5.9–8.0 of 8.</li>
+<li>load1-only cells (1×4, 1×8, 1×32) are valid in CHA cycles only (235.7, 235.4, 476.5–477.7). Their ns and occupancy
+values are about 3 % low.</li>
+<li>IRP average occupancy under load: 7.711–7.714 on irp_0's own clock (the IRP clock equals the IIO clock).</li>
+<li>PPA: TSC offset P − S ≈ +2…+6 ns; Δarrival 30.6–38.6 ns; Δarrival/Δc = 0.48–0.60 (not 0.35–0.56).</li>
+</ol>
+</main></body></html>

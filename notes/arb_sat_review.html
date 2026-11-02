@@ -1,0 +1,301 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>arb_sat review (audit of E1 saturation and E2 sharing)</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Noto+Serif+SC:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"><style>
+:root { --paper:#faf9f5; --card:#fffefb; --sunk:#f3f1eb; --ink:#161514; --ink2:#3b3935; --muted:#7a776f; --rule:#e4e0d6; --rule2:#cfcabe;
+  --serif:"Newsreader","Noto Serif SC",Georgia,serif; --sans:"Inter","PingFang SC","Noto Sans SC",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace; }
+@media (prefers-color-scheme: dark) { :root { --paper:#141311; --card:#1b1a17; --sunk:#201f1b; --ink:#ece8df; --ink2:#cfcac0; --muted:#9a958a; --rule:#2f2d29; --rule2:#46433c; } }
+body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.65 var(--sans); -webkit-font-smoothing:antialiased; }
+.wrap { max-width:980px; margin:0 auto; padding:28px 28px 80px; }
+nav.crumb { font:500 12px var(--mono); letter-spacing:.04em; color:var(--muted); margin-bottom:22px; }
+nav.crumb a { color:var(--muted); }
+h1, h2, h3 { font-family:var(--serif); font-weight:500; line-height:1.25; }
+h1 { font-size:30px; margin:0 0 18px; } h2 { font-size:22px; margin:34px 0 10px; padding-top:14px; border-top:1px solid var(--rule); } h3 { font-size:18px; margin:24px 0 8px; }
+a { color:var(--ink); text-decoration-color:var(--rule2); text-underline-offset:3px; }
+code { font:13px var(--mono); background:var(--sunk); padding:1px 4px; border-radius:4px; overflow-wrap:anywhere; }
+pre { background:var(--sunk); padding:12px 14px; border-radius:8px; overflow:auto; } pre code { background:none; padding:0; }
+table { border-collapse:collapse; margin:12px 0; font-size:13.5px; display:block; overflow-x:auto; }
+th, td { border-bottom:1px solid var(--rule); padding:6px 10px; text-align:left; vertical-align:top; }
+th { font:500 12px var(--mono); color:var(--muted); border-bottom:1px solid var(--rule2); }
+blockquote { margin:12px 0; padding:4px 14px; border-left:3px solid var(--rule2); color:var(--ink2); }
+ul.notes { list-style:none; padding:0; } ul.notes li { padding:14px 0; border-bottom:1px solid var(--rule); }
+ul.notes a { font:500 18px var(--serif); } ul.notes .d { color:var(--ink2); } ul.notes .t { font:12px var(--mono); color:var(--muted); }
+.lead { color:var(--ink2); }
+</style></head><body><main class="wrap"><nav class="crumb"><a href="../">DSA 提交流水线</a> · <a href="./">实验笔记</a> · arb_sat_review</nav><h1>arb_sat review (audit of E1 saturation and E2 sharing)</h1>
+<p>Auditor: ChkSat. Audited: probe <code>dsa-lab/src/bin/arb_sat.rs</code>, notes <a href="arb_sat.html"><code>arb_sat.md</code></a>, and the raw runs in
+<code>dsa-lab-runs/arb_sat/</code> (e1-8dwq, e1-4eng, all e2-*). Check probe: <code>dsa-lab/src/bin/arb_sat_chk.rs</code>.
+Re-run directories are relative to <code>dsa-lab-runs/arb_sat_chk/</code>.</p>
+<h2>How the check probe differs from arb_sat</h2>
+<ul>
+<li><strong>Count mode.</strong> Every core writes exactly <code>n</code> MOVDIR64B. The loop stamps nothing per write: it checks
+once per 32 writes, the same for every worker.</li>
+<li><strong>Timed mode</strong> (<code>dur=</code>). All workers share one TSC deadline. Each worker records t_first, t_ret
+(rdtscp after the last write, no fence: the W2X method) and t_fen (after MFENCE).</li>
+<li><strong>PMU sampling.</strong> The coordinator samples DSA PMU SUCCESS + FULL (all WQs) every 10 µs. Reported:
+<ul>
+<li>the least-squares slope over the 10–90 % part of the burst (<code>slope</code>);</li>
+<li>a post-Drain bracket (<code>pd</code>). The coordinator checks whether all workers have fenced only at its
+10 µs PMU sample points, so Drains start 0–10 µs after the last fence. After the Drains it takes
+the TSC and SUCCESS / FULL / IIO, subtracts the Drain descriptors, and divides the data arrivals
+by [first write, post-Drain]. The window therefore contains the sampling delay and the Drain
+latency. <code>pd</code> is a conservative lower bound, not a clean burst-plus-drain rate.</li>
+</ul>
+</li>
+<li><strong>Variants.</strong>
+<ul>
+<li><code>src=stream,rcr=1</code> reproduces arb_sat: one distinct source line and completion record per write
+(16 MB+).</li>
+<li><code>src=ring,rcr=0</code> uses 256 L1-resident descriptors and no completion record.</li>
+</ul>
+</li>
+<li><strong>Mesh.</strong> The CHA clock is measured over every burst (<code>mesh_ghz_burst</code>).</li>
+</ul>
+<p>Valid re-runs:</p>
+<ul>
+<li><code>20261101T231335Z-A-h2h-8dwq-r3</code></li>
+<li><code>…231338Z-A-h2h-2dwq</code></li>
+<li><code>…231347Z-A-h2h-4eng-r2</code></li>
+<li><code>…231356Z-A-e2-timed</code></li>
+<li><code>…231409Z-AB-e2-nf-timed</code></li>
+<li><code>…231551Z-AB-mesh-idle-r2</code></li>
+</ul>
+<p>Superseded runs:</p>
+<ul>
+<li><code>…231051Z</code> panicked (rc 101, no stdout).</li>
+<li><code>…231340Z</code> panicked: wq index out of range on the 1-WQ config.</li>
+<li><code>…231135Z-r2</code>: its post-Drain metric included a 50 µs stabilisation wait. Its slope, fenced and
+W2X-style numbers are valid.</li>
+<li><code>…231412Z-AB-mesh-idle</code>: the mesh was not measured per burst.</li>
+</ul>
+<h2>Answers to the specific suspicions</h2>
+<p><strong>(a) Metrics are partly circular.</strong></p>
+<ul>
+<li><code>arrival_mps = (SUCCESS+FULL)/burst_span</code> (arb_sat.rs:660-664).</li>
+<li><code>offered_mps = Σ_i writes_i / (t_last_i − t_first_i)</code> (arb_sat.rs:517-545).</li>
+<li><code>burst_span = max t_last − min t_first</code> (arb_sat.rs:508-510). Here t_last is rdtscp after MFENCE
+(arb_sat.rs:404-405), so the store-buffer tail is included.</li>
+</ul>
+<p>Arrivals equal the program count, and every worker's span is within 0.2 % of burst_span (raw: e.g.
+1×16 span 1767.3 µs = dt). So &quot;offered == arrival&quot; holds by construction. &quot;Offered&quot; is the core's
+achieved issue rate, not offered load. It is not evidence of no loss.</p>
+<p>The independent no-loss evidence is the count identity: PMU SUCCESS+FULL equals the program count,
+and the completion statuses (ok/full) equal PMU SUCCESS/FULL in all 60 E1 rows. The re-runs confirm
+it after Drain (<code>post_drain_lost = 0</code> in every burst).</p>
+<p>IIO is <strong>not</strong> an exact third witness:</p>
+<ul>
+<li>arb_sat raw: IIO exceeds arrivals by 348–1758 writes (0.1–0.8 %) in every run with WQ-full drops,
+and by 0 in every run without drops. arb_sat reads IIO and DSA at the same instant, before Drain.
+At that instant the DSA count already equals the program count. So the excess is not program
+writes that IIO had counted but that had not yet reached the device. It is extra IIO counts.
+A window-edge effect from some other traffic is not excluded by the old data alone.</li>
+<li>Re-runs after Drain, with the Drain writes subtracted: an excess of 56–150 remains with
+stream/RCR, 0 with ring/no-RCR, and 1920 for 16 cores on one line. So part of the excess is not a
+timing tail. Whether the larger old excess (~500 per run) is the same thing is open. Cause
+unexplained.</li>
+</ul>
+<p>Store-buffer tail: t_ret→t_fen is 0.9–1.1 µs for one core at 16–32 lines, i.e. 130–155
+write-time equivalents at 7 ns. That interval also contains MFENCE and uncore latency, so it does
+not prove 130–155 writes in flight. The store buffer bounds outstanding writes at ≤ ~114 per core.
+For a 1-offset core the tail is 11–19 µs, about 110 write-times.</p>
+<p>If the post-MFENCE tail were omitted, the bound on the error would be:</p>
+<ul>
+<li>114 / 249 984 = 0.046 % for 1 core × 250k writes;</li>
+<li>16 × 114 / ~285k = 0.64 % for 16 cores × ~17.8k writes.</li>
+</ul>
+<p>arb_sat's t_last is taken after MFENCE, so it includes this core-side drain. MFENCE does not
+guarantee arrival at the DSA; only the PMU count, read later, shows that every write arrived. The
+tail matters only for µs-scale bursts; see (d).</p>
+<p><strong>(b) E2 windows: two cases are corrupted.</strong></p>
+<ul>
+<li><strong>E2-AB, reps 1–2.</strong> Core A hits <code>MAX_SLOTS</code> (249 984 writes) at 1880 µs, while B runs on to
+2015 µs (raw <code>e2-ab</code>). So the reported &quot;A 124.0 M/s, total 132.4&quot; is an artifact. Rep 0 ran at
+mesh 2.09 / 1.93 GHz, below the standard condition.</li>
+<li><strong>E2-NF16-1.</strong> Near stops at 1845 µs and far at 2020 µs. The reported &quot;near 123.6 M/s (95.6 %)&quot; is
+also an artifact.</li>
+<li><strong>Every case with a 1-offset core.</strong> That core finishes 11–19 µs late, because its last ~110
+store-buffered writes drain alone. In 4p1 this inflates its share from 1.55 % to 1.59 %.</li>
+</ul>
+<p>Timed re-run (<code>e2-timed</code>, equal deadline):</p>
+<ul>
+<li>AB: A 132.6 M/s, B 8.65 M/s; B's share is 6.2 %, or 6.13 % after removing the tail.</li>
+<li>NF16-1 (<code>e2-nf-timed</code>): near 135.5 M/s, far 5.77 M/s; far's share is 4.1 %.</li>
+</ul>
+<p><strong>(c) Core-loop overhead: none that matters.</strong></p>
+<ul>
+<li>The loop does one rdtsc per 32 writes (arb_sat.rs:399) and reads a distinct 64 B source line per
+write from a 16 MB array (arb_sat.rs:340-394).</li>
+<li>An L1-resident source without completion records is only 1–1.5 % faster: 143.0–143.3 vs
+140.6–142.0 M/s.</li>
+<li>At the same mesh, the ns/write does not move with the core clock: 15.6 cycles/write at 2.2 GHz and
+27.6 at 3.9 GHz both give 7.05 ns (<code>h2h-8dwq-r2</code>).</li>
+</ul>
+<p><strong>(d) The W2X numbers do not survive a long, drain-bracketed measurement. The cap is real.</strong> W2X timed
+400 writes (after 200 warm-up writes) from rdtscp to rdtscp with no fence (w2_xport.rs:433-437).
+With that method the re-runs reproduce W2X:</p>
+<ul>
+<li>16 lines: 5.9–6.8 ns.</li>
+<li>32 lines: 4.8–5.5 ns.</li>
+</ul>
+<p>For the same 608-write bursts, the MFENCE-inclusive time is 7.1–7.9 ns at 16 lines and 6.5–7.0 ns at
+32 lines. For bursts of ≥ 4k writes, all methods converge on 6.95–7.16 ns.</p>
+<p>Head-to-head, 40 000 writes per core, PMU slope / fenced core rate (M/s):</p>
+<table>
+<thead>
+<tr>
+<th>config</th>
+<th>1 core × 16</th>
+<th>1 core × 32 (stream)</th>
+<th>1 core × 32 (ring, no RCR)</th>
+<th>2 cores × 16</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>8 DWQ × 16 (<code>8dwq-r3</code>)</td>
+<td>140.6–142.0 / 140.0–141.1</td>
+<td>138.2–141.6 / 139.7–141.7</td>
+<td>143.1 / 143.2–143.3</td>
+<td>141.3–142.1 / 141.2–142.1</td>
+</tr>
+<tr>
+<td>2 DWQ × 64 (W2X conf, <code>2dwq</code>)</td>
+<td>140.5–141.4 / 141.0–141.5</td>
+<td>141.4 / 141.4–141.5</td>
+<td>143.0 / 143.1–143.2</td>
+<td>141.9–142.0 / 141.5–142.0</td>
+</tr>
+<tr>
+<td>1 DWQ × 128 (<code>4eng-r2</code>)</td>
+<td>140.8–141.4 / 141.2–141.6</td>
+<td>–</td>
+<td>143.0 / 143.2</td>
+<td>141.2–141.3 / 141.3 (same WQ)</td>
+</tr>
+</tbody>
+</table>
+<p>The post-Drain bracket gives 134.8–141.9 M/s. It is a conservative lower bound: the window includes
+0–10 µs of coordinator sampling delay plus the Drain latency, on bursts of about 280–570 µs.
+The loss after Drain is 0 in every row. The cap does not depend on WQ count, WQ size or offsets per
+WQ.</p>
+<p><strong>The cap does not depend on the mesh clock either</strong> (<code>mesh-idle-r2</code>, no heaters):</p>
+<ul>
+<li>At a measured mesh of 0.80 GHz, 4 cores × 16 reach 141.4–142.1 M/s and 8 cores × 16 reach
+143.0–143.1 M/s.</li>
+<li>In the same run, 1 core × 1 line slows to 163–218 ns at 0.9–1.3 GHz. So the mesh really was slow.</li>
+</ul>
+<p>Caveat on the W2X reproduction above: W2X's 200 warm-up writes could cancel buffer occupancy between the two stamps, so this does not
+prove the store buffer specifically is the cause. What it shows is that the 5–6 ns figure is a
+short, retire-only metric. It is consistent with buffering at the endpoints (store buffer and/or
+uncore), and it disappears with ≥ 4k-write or fence/Drain-bracketed timing.</p>
+<p>[INFERENCE] Short fenced bursts exceed the cap (608 writes at 32 lines: 151–153 M/s). So roughly 50
+writes are accepted beyond the point where MFENCE retires, i.e. upstream of the 7 ns stage.</p>
+<p><strong>(e) Core placement is correct.</strong></p>
+<ul>
+<li>Workers 2,4,…,30,1 are 16 distinct physical cores on node 0 (lscpu: core id = cpu, SMT sibling =
+cpu+64).</li>
+<li>The E1 heaters were 3,5,…,17, which are disjoint from the workers.</li>
+<li>E1 mesh was 2.20 GHz on node 0 at start and end of both E1 runs.</li>
+<li>E2 deviations from the standard condition: e2-ab started at 2.09 / 1.93 GHz, e2-nfasym at
+1.93 GHz, e2-4p1 at 2.13 GHz.</li>
+</ul>
+<h2>Verdict per claim</h2>
+<p><strong>E1-1: the cap is about 141.5 M/s (7.05 ns/write): CONFIRMED.</strong> Re-runs give 140–143.3 M/s across
+three configs, 1–8 cores, core clock 2.2–3.9 GHz and mesh 0.8–2.2 GHz.</p>
+<p><strong>E1-2: total flat, ns/write ∝ N: CONFIRMED with one exception.</strong> The 16-offset rows give 7.1, 14.1,
+28.2, 56.6 and 112.8 ns. The exception is 16 cores × 1 offset on one WQ, i.e. one shared portal
+line:</p>
+<ul>
+<li>arb_sat 4eng raw: 110.9 M/s;</li>
+<li>re-run: 108.6 M/s;</li>
+<li>the same 16 cores with 2 offsets: 140.3 M/s.</li>
+</ul>
+<p>So the notes' &quot;1 DWQ identical, 141.1–141.6&quot; omits this row and is WRONG for it.</p>
+<p><strong>E1-3a: zero in-flight loss: CONFIRMED, for MMIO writes only.</strong> The PMU count equals the program
+count before and after Drain. Every posted write reached the device. But under saturation 35–68 %
+of them were rejected as WQ-full and never executed. Examples from E1 raw: 1×16 35.5 % FULL; 8 DWQ
+16×16 67.7 %; 4eng 8×16 51.7 %. &quot;No loss&quot; does not mean every descriptor ran.</p>
+<p><strong>E1-3b: &quot;== IIO count&quot;: WRONG as stated.</strong> IIO over-counts in every run with WQ-full drops (see
+(a)).</p>
+<p><strong>E1-3c: &quot;credit&quot; back-pressure: OVERSTATED.</strong></p>
+<ul>
+<li>What is shown: the core stalls with a full store buffer (retire-based rate equals fenced rate;
+MFENCE tail 0.9–1.1 µs, with ≤ ~114 writes per core in the store buffer) and nothing is lost.</li>
+<li>What is not shown: a credit mechanism, or where the stage sits.</li>
+</ul>
+<p><strong>E1 inference &quot;15.5 mesh cycles per write&quot;: WRONG.</strong> The cap is unchanged at a 0.80 GHz mesh, where
+7.05 ns would be 5.6 mesh cycles.</p>
+<p><strong>E1 aside &quot;a single core saturates&quot;: CONFIRMED.</strong></p>
+<p><strong>E2-1: share ∝ outstanding lines (offsets): CONFIRMED, with new tests.</strong> In the equal-window runs
+(<code>e2-timed</code>):</p>
+<table>
+<thead>
+<tr>
+<th>mix</th>
+<th>measured split</th>
+<th>16:k prediction</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>16 vs 4</td>
+<td>79.97 / 20.03 %</td>
+<td>80 / 20</td>
+</tr>
+<tr>
+<td>16 vs 8</td>
+<td>66.7 / 33.3 %</td>
+<td>66.7 / 33.3</td>
+</tr>
+<tr>
+<td>16 vs 16</td>
+<td>50.0 / 50.0 %</td>
+<td>50 / 50</td>
+</tr>
+<tr>
+<td>4×16 + 4</td>
+<td>5.9 % for the slow core</td>
+<td>5.88 %</td>
+</tr>
+</tbody>
+</table>
+<p>A work-conserving per-source round robin (max-min) would give 16 vs 8 a 50/50 split and the 4p1
+slow core its full ~9.4 M/s. That rules it out.</p>
+<p>The notes' E2-AB argument does not support this. They predicted 50/50 for round robin, but round
+robin is work-conserving: B only demands about 9 M/s, so RR would also give B about 6.5 %. E2-AB
+cannot discriminate, and the &quot;decisively rules out&quot; claim from AB is WRONG.</p>
+<p><strong>E2-2: slow core gets 2.3 M/s (1.6 %): CONFIRMED.</strong> The re-run gives 2.24 M/s and 1.59 %; after
+removing the drain tail it is 1.55 %, against a 1/65 prediction of 1.54 %.</p>
+<p><strong>E2-3: near/far 57.6 / 42.4: CONFIRMED numerically.</strong> The arb_sat windows matched (2001.7 vs
+2002.5 µs); the re-run gives 56.7 / 43.3. The &quot;position favoritism&quot; reading (H-pos) is OVERSTATED.</p>
+<p>The same mechanism explains the split, with no position-dependent arbiter:</p>
+<ul>
+<li>Each line's cycle is its own path latency plus a common queue wait W. Solo, the near line takes
+about 105–110 ns and the far line 165 ns (<code>e2-nf-timed</code>: far solo 1 offset 6.05 M/s; 16 offsets
+83.8 M/s).</li>
+<li>Solving 16/(110+W) + 16/(165+W) = 141.5 M/s gives W ≈ 92 ns, so the model predicts 56 / 44.</li>
+<li>For 16 near + 32 far the model predicts 37 / 63; the measurement is 38.2 / 61.8. The far socket
+wins once it has more lines.</li>
+</ul>
+<p><strong>E2 rate numbers for AB and NF16-1: WRONG (window artifact).</strong> Corrected numbers are in (b).</p>
+<h2>Corrected numbers</h2>
+<ul>
+<li>Cap: 141.4–142.1 M/s with the arb_sat source pattern, and 143.0–143.3 M/s with an L1-resident
+source and no completion records. That is 6.98–7.07 ns/write.</li>
+<li>The cap is independent of WQ configuration, core clock and mesh clock (0.8–2.2 GHz).</li>
+<li>16 cores on one portal line: 108.6–110.9 M/s.</li>
+<li>E2-AB: A 132.6 M/s and B 8.65 M/s, so B has 6.1–6.2 %; the total is 141.2 M/s, not 132.4.</li>
+<li>E2-NF16-1: near 135.5 M/s (95.9 %), far 5.77 M/s (4.1 %).</li>
+<li>E2-4p1: slow core 1.55–1.59 %.</li>
+<li>Near/far 16 vs 16: 56.7–57.6 / 42.4–43.3.</li>
+</ul>
+<h2>Still needs a new experiment</h2>
+<ol>
+<li><strong>Locate the mesh-independent 7 ns stage.</strong> Run dsa0 together with iax1 (same IIO stop 0000:75),
+and dsa0 together with dsa2. If the cap is shared, the stage is in the IIO / root port; if each
+device gets its own, it is device ingress.</li>
+<li><strong>Explain the shared-line limit.</strong> 16 cores on one line reach only ~109 M/s, which conflicts with
+W3-1's &quot;core-local&quot; result. Sweep 4, 8, 12 and 16 cores on one line.</li>
+<li><strong>Explain the IIO over-count</strong> that appears with WQ-full drops plus completion records.</li>
+<li><strong>Test the latency-plus-wait model.</strong> Inject a known extra per-line latency (e.g. a far line, or
+SFENCE on one core), and use 4, 8 and 32-offset mixes against the far socket.</li>
+<li><strong>Locate the ~50-write buffer</strong> that sits past the point where MFENCE retires. This needs PMU
+sampling at a resolution finer than 10 µs.</li>
+</ol>
+</main></body></html>

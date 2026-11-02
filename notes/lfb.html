@@ -1,0 +1,168 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>lfb: does a MOVDIR64B need a fill buffer (LFB) to leave the core?</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Noto+Serif+SC:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"><style>
+:root { --paper:#faf9f5; --card:#fffefb; --sunk:#f3f1eb; --ink:#161514; --ink2:#3b3935; --muted:#7a776f; --rule:#e4e0d6; --rule2:#cfcabe;
+  --serif:"Newsreader","Noto Serif SC",Georgia,serif; --sans:"Inter","PingFang SC","Noto Sans SC",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace; }
+@media (prefers-color-scheme: dark) { :root { --paper:#141311; --card:#1b1a17; --sunk:#201f1b; --ink:#ece8df; --ink2:#cfcac0; --muted:#9a958a; --rule:#2f2d29; --rule2:#46433c; } }
+body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.65 var(--sans); -webkit-font-smoothing:antialiased; }
+.wrap { max-width:980px; margin:0 auto; padding:28px 28px 80px; }
+nav.crumb { font:500 12px var(--mono); letter-spacing:.04em; color:var(--muted); margin-bottom:22px; }
+nav.crumb a { color:var(--muted); }
+h1, h2, h3 { font-family:var(--serif); font-weight:500; line-height:1.25; }
+h1 { font-size:30px; margin:0 0 18px; } h2 { font-size:22px; margin:34px 0 10px; padding-top:14px; border-top:1px solid var(--rule); } h3 { font-size:18px; margin:24px 0 8px; }
+a { color:var(--ink); text-decoration-color:var(--rule2); text-underline-offset:3px; }
+code { font:13px var(--mono); background:var(--sunk); padding:1px 4px; border-radius:4px; overflow-wrap:anywhere; }
+pre { background:var(--sunk); padding:12px 14px; border-radius:8px; overflow:auto; } pre code { background:none; padding:0; }
+table { border-collapse:collapse; margin:12px 0; font-size:13.5px; display:block; overflow-x:auto; }
+th, td { border-bottom:1px solid var(--rule); padding:6px 10px; text-align:left; vertical-align:top; }
+th { font:500 12px var(--mono); color:var(--muted); border-bottom:1px solid var(--rule2); }
+blockquote { margin:12px 0; padding:4px 14px; border-left:3px solid var(--rule2); color:var(--ink2); }
+ul.notes { list-style:none; padding:0; } ul.notes li { padding:14px 0; border-bottom:1px solid var(--rule); }
+ul.notes a { font:500 18px var(--serif); } ul.notes .d { color:var(--ink2); } ul.notes .t { font:12px var(--mono); color:var(--muted); }
+.lead { color:var(--ink2); }
+</style></head><body><main class="wrap"><nav class="crumb"><a href="../">DSA 提交流水线</a> · <a href="./">实验笔记</a> · lfb</nav><h1>lfb: does a MOVDIR64B need a fill buffer (LFB) to leave the core?</h1>
+<p>Probe: <code>dsa-lab/src/bin/lfb_mov.rs</code>. Run directories are relative to
+<code>dsa-lab-runs/</code>.</p>
+<p>Background (pushpull): one core keeps ~30 MOVDIR64B in the CHA TORs at once, more than the ~16
+fill buffers a Golden Cove core is said to have, so a MOVDIR64B does not hold a fill buffer until
+the CHA releases it. Open: does it use one at all (briefly, as a WC buffer, per the SDM's &quot;WC
+protocol&quot;), or does its data wait in the store-buffer entry until the CHA takes it?</p>
+<h2>Design (written before running)</h2>
+<p>Fill the fill buffers with software prefetches, then send one MOVDIR64B right away. Prefetches
+are used instead of loads because a load miss blocks in-order retirement, so a later
+MOVDIR64B could not leave the store buffer until the load data returns (that would measure load
+latency, not fill-buffer contention). A prefetch that misses L1 takes a fill buffer until its
+line returns, but does not hold up retirement of later instructions.</p>
+<p>Per trial (submitter cpu 4, poller cpu 6, both node 0; dsa0 wq0.0; heaters, mesh ~2.2 GHz):</p>
+<ol>
+<li>N target lines, one per 4 KiB page, flushed with CLFLUSHOPT (or pre-loaded into L1 for the
+control); MFENCE; idle 2 µs.</li>
+<li>t_pre; N × PREFETCHT0; t_s (lfence; rdtsc; lfence).</li>
+<li>MOVDIR64B of a noop with a completion record (descriptor in L1); MFENCE; t_f.</li>
+<li>The poller stamps t_p when the record changes.</li>
+</ol>
+<p>Measured per N: issue = t_s − t_pre, arrival = t_p − t_s, fence = t_f − t_s.
+Targets: <code>l1</code> (control: no fill buffer used), <code>local</code> (node-0 DRAM), <code>remote</code> (node-1 DRAM,
+longer occupancy). Variant <code>empty</code>: the same without the MOVDIR64B, to see whether MFENCE itself
+waits for outstanding prefetches.
+N = 0, 8, 12, 14, 15, 16, 17, 18, 20, 24, 32. Blocks rotate over targets and N.</p>
+<p>Predictions:</p>
+<ul>
+<li>Calibration: for DRAM targets, <code>issue</code> jumps once N exceeds the number of fill buffers F
+(prefetch N = F + 1 must wait for a line to return); flat for <code>l1</code>. If no knee appears, the
+prefetches are not holding fill buffers and the test says nothing.</li>
+<li><strong>H-FB (MOVDIR64B needs a fill buffer to leave the core):</strong> for N ≥ F, <code>arrival</code> rises by about
+the time until the first prefetch returns (local tens of ns up to ~100 ns, remote more, remote &gt;
+local); flat below F and flat for <code>l1</code>.</li>
+<li><strong>H-noFB (it leaves from the store buffer without one):</strong> <code>arrival</code> flat (within ~5 ns) at every
+N for all targets.</li>
+<li><code>fence</code> is only interpretable if <code>empty</code> stays flat; otherwise MFENCE waits for the prefetches.</li>
+</ul>
+<hr />
+<h1>Results (2026-11-02)</h1>
+<p>Runs <code>LFB/20261102T090944Z-AB-r1</code> (submitter cpu 4, poller 6, remote region on node 1 via cpu 40;
+4 rounds × 200 trials per point, <code>empty</code> 100) and <code>LFB/20261102T091116Z-AB-r2-cpu12</code> (cpu 12,
+poller 14, cpu 44; N = 0, 13–17). dsa0, 4-engine.conf, heaters; mesh 2.20 / 2.10 GHz at start
+and end; drains ok. Medians in ns; FB_FULL = L1D_PEND_MISS.FB_FULL cycles per trial.</p>
+<table>
+<thead>
+<tr>
+<th>target</th>
+<th>N</th>
+<th>issue</th>
+<th>arrival (r1 / r2)</th>
+<th>MOVDIR64B + MFENCE</th>
+<th><code>empty</code> MFENCE</th>
+<th>FB_FULL cycles (mov)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>l1</td>
+<td>0–32</td>
+<td>14–24</td>
+<td>386–388 / 372–374</td>
+<td>151 / 144</td>
+<td>26–29</td>
+<td>0</td>
+</tr>
+<tr>
+<td>local</td>
+<td>0–14</td>
+<td>15–30</td>
+<td>386–388 / 385–388</td>
+<td>151–159</td>
+<td>27–42</td>
+<td>0</td>
+</tr>
+<tr>
+<td>local</td>
+<td>15–16</td>
+<td>20–31</td>
+<td><strong>474–475 / 470–473</strong></td>
+<td>238–245</td>
+<td><strong>113–122</strong></td>
+<td>229–275</td>
+</tr>
+<tr>
+<td>local</td>
+<td>17–32</td>
+<td>138–186</td>
+<td>397–399 / 389</td>
+<td>157–168</td>
+<td>41–44</td>
+<td>468–637</td>
+</tr>
+<tr>
+<td>remote</td>
+<td>0–14</td>
+<td>14–20</td>
+<td>386–387 / 374–375</td>
+<td>145–151</td>
+<td>26–34</td>
+<td>0</td>
+</tr>
+<tr>
+<td>remote</td>
+<td>15–16</td>
+<td>20</td>
+<td><strong>533–534 / 523</strong></td>
+<td>293–298</td>
+<td><strong>172–176</strong></td>
+<td>465–473</td>
+</tr>
+<tr>
+<td>remote</td>
+<td>17–32</td>
+<td>187–237</td>
+<td>387–389 / 375</td>
+<td>145–153</td>
+<td>27–35</td>
+<td>709–933</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Calibration:</strong> <code>issue</code> jumps at N = 17 for DRAM targets (local +118 ns, remote +167 ns),
+flat for <code>l1</code>: 16 prefetches get a fill buffer at once, the 17th waits for a line to return.
+L1D.REPLACEMENT = N + 1–1.6 per trial: the prefetches really fill lines. With N ≥ 17 the
+prefetches all return within a few ns of each other, so at t_s the fill buffers are free
+again; only N = 15–16 keep them busy at t_s.</li>
+<li><strong>H-FB: supported, two evidence types, two core pairs.</strong> With 15 or 16 fill buffers busy, the
+MOVDIR64B reaches the device later by +86–89 ns (local) and +147–148 ns (remote), i.e. it
+leaves when the first prefetch returns; with ≤ 14 busy, no delay; <code>l1</code> flat. FB_FULL counts the
+wait directly: local 229–275 cycles at 2.8–3.25 GHz ≈ 82–86 ns, remote 465–473 cycles at
+3.25 GHz ≈ 143–146 ns, matching the arrival delays.</li>
+<li><strong>H-noFB: ruled out.</strong></li>
+<li>The threshold is 15 busy, not 16: prefetches can use 16, a MOVDIR64B (and an MFENCE) waits
+when 15 are busy [INFERENCE: one fill buffer is not available to stores / fences].</li>
+<li>MFENCE alone (<code>empty</code>) also waits for a fill buffer: +86–95 ns local, +145–150 ns remote at
+N = 15–16, with matching FB_FULL cycles. So the MOVDIR64B + MFENCE column mixes both waits.</li>
+<li>With the pushpull result (one core keeps ~30 MOVDIR64B in the CHA TORs, 16 fill buffers),
+a MOVDIR64B holds its fill buffer only briefly, not until the CHA releases it
+[INFERENCE: the fill buffer is freed once the 64 B have been handed on, so for most writes
+waiting in the CHA the data has already left the L1 fill buffers; whether it sits in the CHA
+or in another core-side queue (e.g. L2) is not measured].</li>
+<li>Practical: cache-missing loads, prefetches or completion-record polls that occupy ≥ 15 fill
+buffers delay a submit by up to one memory latency.</li>
+</ul>
+<p>Not independently audited yet; replicated on a second core pair.</p>
+</main></body></html>

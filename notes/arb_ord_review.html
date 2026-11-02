@@ -1,0 +1,299 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>arb_ord (E3) audit</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Noto+Serif+SC:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"><style>
+:root { --paper:#faf9f5; --card:#fffefb; --sunk:#f3f1eb; --ink:#161514; --ink2:#3b3935; --muted:#7a776f; --rule:#e4e0d6; --rule2:#cfcabe;
+  --serif:"Newsreader","Noto Serif SC",Georgia,serif; --sans:"Inter","PingFang SC","Noto Sans SC",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace; }
+@media (prefers-color-scheme: dark) { :root { --paper:#141311; --card:#1b1a17; --sunk:#201f1b; --ink:#ece8df; --ink2:#cfcac0; --muted:#9a958a; --rule:#2f2d29; --rule2:#46433c; } }
+body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.65 var(--sans); -webkit-font-smoothing:antialiased; }
+.wrap { max-width:980px; margin:0 auto; padding:28px 28px 80px; }
+nav.crumb { font:500 12px var(--mono); letter-spacing:.04em; color:var(--muted); margin-bottom:22px; }
+nav.crumb a { color:var(--muted); }
+h1, h2, h3 { font-family:var(--serif); font-weight:500; line-height:1.25; }
+h1 { font-size:30px; margin:0 0 18px; } h2 { font-size:22px; margin:34px 0 10px; padding-top:14px; border-top:1px solid var(--rule); } h3 { font-size:18px; margin:24px 0 8px; }
+a { color:var(--ink); text-decoration-color:var(--rule2); text-underline-offset:3px; }
+code { font:13px var(--mono); background:var(--sunk); padding:1px 4px; border-radius:4px; overflow-wrap:anywhere; }
+pre { background:var(--sunk); padding:12px 14px; border-radius:8px; overflow:auto; } pre code { background:none; padding:0; }
+table { border-collapse:collapse; margin:12px 0; font-size:13.5px; display:block; overflow-x:auto; }
+th, td { border-bottom:1px solid var(--rule); padding:6px 10px; text-align:left; vertical-align:top; }
+th { font:500 12px var(--mono); color:var(--muted); border-bottom:1px solid var(--rule2); }
+blockquote { margin:12px 0; padding:4px 14px; border-left:3px solid var(--rule2); color:var(--ink2); }
+ul.notes { list-style:none; padding:0; } ul.notes li { padding:14px 0; border-bottom:1px solid var(--rule); }
+ul.notes a { font:500 18px var(--serif); } ul.notes .d { color:var(--ink2); } ul.notes .t { font:12px var(--mono); color:var(--muted); }
+.lead { color:var(--ink2); }
+</style></head><body><main class="wrap"><nav class="crumb"><a href="../">DSA 提交流水线</a> · <a href="./">实验笔记</a> · arb_ord_review</nav><h1>arb_ord (E3) audit</h1>
+<p>Audited <code>src/bin/arb_ord.rs</code>, <code>notes/arb_ord.md</code> and <code>dsa-lab-runs/E3/*</code>. The original <code>stdout</code> files
+hold only summaries, with no per-item records, so the statistics could not be recomputed from them.
+I added <code>src/bin/arb_ord_chk.rs</code> and re-ran on side A with <code>dsa-config/1-engine.conf</code>, 4 KiB, 50 trials,
+8 heaters (mesh 2.09–2.20 GHz), and <code>dwq_full = 0</code> in every run. Run dirs are under
+<code>dsa-lab-runs/E3chk/</code>.</p>
+<ul>
+<li><code>orig</code> mode: the same per-trial flow as <code>arb_ord</code> (issue K writes to portal+0, SFENCE, poll own
+records in order, stamp rdtsc at first sight). It dumps every item: core, seq, t_issue, t_seen,
+and <code>pre</code>. <code>pre</code> = the record was already complete when the poller first read it at its turn,
+so its t_seen is the time the core looked, not a completion edge.
+Runs: <code>…230908Z-A-orig-n8-s4096</code> (K=12), <code>…231030Z-A-orig-n4-k24</code>, <code>…230952Z-A-orig-n2-k48</code>,
+<code>…230953Z-A-orig-n1-k64</code>.</li>
+<li><code>split</code> mode: a known-order control. One extra core (cpu18) writes all N·K descriptors in the
+order j = s·N + c. The true device order is therefore strict round-robin. Record j is polled by
+poller c (cpus 2..16), using the same polling code.
+Runs: <code>…230951Z-A-split-n8-d0</code>, <code>…231029Z-A-split-n4-k24</code>, <code>…231028Z-A-split-n2-k48</code>.</li>
+</ul>
+<h2>Claims</h2>
+<ol>
+<li>
+<p><strong>Detector validated by the 1-core control: WRONG (the control is vacuous).</strong></p>
+<ul>
+<li>
+<p>The poll loop waits for record i before it reads record i+1 and stamps each record with its own
+rdtsc (<code>arb_ord.rs:450-457</code>). So per-core t_seen is monotonic and tie-free <em>by construction</em>.</p>
+</li>
+<li>
+<p>The check at <code>:545-552</code> cannot fail, and <code>inter_comp_ties</code> at N=1 cannot be nonzero.</p>
+</li>
+<li>
+<p>At N=1, 82% of stamps are <code>pre</code> (look-times).</p>
+</li>
+<li>
+<p>The control never tests the only thing that matters, the cross-core merge.</p>
+</li>
+<li>
+<p>The <code>split</code> control does test it, with the true order known:</p>
+<table>
+<thead>
+<tr>
+<th>N</th>
+<th>adjacent true pairs seen inverted</th>
+<th>pairwise inversions</th>
+<th>measured run length</th>
+<th>measured T[i][i]</th>
+<th>measured strict-RR (truth: 1.0 / 0 % / 100 %)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2</td>
+<td>21.4 %</td>
+<td>0.45 %</td>
+<td>1.61</td>
+<td>38.3 %</td>
+<td>63.4 %</td>
+</tr>
+<tr>
+<td>4</td>
+<td>4.3 %</td>
+<td>0.19 %</td>
+<td>1.02</td>
+<td>2.0 %</td>
+<td>86.8 %</td>
+</tr>
+<tr>
+<td>8</td>
+<td>7.7 %</td>
+<td>0.25 %</td>
+<td>1.00</td>
+<td>0.0 %</td>
+<td>83.5 %</td>
+</tr>
+</tbody>
+</table>
+</li>
+<li>
+<p>Gaps between truly consecutive items (N=8): p1 −465 ns, p5 −29 ns, p50 129 ns, p90 424 ns.
+So in this control, some stamps lag by about 0.5 µs, which is several completion slots.</p>
+</li>
+<li>
+<p>At N=2, 71.5 % of split stamps (73.5 % of <code>orig</code>) are <code>pre</code>. <code>pre</code> means the record was already
+complete <em>when that item's turn came</em>, not at poll start. Those stamps are look-times, and the
+order among them reflects how the pollers scanned. Whether the cause is bursty completion writes
+or poller lag is not resolved.</p>
+</li>
+<li>
+<p>Caveat: the split control has its own cadence (one submitter at about 110 ns per write) and its
+own phases. It shows that this detector <em>can</em> misorder under those conditions. It is not a
+calibrated error bound for the archived runs.</p>
+</li>
+<li>
+<p>So the archived detector has no validated cross-core error bound, and the 4 KiB payload is not
+shown to be &quot;authoritative&quot; (notes §2).</p>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>Run length collapses with N; T[i][i] = 0.12 % at N=8: the trend is UNSUPPORTED (it cannot be told apart from detector error). The N=8 value is plausible.</strong></p>
+<ul>
+<li>On a true strict alternation, the detector produces 1.61 / 38.3 % / 63.4 % at N=2.</li>
+<li>Real N=2 (<code>orig</code>) gives 1.575 / 36.9 % / 63.8 %. The notes report 1.56 / 36.4 % / 62–63 %.</li>
+<li>At N=4: real 1.028 / 2.8 % against split 1.02 / 2.0 %.</li>
+<li>Because the conditions differ, this does not prove the N=2 and N=4 self-transitions are
+artifacts. It shows the archived numbers cannot discriminate strict alternation from clumping.</li>
+<li>A likely confound is K = 96/N: with fewer cores, each poller has more of its own records close
+together. The share of <code>pre</code> stamps is 73.5 % at N=2, 11 % at N=4 and 0.1 % at N=8. This is an
+inference, not demonstrated.</li>
+<li>The notes' &quot;barrier jitter allows runs&quot; mechanism is untested. A strictly alternating arrival
+order is consistent with the N=2 and N=4 statistics.</li>
+<li>At N=8 the split control shows no self-transitions, and my <code>orig</code> re-run gives T[i][i] = 0.0 %.
+Both are consistent with the reported 0.12 %.</li>
+<li>Strict-RR blocks: <code>orig</code> 67.5 % against split 83.5 %. Because the conditions differ, the share of
+the deficit that is real round overlap cannot be quantified.</li>
+</ul>
+</li>
+<li>
+<p><strong>Order matches issue time for 90–99 % of pairs: WRONG as evidence (metric artifact).</strong></p>
+<ul>
+<li>
+<p><code>t_issue</code> is a non-serialising rdtsc placed after MOVDIR64B (<code>:432-433</code>). It can execute out of
+order relative to the write, so it is only a clustered software timestamp taken near instruction
+execution. It is not a departure or arrival time.</p>
+</li>
+<li>
+<p>Per-core stamp spreads are 131 ns for 12 writes (N=8), 366 ns for 24 (N=4) and 558 ns for 48
+(N=2), i.e. 11–16 ns per write.</p>
+</li>
+<li>
+<p>The ~110 ns same-line departure cadence comes from earlier studies (F1, arb_sat solo
+ns/write). E3 does not measure it.</p>
+</li>
+<li>
+<p><code>t_fence</code> is about 180 ns. SFENCE does not order the following rdtsc, so this is not a drain time.</p>
+</li>
+<li>
+<p>Re-run N=8 (<code>E3chk/…230908Z</code>), split by pair population:</p>
+<table>
+<thead>
+<tr>
+<th>population</th>
+<th>share of pairs</th>
+<th>issue-stamp inversions</th>
+<th>sequence-number model</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>same core</td>
+<td>11.6 %</td>
+<td>0 %</td>
+<td>matches by construction</td>
+</tr>
+<tr>
+<td>cross-core, different seq</td>
+<td>81.0 %</td>
+<td>11.8 %</td>
+<td>0.61 % violated</td>
+</tr>
+<tr>
+<td>cross-core, same seq</td>
+<td>7.4 %</td>
+<td>31.4 %</td>
+<td>leaves them unordered</td>
+</tr>
+</tbody>
+</table>
+</li>
+<li>
+<p>Overall the issue stamps invert 11.9 % of pairs; the same-core pairs inflate the &quot;match&quot; rate.</p>
+</li>
+<li>
+<p>On different-seq pairs, the issue stamps do worse than the sequence index (11.8 % against
+0.61 %).</p>
+</li>
+<li>
+<p>On same-seq pairs, the sequence model is silent. The issue stamps invert 31.4 % of them (68.6 %
+agree): weakly informative, possibly through per-core start offset. This is an inference, and
+stamps that can execute out of order make it uncertain.</p>
+</li>
+<li>
+<p>H1 was therefore not tested, and &quot;partially supported&quot; is not justified.</p>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>&quot;Near cores systematically earlier&quot; ruled out: UNSUPPORTED/OVERSTATED.</strong></p>
+<ul>
+<li>Every run is side A with cpus 2–16 on node 0 (<code>meta.json</code> sides <code>[&quot;A&quot;]</code>). <code>LAB_FAR_CPU=34</code> was
+never used, so far cores are untested.</li>
+<li>Among node-0 cores, ordering looks systematic within a run. In the split control (different
+conditions), the per-core rank bias is ≤ 0.09 positions, so the detector alone is an unlikely cause.</li>
+<li>Real per-core mean ranks still span 44.2–50.2 (re-run) and 44.4–49.2 (t200). A lead of 3
+positions is most of a round.</li>
+<li>The first arrival goes to one core in 160/200 trials (t200, cpu16), 47/50 (r1, cpu4),
+39/50 (r2, cpu16) and 38/50 (re-run, cpu8).</li>
+<li>The winning core changes from run to run, so static mesh distance is not the main cause.</li>
+<li>The common TSC deadline (<code>:423-426</code>) removes software-barrier wake ordering. It does not remove
+per-core differences in spin-loop exit latency, interrupts or TSC offsets, so start skew remains
+a possible cause. It was not measured.</li>
+<li>The s0 race is also not a clean detector event, since several stamps are only tens of ns apart.</li>
+</ul>
+</li>
+<li>
+<p><strong>Per-source interleaving is hardware-enforced: OVERSTATED.</strong></p>
+<ul>
+<li>The pattern is <em>consistent with</em> independent ~110 ns same-line source cadences. The data do not
+separate that from an ingress arbiter.</li>
+<li>Arrival times of about t0_c + s·110 ns would give round-robin rounds and run length 1 at N=8.
+With random t0_c per trial they would also give a uniform 1/7 transition matrix.</li>
+<li>Within-trial pairwise round order is consistent 0.903 of the time in <code>orig</code> (0.971 in split).
+That suggests mostly stable per-core phases with some drift.</li>
+<li><code>fixed_cycle_fraction = 0</code> is not evidence of a &quot;dynamic permutation&quot;. The metric is also 0.0 on
+the split control, whose true cycle is fixed.</li>
+<li>arb_sat E2-4p1 (24.6 % vs 1.6 % shares) already argues against per-source round-robin at the
+ingress.</li>
+</ul>
+</li>
+</ol>
+<h2>Suspicions (a)–(f)</h2>
+<ul>
+<li>
+<p><strong>(a)</strong> Confirmed. See claim 3.</p>
+</li>
+<li>
+<p><strong>(b)</strong> Confirmed: no far cores were used.</p>
+</li>
+<li>
+<p><strong>(c)</strong> Confirmed: there is no evidence of saturation. At N=8 the bursts are 12 writes per core
+(about 1.3 µs) at about 73 M/s. arb_sat's own &quot;8 cores × 1 offset&quot; row arrives at 75.8 M/s with
+the solo cadence of 105.6 ns/write, against a cap of about 141 M/s.
+Being below the global cap does not exclude momentary request collisions at the ingress. But E3
+neither measures them nor reaches the saturated regime, so it does not speak to arbitration under
+sustained contention.
+The WQ never filled (<code>dwq_full = 0</code>). Per-descriptor engine time (mean stamp spacing 169–259 ns)
+comes from the same unvalidated detector and is only indicative.</p>
+</li>
+<li>
+<p><strong>(d)</strong> Confirmed as a risk, not as a bound. In the split control, misordering is comparable to
+the spacing between completions:</p>
+<ul>
+<li>the median truly-adjacent gap is 108–129 ns;</li>
+<li>4–21 % of adjacent pairs are swapped;</li>
+<li>lags reach 0.5–0.7 µs.</li>
+</ul>
+<p>The archived runs carry no such control.</p>
+</li>
+<li>
+<p><strong>(e)</strong> Recomputed from the archived <code>E3/20261101T200244Z-A-n8-s4096-t200/stdout</code>:</p>
+<ul>
+<li><code>run_length_hist</code> <code>{1:19169, 2:3, 3:3, 4:1, 12:1}</code> gives 19,177 runs over 19,200 descriptors,
+so mean run length = 1.00119935, matching <code>mean_run_length</code>.</li>
+<li>Self-transitions = 19,200 − 19,177 = 23 of 19,000 within-trial transitions, i.e. 0.121 %.
+The archived <code>diag_mean_pct</code> is 0.1205.</li>
+<li>Strict-RR = 1775 / 2400 = 73.958 %.</li>
+<li>The full transition matrix cannot be independently recomputed. Only row-normalised percentages
+were archived, with no per-item records or raw counts.</li>
+<li>The notes' &quot;19,176 descriptors in length-1 runs&quot; is wrong: there are 19,169. One trial holds a
+12-long single-core run.</li>
+<li>For comparison, my <code>orig</code> re-run (<code>E3chk/…230908Z</code>) gives run length 1.000, T[i][i] 0 %,
+strict-RR 67.5 %.</li>
+</ul>
+</li>
+<li>
+<p><strong>(f)</strong> Confirmed. See claim 5.</p>
+</li>
+</ul>
+<h2>Still needs a new experiment</h2>
+<ul>
+<li>A detector whose cross-core error is below the true spacing, calibrated with the split control.
+Options: slower descriptors (larger or paced, so that spacing exceeds about 1 µs), or a single
+poller that scans all records round-robin.</li>
+<li>Far-core (node 1, <code>--side both</code>) ordering, with the start offset measured separately from mesh
+distance.</li>
+<li>Arbitration under real contention: offered load above about 141 M/s, using multi-offset sources.
+This first needs a check that WQ order across offsets follows arrival order.</li>
+</ul>
+</main></body></html>

@@ -1,0 +1,161 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>arb_io review (audit of E4: do dsa0 and iax1 behind one IO stop compete?)</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Noto+Serif+SC:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"><style>
+:root { --paper:#faf9f5; --card:#fffefb; --sunk:#f3f1eb; --ink:#161514; --ink2:#3b3935; --muted:#7a776f; --rule:#e4e0d6; --rule2:#cfcabe;
+  --serif:"Newsreader","Noto Serif SC",Georgia,serif; --sans:"Inter","PingFang SC","Noto Sans SC",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace; }
+@media (prefers-color-scheme: dark) { :root { --paper:#141311; --card:#1b1a17; --sunk:#201f1b; --ink:#ece8df; --ink2:#cfcac0; --muted:#9a958a; --rule:#2f2d29; --rule2:#46433c; } }
+body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.65 var(--sans); -webkit-font-smoothing:antialiased; }
+.wrap { max-width:980px; margin:0 auto; padding:28px 28px 80px; }
+nav.crumb { font:500 12px var(--mono); letter-spacing:.04em; color:var(--muted); margin-bottom:22px; }
+nav.crumb a { color:var(--muted); }
+h1, h2, h3 { font-family:var(--serif); font-weight:500; line-height:1.25; }
+h1 { font-size:30px; margin:0 0 18px; } h2 { font-size:22px; margin:34px 0 10px; padding-top:14px; border-top:1px solid var(--rule); } h3 { font-size:18px; margin:24px 0 8px; }
+a { color:var(--ink); text-decoration-color:var(--rule2); text-underline-offset:3px; }
+code { font:13px var(--mono); background:var(--sunk); padding:1px 4px; border-radius:4px; overflow-wrap:anywhere; }
+pre { background:var(--sunk); padding:12px 14px; border-radius:8px; overflow:auto; } pre code { background:none; padding:0; }
+table { border-collapse:collapse; margin:12px 0; font-size:13.5px; display:block; overflow-x:auto; }
+th, td { border-bottom:1px solid var(--rule); padding:6px 10px; text-align:left; vertical-align:top; }
+th { font:500 12px var(--mono); color:var(--muted); border-bottom:1px solid var(--rule2); }
+blockquote { margin:12px 0; padding:4px 14px; border-left:3px solid var(--rule2); color:var(--ink2); }
+ul.notes { list-style:none; padding:0; } ul.notes li { padding:14px 0; border-bottom:1px solid var(--rule); }
+ul.notes a { font:500 18px var(--serif); } ul.notes .d { color:var(--ink2); } ul.notes .t { font:12px var(--mono); color:var(--muted); }
+.lead { color:var(--ink2); }
+</style></head><body><main class="wrap"><nav class="crumb"><a href="../">DSA 提交流水线</a> · <a href="./">实验笔记</a> · arb_io_review</nav><h1>arb_io review (audit of E4: do dsa0 and iax1 behind one IO stop compete?)</h1>
+<p>Audited <code>src/bin/arb_io.rs</code>, <code>notes/arb_io.md</code> and the five runs in <code>dsa-lab-runs/arb_io/2026110120*</code>.
+Verification probe <code>src/bin/arb_io_chk.rs</code> (phases given as <code>NAME|dev@cpus|dev@cpus</code>; same descriptors
+and the same 16-offset rotation as arb_io; <code>--chunk 1</code> is arb_io's loop with one rdtsc per write,
+<code>--chunk 32</code> reads the TSC once per 32 writes like arb_sat). It also records each worker's first and
+last TSC relative to the shared window, the worker's core GHz, and the mesh GHz of both sockets over
+each phase. All runs used <code>lab run --side both --conf dsa-config/arb_io.conf</code> with the same iax
+reload wrapper as the originals, 50 ms windows and 3 reps:</p>
+<table>
+<thead>
+<tr>
+<th>run</th>
+<th>content</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>arb_io/20261101T231006Z-AB-chk-repro</code></td>
+<td><code>--verify 1000</code>; A4 B4 C4 A2 B2 C2 C1 D4, chunk 1</td>
+</tr>
+<tr>
+<td><code>arb_io/20261101T231114Z-AB-chk-ctrl</code></td>
+<td>source-socket controls (Cfar, Dn0, Rn0, Bfar, A8), node-1 replica (E4 F4 G4), chunk 1</td>
+</tr>
+<tr>
+<td><code>arb_io/20261101T231202Z-AB-chk-c1</code></td>
+<td>A/B/C/D at 1, 2 and 4 cores per device, node-1 replica G4b, chunk 1</td>
+</tr>
+<tr>
+<td><code>arb_io/20261101T231207Z-AB-chk-c32</code></td>
+<td>same phases, chunk 32</td>
+</tr>
+</tbody>
+</table>
+<p>In every phase of every chk run, PMU SUCCESS+FULL equals the core write count exactly, mux = false and drain ok.</p>
+<h2>Claim by claim</h2>
+<ol>
+<li>
+<p><strong>dsa0 and iax1 alone each reach ~141 M/s: CONFIRMED.</strong> Original A = 141.1–141.5 M/s, B = 141.9–142.1 M/s.
+Re-runs: A = 141.0–142.3 M/s and B = 141.8–142.4 M/s at 2, 4 and 8 cores (A8 = 141.2–141.4). With chunk 32,
+one core alone already reaches it (A1 = 141.3–141.7, B1 = 142.0). So 141 M/s is a per-device ceiling, also seen
+on dsa2 and iax3. It does not depend on how many cores send.</p>
+</li>
+<li>
+<p><strong>4+4 cores: sum 239 M/s, 50:50 split: CONFIRMED.</strong> Original C4 = 236.6–239.5 M/s. Re-runs C4 = 235.5–240.0 M/s
+(12 reps). The two devices differ by at most 0.3 % in C2 and C4. The 50:50 split holds only when the two core
+sets are symmetric: with 1 core per device and chunk 32 it is 121 : 125 (the cores run at 2.2 and 3.8 GHz);
+with iax1 driven from node 1 (Cfar) it is 128 : 113.</p>
+</li>
+<li>
+<p><strong>2+2 cores: sum 208 M/s: CONFIRMED in direction, number at the low end.</strong> Original C2 = 206.0, 208.1 and
+208.2 M/s. Re-runs C2 = 208.1–222.6 M/s (9 reps, about 216 typical). Across all 12 reps each, every C2 sum is
+below every C4 sum (max C2 222.6 &lt; min C4 235.5). The notes' &quot;26.5 % deficit&quot; becomes about 24 % on the re-runs.</p>
+</li>
+<li>
+<p><strong>&quot;Per-core ns/write rises 28.3 → 33.5, so back-pressure reaches the cores&quot;: OVERSTATED.</strong> In arb_io,
+ns/write = (t_last − t_first)/writes (<code>arb_io.rs:604</code>). Every window is 50.000 ms, and core writes equal PMU
+arrivals in 104/104 device-phase entries. The column is therefore just 1/(arrival rate per core); it is not
+separate evidence and not a latency. That cores are throttled is real, because alone each could issue
+≥ 81.5 M/s. The &quot;posted-write credits / store-buffer exhaustion&quot; mechanism is not measured.</p>
+</li>
+<li>
+<p><strong>dsa0 + dsa2 (different IO stops) = 282, no interference: CONFIRMED, but the original control is confounded.</strong>
+In the original D, dsa2 is driven from node-1 cores, so C (8 node-0 cores) and D (4+4 cores on two sockets)
+differ in the source socket as well as in the IO stop. Re-runs remove the confound:</p>
+<ul>
+<li>Dn0, dsa0 + dsa2 both from 8 node-0 cores: 282.0 M/s (×3). The node-0 cores and mesh can emit 282 M/s.</li>
+<li>Cfar, iax1 driven from node-1 cores: 240.0–241.2 M/s, the same deficit as C4. The shared stage is on the
+destination side.</li>
+<li>The node-1 pair dsa2 + iax3 (bus f2) reproduces it: G4b = 237.7–240.0 M/s.</li>
+<li>D1 with chunk 32 = 281.8–283.7 M/s.</li>
+</ul>
+<p>The original G4 in chk-ctrl (226 M/s) is invalid: the cpu-48 worker stalled at 0.1 M/s in that run.
+&quot;Localized to the IO stop&quot; is still an [INFERENCE]: the data show a stage shared by the two functions on
+one root bus. That stage could be the IIO stack or the accelerator fabric behind it.</p>
+</li>
+<li>
+<p><strong>1 core each (84 + 84) shows no interference: UNSUPPORTED as evidence against contention.</strong> The 84 M/s is
+the probe's loop, not a device or IAA property (suspicion a):</p>
+<ul>
+<li>with one rdtsc per write, a core issues 81.5 M/s at 2.2 GHz core clock and 134–139 M/s at 3.5–3.8 GHz
+(chk-c1, chk-ctrl). The originals ran with core_ghz 2.20;</li>
+<li>with chunk 32 the same core reaches 141.5 M/s even at 2.2 GHz, which matches arb_sat's 141 (7.07 ns).</li>
+</ul>
+<p>At full offered load, 1 core per device does interfere: C1 = 243.4–246.9 M/s against A1 + B1 = 283.4
+(deficit about 13 %, chk-c32). The notes' &quot;threshold&quot; story is also wrong. The C sum is not monotonic in
+source count: 1+1 cores give 245, 2+2 give about 216 and 4+4 give about 238. Chunk-1 C1 with one fast core
+offers 216–220 M/s and loses only 1–3 %. The data fit no fixed IO-stop capacity of &quot;~210–240&quot;.</p>
+</li>
+</ol>
+<h2>Suspicions</h2>
+<ul>
+<li><strong>(b) Window alignment: OK.</strong> Rates use the shared [start, end] TSC window (<code>arb_io.rs:579</code>), not per-device
+times. In the re-runs every worker starts within 66 ns of the shared start. Overrun past the end is ≤ 2.1 µs,
+except the stalled cpu-48 worker in G4. No side finishes early.</li>
+<li><strong>(c) IAA counting: OK.</strong> The format matches DSA (<code>event</code> = config:4-31, <code>filter_wq</code> = config1:0-31).
+<ul>
+<li>Single thread, K = 1000 per device: SUCCESS + FULL = K + 1 exactly (the +1 is the Drain), on all four devices.</li>
+<li>Paced, 1 offset: FULL = 0 and completion records = SUCCESS − 1.</li>
+<li>Burst over 16 offsets (iax1): SUCCESS 422 + FULL 579 = 1001.</li>
+<li>The originals also match core writes exactly with millions of FULLs per phase.</li>
+</ul>
+</li>
+<li><strong>(d) Cores and heaters: mostly OK, but the notes misstate them.</strong> The core sets are disjoint
+(<code>arb_io.rs:353-357</code>). SMT siblings are n+64, and heaters exclude used CPUs and their siblings (<code>lib.rs:485-497</code>).
+Node 0 has 32 cores; 17 are used.
+<ul>
+<li>The node-0 heaters are actually cpus 0,1,3,5,7,9,11,13, not &quot;24..31&quot;.</li>
+<li>The 2c iax1 cores are 10 and 12, not &quot;6, 8&quot;.</li>
+<li>Mesh GHz is measured only at run start and end, not per phase. The 1c run started at 1.98 / 1.75 GHz,
+which contradicts &quot;2.2 GHz every run&quot;. Per-phase re-measurement shows 2.2 GHz on node 0 in every phase.</li>
+</ul>
+</li>
+<li><strong>(e) 2c vs 4c: reproducible.</strong> See claim 3. C2 spread is 208–223, against C4 235.5–240.</li>
+<li><strong>(f) Fair comparison: A/B/C are matched; D is not.</strong> Phase C uses exactly the A core set plus the B core set,
+with the same offsets, loop and window (<code>arb_io.rs:486-505</code>). D changes the source socket (see claim 5).</li>
+</ul>
+<h2>Other notes defects</h2>
+<ul>
+<li>Run <code>4c-r1</code> (<code>20261101T200432Z</code>) is not mentioned. Its first phase (A rep 0) recorded 0 writes on every
+worker, and the cause is not established. The code allows it: <code>start_tsc</code> is fixed at <code>arb_io.rs:523-526</code>,
+before the mutex and <code>bar_start</code> release. Any stall over 50.2 ms before a worker reaches its loop leaves
+<code>writes = 0</code>, and nothing flags it.</li>
+<li>The notes omit the 1c run's D rep 2, where dsa0 runs at 102.0 M/s (9.80 ns) while dsa2 stays at 84.3. That
+is not cross-device interaction. The 1-core loop is core-clock-bound: in the re-runs the same loop gives
+81.5 M/s at 2.2 GHz and 134–139 at 3.5–3.8 GHz, so 102 fits a core at an intermediate clock. The original
+records no per-worker GHz. The chunk-32 D1 re-run is additive (281.8–283.7).</li>
+<li>The &quot;~5–6.5 ns/write per core solo&quot; in the header is wrong for this loop: one core manages 11.9 ns.</li>
+<li>Labels such as &quot;p50&quot; are attached to single-run tables.</li>
+</ul>
+<h2>Still needs an experiment</h2>
+<ul>
+<li><strong>Mechanism of the shared stage.</strong> Why is the C sum non-monotonic in source count (1+1: 245, 2+2: 216, 4+4: 238)?
+Sweep 1–8 cores per device with chunk 32. Add IIO occupancy/credit events, and test whether the per-device
+ceiling and the shared stage are the same resource.</li>
+<li><strong>Placement inside the root bus.</strong> Is the shared stage the IIO stack or a fabric behind it? Use a device on a
+different IIO stack of the same socket (none is enabled now).</li>
+<li><strong>Per-core clock control.</strong> Turbo is uneven: about 3.3–3.9 GHz on one core per group, 2.2 GHz elsewhere. It
+matters for loop-bound phases (chunk 1, 1 core).</li>
+</ul>
+</main></body></html>

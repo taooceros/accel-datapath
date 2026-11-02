@@ -1,0 +1,291 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>order: keeping submission order while using parallel portal lines</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Noto+Serif+SC:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"><style>
+:root { --paper:#faf9f5; --card:#fffefb; --sunk:#f3f1eb; --ink:#161514; --ink2:#3b3935; --muted:#7a776f; --rule:#e4e0d6; --rule2:#cfcabe;
+  --serif:"Newsreader","Noto Serif SC",Georgia,serif; --sans:"Inter","PingFang SC","Noto Sans SC",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace; }
+@media (prefers-color-scheme: dark) { :root { --paper:#141311; --card:#1b1a17; --sunk:#201f1b; --ink:#ece8df; --ink2:#cfcac0; --muted:#9a958a; --rule:#2f2d29; --rule2:#46433c; } }
+body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.65 var(--sans); -webkit-font-smoothing:antialiased; }
+.wrap { max-width:980px; margin:0 auto; padding:28px 28px 80px; }
+nav.crumb { font:500 12px var(--mono); letter-spacing:.04em; color:var(--muted); margin-bottom:22px; }
+nav.crumb a { color:var(--muted); }
+h1, h2, h3 { font-family:var(--serif); font-weight:500; line-height:1.25; }
+h1 { font-size:30px; margin:0 0 18px; } h2 { font-size:22px; margin:34px 0 10px; padding-top:14px; border-top:1px solid var(--rule); } h3 { font-size:18px; margin:24px 0 8px; }
+a { color:var(--ink); text-decoration-color:var(--rule2); text-underline-offset:3px; }
+code { font:13px var(--mono); background:var(--sunk); padding:1px 4px; border-radius:4px; overflow-wrap:anywhere; }
+pre { background:var(--sunk); padding:12px 14px; border-radius:8px; overflow:auto; } pre code { background:none; padding:0; }
+table { border-collapse:collapse; margin:12px 0; font-size:13.5px; display:block; overflow-x:auto; }
+th, td { border-bottom:1px solid var(--rule); padding:6px 10px; text-align:left; vertical-align:top; }
+th { font:500 12px var(--mono); color:var(--muted); border-bottom:1px solid var(--rule2); }
+blockquote { margin:12px 0; padding:4px 14px; border-left:3px solid var(--rule2); color:var(--ink2); }
+ul.notes { list-style:none; padding:0; } ul.notes li { padding:14px 0; border-bottom:1px solid var(--rule); }
+ul.notes a { font:500 18px var(--serif); } ul.notes .d { color:var(--ink2); } ul.notes .t { font:12px var(--mono); color:var(--muted); }
+.lead { color:var(--ink2); }
+</style></head><body><main class="wrap"><nav class="crumb"><a href="../">DSA 提交流水线</a> · <a href="./">实验笔记</a> · order</nav><h1>order: keeping submission order while using parallel portal lines</h1>
+<p>Probe: <code>dsa-lab/src/bin/ord_mech.rs</code>. Run directories are relative to
+<code>dsa-lab-runs/</code>.</p>
+<h2>Question</h2>
+<p>One core is fast only when it rotates over several portal lines (one write per (core, line) at a
+time, ~110 ns; 16 lines reach the device cap of 143 M/s). Writes to different lines go through
+different CHAs and reach the device out of order (P21: 2 adjacent lines, displacement ≤ 1; 4 lines
+≤ 3). Spec 3.9 guarantees execution order only for one portal address, one WQ, a one-engine group.
+Which mechanisms give an order guarantee and how much of the parallel speed do they keep?</p>
+<p>&quot;Order&quot; here = arrival order at the WQ, which on a one-engine group is the execution order (spec
+3.9; P12: one engine completes in order). Measured as in P21: 64 KiB memmoves (~2 µs each) on
+<code>1-engine.conf</code>, completion record first-seen sweep; an inversion = i &lt; j but j seen first.</p>
+<h2>Mechanisms and predictions (written before running)</h2>
+<table>
+<thead>
+<tr>
+<th>id</th>
+<th>mechanism</th>
+<th>order prediction</th>
+<th>submit-side rate prediction</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>M0</td>
+<td>one line</td>
+<td>ordered</td>
+<td>~9 M/s (one write per ~110 ns)</td>
+</tr>
+<tr>
+<td>M1</td>
+<td>rotate L lines, no fence</td>
+<td>inversions (P21)</td>
+<td>min(143, L × 9) M/s</td>
+</tr>
+<tr>
+<td>M2</td>
+<td>rotate L lines, SFENCE after every k writes (&quot;epochs&quot;)</td>
+<td>no inversion across epochs; inversions only inside an epoch</td>
+<td>≈ k / (L0 + 7 ns × k), L0 ≈ 130 ns (one acknowledgement per epoch, device stage 7 ns/write): k = 1 → ~7, 4 → ~25, 16 → ~66, 32 → ~87 M/s</td>
+</tr>
+<tr>
+<td>M2'</td>
+<td>SFENCE before every write (Linux idxd <code>wmb()</code> + <code>iosubmit_cmds512</code>)</td>
+<td>ordered</td>
+<td>same as k = 1: ~7 M/s, parallel lines give nothing</td>
+</tr>
+<tr>
+<td>M3</td>
+<td>lines that hash to the same CHA, no fence</td>
+<td><strong>H-sameCHA</strong>: ordered (one CHA forwards in arrival order) / <strong>H-indep</strong>: inversions like M1</td>
+<td>≈ L × 9 M/s for those lines</td>
+</tr>
+<tr>
+<td>M4</td>
+<td>Batch: k descriptors written to memory with normal stores, SFENCE, one MOVDIR64B to one line</td>
+<td>the batches are ordered (one line); inside a batch spec 3.9 gives no guarantee: <strong>H-engine-order</strong>: no inversions on one engine (in practice) / <strong>H-batch-reorder</strong>: inversions</td>
+<td>one write per k descriptors: limited by the single engine's batch throughput, not by the write path</td>
+</tr>
+<tr>
+<td>M5</td>
+<td>no ordering at submit; the consumer delivers completions in sequence (reorder at the poller)</td>
+<td>completion delivery is ordered by construction; execution order is not</td>
+<td>full M1 rate; cost = extra latency until the predecessor completes</td>
+</tr>
+</tbody>
+</table>
+<p>Steps:</p>
+<ol>
+<li><code>chamap</code>: which CHA each of the 64 lines of the wq0.0 portal page maps to (CHA TOR WCiLF
+inserts per CHA box for 2000 writes to one line).</li>
+<li><code>order</code>: M0, M1, M2 (k = 1, 2, 4, 16), M3 (same-CHA pairs vs. different-CHA pairs), M4.</li>
+<li><code>rate</code>: submit-side rate for M0, M1, M2 (k sweep), M2' (fenced time and DSA PMU arrivals).</li>
+<li><code>brate</code>: one-engine throughput for direct noops and for batches (M4 end to end).</li>
+</ol>
+<hr />
+<h1>Results (2026-11-02)</h1>
+<p>All runs: dsa0, cpu 2, heaters, mesh 2.2 GHz at start and end. Run dirs under <code>ORD/</code>.</p>
+<h2>Line → CHA map (<code>ORD/20261102T092912Z-A-chamap</code>)</h2>
+<p>Each portal line maps to one CHA; every CHA owns exactly two lines of the page:
+0→12, 1→13, 2→14, 3→15, 4–7→24–27, 8–11→4–7, 12–15→16–19, 16→13, 17→12, 18→15, 19→14, …,
+32–35→30, 31, 28, 29, …, 60–63→3, 2, 1, 0. Same-CHA pairs used: (0, 17) and (1, 16).</p>
+<h2>Order (1-engine.conf, 32 memmoves per trial, 200 trials)</h2>
+<p>Detector: the P21 sweep detector gives false inversions when completions are closer than a
+sweep (4 KiB: 92/200 trials on one line). Final numbers use a witnessed detector: right after
+record i is first seen, every earlier unseen record k is re-read; still unwritten → witnessed
+inversion (k, i). Runs <code>…093246Z-A-order-wit-65536</code>, <code>…093249Z-A-order-wit-4096</code>,
+<code>…093250Z-A-order-wit-mixed</code>; first sweep-only runs <code>…092922Z-A-order-r1</code>, <code>…093132Z-A-order-mixed</code>.
+All trials complete, all statuses 0x01.</p>
+<table>
+<thead>
+<tr>
+<th>pattern</th>
+<th>64 KiB: trials with witnessed inversion (max gap)</th>
+<th>4 KiB</th>
+<th>cross-epoch</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>one line</td>
+<td>0</td>
+<td>0</td>
+<td>–</td>
+</tr>
+<tr>
+<td>2 adjacent lines (CHA 12, 13)</td>
+<td>200/200 (1)</td>
+<td>188/200 (1)</td>
+<td>–</td>
+</tr>
+<tr>
+<td>2 lines on the same CHA (0, 17)</td>
+<td>136/200 (1)</td>
+<td>42/200 (1)</td>
+<td>–</td>
+</tr>
+<tr>
+<td>lines 0 + 32</td>
+<td>1/200 (1)</td>
+<td>0</td>
+<td>–</td>
+</tr>
+<tr>
+<td>16 lines</td>
+<td>200/200 (10)</td>
+<td>197/200 (7)</td>
+<td>–</td>
+</tr>
+<tr>
+<td>16 lines, SFENCE before every write</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>16 lines, SFENCE every 4</td>
+<td>200/200 (3)</td>
+<td>142/200 (3)</td>
+<td>0</td>
+</tr>
+<tr>
+<td>16 lines, SFENCE every 16</td>
+<td>200/200 (12)</td>
+<td>200/200 (12)</td>
+<td>0</td>
+</tr>
+<tr>
+<td>one Batch of 32, one line</td>
+<td>0</td>
+<td>0</td>
+<td>–</td>
+</tr>
+<tr>
+<td>2 MiB head + 31 × 4 KiB: one line / Batch / Batch + Fence every 8</td>
+<td>–</td>
+<td>0 / 0 / 0 (none passed the head)</td>
+<td>–</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>M0, M1: supported. M2 (epochs): supported for order: 0 witnessed inversions across a fence in
+every run; inside an epoch the order is arbitrary. M2': ordered.</li>
+<li><strong>M3 (H-sameCHA): ruled out.</strong> Two lines on one CHA still swap (fewer than adjacent lines).
+Whether a pair swaps tracks the two lines' latencies [INFERENCE], not the CHA.</li>
+<li><strong>M4: H-engine-order supported in practice</strong> (0 in 200 trials at 64 KiB, 4 KiB and with a
+2 MiB head). Spec 3.9 does not guarantee order inside a batch without the Fence flag; this is
+an observation, not a guarantee.</li>
+</ul>
+<h2>Submit-side rate (<code>ORD/20261102T092936Z-A-rate-4e</code>; noops, no record, 40 960 writes, 3 reps, 0 lost)</h2>
+<table>
+<thead>
+<tr>
+<th>pattern</th>
+<th>M/s</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>one line</td>
+<td>9.0</td>
+</tr>
+<tr>
+<td>2 lines (adjacent or same CHA)</td>
+<td>18.1–18.4</td>
+</tr>
+<tr>
+<td>4 lines</td>
+<td>35.5</td>
+</tr>
+<tr>
+<td>16 / 32 lines</td>
+<td>142 / 143.3</td>
+</tr>
+<tr>
+<td>16 lines, SFENCE every 1 / 2 / 4 / 8 / 16</td>
+<td>7.6 / 14.9 / 28.7 / 55.0 / 99</td>
+</tr>
+<tr>
+<td>32 lines, SFENCE every 32</td>
+<td>143.2</td>
+</tr>
+<tr>
+<td>64 lines, SFENCE every 64</td>
+<td>143.3</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Epoch time: 131 ns (k = 1), 134 (2), 139 (4), 145 (8), 162 (16), 224 (32 = 32 × 7 ns).</li>
+<li><strong>M2 rate prediction wrong:</strong> k/(130 + 7k) predicted 66 at 16 and 87 at 32; measured 99 and
+143. A fence every ≥ 32 writes costs nothing. [INFERENCE: the SFENCE completes once the CHAs
+have handed the epoch's writes downstream; the IIO/IRP queues (~8+ writes) keep the device
+stage busy while the next epoch travels.]</li>
+<li>M2' (SFENCE before every write, as the Linux idxd path does): 7.6 M/s whatever the number of
+lines.</li>
+</ul>
+<h2>Device side under an order requirement</h2>
+<p>Execution order needs a one-engine group (spec 3.9). One engine:</p>
+<ul>
+<li>direct noops without record: ≥ 142.7 M/s accepted, no drops; with record 90.5 M/s
+(<code>…093044Z-A-rate-1e</code>, <code>…093122Z-A-rate-1e-rcr2</code>; the first <code>rate-1e-rcr</code> run is invalid:
+completion records on untouched calloc pages).</li>
+<li>Batches on one line (ordered batches), window 16, noops (<code>…093001Z-A-brate-1-engine</code>, core 3.9
+GHz; <code>…093313Z-A-brate-1e-noop-r2</code>, core 2.2 GHz): B = 4: 32; 8: 57–64; 16: 57–77; 32: 64–78;
+64: 81–84; 128: 87 M descriptors/s. Small B is core-bound (one batch per ~125 ns: SFENCE + one
+line), large B device-bound (core waits 75–90 % of the time). Four engines reach ~199 M/s but
+spread batches over engines (no order between batches).</li>
+<li>Fence flag on work descriptors (<code>…093309Z-A-brate-1e-mv256</code>, <code>…093312Z-A-brate-1e-mv4096</code>,
+B = 32, window 16): noops 63–66 vs 64–78 M/s; 256 B memmoves 2.1–3.0 vs 6.1 M/s; 4 KiB 1.6 vs
+5.4 M/s. Fence every 16: 5.1–6.0 (little cost).</li>
+<li>Small copies on one engine are slow and depend on depth: 256 B, B = 32, window 64: 13.1 M/s;
+B = 8, window 64: 19.0 M/s (<code>…093345Z-A-brate-1e-mv256-w</code>); direct one line keeps up at 9.1
+M/s; 4 KiB direct one line 5.6–5.7 M/s (23 GB/s) vs 7.0 on four engines. Direct 16-line runs
+overflowed the WQ, so the one-engine ceiling for small direct copies is not measured cleanly.</li>
+</ul>
+<h2>Practical reading</h2>
+<table>
+<thead>
+<tr>
+<th>order needed</th>
+<th>mechanism</th>
+<th>measured</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>results delivered in order</td>
+<td>none at submit; consumer releases completion i only after i − 1 (M5)</td>
+<td>full rate (not measured: cost is latency, displacement ≤ ~10)</td>
+</tr>
+<tr>
+<td>group before group (barrier)</td>
+<td>rotate ≥ 32 lines, SFENCE between groups (M2)</td>
+<td>143 M/s at groups of 32</td>
+</tr>
+<tr>
+<td>every descriptor in submit order at the device</td>
+<td>one line (9 M/s), SFENCE per write (7.6), or Batch on one line (up to ~85 M/s noops, order observed, not specified)</td>
+<td>–</td>
+</tr>
+<tr>
+<td>B uses A's output</td>
+<td>Batch + Fence flag, Drain, or wait for A's completion; in-order execution alone is not enough (spec 3.9: reads may pass earlier writes)</td>
+<td>Fence costs 1.4–3.4× on copies</td>
+</tr>
+</tbody>
+</table>
+<p>Not independently audited yet.</p>
+</main></body></html>

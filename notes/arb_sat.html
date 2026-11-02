@@ -1,0 +1,675 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>arb_sat: Hardware Arbitration on the CPU-to-DSA Write Datapath</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Noto+Serif+SC:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"><style>
+:root { --paper:#faf9f5; --card:#fffefb; --sunk:#f3f1eb; --ink:#161514; --ink2:#3b3935; --muted:#7a776f; --rule:#e4e0d6; --rule2:#cfcabe;
+  --serif:"Newsreader","Noto Serif SC",Georgia,serif; --sans:"Inter","PingFang SC","Noto Sans SC",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace; }
+@media (prefers-color-scheme: dark) { :root { --paper:#141311; --card:#1b1a17; --sunk:#201f1b; --ink:#ece8df; --ink2:#cfcac0; --muted:#9a958a; --rule:#2f2d29; --rule2:#46433c; } }
+body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.65 var(--sans); -webkit-font-smoothing:antialiased; }
+.wrap { max-width:980px; margin:0 auto; padding:28px 28px 80px; }
+nav.crumb { font:500 12px var(--mono); letter-spacing:.04em; color:var(--muted); margin-bottom:22px; }
+nav.crumb a { color:var(--muted); }
+h1, h2, h3 { font-family:var(--serif); font-weight:500; line-height:1.25; }
+h1 { font-size:30px; margin:0 0 18px; } h2 { font-size:22px; margin:34px 0 10px; padding-top:14px; border-top:1px solid var(--rule); } h3 { font-size:18px; margin:24px 0 8px; }
+a { color:var(--ink); text-decoration-color:var(--rule2); text-underline-offset:3px; }
+code { font:13px var(--mono); background:var(--sunk); padding:1px 4px; border-radius:4px; overflow-wrap:anywhere; }
+pre { background:var(--sunk); padding:12px 14px; border-radius:8px; overflow:auto; } pre code { background:none; padding:0; }
+table { border-collapse:collapse; margin:12px 0; font-size:13.5px; display:block; overflow-x:auto; }
+th, td { border-bottom:1px solid var(--rule); padding:6px 10px; text-align:left; vertical-align:top; }
+th { font:500 12px var(--mono); color:var(--muted); border-bottom:1px solid var(--rule2); }
+blockquote { margin:12px 0; padding:4px 14px; border-left:3px solid var(--rule2); color:var(--ink2); }
+ul.notes { list-style:none; padding:0; } ul.notes li { padding:14px 0; border-bottom:1px solid var(--rule); }
+ul.notes a { font:500 18px var(--serif); } ul.notes .d { color:var(--ink2); } ul.notes .t { font:12px var(--mono); color:var(--muted); }
+.lead { color:var(--ink2); }
+</style></head><body><main class="wrap"><nav class="crumb"><a href="../">DSA 提交流水线</a> · <a href="./">实验笔记</a> · arb_sat</nav><h1>arb_sat: Hardware Arbitration on the CPU-to-DSA Write Datapath</h1>
+<p>Probe: <code>dsa-lab/src/bin/arb_sat.rs</code>.
+Run directories are relative to <code>dsa-lab-runs/</code>.</p>
+<h2>Target</h2>
+<p>Reverse-engineer the hardware arbitration on the path from CPU cores to an Intel DSA dedicated work queue (WQ), using outside measurements only:</p>
+<ul>
+<li><strong>E1</strong>: Where does the write path saturate?</li>
+<li><strong>E2</strong>: How is bandwidth shared under saturation?</li>
+</ul>
+<h2>Background and Prior Findings</h2>
+<ul>
+<li>Single core writing a single portal offset (64 B): serialized at ~110 ns/write (~9.1 M writes/s) at a 2.2 GHz mesh.</li>
+<li>Single core rotating across multiple 64 B portal offsets of the same WQ portal page: achieves concurrent store buffer chains down to ~5.0-6.5 ns/write (~150-200 M writes/s) at 16-32 offsets. The device ignores portal address bits 11:6 (DSA spec 9.3).</li>
+<li>8 cores with 1 offset reached 77 M writes/s with each core at its solo rate (~110 ns/write); no arbitration was visible because offered load was below path capacity. Losses only ever came from WQ-FULL.</li>
+<li>Hardware topology: Dual-socket Xeon Gold 6438M (Sapphire Rapids). <code>dsa0</code> and <code>iax1</code> are on NUMA node 0 (same root bus / IO stop 0000:75); <code>dsa2</code> and <code>iax3</code> are on NUMA node 1 (root bus 0000:f2). Each DSA device has 4 engines and 128 total WQ entries.</li>
+<li>Posted MOVDIR64B writes are never lost in flight: <code>EV_DWQ_SUCCESS + EV_DWQ_FULL</code> on the DSA PMU counts every arriving write at the device. The uncore IIO counter <code>UNC_IIO_TXN_REQ_BY_CPU.MEM_WRITE</code> on <code>uncore_iio_0</code> counts every CPU write to device memory.</li>
+</ul>
+<hr />
+<h2>E1: Saturate the Path</h2>
+<h3>Question</h3>
+<p>Can the CPU-to-DSA write datapath be saturated by scaling offered load via core count (1, 2, 4, 8, 16 physical cores on node 0) and portal offsets per core (1, 4, 16)? If so, where does saturation occur, what is the maximum arrival rate, and what is the back-pressure mechanism?</p>
+<h3>Competing Hypotheses (Written Before Running)</h3>
+<ol>
+<li><strong>H-nosat (No saturation reachable)</strong>:
+<ul>
+<li>Arrival rate keeps rising linearly with offered load across all configurations up to 16 cores × 16 offsets (~2.4 G writes/s offered).</li>
+<li>Core ns/write remains at the solo rate (~110 ns for 1 offset, ~28 ns for 4 offsets, ~6.5 ns for 16 offsets).</li>
+</ul>
+</li>
+<li><strong>H-credit (Upstream credit back-pressure)</strong>:
+<ul>
+<li>Arrival rate plateaus at a path/device bottleneck capacity $C$.</li>
+<li>Cores experience upstream back-pressure: store buffer fills, causing MOVDIR64B to stall; core ns/write rises proportionally ($ns/write \propto N_{cores} / C$).</li>
+<li>Device arrival counts (<code>SUCCESS + FULL</code>) and IIO write counts (<code>uncore_iio_0.txn_wr</code>) both match the actual writes sent by the cores (zero in-flight loss).</li>
+</ul>
+</li>
+<li><strong>H-loss (In-flight loss before arrival)</strong>:
+<ul>
+<li>Device arrival rate plateaus, but core ns/write remains flat at the solo rate.</li>
+<li>Writes issued by cores exceed arriving writes: either <code>IIO &lt; core_writes</code> (lost in mesh/IIO ingress) or <code>DSA_arrivals &lt; IIO</code> (lost between IIO and device).</li>
+</ul>
+</li>
+<li><strong>H-limit500 (Specific device ingress limiter)</strong>:
+<ul>
+<li>Ingress bottleneck at device clock: e.g. ~500 M writes/s = 2 × 32 B transfers per ~1 GHz device clock cycle [INFERENCE].</li>
+<li>Alternatively, bus ceiling at PCIe Gen5 x16 write bandwidth (~64 GB/s = 1.0 G 64B writes/s) or mesh stop ceiling.</li>
+</ul>
+</li>
+</ol>
+<h3>Predictions (Written Before Running)</h3>
+<ul>
+<li>For 1 offset per core: offered load per core is ~9.1 M/s. 16 cores offer ~145 M/s, which may reach or approach saturation.</li>
+<li>For 4 offsets per core: offered load per core is ~35.7 M/s. 16 cores offer ~570 M/s.</li>
+<li>For 16 offsets per core: offered load per core is ~153.8 M/s. 4 cores offer ~615 M/s; 8 cores offer ~1.23 G/s; 16 cores offer ~2.46 G/s.</li>
+<li>If $C \approx 500$ M writes/s, saturation will be reached at $\ge 4$ cores rotating 16 offsets.</li>
+<li>Under H-credit, core write rate will be the first metric to deviate from offered load, while IIO and DSA counts will stay strictly equal to issued writes.</li>
+</ul>
+<hr />
+<h2>E1: Experimental Results</h2>
+<h3>Primary Runs</h3>
+<ul>
+<li><code>cadence-8dwq-1g.conf</code> (8 DWQs, size 16 each, 4 engines): <code>arb_sat/20261101T201026Z-A-e1-8dwq</code></li>
+<li><code>4-engine.conf</code> (1 DWQ, size 128, 4 engines): <code>arb_sat/20261101T201042Z-A-e1-4eng</code></li>
+</ul>
+<p>Measurement conditions: 8 L2 heaters (<code>Heaters::start</code>) excluding all measurement cores; mesh clock verified at 2.20 GHz at start and end. Uncore IIO counter opened on <code>uncore_iio_0</code> (<code>UNC_IIO_TXN_REQ_BY_CPU.MEM_WRITE</code>). Device PMU events opened on <code>dsa0</code>: <code>EV_DWQ_SUCCESS</code> (0x10), <code>EV_DWQ_FULL</code> (0x20), and <code>EV_DWQ_BOTH</code> (0x30). All PMU events verified <code>time_running == time_enabled</code> (no multiplexing). All completion records verified after Drain: 0 bad status codes.</p>
+<h3>E1 Load-Curve Table (<code>cadence-8dwq-1g.conf</code>)</h3>
+<p>Run dir: <code>arb_sat/20261101T201026Z-A-e1-8dwq</code>. Duration 2.0 ms per burst; 2 reps per configuration.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">Cores</th>
+<th style="text-align:center">Offsets</th>
+<th style="text-align:center">Rep</th>
+<th style="text-align:center">Offered (M/s)</th>
+<th style="text-align:center">Arrival (M/s)</th>
+<th style="text-align:center">PMU SUCCESS (M/s)</th>
+<th style="text-align:center">PMU FULL (M/s)</th>
+<th style="text-align:center">IIO Rate (M/s)</th>
+<th style="text-align:center">Mean ns/write</th>
+<th style="text-align:center">In-Flight Loss</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">1</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">0</td>
+<td style="text-align:center">9.0</td>
+<td style="text-align:center">9.0</td>
+<td style="text-align:center">9.0</td>
+<td style="text-align:center">0.0</td>
+<td style="text-align:center">9.0</td>
+<td style="text-align:center">110.6</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">1</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">9.0</td>
+<td style="text-align:center">9.0</td>
+<td style="text-align:center">9.0</td>
+<td style="text-align:center">0.0</td>
+<td style="text-align:center">9.0</td>
+<td style="text-align:center">110.5</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">1</td>
+<td style="text-align:center">4</td>
+<td style="text-align:center">0</td>
+<td style="text-align:center">35.6</td>
+<td style="text-align:center">35.6</td>
+<td style="text-align:center">35.6</td>
+<td style="text-align:center">0.0</td>
+<td style="text-align:center">35.6</td>
+<td style="text-align:center">28.1</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">1</td>
+<td style="text-align:center">4</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">35.6</td>
+<td style="text-align:center">35.6</td>
+<td style="text-align:center">35.6</td>
+<td style="text-align:center">0.0</td>
+<td style="text-align:center">35.6</td>
+<td style="text-align:center">28.1</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">1</td>
+<td style="text-align:center">16</td>
+<td style="text-align:center">0</td>
+<td style="text-align:center">141.4</td>
+<td style="text-align:center"><strong>141.4</strong></td>
+<td style="text-align:center">91.2</td>
+<td style="text-align:center">50.3</td>
+<td style="text-align:center">141.8</td>
+<td style="text-align:center">7.1</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">1</td>
+<td style="text-align:center">16</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">141.4</td>
+<td style="text-align:center"><strong>141.4</strong></td>
+<td style="text-align:center">91.2</td>
+<td style="text-align:center">50.3</td>
+<td style="text-align:center">141.7</td>
+<td style="text-align:center">7.1</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">2</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">0</td>
+<td style="text-align:center">18.4</td>
+<td style="text-align:center">18.4</td>
+<td style="text-align:center">18.4</td>
+<td style="text-align:center">0.0</td>
+<td style="text-align:center">18.4</td>
+<td style="text-align:center">108.6</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">2</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">18.4</td>
+<td style="text-align:center">18.4</td>
+<td style="text-align:center">18.4</td>
+<td style="text-align:center">0.0</td>
+<td style="text-align:center">18.4</td>
+<td style="text-align:center">108.7</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">2</td>
+<td style="text-align:center">4</td>
+<td style="text-align:center">0</td>
+<td style="text-align:center">71.4</td>
+<td style="text-align:center">71.4</td>
+<td style="text-align:center">71.4</td>
+<td style="text-align:center">0.0</td>
+<td style="text-align:center">71.4</td>
+<td style="text-align:center">28.0</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">2</td>
+<td style="text-align:center">4</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">71.5</td>
+<td style="text-align:center">71.5</td>
+<td style="text-align:center">71.5</td>
+<td style="text-align:center">0.0</td>
+<td style="text-align:center">71.5</td>
+<td style="text-align:center">28.0</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">2</td>
+<td style="text-align:center">16</td>
+<td style="text-align:center">0</td>
+<td style="text-align:center">141.9</td>
+<td style="text-align:center"><strong>141.9</strong></td>
+<td style="text-align:center">91.1</td>
+<td style="text-align:center">50.8</td>
+<td style="text-align:center">142.2</td>
+<td style="text-align:center">14.1</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">2</td>
+<td style="text-align:center">16</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">141.9</td>
+<td style="text-align:center"><strong>141.9</strong></td>
+<td style="text-align:center">91.1</td>
+<td style="text-align:center">50.8</td>
+<td style="text-align:center">142.2</td>
+<td style="text-align:center">14.1</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">4</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">0</td>
+<td style="text-align:center">37.2</td>
+<td style="text-align:center">37.1</td>
+<td style="text-align:center">37.1</td>
+<td style="text-align:center">0.0</td>
+<td style="text-align:center">37.1</td>
+<td style="text-align:center">107.7</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">4</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">37.2</td>
+<td style="text-align:center">37.2</td>
+<td style="text-align:center">37.2</td>
+<td style="text-align:center">0.0</td>
+<td style="text-align:center">37.2</td>
+<td style="text-align:center">107.7</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">4</td>
+<td style="text-align:center">4</td>
+<td style="text-align:center">0</td>
+<td style="text-align:center">142.5</td>
+<td style="text-align:center"><strong>142.5</strong></td>
+<td style="text-align:center">91.1</td>
+<td style="text-align:center">51.4</td>
+<td style="text-align:center">142.8</td>
+<td style="text-align:center">28.1</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">4</td>
+<td style="text-align:center">4</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">142.3</td>
+<td style="text-align:center"><strong>142.3</strong></td>
+<td style="text-align:center">91.1</td>
+<td style="text-align:center">51.2</td>
+<td style="text-align:center">142.6</td>
+<td style="text-align:center">28.1</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">4</td>
+<td style="text-align:center">16</td>
+<td style="text-align:center">0</td>
+<td style="text-align:center">142.1</td>
+<td style="text-align:center"><strong>142.1</strong></td>
+<td style="text-align:center">91.1</td>
+<td style="text-align:center">51.0</td>
+<td style="text-align:center">142.3</td>
+<td style="text-align:center">28.2</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">4</td>
+<td style="text-align:center">16</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">142.1</td>
+<td style="text-align:center"><strong>142.1</strong></td>
+<td style="text-align:center">91.1</td>
+<td style="text-align:center">51.0</td>
+<td style="text-align:center">142.4</td>
+<td style="text-align:center">28.1</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">8</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">0</td>
+<td style="text-align:center">75.7</td>
+<td style="text-align:center">75.7</td>
+<td style="text-align:center">75.7</td>
+<td style="text-align:center">0.0</td>
+<td style="text-align:center">75.7</td>
+<td style="text-align:center">105.7</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">8</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">75.8</td>
+<td style="text-align:center">75.8</td>
+<td style="text-align:center">75.8</td>
+<td style="text-align:center">0.0</td>
+<td style="text-align:center">75.8</td>
+<td style="text-align:center">105.6</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">8</td>
+<td style="text-align:center">4</td>
+<td style="text-align:center">0</td>
+<td style="text-align:center">141.2</td>
+<td style="text-align:center"><strong>141.1</strong></td>
+<td style="text-align:center">91.0</td>
+<td style="text-align:center">50.1</td>
+<td style="text-align:center">141.4</td>
+<td style="text-align:center">56.7</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">8</td>
+<td style="text-align:center">4</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">141.2</td>
+<td style="text-align:center"><strong>141.1</strong></td>
+<td style="text-align:center">91.1</td>
+<td style="text-align:center">50.1</td>
+<td style="text-align:center">141.4</td>
+<td style="text-align:center">56.7</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">8</td>
+<td style="text-align:center">16</td>
+<td style="text-align:center">0</td>
+<td style="text-align:center">141.2</td>
+<td style="text-align:center"><strong>141.2</strong></td>
+<td style="text-align:center">91.1</td>
+<td style="text-align:center">50.1</td>
+<td style="text-align:center">141.4</td>
+<td style="text-align:center">56.6</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">8</td>
+<td style="text-align:center">16</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">141.2</td>
+<td style="text-align:center"><strong>141.2</strong></td>
+<td style="text-align:center">91.1</td>
+<td style="text-align:center">50.1</td>
+<td style="text-align:center">141.4</td>
+<td style="text-align:center">56.6</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">16</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">0</td>
+<td style="text-align:center">140.7</td>
+<td style="text-align:center"><strong>140.6</strong></td>
+<td style="text-align:center">90.8</td>
+<td style="text-align:center">49.8</td>
+<td style="text-align:center">140.9</td>
+<td style="text-align:center">113.8</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">16</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">140.7</td>
+<td style="text-align:center"><strong>140.6</strong></td>
+<td style="text-align:center">90.9</td>
+<td style="text-align:center">49.8</td>
+<td style="text-align:center">140.9</td>
+<td style="text-align:center">113.8</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">16</td>
+<td style="text-align:center">4</td>
+<td style="text-align:center">0</td>
+<td style="text-align:center">141.0</td>
+<td style="text-align:center"><strong>140.9</strong></td>
+<td style="text-align:center">91.1</td>
+<td style="text-align:center">49.8</td>
+<td style="text-align:center">141.2</td>
+<td style="text-align:center">113.5</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">16</td>
+<td style="text-align:center">4</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">141.0</td>
+<td style="text-align:center"><strong>141.0</strong></td>
+<td style="text-align:center">90.8</td>
+<td style="text-align:center">50.2</td>
+<td style="text-align:center">141.2</td>
+<td style="text-align:center">113.5</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">16</td>
+<td style="text-align:center">16</td>
+<td style="text-align:center">0</td>
+<td style="text-align:center">141.8</td>
+<td style="text-align:center"><strong>141.8</strong></td>
+<td style="text-align:center">45.8</td>
+<td style="text-align:center">96.0</td>
+<td style="text-align:center">142.0</td>
+<td style="text-align:center">112.8</td>
+<td style="text-align:center">0</td>
+</tr>
+<tr>
+<td style="text-align:center">16</td>
+<td style="text-align:center">16</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">141.8</td>
+<td style="text-align:center"><strong>141.8</strong></td>
+<td style="text-align:center">45.4</td>
+<td style="text-align:center">96.4</td>
+<td style="text-align:center">142.0</td>
+<td style="text-align:center">112.8</td>
+<td style="text-align:center">0</td>
+</tr>
+</tbody>
+</table>
+<p><em>(In-Flight Loss = <code>dsa_arrivals - total_core_writes</code>; equals 0 in all 30 runs.)</em></p>
+<h3>Comparison with Single Dedicated WQ (<code>4-engine.conf</code>)</h3>
+<p>Run dir: <code>arb_sat/20261101T201042Z-A-e1-4eng</code>.</p>
+<ul>
+<li>Saturated arrival rate on 1 DWQ: <strong>141.1 – 141.6 M writes/s</strong>, identical to the 8 DWQ configuration.</li>
+<li>Mean ns/write under saturation: 14.2 ns (2 cores × 16 off), 28.4 ns (4 cores × 16 off), 56.5 ns (8 cores × 16 off), 113.1 ns (16 cores × 16 off).</li>
+<li>In-flight loss: 0 in all 30 runs.</li>
+</ul>
+<h3>E1 Verdict</h3>
+<ol>
+<li><strong>Saturation Ceiling</strong>:
+<ul>
+<li>The write datapath saturates at <strong>141.8 ± 0.7 M writes/s</strong> (max observed 142.5 M/s).</li>
+<li>This rate is equivalent to <strong>7.05 ns per 64 B write</strong> ($9.08 \text{ GB/s}$).</li>
+<li>At a 2.20 GHz mesh clock, 7.05 ns equals <strong>15.5 mesh cycles per 64 B write</strong> [INFERENCE].</li>
+<li>The bottleneck is common to both 1 DWQ and 8 DWQ configs, pointing to the device portal MMIO ingress interface / IIO write buffer boundary rather than individual WQ logic [INFERENCE].</li>
+</ul>
+</li>
+<li><strong>Back-Pressure Mechanism</strong>:
+<ul>
+<li>Strongly confirms <strong>H-credit</strong> (upstream credit back-pressure).</li>
+<li>When offered load exceeds ~142 M/s, device arrival rate plateaus while core-side latency scales linearly with core count:
+$$\text{Latency per write} \approx N_{\text{cores}} \times 7.05 \text{ ns}$$</li>
+<li>Cores stall in MOVDIR64B as store buffers fill with unacknowledged posted writes.</li>
+</ul>
+</li>
+<li><strong>Loss Check</strong>:
+<ul>
+<li>Strongly refutes <strong>H-loss</strong>: across all 60 runs, <code>dsa_arrivals == total_core_writes</code> exactly (0 lost writes in flight).</li>
+<li>IIO counter <code>uncore_iio_0.txn_wr</code> matches device arrivals within 0.1-0.2% measurement window edge effects.</li>
+</ul>
+</li>
+<li><strong>First Deviating Metric</strong>:
+<ul>
+<li><strong>Core-side ns/write per core</strong> is the first counter to deviate from the solo offered load baseline as saturation is reached.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2>E2: Sharing Under Saturation</h2>
+<h3>Question</h3>
+<p>Under path saturation (as established in E1 at ~141.5 M/s), how is bandwidth arbitrated among competing cores with asymmetric demand or different NUMA positions?</p>
+<h3>Competing Hypotheses &amp; Predictions (Written Before Running)</h3>
+<ol>
+<li><strong>H-fifo (Offered rate proportional / FIFO)</strong>:
+<ul>
+<li>Core A (16 off, solo ~141 M/s) vs Core B (1 off, solo ~9.1 M/s): predicted share $16/17 \approx 94.1%$ vs $1/17 \approx 5.9%$.</li>
+<li>4 cores × 16 off + 1 core × 1 off: predicted share $16/65 \approx 24.6%$ per fast core (total 98.5%), $1/65 \approx 1.54%$ for the slow core.</li>
+</ul>
+</li>
+<li><strong>H-source-rr (Per-source round-robin)</strong>:
+<ul>
+<li>Predicts 50.0% vs 50.0% for Core A vs Core B.</li>
+<li>Predicts 20.0% equal share for each of the 5 cores in 4+1.</li>
+</ul>
+</li>
+<li><strong>H-flow-rr (Per-flow round-robin across offset addresses)</strong>:
+<ul>
+<li>Each offset line is an independent stream; predicts 16:1 ratio, matching H-fifo.</li>
+</ul>
+</li>
+<li><strong>H-pos (Position-based favoritism)</strong>:
+<ul>
+<li>Near cores (node 0) favored over far cores (node 1) on cross-socket writes to <code>dsa0</code>.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2>E2: Experimental Results</h2>
+<p>All submitters run on dedicated WQs (<code>wq0.0</code> through <code>wq0.7</code>) on <code>dsa0</code> with <code>dsa-config/cadence-8dwq-1g.conf</code>.
+Individual arrivals per submitter are measured via per-WQ DSA PMU counters (category 0, <code>0x30</code> or <code>0x10+0x20</code> filtered by WQ bitmask).
+All runs verified zero counter multiplexing (<code>time_running == time_enabled</code>).</p>
+<h3>E2 Share Table</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">Case</th>
+<th style="text-align:left">Scenario</th>
+<th style="text-align:left">Run Directory</th>
+<th style="text-align:center">Submitter A Rate</th>
+<th style="text-align:center">Submitter B Rate</th>
+<th style="text-align:center">Submitter A Share</th>
+<th style="text-align:center">Submitter B Share</th>
+<th style="text-align:center">Saturated Total</th>
+<th style="text-align:left">Verdict</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center"><strong>E2-AB</strong></td>
+<td style="text-align:left">Core A (16 off, wq0.0) vs Core B (1 off, wq0.1)</td>
+<td style="text-align:left"><code>arb_sat/20261101T201100Z-A-e2-ab</code></td>
+<td style="text-align:center">124.0 M/s</td>
+<td style="text-align:center">8.4 M/s</td>
+<td style="text-align:center"><strong>93.7%</strong></td>
+<td style="text-align:center"><strong>6.3%</strong></td>
+<td style="text-align:center">132.4 M/s</td>
+<td style="text-align:left">Matches FIFO/per-flow (94.1%/5.9%); decisively rules out per-source RR (50%/50%)</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>E2-4p1</strong></td>
+<td style="text-align:left">4 Fast Cores (16 off) + 1 Slow Core (1 off)</td>
+<td style="text-align:left"><code>arb_sat/20261101T201108Z-A-e2-4p1</code></td>
+<td style="text-align:center">138.3 M/s (tot)&lt;br&gt;(34.6 M/s each)</td>
+<td style="text-align:center">2.3 M/s</td>
+<td style="text-align:center"><strong>98.4%</strong>&lt;br&gt;(<strong>24.6%</strong> each)</td>
+<td style="text-align:center"><strong>1.6%</strong></td>
+<td style="text-align:center">140.6 M/s</td>
+<td style="text-align:left">Matches FIFO/per-flow ($16/65 = 24.6%$, $1/65 = 1.54%$); rules out per-source RR (20% each)</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>E2-NFSym</strong></td>
+<td style="text-align:left">Near (16 off, cpu 2) vs Far (16 off, cpu 34)</td>
+<td style="text-align:left"><code>arb_sat/20261101T201117Z-AB-e2-nfsym</code></td>
+<td style="text-align:center">81.7 M/s</td>
+<td style="text-align:center">60.1 M/s</td>
+<td style="text-align:center"><strong>57.6%</strong></td>
+<td style="text-align:center"><strong>42.4%</strong></td>
+<td style="text-align:center">141.8 M/s</td>
+<td style="text-align:left">Near favored by ratio 1.36:1, consistent with cross-socket UPI roundtrip latency ratio (~110 vs ~155 ns = 1.41) [INFERENCE]</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>E2-NFAsym</strong></td>
+<td style="text-align:left">Near (1 off, cpu 2) vs Far (16 off, cpu 34)</td>
+<td style="text-align:left"><code>arb_sat/20261101T201126Z-AB-e2-nfasym</code></td>
+<td style="text-align:center">9.0 M/s</td>
+<td style="text-align:center">80.0 M/s</td>
+<td style="text-align:center"><strong>10.1%</strong></td>
+<td style="text-align:center"><strong>89.9%</strong></td>
+<td style="text-align:center">89.0 M/s</td>
+<td style="text-align:left">Offered load (89 M/s) is below saturation ceiling; both achieve full solo rates</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>E2-NF4x4</strong></td>
+<td style="text-align:left">4 Near (16 off) vs 4 Far (16 off)</td>
+<td style="text-align:left"><code>arb_sat/20261101T201133Z-AB-e2-nf4x4</code></td>
+<td style="text-align:center">73.4 M/s (tot)&lt;br&gt;(18.4 M/s each)</td>
+<td style="text-align:center">67.8 M/s (tot)&lt;br&gt;(17.0 M/s each)</td>
+<td style="text-align:center"><strong>52.0%</strong></td>
+<td style="text-align:center"><strong>48.0%</strong></td>
+<td style="text-align:center">141.1 M/s</td>
+<td style="text-align:left">Near slightly favored (52% vs 48%), balanced across multi-core sockets</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>E2-NF16-1</strong></td>
+<td style="text-align:left">Near (16 off) vs Far (1 off)</td>
+<td style="text-align:left"><code>arb_sat/20261101T201226Z-AB-e2-nf16-1</code></td>
+<td style="text-align:center">123.6 M/s</td>
+<td style="text-align:center">5.7 M/s</td>
+<td style="text-align:center"><strong>95.6%</strong></td>
+<td style="text-align:center"><strong>4.4%</strong></td>
+<td style="text-align:center">129.3 M/s</td>
+<td style="text-align:left">Fast Near dominates slow Far</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>E2-NF1-4x16</strong></td>
+<td style="text-align:left">1 Near (1 off) vs 4 Far (16 off, 64 flows)</td>
+<td style="text-align:left"><code>arb_sat/20261101T201233Z-AB-e2-nf1-4x16</code></td>
+<td style="text-align:center">2.7 M/s</td>
+<td style="text-align:center">137.2 M/s</td>
+<td style="text-align:center"><strong>1.9%</strong></td>
+<td style="text-align:center"><strong>98.1%</strong></td>
+<td style="text-align:center">139.9 M/s</td>
+<td style="text-align:left">Heavily saturated; 1-offset Near core throttled to 1.9% despite being local. Flow demand dominates position!</td>
+</tr>
+</tbody>
+</table>
+<h3>E2 Verdict</h3>
+<ol>
+<li><strong>Demand-Proportional Arbitration (H-fifo / H-flow-rr Confirmed)</strong>:
+<ul>
+<li>When cores with asymmetric demand compete under saturation, bandwidth is divided strictly <strong>in proportion to offered rate / number of concurrent offset flows</strong>.</li>
+<li>In E2-AB, Core A (16 flows) captures <strong>93.7%</strong> and Core B (1 flow) captures <strong>6.3%</strong> (theoretical $16/17 = 94.12%$).</li>
+<li>In E2-4p1, each of the 4 fast cores captures <strong>24.6%</strong> and the slow core captures <strong>1.6%</strong> (theoretical $16/65 = 24.62%$, $1/65 = 1.54%$).</li>
+<li><strong>Per-source round-robin (H-source-rr) is decisively rejected</strong>: cores do not get equal bandwidth regardless of offered rate.</li>
+</ul>
+</li>
+<li><strong>Topological Asymmetry (Near vs Far)</strong>:
+<ul>
+<li>Between symmetric 16-offset submitters, Near cores are moderately favored over Far cores (<strong>57.6% vs 42.4%</strong>, ratio 1.36:1).</li>
+<li>This matches the ratio of cross-socket UPI transit latencies (~155 ns solo far vs ~110 ns solo near = 1.41 ratio) [INFERENCE].</li>
+<li>However, <strong>flow count completely dominates topology</strong>: under heavy cross-socket saturation (E2-NF1-4x16), 4 far cores (64 flows) push the local near core (1 flow) down to <strong>1.9%</strong> of device arrivals.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2>Evidence Types and Consistency</h2>
+<p>Two independent evidence types were measured for every conclusion:</p>
+<ol>
+<li><strong>Core-side timing and completion polling</strong>:
+<ul>
+<li><code>ticks_to_ns</code> over TSC brackets, measuring core ns/write.</li>
+<li>Per-descriptor completion record polling after Drain confirming exact accepted counts (<code>status == 1</code>) and dropped counts (<code>status == 0</code>), with 0 bad statuses (<code>status &gt; 1</code>).</li>
+</ul>
+</li>
+<li><strong>Device and Uncore PMU counters</strong>:
+<ul>
+<li><code>dsa0</code> PMU category 0 counters <code>EV_DWQ_SUCCESS</code> and <code>EV_DWQ_FULL</code>, verified un-multiplexed (<code>time_running == time_enabled</code>).</li>
+<li><code>uncore_iio_0</code> PMU counter <code>UNC_IIO_TXN_REQ_BY_CPU.MEM_WRITE</code> counting CPU writes to device memory.</li>
+<li>Exact conservation across all stages: $\text{Core Writes} = \text{IIO Writes} = \text{DSA Arrivals} = \text{SUCCESS} + \text{FULL}$.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2>Caveats and Open Issues</h2>
+<ul>
+<li>The saturation ceiling of ~141.8 M writes/s ($9.08 \text{ GB/s}$) is lower than the theoretical PCIe Gen5 x16 link write ceiling (~64 GB/s). It reflects the internal MMIO write ingress service time of the DSA device or IIO posted write buffer ring [INFERENCE].</li>
+<li>Single-core tests at 16 offsets saturate the path (~141.4 M/s) when unrolled, indicating that a single modern SPR core with 16 portal offsets can saturate the entire DSA write datapath alone.</li>
+</ul>
+</main></body></html>

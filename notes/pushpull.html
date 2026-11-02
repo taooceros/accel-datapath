@@ -1,0 +1,392 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>pushpull: where the submit write waits, and when its data leaves the core</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Noto+Serif+SC:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"><style>
+:root { --paper:#faf9f5; --card:#fffefb; --sunk:#f3f1eb; --ink:#161514; --ink2:#3b3935; --muted:#7a776f; --rule:#e4e0d6; --rule2:#cfcabe;
+  --serif:"Newsreader","Noto Serif SC",Georgia,serif; --sans:"Inter","PingFang SC","Noto Sans SC",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace; }
+@media (prefers-color-scheme: dark) { :root { --paper:#141311; --card:#1b1a17; --sunk:#201f1b; --ink:#ece8df; --ink2:#cfcac0; --muted:#9a958a; --rule:#2f2d29; --rule2:#46433c; } }
+body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.65 var(--sans); -webkit-font-smoothing:antialiased; }
+.wrap { max-width:980px; margin:0 auto; padding:28px 28px 80px; }
+nav.crumb { font:500 12px var(--mono); letter-spacing:.04em; color:var(--muted); margin-bottom:22px; }
+nav.crumb a { color:var(--muted); }
+h1, h2, h3 { font-family:var(--serif); font-weight:500; line-height:1.25; }
+h1 { font-size:30px; margin:0 0 18px; } h2 { font-size:22px; margin:34px 0 10px; padding-top:14px; border-top:1px solid var(--rule); } h3 { font-size:18px; margin:24px 0 8px; }
+a { color:var(--ink); text-decoration-color:var(--rule2); text-underline-offset:3px; }
+code { font:13px var(--mono); background:var(--sunk); padding:1px 4px; border-radius:4px; overflow-wrap:anywhere; }
+pre { background:var(--sunk); padding:12px 14px; border-radius:8px; overflow:auto; } pre code { background:none; padding:0; }
+table { border-collapse:collapse; margin:12px 0; font-size:13.5px; display:block; overflow-x:auto; }
+th, td { border-bottom:1px solid var(--rule); padding:6px 10px; text-align:left; vertical-align:top; }
+th { font:500 12px var(--mono); color:var(--muted); border-bottom:1px solid var(--rule2); }
+blockquote { margin:12px 0; padding:4px 14px; border-left:3px solid var(--rule2); color:var(--ink2); }
+ul.notes { list-style:none; padding:0; } ul.notes li { padding:14px 0; border-bottom:1px solid var(--rule); }
+ul.notes a { font:500 18px var(--serif); } ul.notes .d { color:var(--ink2); } ul.notes .t { font:12px var(--mono); color:var(--muted); }
+.lead { color:var(--ink2); }
+</style></head><body><main class="wrap"><nav class="crumb"><a href="../">DSA 提交流水线</a> · <a href="./">实验笔记</a> · pushpull</nav><h1>pushpull: where the submit write waits, and when its data leaves the core</h1>
+<p>Probes: <code>dsa-lab/src/bin/pp_occ.rs</code> (PPO), <code>dsa-lab/src/bin/pp_arrival.rs</code> (PPA); PPM reuses
+<code>arb_sat_chk</code>. Run directories are relative to <code>dsa-lab-runs/</code>.</p>
+<p>Background (arb_sat, arb_sat_review): one device accepts at most ~141 M writes/s (~7 ns/write),
+independent of cores, WQs, core clock and mesh clock. One (core, 64 B line) has one write in its
+serial step at a time; a step takes ~110 ns at a 2.2 GHz mesh, +55–67 ns from the other socket.
+Under saturation every line's cycle grows by a common wait (near/far shares fit W ≈ 92 ns at
+16+16 lines). Throughput, shares and counts cannot tell whether the hop from core to IIO is
+receiver-pulled or sender-pushed with credits: both are lossless, FIFO and rate-limited by the
+slowest stage. Two observables differ:</p>
+<ol>
+<li>where waiting writes sit (at the receiver, as requests it has already seen, or at the sender);</li>
+<li>when the data leaves the core relative to a reply from the far end.</li>
+</ol>
+<h2>PPO: where does the extra wait sit? (written before running)</h2>
+<p>Method (as in Vuppalapati et al., SIGCOMM'24): uncore occupancy and insert counters, mean
+residency = occupancy / inserts (Little). Steady-state windows inside long timed bursts on dsa0
+(side A, heaters, mesh ~2.2 GHz), L1-resident noop descriptors without completion records.</p>
+<p>Step 0, calibration: K known MOVDIR64B from one core to one line; find which CHA TOR filter
+(IA, IA_WCIL, IA_WCILF, MMIO), which M2PCIe ingress class (CHA_IDI / CHA_NCB / CHA_NCS) and which
+IIO / IRP events count exactly K (idle window subtracted). Only events that count K are used.</p>
+<p>Load points: 1 core × 1 line (unloaded), 1 × 4, 1 × 8 (below the cap), 1 × 16 (at the cap),
+4 × 16 (64 lines), 16 × 16 (256 lines). At the cap, the per-line cycle is lines / 141 M/s:
+113, 454 and 1815 ns, so the extra wait W ≈ 3, 344 and 1700 ns.</p>
+<ul>
+<li><strong>H-recv (requests reach the CHA and wait there):</strong> TOR residency of the MOVDIR64B filter grows
+by about W (≈ +340 ns at 4 × 16, ≈ +1.7 µs at 16 × 16). TOR occupancy (summed over the 32 CHAs)
+≈ the number of outstanding lines (≈ 64, ≈ 256) unless a TOR cap is hit.</li>
+<li><strong>H-send (writes wait in the core until it may send):</strong> TOR residency stays at its unloaded
+value at every load; TOR occupancy ≈ 141 M/s × unloaded residency, independent of core count.</li>
+<li><strong>H-cap (both):</strong> TOR occupancy grows to a fixed cap and then stops; residency grows only up to
+cap / 141 M/s; the rest waits in the cores.</li>
+<li>Message class: if each write enters M2PCIe as exactly one CHA_NCB insert (and ~0 CHA_NCS), the
+data travels with the request on the CHA → IIO leg (pushed). Anything else is reported as is.</li>
+</ul>
+<h2>PPA: does the data leave before or after a reply from the far side? (written before running)</h2>
+<p>Submitter S on the near socket (node 0) or the far socket (node 1) writes one noop with a
+completion record to dsa0, stamped with rdtsc just before MOVDIR64B (store buffer empty). A poller
+P on node 0 spins on the record (node-0 memory) and stamps when it changes. The device and the
+record path are the same for both submitters, so far − near of (P stamp − S stamp) is the extra
+time for the write to reach the device. Same run: per-line cadence (long same-line bursts) and
+single-write MFENCE time for both submitters, as the yardstick. TSC skew between the two sockets is
+measured by ping-pong on lines homed on each node and must be small against the effect.</p>
+<p>With Δc = far − near per-line cadence (expected 55–67 ns, about one cross-socket round trip):</p>
+<ul>
+<li><strong>H-push (data leaves with the request, before any far-side reply):</strong> Δarrival ≈ Δc / 2
+(~28–34 ns).</li>
+<li><strong>H-pull (data waits for a reply from the far side):</strong> Δarrival ≈ 1.5 Δc (~83–100 ns).</li>
+<li>Decision: Δarrival / Δc &lt; 0.75 → push; &gt; 1.25 → pull; between → undecided.</li>
+</ul>
+<h2>PPM: does one core cap its outstanding MOVDIR64B? (written before running)</h2>
+<p>Idle mesh (<code>--heaters 0</code>, side both), one core, 1 / 16 / 32 / 64 lines, mesh measured per burst.
+With c1 = the one-line cadence at that mesh:</p>
+<ul>
+<li><strong>H-cap16 (a core holds at most ~16, like the LFB):</strong> rate ≈ min(141, 16 / c1) for 16, 32 and 64
+lines (no gain beyond 16).</li>
+<li><strong>H-nocap:</strong> rate ≈ min(141, L / c1): 32 and 64 lines faster than 16 until the 141 cap.</li>
+</ul>
+<hr />
+<h1>Results (2026-11-02, corrected after the audit in <a href="pushpull_review.html"><code>pushpull_review.md</code></a>)</h1>
+<p>All runs: dsa0, <code>perf_event_paranoid=0</code>. Heaters on node 0 (node 1 for <code>cal-far-n1</code>; none in
+PPM). Mesh per burst is given where it matters (2.0–2.2 GHz in the heated runs).
+<code>PPO/…load1</code> used a binary whose DSA / CHA-clock window was ~3 % too long; its rate and ns
+values are not used below, only its CHA-cycle ratios. All other runs use the current sources.</p>
+<h2>PPO step 0: which counters see a MOVDIR64B (calibration)</h2>
+<p>Runs <code>PPO/20261102T072543Z-A-cal1</code>, <code>PPO/20261102T072619Z-A-cal2</code> (K = 20 000 noops, no
+completion record, cpu 2 → wq0.0 line 0, then one Drain; 2 reps per pass; idle window subtracted).</p>
+<table>
+<thead>
+<tr>
+<th>counter</th>
+<th>burst count</th>
+<th>where</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CHA <code>TOR_INSERTS.IA_WCILF</code> (0x35, umask 0x01, ext 0xC867FF)</td>
+<td>20 001 = K + Drain</td>
+<td>one CHA (cha 12) for one line</td>
+</tr>
+<tr>
+<td>CHA <code>TOR_INSERTS.IA_WCIL</code> / <code>.MMIO</code></td>
+<td>0 / 0</td>
+<td>–</td>
+</tr>
+<tr>
+<td>M2PCIe <code>RxC_INSERTS.CHA_NCB</code> / <code>CHA_NCS</code> / <code>CHA_IDI</code></td>
+<td>20 001 / 0 / 2</td>
+<td>uncore_m2pcie_0 only</td>
+</tr>
+<tr>
+<td>IIO <code>TXN_REQ_BY_CPU.MEM_WRITE</code> / <code>OUTBOUND_CL_REQS_ISSUED.TO_IO</code></td>
+<td>20 001 / 20 003–20 012</td>
+<td>uncore_iio_0 (6 of 20 012 on iio_7)</td>
+</tr>
+<tr>
+<td>IRP <code>TxS_DATA_INSERTS_NCS</code> (0x0e) / <code>IRP_ALL.OUTBOUND_INSERTS</code></td>
+<td>20 001–20 003 / 20 007</td>
+<td>uncore_irp_0</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Each MOVDIR64B is one WCiLF request in the TOR of the CHA that owns the line address, one
+NCB (data-carrying class) message into the M2PCIe of the DSA's stack, one IRP outbound
+request and one IIO outbound transaction. No NCS (no-data) message precedes it.</li>
+<li>Unloaded TOR residency (occupancy / inserts, each burst at its own mesh clock): 224–234 CHA
+cycles = 106–112 ns, 3.4–4.8 ns shorter than the per-line step of the same burst (110–116 ns).</li>
+<li>TOR_OCCUPANCY can only use counter 0 of a CHA box: one occupancy event per pass.</li>
+<li>IIO clockticks on stack 0: ~1.0 GHz while writes flow, mostly gated when idle (~0.03 GHz).
+The IRP clock equals the IIO clock (audit re-run <code>PPX/20261102T075249Z-A-irpclk-m2pne</code>).</li>
+</ul>
+<p>Far submitter (cpu 34 → dsa0; <code>PPO/20261102T073030Z-AB-cal-far-n1</code>, <code>…073032Z-AB-cal-far-n0</code>):
+the WCiLF goes into a CHA TOR on node 1 (the core's own socket; 20 000 inserts on cha 12; node-0
+CHAs see only the main thread's Drain). Its TOR residency is 169–172 ns against a per-line step
+of 174–176 ns. On node 0 the writes enter M2PCIe as <code>RxC_INSERTS.UPI_NCB</code> = 20 000
+(UPI_NCS = 0): each write crosses UPI as one data-carrying message [INFERENCE: directly from the
+node-1 CHA; remote-source TOR inserts at node-0 CHAs were not counted].</p>
+<h2>PPO: where the extra wait sits</h2>
+<p>Run <code>PPO/20261102T072942Z-A-load2-8dwq</code> (cadence-8dwq-1g.conf, mesh 2.20 GHz); CHA-cycle
+ratios agree to ≤ 1 % with <code>PPO/20261102T072640Z-A-load1</code> (4-engine.conf, 1 DWQ). Steady 3 ms
+windows inside continuous bursts, L1-resident noop ring, no completion records, 2 reps.
+Per-line cycle = outstanding lines / rate.</p>
+<table>
+<thead>
+<tr>
+<th>case</th>
+<th>lines</th>
+<th>per-line cycle ns</th>
+<th>TOR residency ns</th>
+<th>outside TOR ns</th>
+<th>TOR avg occ</th>
+<th>IRP TxS avg occ / residency (IIO cyc)</th>
+<th>IIO cycles per write</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 core × 1</td>
+<td>1</td>
+<td>106–111</td>
+<td>106.1–106.2</td>
+<td>4.5</td>
+<td>0.96</td>
+<td>0.17 / 18.9</td>
+<td>106–111</td>
+</tr>
+<tr>
+<td>1 × 16</td>
+<td>16</td>
+<td>112–113</td>
+<td>106.2–107.2</td>
+<td>5.7–6.1</td>
+<td>15.1–15.2</td>
+<td>3.0–3.1 / 21–22</td>
+<td>7.02–7.05</td>
+</tr>
+<tr>
+<td>4 × 16 (4 WQs)</td>
+<td>64</td>
+<td>448–449</td>
+<td>437.4–438.6</td>
+<td>9.3–11.1</td>
+<td>62.5–62.7</td>
+<td>7.71 / 54.0</td>
+<td>7.000</td>
+</tr>
+<tr>
+<td>16 × 4 (1 WQ)</td>
+<td>64</td>
+<td>448</td>
+<td>439.8–440.2</td>
+<td>8.1–8.4</td>
+<td>62.8–62.9</td>
+<td>7.71 / 54.0</td>
+<td>7.000</td>
+</tr>
+<tr>
+<td>16 × 16, 64 addresses shared by 4 cores</td>
+<td>256</td>
+<td>1792–1793</td>
+<td>1498–1505</td>
+<td>287–295</td>
+<td>214.0–215.1</td>
+<td>7.71 / 54.0</td>
+<td>7.000</td>
+</tr>
+<tr>
+<td>16 × 16, 256 distinct addresses (8 WQs)</td>
+<td>256</td>
+<td>1793</td>
+<td>1495–1497</td>
+<td>296–298</td>
+<td>213.6–213.8</td>
+<td>7.71 / 54.0</td>
+<td>7.000</td>
+</tr>
+</tbody>
+</table>
+<p>load1-only cases, CHA cycles: TOR residency 235.7 (1 × 4), 235.4 (1 × 8), 476.5–477.7 (1 × 32,
+per-line cycle 224 ns; 2.04× the 1 × 16 residency while the cycle grew 1.99×); TOR occupancy
+~30 of 32 (about 3 % low). M2PCIe CHA_NCB ingress (thresholded re-run R1): non-empty in 0.8 % of
+M2P cycles at 1 × 1, 13 % at 1 × 16 and 1 × 32, and in every cycle with ≥ 4 cores.
+Per CHA: one line holds 0.87–0.97 entries, two lines 1.93–1.98; at 16 × 16, 5.9–8.0 of 8,
+uneven (CHAs 8, 9, 12 near 8; CHAs 16–31 at 5.9–6.5).</p>
+<ul>
+<li><strong>H-recv: supported (count evidence).</strong> Up to 64 outstanding lines the growth of the per-line
+cycle (111 → 224 → 448 ns) appears as TOR residency (106 → ~2× → 437–440 ns, 4.5–11 ns short
+of the cycle), and the TOR holds one entry per outstanding line (62.5–62.9 of 64). The core's
+request reaches its CHA at once and waits there; the core does not hold it back.</li>
+<li><strong>H-send: ruled out</strong> (TOR residency would have stayed at ~106 ns).</li>
+<li><strong>H-cap: not shown.</strong> At 256 lines (one load point) the TOR holds 214 of 256 and ~290 ns of the
+1.79 µs cycle is spent before the TOR insert, unevenly across CHAs (≈ 5 to ≈ 470 ns). Same with
+256 distinct addresses, so not a same-address conflict. Mechanism open.</li>
+<li>Message class: the write enters M2PCIe only as CHA_NCB (local) or UPI_NCB (remote), the
+data-carrying class, one per write.</li>
+<li>Downstream of the CHA: the IRP's outbound request queue (towards the device) plateaus at an
+average of 7.71 entries under saturation [INFERENCE: ~8 slots; the maximum is not measured].
+With one core at the cap (1 × 32) the IRP holds 3.6, M2PCIe is mostly empty, yet the TOR
+holds ~30: the CHA keeps most waiting writes itself.</li>
+<li><strong>The cap is exactly 7.000 IIO clock cycles per write</strong> (count ratio 6.999–7.003) in every
+saturated case, 1–16 cores, 1 or 8 WQs: 143.0 M/s at a 1.001 GHz IIO clock (TSC-bracketed DSA
+counter 142.94–143.00; PPM slope 143.05). The service stage is at or after the IRP's outbound
+queue [INFERENCE: IIO-to-device port or device ingress; IIO and device clocks are both ~1 GHz].
+The 141.4–142.1 M/s measured earlier with completion records was not re-tested.</li>
+</ul>
+<h2>PPA: when the data leaves</h2>
+<p>Run <code>PPA/20261102T073316Z-AB-r1</code>: poller cpu 6, near submitters 4/12/20, far 34/44/54;
+10 blocks × 300 trials per submitter (each block runs the near cores, then the far cores);
+noop with completion record in node-0 memory; mesh 2.20 (node 0) / 2.10 (node 1); drains ok.
+Audit re-run <code>PPX/20261102T075934Z-AB-ppa-chk-blocks</code>: 4 + 4 cores, 20 rounds × 300 trials,
+order reversed every other round, verified page homes, symmetric (split-home) skew estimate.</p>
+<table>
+<thead>
+<tr>
+<th>cpu</th>
+<th>node</th>
+<th>arrival median (t_P − t_S) ns</th>
+<th>per-line cadence ns</th>
+<th>write + MFENCE ns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>4</td>
+<td>0</td>
+<td>389.5</td>
+<td>109.5</td>
+<td>168.9</td>
+</tr>
+<tr>
+<td>12</td>
+<td>0</td>
+<td>387.7</td>
+<td>97.8</td>
+<td>164.3</td>
+</tr>
+<tr>
+<td>20</td>
+<td>0</td>
+<td>399.5</td>
+<td>115.6</td>
+<td>179.8</td>
+</tr>
+<tr>
+<td>34</td>
+<td>1</td>
+<td>433.1</td>
+<td>177.3</td>
+<td>241.5</td>
+</tr>
+<tr>
+<td>44</td>
+<td>1</td>
+<td>415.8</td>
+<td>160.0</td>
+<td>227.9</td>
+</tr>
+<tr>
+<td>54</td>
+<td>1</td>
+<td>434.0</td>
+<td>177.4</td>
+<td>242.4</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Δc (far − near cadence) = 64.0 ns (re-run 64.1); Δ(write + MFENCE) = 66.3 ns (66.7).</li>
+<li>Raw Δarrival = 35.4 ns (re-run 36.0 for the same cores, 37.3 / 37.4 with either block order).</li>
+<li>Inter-socket TSC offset (re-run, split homes): P − S ≈ +2…+6 ns (±5 ns method noise). PPA's
+own same-home skews are biased by the line layout and are not used.</li>
+<li><strong>Corrected Δarrival = 30.6–38.6 ns; Δarrival / Δc = 0.48–0.60.</strong></li>
+<li><strong>H-push: supported (timing evidence).</strong> The far core's write reaches the device about half a
+round trip later (push predicts 0.5), not 1.5 round trips (~96 ns). Reaching the pull
+prediction would need a −60 ns skew. A variant where the far CHA also waits for an ack of the
+data would give Δc ≈ 2 round trips; Δc and Δ(write + MFENCE) are about one, which excludes it.
+With the PPO far calibration: the far core hands the write to its own node-1 CHA, which sends
+it across UPI as one data message without waiting for node 0; the reply (and the core's next
+same-line write) comes about one round trip later.</li>
+<li>Caveat: the submitter's core clock enters the arrival time (~100 core cycles between stamp and
+departure; 2.8–3.4 GHz blocks arrive 11–15 ns earlier than 2.2 GHz ones in the re-run). PPA's
+warm-up clocks were 2.19–2.20 GHz on every block.</li>
+</ul>
+<h2>PPM: outstanding writes per core</h2>
+<p>Run <code>PPM/20261102T073355Z-AB-idle-1core</code> (no heaters, side both, 1.5 s idle before each burst,
+4 reps; ring source, no completion records).</p>
+<table>
+<thead>
+<tr>
+<th>lines</th>
+<th>mesh GHz per burst</th>
+<th>rate M/s (PMU slope)</th>
+<th>fenced ns/write</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>0.80, 0.90, 1.20, 2.00</td>
+<td>4.2–8.6</td>
+<td>116–240</td>
+</tr>
+<tr>
+<td>16</td>
+<td>1.0–1.2</td>
+<td>77.9–92.1</td>
+<td>10.9–12.9</td>
+</tr>
+<tr>
+<td>32</td>
+<td>1.1–1.2</td>
+<td>143.05–143.06</td>
+<td>6.99</td>
+</tr>
+<tr>
+<td>64</td>
+<td>0.8–1.2</td>
+<td>143.06</td>
+<td>6.98–6.99</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>H-cap16: ruled out (rate + count evidence).</strong> At a ~1.0 GHz mesh 16 lines give 78 M/s
+(16 / ~205 ns) and 32 lines reach the device cap. In PPO one core at 1 × 32 keeps ~30 WCiLF in
+the CHA TORs at once.</li>
+</ul>
+<h2>What this says about push vs pull</h2>
+<ul>
+<li>Core → own CHA: the request is delivered and accepted at once; all queueing (up to 64
+outstanding lines) is TOR residency at the CHA. The TOR entry lives until 4–11 ns before the
+core's next write to that line [INFERENCE: the CHA retires it, and the core may send again,
+only after the write has gone downstream]. The receiver holds the queue. Whether the 64 B data
+still sits in the core while the request waits is not observable with these counters.</li>
+<li>CHA → IIO: one data-carrying message per write. Across sockets the data arrives ~half a round
+trip after issue: pushed (timing evidence). Locally the same message class is used
+[INFERENCE: pushed as well].</li>
+<li>IIO → device: one write per 7.000 IIO cycles; the IRP's outbound queue fills in front of it
+under load.</li>
+</ul>
+<h2>Next questions</h2>
+<ul>
+<li>Is the 7-cycle stage in the IIO (switch / port to the device) or in the device? Use dsa0 +
+iax1 on the same stack with per-device IRP / IIO counters, or change the device clock.</li>
+<li>What does the CHA wait for between TOR insert and forwarding when one core sits at the cap
+(1 × 32: TOR ~30, IRP 3.6, M2PCIe mostly empty)?</li>
+<li>Why the M2PCIe CHA_NCB not-empty event counts 2 per clock when the queue never empties.</li>
+<li>The pre-TOR wait at 256 lines (uneven across CHAs).</li>
+</ul>
+</main></body></html>

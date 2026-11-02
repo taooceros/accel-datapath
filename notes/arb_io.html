@@ -1,0 +1,629 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>arb_io: E4 — Do two devices behind the same IO stop compete for write bandwidth?</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Noto+Serif+SC:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"><style>
+:root { --paper:#faf9f5; --card:#fffefb; --sunk:#f3f1eb; --ink:#161514; --ink2:#3b3935; --muted:#7a776f; --rule:#e4e0d6; --rule2:#cfcabe;
+  --serif:"Newsreader","Noto Serif SC",Georgia,serif; --sans:"Inter","PingFang SC","Noto Sans SC",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace; }
+@media (prefers-color-scheme: dark) { :root { --paper:#141311; --card:#1b1a17; --sunk:#201f1b; --ink:#ece8df; --ink2:#cfcac0; --muted:#9a958a; --rule:#2f2d29; --rule2:#46433c; } }
+body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.65 var(--sans); -webkit-font-smoothing:antialiased; }
+.wrap { max-width:980px; margin:0 auto; padding:28px 28px 80px; }
+nav.crumb { font:500 12px var(--mono); letter-spacing:.04em; color:var(--muted); margin-bottom:22px; }
+nav.crumb a { color:var(--muted); }
+h1, h2, h3 { font-family:var(--serif); font-weight:500; line-height:1.25; }
+h1 { font-size:30px; margin:0 0 18px; } h2 { font-size:22px; margin:34px 0 10px; padding-top:14px; border-top:1px solid var(--rule); } h3 { font-size:18px; margin:24px 0 8px; }
+a { color:var(--ink); text-decoration-color:var(--rule2); text-underline-offset:3px; }
+code { font:13px var(--mono); background:var(--sunk); padding:1px 4px; border-radius:4px; overflow-wrap:anywhere; }
+pre { background:var(--sunk); padding:12px 14px; border-radius:8px; overflow:auto; } pre code { background:none; padding:0; }
+table { border-collapse:collapse; margin:12px 0; font-size:13.5px; display:block; overflow-x:auto; }
+th, td { border-bottom:1px solid var(--rule); padding:6px 10px; text-align:left; vertical-align:top; }
+th { font:500 12px var(--mono); color:var(--muted); border-bottom:1px solid var(--rule2); }
+blockquote { margin:12px 0; padding:4px 14px; border-left:3px solid var(--rule2); color:var(--ink2); }
+ul.notes { list-style:none; padding:0; } ul.notes li { padding:14px 0; border-bottom:1px solid var(--rule); }
+ul.notes a { font:500 18px var(--serif); } ul.notes .d { color:var(--ink2); } ul.notes .t { font:12px var(--mono); color:var(--muted); }
+.lead { color:var(--ink2); }
+</style></head><body><main class="wrap"><nav class="crumb"><a href="../">DSA 提交流水线</a> · <a href="./">实验笔记</a> · arb_io</nav><h1>arb_io: E4 — Do two devices behind the same IO stop compete for write bandwidth?</h1>
+<h2>Question</h2>
+<p>On Intel Sapphire Rapids, <code>dsa0</code> (PCI BDF 75:01.0) and <code>iax1</code> (PCI BDF 75:02.0) share the same root bus (<code>0000:75</code>) and IO stop on NUMA node 0 (Socket 0). Conversely, <code>dsa2</code> (PCI BDF f2:01.0) sits on root bus <code>0000:f2</code> on NUMA node 1 (Socket 1) behind an independent IO stop.</p>
+<p>When multiple cores drive both devices near their maximum arrival rates using MOVDIR64B with rotating portal offsets (16 lines, achieving ~5-6.5 ns/write per core solo), does the shared IO stop on node 0 arbitrate or bottleneck write bandwidth between <code>dsa0</code> and <code>iax1</code>?</p>
+<h2>Setup and Workload</h2>
+<ul>
+<li><strong>Devices</strong>:
+<ul>
+<li><code>dsa0</code>: DWQ <code>wq0.0</code> (dedicated, size 128, 4 engines, group 0).</li>
+<li><code>iax1</code>: DWQ <code>wq1.0</code> (dedicated, size 128, 1 engine, group 0; high arrival rate causes expected WQ-full drops, but device PMU <code>EV_DWQ_SUCCESS + EV_DWQ_FULL</code> captures all arriving writes).</li>
+<li><code>dsa2</code>: DWQ <code>wq2.0</code> (dedicated, size 128, 4 engines, group 0) on node 1.</li>
+</ul>
+</li>
+<li><strong>Traffic pattern</strong>:
+<ul>
+<li>Each submitter core executes MOVDIR64B round-robin across 16 distinct 64-byte offsets of its assigned portal page (<code>offset = 64 * (k % 16)</code>).</li>
+<li>Noop descriptors with completion records pointing to local pre-faulted cache-line aligned memory.</li>
+<li>Submissions run in synchronized burst windows (50 ms) using a shared TSC deadline.</li>
+</ul>
+</li>
+<li><strong>Core allocation</strong>:
+<ul>
+<li><code>dsa0</code> submitters: disjoint physical cores on node 0 (e.g. cpus 2, 4, 6, 8).</li>
+<li><code>iax1</code> submitters: disjoint physical cores on node 0 (e.g. cpus 10, 12, 14, 16).</li>
+<li><code>dsa2</code> submitters: physical cores on node 1 (e.g. cpus 34, 36, 38, 40).</li>
+<li>Coordinator core: cpu 20 (node 0).</li>
+<li>Heaters: 8 L2 spinner threads on node 0 (cpus 24..31) and 8 on node 1 (cpus 56..63), holding mesh frequency at ~2.2 GHz.</li>
+</ul>
+</li>
+<li><strong>Phases</strong>:
+<ul>
+<li><strong>Phase A</strong>: <code>dsa0</code> alone driven by node-0 submitters.</li>
+<li><strong>Phase B</strong>: <code>iax1</code> alone driven by disjoint node-0 submitters.</li>
+<li><strong>Phase C</strong>: <code>dsa0</code> + <code>iax1</code> driven concurrently by their disjoint node-0 core sets.</li>
+<li><strong>Phase D_ctrl</strong>: <code>dsa2</code> alone driven by node-1 submitters.</li>
+<li><strong>Phase D</strong>: <code>dsa0</code> (node-0 cores) + <code>dsa2</code> (node-1 cores) driven concurrently (control: separate IO stops).</li>
+</ul>
+</li>
+</ul>
+<h2>Competing Hypotheses (written before any runs)</h2>
+<h3>Hypothesis 1: Shared IO stop arbitrates / limits write bandwidth (H-arb)</h3>
+<ul>
+<li>The root bus 75 IO stop or mesh ingress port has a finite write bandwidth / transaction ingestion rate that saturates under concurrent multi-core rotated-offset blasts.</li>
+<li><strong>Predictions</strong>:
+<ol>
+<li>In Phase C, the combined arrival rate is strictly less than the sum of solo arrival rates: $C_{\text{sum}} &lt; A + B$.</li>
+<li>Back-pressure from the IO stop reaches the cores' store buffers, resulting in a measurable increase in per-core ns/write in Phase C compared to Phase A and Phase B.</li>
+<li>In Phase D, because <code>dsa2</code> is on a separate IO stop on Socket 1, no shared bus arbitration occurs: $D_{\text{sum}} \approx A + D_{\text{ctrl}}$, and <code>dsa0</code> per-core ns/write matches Phase A.</li>
+</ol>
+</li>
+</ul>
+<h3>Hypothesis 2: No shared limit at these arrival rates (H-nolimit)</h3>
+<ul>
+<li>The IO stop / root complex ingress crossbar on node 0 has sufficient capacity to sink writes to both devices concurrently without throttling.</li>
+<li><strong>Predictions</strong>:
+<ol>
+<li>In Phase C, the combined arrival rate equals the sum of solo arrival rates: $C_{\text{sum}} \approx A + B$.</li>
+<li>Per-core ns/write on <code>dsa0</code> and <code>iax1</code> remains flat between solo and concurrent phases.</li>
+<li>In Phase D, $D_{\text{sum}} \approx A + D_{\text{ctrl}}$, with flat per-core ns/write.</li>
+</ol>
+</li>
+</ul>
+<h2>Evidence Types</h2>
+<ol>
+<li><strong>Core-side timing and submit rates</strong>:
+<ul>
+<li>Per-core ns/write measured via high-resolution TSC delta over submitted writes ($(\Delta \text{TSC} \times 10^9) / (\text{hz} \times N_{\text{writes}})$).</li>
+<li>Core-reported write issue rate (M writes/s).</li>
+</ul>
+</li>
+<li><strong>Device PMU arrival counters</strong>:
+<ul>
+<li><code>EV_DWQ_SUCCESS</code> (0x10) + <code>EV_DWQ_FULL</code> (0x20) on <code>dsa0</code>, <code>iax1</code>, and <code>dsa2</code>.</li>
+<li>Verified with <code>time_enabled == time_running</code> (no multiplexing).</li>
+</ul>
+</li>
+<li><strong>Uncore IIO counters</strong>:
+<ul>
+<li><code>uncore_iio_0</code> event <code>UNC_IIO_TxN_REQ_BY_CPU.MEM_WRITE</code> (0xc1, umask 0x01, ch_mask 0xff, fc_mask 7) on node 0 (cpu 0) and node 1 (cpu 32).</li>
+<li>Independent verification of CPU posted writes entering the IO stop.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2>Experimental Runs and Provenance</h2>
+<p>All runs executed under <code>tools/dsa-lab/lab run --exp arb_io --side both --conf dsa-config/arb_io.conf</code> with L2 heaters pinning the mesh clock to ~2.2 GHz (verified at start and end of every run, reported in JSON). Zero SWERROR state changes observed across all runs.</p>
+<ul>
+<li><strong>Primary 4-core runs (4 cores per device)</strong>:
+<ul>
+<li><code>arb_io/20261101T200554Z-AB-4c-r2</code> (3 reps, 50 ms burst window)</li>
+<li><code>arb_io/20261101T200657Z-AB-4c-r3</code> (3 reps, 50 ms burst window, confirmatory repeat)</li>
+</ul>
+</li>
+<li><strong>Contrast runs (varying arrival pressure)</strong>:
+<ul>
+<li><code>arb_io/20261101T200613Z-AB-2c-r1</code> (2 cores per device, 3 reps, 50 ms burst window)</li>
+<li><code>arb_io/20261101T200626Z-AB-1c-r1</code> (1 core per device, 3 reps, 50 ms burst window, unsaturated baseline)</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2>Phase Table: Primary 4-Core Configuration (r2 &amp; r3)</h2>
+<p><em>Cores</em>: <code>dsa0</code>: [2, 4, 6, 8]; <code>iax1</code>: [10, 12, 14, 16]; <code>dsa2</code>: [34, 36, 38, 40].
+<em>Duration</em>: 50.0 ms per phase. Mesh: 2.20 GHz (Socket 0) / 2.18-2.20 GHz (Socket 1). Multiplexing: <code>mux=false</code> for all counters.</p>
+<h3>Run <code>arb_io/20261101T200554Z-AB-4c-r2</code></h3>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Description</th>
+<th>dsa0 Arr (M/s)</th>
+<th>dsa0 ns/w</th>
+<th>iax1 Arr (M/s)</th>
+<th>iax1 ns/w</th>
+<th>dsa2 Arr (M/s)</th>
+<th>dsa2 ns/w</th>
+<th>IIO Node0 (M/s)</th>
+<th>IIO Node1 (M/s)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>A (r1)</strong></td>
+<td>dsa0 alone</td>
+<td>141.18</td>
+<td>28.33</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>141.42</td>
+<td>0.00</td>
+</tr>
+<tr>
+<td><strong>B (r1)</strong></td>
+<td>iax1 alone</td>
+<td>—</td>
+<td>—</td>
+<td>142.01</td>
+<td>28.17</td>
+<td>—</td>
+<td>—</td>
+<td>142.26</td>
+<td>0.00</td>
+</tr>
+<tr>
+<td><strong>C (r1)</strong></td>
+<td>dsa0 + iax1 (same IO stop)</td>
+<td><strong>119.28</strong></td>
+<td><strong>33.54</strong></td>
+<td><strong>119.41</strong></td>
+<td><strong>33.50</strong></td>
+<td>—</td>
+<td>—</td>
+<td><strong>239.26</strong></td>
+<td>0.00</td>
+</tr>
+<tr>
+<td><strong>D_ctrl (r1)</strong></td>
+<td>dsa2 alone (node 1)</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>141.14</td>
+<td>28.34</td>
+<td>0.00</td>
+<td>141.39</td>
+</tr>
+<tr>
+<td><strong>D (r1)</strong></td>
+<td>dsa0 + dsa2 (diff IO stop)</td>
+<td><strong>141.22</strong></td>
+<td><strong>28.32</strong></td>
+<td>—</td>
+<td>—</td>
+<td><strong>141.08</strong></td>
+<td><strong>28.35</strong></td>
+<td><strong>141.46</strong></td>
+<td><strong>141.35</strong></td>
+</tr>
+<tr>
+<td><strong>A (r2)</strong></td>
+<td>dsa0 alone</td>
+<td>141.21</td>
+<td>28.33</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>141.46</td>
+<td>0.00</td>
+</tr>
+<tr>
+<td><strong>B (r2)</strong></td>
+<td>iax1 alone</td>
+<td>—</td>
+<td>—</td>
+<td>142.02</td>
+<td>28.17</td>
+<td>—</td>
+<td>—</td>
+<td>142.26</td>
+<td>0.00</td>
+</tr>
+<tr>
+<td><strong>C (r2)</strong></td>
+<td>dsa0 + iax1 (same IO stop)</td>
+<td><strong>119.44</strong></td>
+<td><strong>33.49</strong></td>
+<td><strong>119.47</strong></td>
+<td><strong>33.48</strong></td>
+<td>—</td>
+<td>—</td>
+<td><strong>239.51</strong></td>
+<td>0.00</td>
+</tr>
+<tr>
+<td><strong>D_ctrl (r2)</strong></td>
+<td>dsa2 alone (node 1)</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>141.13</td>
+<td>28.34</td>
+<td>0.00</td>
+<td>141.37</td>
+</tr>
+<tr>
+<td><strong>D (r2)</strong></td>
+<td>dsa0 + dsa2 (diff IO stop)</td>
+<td><strong>141.23</strong></td>
+<td><strong>28.32</strong></td>
+<td>—</td>
+<td>—</td>
+<td><strong>141.06</strong></td>
+<td><strong>28.36</strong></td>
+<td><strong>141.46</strong></td>
+<td><strong>141.33</strong></td>
+</tr>
+<tr>
+<td><strong>A (r3)</strong></td>
+<td>dsa0 alone</td>
+<td>141.20</td>
+<td>28.33</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>141.45</td>
+<td>0.00</td>
+</tr>
+<tr>
+<td><strong>B (r3)</strong></td>
+<td>iax1 alone</td>
+<td>—</td>
+<td>—</td>
+<td>142.03</td>
+<td>28.16</td>
+<td>—</td>
+<td>—</td>
+<td>142.26</td>
+<td>0.00</td>
+</tr>
+<tr>
+<td><strong>C (r3)</strong></td>
+<td>dsa0 + iax1 (same IO stop)</td>
+<td><strong>119.19</strong></td>
+<td><strong>33.56</strong></td>
+<td><strong>119.21</strong></td>
+<td><strong>33.55</strong></td>
+<td>—</td>
+<td>—</td>
+<td><strong>239.00</strong></td>
+<td>0.00</td>
+</tr>
+<tr>
+<td><strong>D_ctrl (r3)</strong></td>
+<td>dsa2 alone (node 1)</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>141.14</td>
+<td>28.34</td>
+<td>0.00</td>
+<td>141.38</td>
+</tr>
+<tr>
+<td><strong>D (r3)</strong></td>
+<td>dsa0 + dsa2 (diff IO stop)</td>
+<td><strong>141.22</strong></td>
+<td><strong>28.32</strong></td>
+<td>—</td>
+<td>—</td>
+<td><strong>141.10</strong></td>
+<td><strong>28.35</strong></td>
+<td><strong>141.46</strong></td>
+<td><strong>141.37</strong></td>
+</tr>
+</tbody>
+</table>
+<h3>Run <code>arb_io/20261101T200657Z-AB-4c-r3</code> (Confirmatory Repeat)</h3>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Description</th>
+<th>dsa0 Arr (M/s)</th>
+<th>dsa0 ns/w</th>
+<th>iax1 Arr (M/s)</th>
+<th>iax1 ns/w</th>
+<th>dsa2 Arr (M/s)</th>
+<th>dsa2 ns/w</th>
+<th>IIO Node0 (M/s)</th>
+<th>IIO Node1 (M/s)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>A (mean)</strong></td>
+<td>dsa0 alone</td>
+<td>141.18</td>
+<td>28.33</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>141.43</td>
+<td>0.00</td>
+</tr>
+<tr>
+<td><strong>B (mean)</strong></td>
+<td>iax1 alone</td>
+<td>—</td>
+<td>—</td>
+<td>142.06</td>
+<td>28.15</td>
+<td>—</td>
+<td>—</td>
+<td>142.29</td>
+<td>0.00</td>
+</tr>
+<tr>
+<td><strong>C (mean)</strong></td>
+<td>dsa0 + iax1 (same IO stop)</td>
+<td><strong>118.89</strong></td>
+<td><strong>33.64</strong></td>
+<td><strong>118.85</strong></td>
+<td><strong>33.66</strong></td>
+<td>—</td>
+<td>—</td>
+<td><strong>238.34</strong></td>
+<td>0.00</td>
+</tr>
+<tr>
+<td><strong>D_ctrl (mean)</strong></td>
+<td>dsa2 alone (node 1)</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>141.17</td>
+<td>28.34</td>
+<td>0.00</td>
+<td>141.41</td>
+</tr>
+<tr>
+<td><strong>D (mean)</strong></td>
+<td>dsa0 + dsa2 (diff IO stop)</td>
+<td><strong>141.45</strong></td>
+<td><strong>28.28</strong></td>
+<td>—</td>
+<td>—</td>
+<td><strong>141.12</strong></td>
+<td><strong>28.35</strong></td>
+<td><strong>141.68</strong></td>
+<td><strong>141.39</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>Phase Table: 2-Core and 1-Core Contrasts</h2>
+<h3>2 Cores Per Device (<code>arb_io/20261101T200613Z-AB-2c-r1</code>)</h3>
+<p><em>Cores</em>: <code>dsa0</code>: [2, 4]; <code>iax1</code>: [6, 8]; <code>dsa2</code>: [34, 36].</p>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Description</th>
+<th>dsa0 Arr (M/s)</th>
+<th>dsa0 ns/w</th>
+<th>iax1 Arr (M/s)</th>
+<th>iax1 ns/w</th>
+<th>dsa2 Arr (M/s)</th>
+<th>dsa2 ns/w</th>
+<th>IIO Node0 (M/s)</th>
+<th>IIO Node1 (M/s)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>A (p50)</strong></td>
+<td>dsa0 alone</td>
+<td>141.40</td>
+<td>14.14</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>141.68</td>
+<td>0.00</td>
+</tr>
+<tr>
+<td><strong>B (p50)</strong></td>
+<td>iax1 alone</td>
+<td>—</td>
+<td>—</td>
+<td>142.02</td>
+<td>14.08</td>
+<td>—</td>
+<td>—</td>
+<td>142.27</td>
+<td>0.00</td>
+</tr>
+<tr>
+<td><strong>C (p50)</strong></td>
+<td>dsa0 + iax1 (same IO stop)</td>
+<td><strong>104.06</strong></td>
+<td><strong>19.22</strong></td>
+<td><strong>104.07</strong></td>
+<td><strong>19.22</strong></td>
+<td>—</td>
+<td>—</td>
+<td><strong>208.76</strong></td>
+<td>0.00</td>
+</tr>
+<tr>
+<td><strong>D_ctrl (p50)</strong></td>
+<td>dsa2 alone (node 1)</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>141.22</td>
+<td>14.16</td>
+<td>0.00</td>
+<td>141.48</td>
+</tr>
+<tr>
+<td><strong>D (p50)</strong></td>
+<td>dsa0 + dsa2 (diff IO stop)</td>
+<td><strong>141.40</strong></td>
+<td><strong>14.14</strong></td>
+<td>—</td>
+<td>—</td>
+<td><strong>141.17</strong></td>
+<td><strong>14.17</strong></td>
+<td><strong>141.66</strong></td>
+<td><strong>141.46</strong></td>
+</tr>
+</tbody>
+</table>
+<h3>1 Core Per Device (<code>arb_io/20261101T200626Z-AB-1c-r1</code>, Unsaturated)</h3>
+<p><em>Cores</em>: <code>dsa0</code>: [2]; <code>iax1</code>: [10]; <code>dsa2</code>: [34].</p>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Description</th>
+<th>dsa0 Arr (M/s)</th>
+<th>dsa0 ns/w</th>
+<th>iax1 Arr (M/s)</th>
+<th>iax1 ns/w</th>
+<th>dsa2 Arr (M/s)</th>
+<th>dsa2 ns/w</th>
+<th>IIO Node0 (M/s)</th>
+<th>IIO Node1 (M/s)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>A (p50)</strong></td>
+<td>dsa0 alone</td>
+<td>84.34</td>
+<td>11.86</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>84.90</td>
+<td>0.00</td>
+</tr>
+<tr>
+<td><strong>B (p50)</strong></td>
+<td>iax1 alone</td>
+<td>—</td>
+<td>—</td>
+<td>83.92</td>
+<td>11.92</td>
+<td>—</td>
+<td>—</td>
+<td>84.66</td>
+<td>0.00</td>
+</tr>
+<tr>
+<td><strong>C (p50)</strong></td>
+<td>dsa0 + iax1 (same IO stop)</td>
+<td><strong>83.83</strong></td>
+<td><strong>11.93</strong></td>
+<td><strong>84.66</strong></td>
+<td><strong>11.81</strong></td>
+<td>—</td>
+<td>—</td>
+<td><strong>169.60</strong></td>
+<td>0.00</td>
+</tr>
+<tr>
+<td><strong>D_ctrl (p50)</strong></td>
+<td>dsa2 alone (node 1)</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>84.64</td>
+<td>11.81</td>
+<td>0.00</td>
+<td>85.12</td>
+</tr>
+<tr>
+<td><strong>D (p50)</strong></td>
+<td>dsa0 + dsa2 (diff IO stop)</td>
+<td><strong>83.75</strong></td>
+<td><strong>11.94</strong></td>
+<td>—</td>
+<td>—</td>
+<td><strong>83.60</strong></td>
+<td><strong>11.96</strong></td>
+<td><strong>84.31</strong></td>
+<td><strong>84.05</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>Detailed Analysis and Findings</h2>
+<h3>1. Same-IO-Stop Competition (Phase C vs A + B)</h3>
+<ul>
+<li>In Phase A and Phase B, solo driving of either <code>dsa0</code> or <code>iax1</code> reaches an ingress rate of <strong>~141.2 M writes/s</strong> (dsa0) and <strong>~142.0 M writes/s</strong> (iax1).
+<ul>
+<li>With 4 cores, each core submits at ~28.3 ns/write (aggregating to ~141 M/s).</li>
+<li>With 2 cores, each core submits at ~14.1 ns/write (aggregating to ~141 M/s).</li>
+<li>Expected sum without contention: $A + B = 141.2 + 142.0 = \mathbf{283.2\text{ M writes/s}}$ ($18.1\text{ GB/s}$ posted write bandwidth).</li>
+</ul>
+</li>
+<li>In Phase C (concurrent submissions to <code>dsa0</code> and <code>iax1</code> behind the same IO stop on root bus 75):
+<ul>
+<li>In the 4-core run, combined arrival rate drops to <strong>238.7 M writes/s</strong> ($C_{\text{sum}} / (A + B) = \mathbf{0.843}$, a <strong>15.7% bandwidth deficit</strong>). Both devices are symmetrically throttled from 141-142 M/s down to 119.3 M/s.</li>
+<li>In the 2-core run, combined arrival rate drops to <strong>208.2 M writes/s</strong> ($C_{\text{sum}} / (A + B) = \mathbf{0.735}$, a <strong>26.5% bandwidth deficit</strong>). Both devices drop symmetrically to 104.1 M/s.</li>
+<li>In the 1-core run (unsaturated), attempted total arrival rate is only $84.3 + 83.9 = 168.2\text{ M/s}$. Here, $C_{\text{sum}} = 168.5\text{ M/s} \approx A + B$, proving that arbitration/bottlenecking requires saturation above ~170-200 M writes/s.</li>
+</ul>
+</li>
+</ul>
+<h3>2. Core-Side Timing and Back-Pressure</h3>
+<ul>
+<li>In Phase C, submitter cores directly experience store-buffer backpressure:
+<ul>
+<li>4-core run: per-core ns/write rises from <strong>28.33 ns</strong> (solo) to <strong>33.54 ns</strong> (Phase C), a <strong>+18.4% latency increase</strong> (+5.2 ns/write).</li>
+<li>2-core run: per-core ns/write rises from <strong>14.14 ns</strong> (solo) to <strong>19.22 ns</strong> (Phase C), a <strong>+35.9% latency increase</strong> (+5.1 ns/write).</li>
+</ul>
+</li>
+<li>The fact that ns/write rises for both sets of cores while executing non-blocking MOVDIR64B confirms that posted-write credits or store-buffer drain buffers into the IO stop are exhausted, propagating backpressure directly into the CPU core's store pipeline.</li>
+</ul>
+<h3>3. Cross-Socket Control (Phase D vs A + D_ctrl)</h3>
+<ul>
+<li>In Phase D, <code>dsa0</code> (node 0) and <code>dsa2</code> (node 1) are driven concurrently. <code>dsa2</code> sits behind root bus <code>0000:f2</code> on Socket 1, an independent IO stop.
+<ul>
+<li><code>dsa0</code> arrival rate: <strong>141.22 M/s</strong> (identically matching Phase A solo: 141.20 M/s).</li>
+<li><code>dsa0</code> per-core ns/write: <strong>28.32 ns</strong> (identically matching Phase A solo: 28.33 ns).</li>
+<li><code>dsa2</code> arrival rate: <strong>141.10 M/s</strong> (identically matching Phase D_ctrl solo: 141.14 M/s).</li>
+<li>Combined throughput: $D_{\text{sum}} = 141.22 + 141.10 = \mathbf{282.32\text{ M writes/s}}$.</li>
+<li>Ratio $D_{\text{sum}} / (A + D_{\text{ctrl}}) = \mathbf{1.000}$ (100.0% efficiency, zero degradation).</li>
+</ul>
+</li>
+<li>This confirms that the contention observed in Phase C is strictly localized to the shared IO stop on node 0, and does not arise from software coordination, memory overhead, or cross-socket mesh interference.</li>
+</ul>
+<h3>4. Triangulation with Uncore IIO Counters</h3>
+<ul>
+<li>The uncore IIO counter <code>uncore_iio_0</code> (<code>UNC_IIO_TxN_REQ_BY_CPU.MEM_WRITE</code>):
+<ul>
+<li>In Phase A: Node 0 counts <strong>141.4 M/s</strong>, Node 1 counts <strong>0.0 M/s</strong>.</li>
+<li>In Phase B: Node 0 counts <strong>142.3 M/s</strong>, Node 1 counts <strong>0.0 M/s</strong>.</li>
+<li>In Phase C: Node 0 counts <strong>239.3 M/s</strong>, Node 1 counts <strong>0.0 M/s</strong> (matching $119.3 + 119.4 = 238.7\text{ M/s}$ PMU sum within 0.2%).</li>
+<li>In Phase D_ctrl: Node 0 counts <strong>0.0 M/s</strong>, Node 1 counts <strong>141.4 M/s</strong>.</li>
+<li>In Phase D: Node 0 counts <strong>141.5 M/s</strong>, Node 1 counts <strong>141.4 M/s</strong> (summing to 282.9 M/s).</li>
+</ul>
+</li>
+<li>The exact quantitative match between core submits, uncore IIO transactions, and device PMU arrival sums rules out any descriptor loss or counter multiplexing artifact (<code>mux=false</code> everywhere).</li>
+</ul>
+<hr />
+<h2>Verdict</h2>
+<p><strong>Hypothesis 1 (H-arb: Shared IO stop arbitrates / limits write bandwidth) HOLDS.</strong></p>
+<ol>
+<li><strong>Competition under saturation</strong>: When two devices behind the same IO stop (<code>dsa0</code> and <code>iax1</code> on root bus 75) are driven concurrently near saturation, they compete for write bandwidth. Combined arrival rate drops by <strong>15.7%</strong> (4 cores/dev, from 283.2 to 238.7 M/s) to <strong>26.5%</strong> (2 cores/dev, from 283.4 to 208.2 M/s).</li>
+<li><strong>Back-pressure reaches cores</strong>: Submitter cores experience store-buffer backpressure, with per-core ns/write increasing by <strong>+18.4%</strong> (4 cores/dev: 28.3 → 33.5 ns) to <strong>+35.9%</strong> (2 cores/dev: 14.1 → 19.2 ns).</li>
+<li><strong>Control isolates the IO stop</strong>: Driving devices behind independent IO stops (<code>dsa0</code> on node 0 + <code>dsa2</code> on node 1) achieves perfect linear additivity ($D_{\text{sum}} = A + D_{\text{ctrl}} = 282.3\text{ M writes/s}$, ratio 1.000) with zero rise in per-core ns/write.</li>
+<li><strong>Saturation threshold</strong>: At low traffic (1 core/dev, combined rate ~168 M writes/s = 10.8 GB/s), no arbitration is observed ($C \approx A + B$). Contention sets in once aggregate posted write traffic approaches the node-0 IO stop limit of ~210-240 M writes/s (~13.4-15.3 GB/s) [INFERENCE].</li>
+</ol>
+</main></body></html>
