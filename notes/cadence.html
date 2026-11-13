@@ -4,8 +4,12 @@
 @media (prefers-color-scheme: dark) { :root { --paper:#141311; --card:#1b1a17; --sunk:#201f1b; --ink:#ece8df; --ink2:#cfcac0; --muted:#9a958a; --rule:#2f2d29; --rule2:#46433c; } }
 body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.65 var(--sans); -webkit-font-smoothing:antialiased; }
 .wrap { max-width:980px; margin:0 auto; padding:28px 28px 80px; }
-nav.crumb { font:500 12px var(--mono); letter-spacing:.04em; color:var(--muted); margin-bottom:22px; }
+nav.crumb { display:flex; align-items:center; justify-content:space-between; gap:12px; font:500 12px var(--mono); letter-spacing:.04em; color:var(--muted); margin-bottom:22px; flex-wrap:wrap; }
 nav.crumb a { color:var(--muted); }
+.langsw { display:inline-flex; border:1px solid var(--rule2); background:var(--card); border-radius:999px; padding:2px; flex:none; }
+.langsw button { border:none; background:transparent; color:var(--muted); font:500 11.5px/1 var(--mono); padding:4px 9px; border-radius:999px; cursor:pointer; }
+.langsw button:hover { color:var(--ink); }
+.langsw button.on { background:var(--ink); color:var(--paper); }
 h1, h2, h3 { font-family:var(--serif); font-weight:500; line-height:1.25; }
 h1 { font-size:30px; margin:0 0 18px; } h2 { font-size:22px; margin:34px 0 10px; padding-top:14px; border-top:1px solid var(--rule); } h3 { font-size:18px; margin:24px 0 8px; }
 a { color:var(--ink); text-decoration-color:var(--rule2); text-underline-offset:3px; }
@@ -18,7 +22,7 @@ blockquote { margin:12px 0; padding:4px 14px; border-left:3px solid var(--rule2)
 ul.notes { list-style:none; padding:0; } ul.notes li { padding:14px 0; border-bottom:1px solid var(--rule); }
 ul.notes a { font:500 18px var(--serif); } ul.notes .d { color:var(--ink2); } ul.notes .t { font:12px var(--mono); color:var(--muted); }
 .lead { color:var(--ink2); }
-</style></head><body><main class="wrap"><nav class="crumb"><a href="../">DSA 提交流水线</a> · <a href="./">实验笔记</a> · cadence</nav><h1>cadence group: F1 follow-up, P6, P7, P11 (forks Q5, Q6)</h1>
+</style></head><body><main class="wrap"><nav class="crumb"><span><a href="../" data-home="1" data-en="DSA Submit Pipeline">DSA 提交流水线</a> · <a href="./" data-notes-idx="1" data-en="Lab Notes">实验笔记</a> · cadence</span><div class="langsw" id="langSwitch" role="group" aria-label="Language"><button type="button" data-lang="zh">中文</button><button type="button" data-lang="en">EN</button></div></nav><h1>cadence group: F1 follow-up, P6, P7, P11 (forks Q5, Q6)</h1>
 <p>All run directories are relative to <code>dsa-lab-runs/</code>. Probes
 (this workspace, <code>dsa-lab/src/bin/</code>):</p>
 <table>
@@ -723,4 +727,39 @@ The A/B idle-mesh difference is the default cores (cpu2 vs cpu34), not the socke
 <li>X1 baseline &quot;~102-106 ns plateau&quot; is core-specific: the standard cpu2 gives 106-111 ns at a 2.2 GHz mesh
 (core 3.8 / 2.2 GHz).</li>
 </ul>
-</main></body></html>
+</main><script>
+(function(){
+  var h = new URLSearchParams(location.hash.slice(1)), q = new URLSearchParams(location.search), s = null;
+  try { s = localStorage.getItem("dsa-pipeline-lang"); } catch (e) {}
+  var lang = (h.get("lang") || q.get("lang") || s) === "en" ? "en" : "zh";
+  function set(l, push) {
+    lang = l === "en" ? "en" : "zh";
+    try { localStorage.setItem("dsa-pipeline-lang", lang); } catch (e) {}
+    document.documentElement.lang = lang === "en" ? "en" : "zh-CN";
+    document.querySelectorAll("#langSwitch button").forEach(function(b){
+      var on = b.dataset.lang === lang;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", String(on));
+    });
+    document.querySelectorAll("[data-en]").forEach(function(el){
+      if (!el.dataset.zh) el.dataset.zh = el.innerHTML;
+      el.innerHTML = lang === "en" ? el.dataset.en : el.dataset.zh;
+    });
+    var t = document.querySelector("title");
+    if (t && t.dataset.en) { if (!t.dataset.zh) t.dataset.zh = t.textContent; t.textContent = lang === "en" ? t.dataset.en : t.dataset.zh; }
+    document.querySelectorAll('a[data-home]').forEach(function(a){ a.setAttribute("href", lang === "en" ? "../#lang=en" : "../"); });
+    document.querySelectorAll('a[data-notes-idx]').forEach(function(a){ a.setAttribute("href", lang === "en" ? "./?lang=en" : "./"); });
+    if (push) {
+      var u = new URL(location.href);
+      if (lang === "en") u.searchParams.set("lang", "en"); else u.searchParams.delete("lang");
+      u.hash = "";
+      history.replaceState(null, "", u.pathname + u.search);
+    }
+  }
+  document.getElementById("langSwitch").addEventListener("click", function(e){
+    var b = e.target.closest("[data-lang]");
+    if (b && b.dataset.lang !== lang) set(b.dataset.lang, true);
+  });
+  set(lang, false);
+})();
+</script></body></html>

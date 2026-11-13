@@ -48,8 +48,13 @@ code { font: 0.88em var(--mono); background: var(--sunk); padding: 1px 5px; bord
 .topin { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; padding-top: 20px; padding-bottom: 9px; border-bottom: 1px solid var(--ink); }
 .brand { display: flex; align-items: center; gap: 8px; text-decoration: none; font: 500 22px/1 var(--serif); letter-spacing: -0.01em; white-space: nowrap; }
 .brand em { font-style: normal; color: var(--muted); }
+.topright { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .topmeta { font: 12px/1 var(--mono); color: var(--muted); display: flex; align-items: center; gap: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topmeta .sq { width: 9px; height: 9px; background: var(--ink); flex: none; }
+.langsw { display: inline-flex; border: 1px solid var(--rule2); background: var(--card); border-radius: 999px; padding: 2px; flex: none; }
+.langsw button { border: none; background: transparent; color: var(--muted); font: 500 11.5px/1 var(--mono); padding: 4px 9px; border-radius: 999px; cursor: pointer; transition: background 0.18s, color 0.18s; }
+.langsw button:hover { color: var(--ink); }
+.langsw button.on { background: var(--ink); color: var(--paper); }
 
 /* title + tabs */
 .titlebar { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px 30px; margin: 30px 0 20px; flex-wrap: wrap; }
@@ -87,7 +92,7 @@ h1 { font: 500 clamp(30px, 3.4vw, 44px)/1.05 var(--serif); letter-spacing: -0.02
 .note { font-size: 12.5px; color: var(--muted); }
 
 /* pipeline view */
-.figbody { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; margin-top: 14px; align-items: stretch; }
+.figbody { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 18px; margin-top: 14px; align-items: stretch; }
 .detailwrap { position: relative; min-height: 480px; }
 .detailwrap .detail { position: absolute; inset: 0; }
 @media (max-width: 1200px) { .figbody { grid-template-columns: 1fr; } .detailwrap { min-height: 0; } .detailwrap .detail { position: static; max-height: 640px; } }
@@ -104,7 +109,10 @@ h1 { font: 500 clamp(30px, 3.4vw, 44px)/1.05 var(--serif); letter-spacing: -0.02
 .cmpctl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding-top: 3px; }
 .cmpctl select { max-width: 300px; }
 .cmpctl .note { margin-left: 8px; }
-.detail table.cmp td:first-child { font: 500 10.5px var(--mono); letter-spacing: 0.05em; color: var(--muted); white-space: nowrap; width: 64px; }
+.detail table.cmp { table-layout: fixed; width: 100%; }
+.detail table.cmp td { overflow-wrap: break-word; padding-right: 8px; }
+.detail table.cmp .tag { white-space: normal; overflow-wrap: normal; word-break: normal; max-width: 100%; }
+.detail table.cmp td:first-child { font: 500 10.5px var(--mono); letter-spacing: 0.05em; color: var(--muted); white-space: normal; width: 70px; line-height: 1.3; padding-right: 10px; }
 .detail table.cmp th .abadge { width: 18px; height: 18px; font-size: 10.5px; }
 .detail ul.diff { list-style: none; padding: 0; margin: 4px 0; }
 .detail ul.diff li { padding: 6px 0 6px 22px; position: relative; border-top: 1px dashed var(--rule); }
@@ -229,7 +237,7 @@ table.ed tbody tr:hover { background: var(--sunk); }
 .fork:hover { border-color: var(--rule2); transform: translateY(-2px); box-shadow: 0 8px 24px -16px rgba(0, 0, 0, 0.25); }
 .fork .qid { font: 500 11.5px var(--mono); letter-spacing: 0.08em; color: var(--muted); display: flex; justify-content: space-between; gap: 10px; }
 .fork h3 { font: 500 22px/1.3 var(--serif); letter-spacing: -0.01em; margin: 6px 0 12px; }
-.alt { display: grid; grid-template-columns: 104px 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid var(--rule); font-size: 14.5px; color: var(--ink2); line-height: 1.55; }
+.alt { display: grid; grid-template-columns: 124px 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid var(--rule); font-size: 14.5px; color: var(--ink2); line-height: 1.55; }
 .alt .why { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
 .alt.out .t { text-decoration: line-through; text-decoration-color: var(--bad); color: var(--muted); }
 .fork .foot { border-top: 1px solid var(--rule); padding-top: 12px; }
@@ -263,7 +271,7 @@ table.ed tbody tr:hover { background: var(--sunk); }
 .tlstat .v { font: 500 21px/1.2 var(--serif); margin-top: 2px; }
 .tlstat .v small { font: 11px var(--mono); color: var(--muted); margin-left: 3px; }
 .lanes { display: grid; gap: 7px; margin: 16px 0 12px; padding: 14px 16px; border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); }
-.lane { display: grid; grid-template-columns: 150px 1fr 104px; gap: 14px; align-items: center; }
+.lane { display: grid; grid-template-columns: 185px 1fr 104px; gap: 14px; align-items: center; }
 .lane .ll { font-size: 13px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lane .ll small { font: 11px var(--mono); color: var(--muted); margin-left: 6px; }
 .cells { position: relative; height: 14px; border-radius: 3px; background: var(--sunk); overflow: hidden; }
@@ -351,7 +359,7 @@ details.cmore { margin-top: 14px; }
 .cmore .note { margin: 12px 0 6px; }
 table.fnumt { width: 100%; border-collapse: collapse; margin-top: 10px; }
 table.fnumt td { border-top: 1px solid var(--rule); padding: 8px 14px 8px 0; vertical-align: top; font-size: 13.5px; line-height: 1.58; color: var(--ink2); }
-table.fnumt td:first-child { font: 500 11.5px/1.6 var(--mono); color: var(--muted); white-space: nowrap; width: 130px; }
+table.fnumt td:first-child { font: 500 11.5px/1.6 var(--mono); color: var(--muted); white-space: nowrap; width: 155px; }
 .inf { display: inline-block; font: 500 10.5px/1.5 var(--mono); color: var(--hypothesis); border: 1px solid color-mix(in srgb, var(--hypothesis) 50%, transparent); border-radius: 4px; padding: 0 5px; margin-right: 4px; vertical-align: 1px; }
 .csvg text { font-family: var(--sans); font-size: 13px; fill: var(--ink2); }
 .csvg .tick { font: 12px var(--mono); fill: var(--muted); }
@@ -386,7 +394,13 @@ footer { margin: 70px 0 36px; padding-top: 12px; border-top: 1px solid var(--ink
       <svg width="22" height="18" viewBox="0 0 22 18" aria-hidden="true"><g fill="currentColor"><rect x="0" y="0" width="22" height="3"/><rect x="2" y="4" width="2" height="11"/><rect x="6" y="4" width="2" height="11"/><rect x="10" y="4" width="2" height="11"/><rect x="14" y="4" width="2" height="11"/><rect x="18" y="4" width="2" height="11"/><rect x="0" y="15" width="22" height="3"/></g></svg>
       <span>accel-datapath</span><em>Lab&nbsp;Notes</em>
     </a>
-    <div class="topmeta" id="topmeta"></div>
+    <div class="topright">
+      <div class="topmeta" id="topmeta"></div>
+      <div class="langsw" id="langSwitch" role="group" aria-label="Language">
+        <button type="button" data-lang="zh">中文</button>
+        <button type="button" data-lang="en">EN</button>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -400,7 +414,7 @@ footer { margin: 70px 0 36px; padding-top: 12px; border-top: 1px solid var(--ink
       <button class="tab" data-tab="forks">设计分叉</button>
       <button class="tab" data-tab="sim">模型与时间线</button>
       <button class="tab" data-tab="data">数据清单</button>
-      <a class="tab" href="notes/" style="text-decoration:none;color:inherit">实验笔记 ↗</a>
+      <a class="tab" id="notesLink" href="notes/" style="text-decoration:none;color:inherit">实验笔记 ↗</a>
     </nav>
   </div>
 
@@ -411,12 +425,12 @@ footer { margin: 70px 0 36px; padding-top: 12px; border-top: 1px solid var(--ink
 
   <section class="view" id="view-pipe">
     <div class="card">
-      <div class="frow"><div class="lab">状态</div><div class="chips" id="legend"></div><div style="display:flex;gap:6px"><button class="ghost" id="cmpToggle" title="并排播放两个实验并列出差别"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="1.5" y="2.5" width="5.5" height="11" rx="1.2"/><rect x="9" y="2.5" width="5.5" height="11" rx="1.2"/></svg>对比两个实验</button><button class="ghost" id="replayMap" title="从第一步重播"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.5 2.5v3.6H9.9"/></svg>重播</button></div></div>
-      <div class="frow cmprow" id="cmpRow" hidden><div class="lab">对比</div>
-        <div class="cmpctl"><span class="abadge">A</span><select id="cmpA"></select><button class="ghost" id="cmpSwap" title="交换 A 和 B">⇄</button><span class="abadge b">B</span><select id="cmpB"></select><span class="note">推荐：</span><div class="chips" id="cmpSuggest"></div></div>
+      <div class="frow"><div class="lab" id="lab-status">状态</div><div class="chips" id="legend"></div><div style="display:flex;gap:6px"><button class="ghost" id="cmpToggle" title="并排播放两个实验并列出差别"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="1.5" y="2.5" width="5.5" height="11" rx="1.2"/><rect x="9" y="2.5" width="5.5" height="11" rx="1.2"/></svg><span id="cmpToggleLbl">对比两个实验</span></button><button class="ghost" id="replayMap" title="从第一步重播"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.5 2.5v3.6H9.9"/></svg><span id="replayMapLbl">重播</span></button></div></div>
+      <div class="frow cmprow" id="cmpRow" hidden><div class="lab" id="lab-cmp">对比</div>
+        <div class="cmpctl"><span class="abadge">A</span><select id="cmpA"></select><button class="ghost" id="cmpSwap" title="交换 A 和 B">⇄</button><span class="abadge b">B</span><select id="cmpB"></select><span class="note" id="cmpSuggestedLbl">推荐：</span><div class="chips" id="cmpSuggest"></div></div>
         <div></div></div>
-      <div class="frow"><div class="lab">已做</div><div class="chips" id="chips-done"></div><div></div></div>
-      <div class="frow"><div class="lab">计划</div><div class="chips" id="chips-plan"></div><div></div></div>
+      <div class="frow"><div class="lab" id="lab-done">已做</div><div class="chips" id="chips-done"></div><div></div></div>
+      <div class="frow"><div class="lab" id="lab-plan">计划</div><div class="chips" id="chips-plan"></div><div></div></div>
       <div class="figbody">
         <div id="mapCol">
           <div class="mapblock" id="blockMain"></div>
@@ -429,64 +443,64 @@ footer { margin: 70px 0 36px; padding-top: 12px; border-top: 1px solid var(--ink
   </section>
 
   <section class="view" id="view-audit">
-    <p class="intro">逐个读了 hw-eval 的计时和计数代码。下表是每个已做实验实际测的区间，以及报告里的结论还能不能用。点实验编号，会在流水线图上播放它的动画。</p>
+    <p class="intro" id="auditIntro1">逐个读了 hw-eval 的计时和计数代码。下表是每个已做实验实际测的区间，以及报告里的结论还能不能用。点实验编号，会在流水线图上播放它的动画。</p>
     <div class="card tablewrap"><table class="ed" id="audit-table"></table></div>
-    <p class="intro" style="margin-top:26px">测量陷阱：wave 1 里每一条都改过至少一个 run 的数字，新实验要先避开。</p>
+    <p class="intro" id="auditIntro2" style="margin-top:26px">测量陷阱：wave 1 里每一条都改过至少一个 run 的数字，新实验要先避开。</p>
     <div class="card tablewrap"><table class="ed" id="pitfall-table"></table></div>
   </section>
 
   <section class="view" id="view-forks">
-    <p class="intro">先猜出几种合理的硬件设计，再找能把它们分开的实验。“已排除”和“与数据矛盾”都有对应的数据出处；“未定”的分叉列出了下一步要做的实验。</p>
+    <p class="intro" id="forksIntro">先猜出几种合理的硬件设计，再找能把它们分开的实验。“已排除”和“与数据矛盾”都有对应的数据出处；“未定”的分叉列出了下一步要做的实验。</p>
     <div class="forks" id="forkgrid"></div>
   </section>
 
   <section class="view" id="view-sim">
     <div class="card">
       <div class="toolbar">
-        <div class="grp"><div class="lab">测量</div><div class="chips" id="presets"></div></div>
-        <div class="grp"><div class="lab">并行异步</div><div class="chips" id="presetsPar"></div></div>
-        <div class="grp"><div class="lab">缓冲在哪</div><div class="chips" id="modeSeg"></div></div>
-        <div class="grp"><div class="lab">CPU 提交</div><div class="chips" id="winSeg"></div></div>
-        <div class="grp"><div class="lab">叠加实测</div><div><select id="overlaySel"></select></div></div>
-        <div class="grow1"><button class="ghost" id="replaySim"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.5 2.5v3.6H9.9"/></svg>重播</button></div>
+        <div class="grp"><div class="lab" id="lab-sim-measure">测量</div><div class="chips" id="presets"></div></div>
+        <div class="grp"><div class="lab" id="lab-sim-par">并行异步</div><div class="chips" id="presetsPar"></div></div>
+        <div class="grp"><div class="lab" id="lab-sim-mode">缓冲在哪</div><div class="chips" id="modeSeg"></div></div>
+        <div class="grp"><div class="lab" id="lab-sim-win">CPU 提交</div><div class="chips" id="winSeg"></div></div>
+        <div class="grp"><div class="lab" id="lab-sim-overlay">叠加实测</div><div><select id="overlaySel"></select></div></div>
+        <div class="grow1"><button class="ghost" id="replaySim"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.5 2.5v3.6H9.9"/></svg><span id="replaySimLbl">重播</span></button></div>
       </div>
-      <p class="modelnote">一个确定性的排队模型，用来对照假说和实测，不是 DSA 的真实实现。每轮提交的 store（MOVDIR64B 加上额外的普通 store）一起占用 store buffer；写出按“首个延迟 + 固定间隔”串行进行；设备端是 WQ（满了丢弃）→ engine 侧槽位 → E 个 engine。“CPU 提交”决定异步程度：同步 = 等上一个完成才交下一个；窗口 W = 最多 W 个在途（tonic 的 async encode 就是把 W 从 1 提到多个）；不等 = 一直交。</p>
+      <p class="modelnote" id="modelNote">一个确定性的排队模型，用来对照假说和实测，不是 DSA 的真实实现。每轮提交的 store（MOVDIR64B 加上额外的普通 store）一起占用 store buffer；写出按“首个延迟 + 固定间隔”串行进行；设备端是 WQ（满了丢弃）→ engine 侧槽位 → E 个 engine。“CPU 提交”决定异步程度：同步 = 等上一个完成才交下一个；窗口 W = 最多 W 个在途（tonic 的 async encode 就是把 W 从 1 提到多个）；不等 = 一直交。</p>
       <div class="lanes" id="lanes"></div>
-      <div class="play"><button class="pbtn main" id="simPlay"></button><input type="range" id="tslider" min="0" max="1000" value="1000"><span class="stallpill" id="stallpill"><i></i>CPU 在等空位</span><span id="tlabel"></span></div>
+      <div class="play"><button class="pbtn main" id="simPlay"></button><input type="range" id="tslider" min="0" max="1000" value="1000"><span class="stallpill" id="stallpill"><i></i><span id="stallpillLbl">CPU 在等空位</span></span><span id="tlabel"></span></div>
       <div class="tlcard">
         <div class="tlhead">
-          <h5>时间线：谁在什么时候干活</h5>
+          <h5 id="tlTitle">时间线：谁在什么时候干活</h5>
           <div class="tllegend" id="tlLegend"></div>
           <div class="chips" id="tlView"></div>
         </div>
-        <p class="tlhow">每一行是一个 descriptor 的一生，从左到右：红 = CPU 等 store buffer 空位，灰 = 在 core 里排队写出，黄 = 在 WQ 里等，浅灰 = 等 engine，彩色 = 在某个 engine 上执行（颜色 = 哪个 engine）。<b>并行</b>：竖着看任一时刻，E0–E3 有几条同时亮着，就是几个 engine 在并行。<b>异步</b>：CPU 行变绿以后设备还在干活，这段时间 CPU 可以去做别的事；同步提交时 CPU 行大部分是黄色（在等完成）。鼠标移上去看细节。</p>
+        <p class="tlhow" id="tlHow">每一行是一个 descriptor 的一生，从左到右：红 = CPU 等 store buffer 空位，灰 = 在 core 里排队写出，黄 = 在 WQ 里等，浅灰 = 等 engine，彩色 = 在某个 engine 上执行（颜色 = 哪个 engine）。<b>并行</b>：竖着看任一时刻，E0–E3 有几条同时亮着，就是几个 engine 在并行。<b>异步</b>：CPU 行变绿以后设备还在干活，这段时间 CPU 可以去做别的事；同步提交时 CPU 行大部分是黄色（在等完成）。鼠标移上去看细节。</p>
         <div class="tlwrap" id="tlWrap"><canvas id="tl"></canvas><canvas id="tlCur"></canvas><div class="tltip" id="tlTip"></div></div>
         <div class="tlstats" id="tlStats"></div>
       </div>
       <div class="charts">
-        <div class="chartcard"><h5>每次 submit 测到的时间</h5><div class="note">x：第几个 submit；y：rdtscp 区间（ns）。线 = 模型，点 = 实测中位数。</div><svg class="chart" id="chartA" viewBox="0 0 400 280"></svg></div>
-        <div class="chartcard"><h5>最终被接受的 descriptor 数</h5><div class="note">x：提交总数；y：最终完成数。点 = 实测（noop sentinel 排空后的计数）。</div><svg class="chart" id="chartB" viewBox="0 0 400 280"></svg></div>
-        <div class="chartcard"><h5>knee 位置 vs 提交间隔</h5><div class="note">模型 knee = 第一次要等空位的 submit；实测 knee = 第一个中位数 ≥ 80 ns 的 K，竖线是 K 网格给出的区间。</div><svg class="chart" id="chartC" viewBox="0 0 400 280"></svg></div>
+        <div class="chartcard"><h5 id="chartATitle">每次 submit 测到的时间</h5><div class="note" id="chartANote">x：第几个 submit；y：rdtscp 区间（ns）。线 = 模型，点 = 实测中位数。</div><svg class="chart" id="chartA" viewBox="0 0 400 280"></svg></div>
+        <div class="chartcard"><h5 id="chartBTitle">最终被接受的 descriptor 数</h5><div class="note" id="chartBNote">x：提交总数；y：最终完成数。点 = 实测（noop sentinel 排空后的计数）。</div><svg class="chart" id="chartB" viewBox="0 0 400 280"></svg></div>
+        <div class="chartcard"><h5 id="chartCTitle">knee 位置 vs 提交间隔</h5><div class="note" id="chartCNote">模型 knee = 第一次要等空位的 submit；实测 knee = 第一个中位数 ≥ 80 ns 的 K，竖线是 K 网格给出的区间。</div><svg class="chart" id="chartC" viewBox="0 0 400 280"></svg></div>
       </div>
-      <details class="params"><summary>调参数</summary><div class="ctrl" id="controls"></div></details>
+      <details class="params"><summary id="paramsSummary">调参数</summary><div class="ctrl" id="controls"></div></details>
     </div>
-    <p class="note" style="margin-top:12px">和 hw-eval 旧数据的差别：prefill 加了 gap 以后，模型预测 knee 之后只卡“写出间隔 − 提交间隔”，旧的 X2 实测被计时的那次始终卡约 105 ns。干净计时下模型成立（gap 25 ns 时 63 ns）；旧数据多半是计时窗口里多了一个 store [推断]（Q8）。</p>
+    <p class="note" id="simBottomNote" style="margin-top:12px">和 hw-eval 旧数据的差别：prefill 加了 gap 以后，模型预测 knee 之后只卡“写出间隔 − 提交间隔”，旧的 X2 实测被计时的那次始终卡约 105 ns。干净计时下模型成立（gap 25 ns 时 63 ns）；旧数据多半是计时窗口里多了一个 store [推断]（Q8）。</p>
   </section>
 
   <section class="view" id="view-data">
-    <p class="intro">主数据已经 gzip 进本目录的 <code>data/</code>（<code>data/MANIFEST.tsv</code> 记录原路径、sha256 和运行命令）。其余数据仍在 <code>async-binding-intel-idxd</code> worktree 里，下表是清理建议，删除和归档要先确认。</p>
+    <p class="intro" id="dataIntro">主数据已经 gzip 进本目录的 <code>data/</code>（<code>data/MANIFEST.tsv</code> 记录原路径、sha256 和运行命令）。其余数据仍在 <code>async-binding-intel-idxd</code> worktree 里，下表是清理建议，删除和归档要先确认。</p>
     <div class="chips" id="dfilter" style="margin-bottom:12px"></div>
     <div class="card tablewrap"><table class="ed" id="dtable"></table></div>
   </section>
 
-  <footer><span>accel-datapath · dsa-pipeline-model · model.js 驱动</span><span id="foot"></span></footer>
+  <footer><span id="footLead">accel-datapath · dsa-pipeline-model · model.js 驱动</span><span id="foot"></span></footer>
 </main>
 
 <script src="model.js"></script>
+<script src="model.en.js"></script>
 <script src="data.js"></script>
 <script>
 "use strict";
-const M = window.DSA_MODEL, D = window.DSA_DATA, S = M.summary;
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const NS = "http://www.w3.org/2000/svg";
@@ -498,12 +512,312 @@ function el(tag, attrs = {}, parent) {
   return e;
 }
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
-const comp = Object.fromEntries(M.components.map((c) => [c.id, c]));
-const exp = Object.fromEntries(M.experiments.map((x) => [x.id, x]));
-const fork = Object.fromEntries(M.forks.map((f) => [f.id, f]));
-const ALT = { supported: ["支持", "known"], ruled_out: ["已排除", "bad"], contradicted: ["与数据矛盾", "bad"], open: ["未定", "unknown"] };
-const VALID = { ok: ["含义可信", "known"], caveat: ["可用，有注意事项", "partial"], reinterpret: ["数据可信，结论要改", "hypothesis"], broken: ["指标有问题", "bad"] };
-const MARK = { timer: ["计时", "timer"], count: ["计数", "count"], knob: ["参数", "knob"], caveat: ["测量陷阱", "caveat"] };
+function mergeCaseFig(f, ef) {
+  if (!ef) return f;
+  const out = { ...f };
+  if (ef.title != null) out.title = ef.title;
+  if (ef.look != null) out.look = ef.look;
+  if (ef.expName != null) out.expName = ef.expName;
+  if (ef.keys) out.keys = ef.keys;
+  if (ef.x) out.x = { ...f.x, ...ef.x };
+  if (ef.y) out.y = { ...f.y, ...ef.y };
+  if (ef.series && f.series) out.series = f.series.map((s, i) => ef.series[i] ? { ...s, ...ef.series[i] } : s);
+  if (ef.vlines && f.vlines) out.vlines = f.vlines.map((v, i) => ef.vlines[i] ? { ...v, ...ef.vlines[i] } : v);
+  if (ef.hlines && f.hlines) out.hlines = f.hlines.map((h, i) => ef.hlines[i] ? { ...h, ...ef.hlines[i] } : h);
+  if (ef.mark && f.mark) out.mark = { ...f.mark, ...ef.mark };
+  if (ef.marks && f.marks) out.marks = f.marks.map((m, i) => ef.marks[i] ? { ...m, ...ef.marks[i] } : m);
+  if (ef.cats && f.cats) out.cats = f.cats.map((c, i) => ef.cats[i] ? { ...c, ...ef.cats[i] } : c);
+  if (ef.groups && f.groups) out.groups = f.groups.map((g, i) => ef.groups[i] ? { ...g, ...ef.groups[i] } : g);
+  if (ef.labels && f.labels) out.labels = { ...f.labels, ...ef.labels };
+  if (ef.lines && f.lines) out.lines = f.lines.map((l, i) => ef.lines[i] ? { ...l, ...ef.lines[i] } : l);
+  return out;
+}
+function buildEnglishModel(base, en) {
+  const cleanSrc = (s) => (typeof s === "string" ? s.replace(/；/g, "; ") : s);
+  return {
+    updated: base.updated,
+    host: en.host,
+    summary: { ...base.summary, ...en.summary, nextSteps: base.summary.nextSteps.map((s, i) => ({ ...s, t: en.summary.nextSteps[i].t })) },
+    casesUi: en.casesUi,
+    cases: base.cases.map((c) => {
+      const ec = en.cases[c.id];
+      return {
+        ...c, title: ec.title,
+        steps: c.steps.map((st, i) => { const est = ec.steps[i]; return { ...st, head: est.head, text: est.text, fig: mergeCaseFig(st.fig, est.fig) }; }),
+        faq: c.faq.map((q, i) => ({ ...q, ...ec.faq[i] })),
+        ev: c.ev.map((e, i) => ({ ...e, ...ec.ev[i] })),
+      };
+    }),
+    comparisons: base.comparisons.map((cp) => { const ec = en.comparisons[`${cp.a},${cp.b}`]; return ec ? { ...cp, ...ec } : cp; }),
+    animations: Object.fromEntries(Object.entries(base.animations).map(([id, steps]) => {
+      const es = en.animations[id] || [];
+      return [id, steps.map((s, i) => {
+        const e = es[i];
+        if (!e) return s;
+        const r = { ...s, h: e.h, cap: e.cap };
+        if (s.note && e.note) r.note = { ...s.note, ...e.note };
+        if (s.timer && e.timer) r.timer = { ...s.timer, ...e.timer };
+        if (s.count && e.count) r.count = { ...s.count, ...e.count };
+        return r;
+      })];
+    })),
+    statuses: Object.fromEntries(Object.entries(base.statuses).map(([k, v]) => [k, { ...v, ...en.statuses[k] }])),
+    evidenceTypes: en.evidenceTypes,
+    domains: base.domains.map((d) => ({ ...d, ...en.domains[d.id] })),
+    edges: base.edges.map((e) => { const ee = en.edges[`${e.from}->${e.to}`]; return ee ? { ...e, ...ee } : e; }),
+    components: base.components.map((c) => {
+      const ec = en.components[c.id];
+      return { ...c, name: ec.name, en: ec.en, badge: ec.badge, what: ec.what, design: ec.design, evidence: c.evidence.map((ev, i) => ({ ...ev, src: cleanSrc(ev.src), ...ec.evidence[i] })), open: ec.open };
+    }),
+    forks: base.forks.map((f) => { const ef = en.forks[f.id]; return { ...f, q: ef.q, alts: f.alts.map((a) => ({ ...a, ...ef.alts[a.id] })) }; }),
+    experiments: base.experiments.map((x) => {
+      const ex = en.experiments[x.id];
+      return {
+        ...x, name: ex.name, selector: ex.selector ?? x.selector,
+        marks: x.marks.map((m, i) => ({ ...m, ...ex.marks[i] })),
+        measures: ex.measures, claimed: ex.claimed, validity: { ...x.validity, text: ex.validity.text }, results: ex.results,
+        data: ex.data ?? x.data,
+        predictions: x.predictions ? x.predictions.map((p, i) => ({ ...p, ...ex.predictions[i] })) : undefined,
+      };
+    }),
+    datasets: base.datasets.map((d, i) => ({ ...d, ...en.datasets[i] })),
+    datasetStatuses: en.datasetStatuses,
+    pitfalls: base.pitfalls.map((p, i) => ({ ...p, ...en.pitfalls[i] })),
+  };
+}
+const MODELS = { zh: window.DSA_MODEL, en: window.DSA_MODEL_EN ? buildEnglishModel(window.DSA_MODEL, window.DSA_MODEL_EN) : window.DSA_MODEL };
+const D = window.DSA_DATA;
+const UI = {
+  zh: {
+    htmlLang: "zh-CN",
+    updated: (d, h) => `<span>更新 ${esc(d)} · ${esc(h)}</span><span class="sq"></span>`,
+    updatedAt: (d) => `更新于 ${d}`,
+    footLead: "accel-datapath · dsa-pipeline-model · model.js 驱动",
+    tabs: { pipe: "流水线与实验", audit: "测量审计", forks: "设计分叉", sim: "模型与时间线", data: "数据清单", notes: "实验笔记 ↗" },
+    pipe: { status: "状态", cmp: "对比", cmpBtn: "对比两个实验", cmpTitle: "并排播放两个实验并列出差别", replay: "重播", replayTitle: "从第一步重播", swapTitle: "交换 A 和 B", suggested: "推荐：", done: "已做", plan: "计划" },
+    audit: {
+      intro1: "逐个读了 hw-eval 的计时和计数代码。下表是每个已做实验实际测的区间，以及报告里的结论还能不能用。点实验编号，会在流水线图上播放它的动画。",
+      intro2: "测量陷阱：wave 1 里每一条都改过至少一个 run 的数字，新实验要先避开。",
+      auditCols: ["实验", "名称", "实际测的区间", "审计结论"],
+      pitfallCols: ["陷阱", "影响和对策", "出处"],
+    },
+    forks: {
+      intro: "先猜出几种合理的硬件设计，再找能把它们分开的实验。“已排除”和“与数据矛盾”都有对应的数据出处；“未定”的分叉列出了下一步要做的实验。",
+      settled: "有倾向", open: "未定", comps: "部件：", joiner: "、",
+    },
+    data: {
+      intro: '主数据已经 gzip 进本目录的 <code>data/</code>（<code>data/MANIFEST.tsv</code> 记录原路径、sha256 和运行命令）。其余数据仍在 <code>async-binding-intel-idxd</code> worktree 里，下表是清理建议，删除和归档要先确认。',
+      all: "全部", cols: ["状态", "路径（async-binding-intel-idxd 下）", "内容", "建议", "备注"],
+    },
+    alt: { supported: ["支持", "known"], ruled_out: ["已排除", "bad"], contradicted: ["与数据矛盾", "bad"], open: ["未定", "unknown"] },
+    valid: { ok: ["含义可信", "known"], caveat: ["可用，有注意事项", "partial"], reinterpret: ["数据可信，结论要改", "hypothesis"], broken: ["指标有问题", "bad"] },
+    mark: { timer: ["计时", "timer"], count: ["计数", "count"], knob: ["参数", "knob"], caveat: ["测量陷阱", "caveat"] },
+    pktLegend: [["desc", "ink", "descriptor（MOVDIR64B）"], ["store", "muted", "普通 store"], ["sentinel", "ink", "sentinel"], ["read", "timer", "CPU 读 status", 1], ["done", "count", "数据 / 完成写回", 1], ["drop", "bad", "被丢弃"], ["alt", "peri", "另一股流"]],
+    player: {
+      aria: "DSA 提交流水线", prevTitle: "上一步 (←)", playTitle: "播放 / 暂停 (空格)", nextTitle: "下一步 (→)", wait: "等待空位",
+      legTimer: "蓝字 = rdtscp 读数", legCount: "绿字 = 计数", legStall: "红框 = 卡住的地方",
+      titleExp: (x) => `实验 ${x.id} · ${x.name}`, titleBase: "基线 · 一个 descriptor 的一生", stepOf: (i, n) => `第 ${i} / ${n} 步`,
+    },
+    cmp: {
+      joiner: "、", comma: "，", none: "没有", zero: "无", quote: (s) => `「${s}」`,
+      bothStall: (s) => `两个都在 <b>${s}</b> 卡住。`, onlyAStall: (s) => `只有 A 在 <b>${s}</b> 卡住。`, onlyBStall: (s) => `只有 B 在 <b>${s}</b> 卡住。`, noStall: "两个动画里都没有卡住的地方。",
+      onlyAKind: (s) => `A 的动画里有${s}，B 没有。`, onlyBKind: (s) => `B 的动画里有${s}，A 没有。`,
+      readingItem: (r, compName) => `<b>${esc(r.text)}</b>（${esc(compName)}，第 ${r.step} 步）`,
+      readings: (a, b) => `读数：A ${a}。B ${b}。`,
+      bothForks: (s) => `都用来回答 ${s}。`, onlyForks: (a, b) => `只有 A 回答：${a}；只有 B 回答：${b}。`,
+      onlyAComp: (s) => `只有 A 经过：${s}。`, onlyBComp: (s) => `只有 B 经过：${s}。`,
+      done: "已做", plan: "计划",
+      headKicker: "对比 · A vs B", diffHead: "差别在哪", itemHead: "逐项对照",
+      rowStatus: "状态", rowMeasures: "测什么", rowMarks: "标记点", rowResults: "结果", rowResPred: "结果 / 预测", rowPvr: "预测 vs 结果", rowAnim: "动画",
+      hint: "点上面的实验 = 换 B，Shift + 点 = 换 A。点图里的部件会退出对比，看那个部件的详情。",
+    },
+    panel: {
+      hyp: "假说", pred: "预测", res: "结果", verdict: "判定", expect: "预期看到",
+      compKicker: "部件", evCount: (n) => `${n} 类直接证据`, inf: "推断",
+      what: "是什么", design: "一般会怎么设计", known: "我们知道什么", noData: "还没有任何数据。", open: "还不知道", relForks: "相关设计分叉", relExps: "经过这个部件的实验",
+      expKicker: "实验", steps: "动画步骤", canCmp: "可以对比", measures: "具体测的是什么", marks: "流水线上的标记", claimed: "报告里的说法", audit: "审计结论", pvr: "预测 vs 结果", data: "数据", predsPre: "各假说的预测（先写下，再跑）", answers: "用来回答",
+      ovKicker: "概览", ovTitle: "目前最可能的结构", ovOpen: "还没定下来的分叉", ovNext: "下一步", ovCmp: "值得并排看的实验",
+      ovHint: "左边正在播放基线动画：一个 descriptor 怎么走完流水线。点上面任一实验，看它的数据怎么流、在哪里卡住；点“对比两个实验”并排看两个。",
+    },
+    sim: {
+      groups: { measure: "测量", par: "并行异步", mode: "缓冲在哪", win: "CPU 提交", overlay: "叠加实测" },
+      replay: "重播",
+      modelNote: "一个确定性的排队模型，用来对照假说和实测，不是 DSA 的真实实现。每轮提交的 store（MOVDIR64B 加上额外的普通 store）一起占用 store buffer；写出按“首个延迟 + 固定间隔”串行进行；设备端是 WQ（满了丢弃）→ engine 侧槽位 → E 个 engine。“CPU 提交”决定异步程度：同步 = 等上一个完成才交下一个；窗口 W = 最多 W 个在途（tonic 的 async encode 就是把 W 从 1 提到多个）；不等 = 一直交。",
+      stallPill: "CPU 在等空位",
+      tlTitle: "时间线：谁在什么时候干活",
+      tlHow: "每一行是一个 descriptor 的一生，从左到右：红 = CPU 等 store buffer 空位，灰 = 在 core 里排队写出，黄 = 在 WQ 里等，浅灰 = 等 engine，彩色 = 在某个 engine 上执行（颜色 = 哪个 engine）。<b>并行</b>：竖着看任一时刻，E0–E3 有几条同时亮着，就是几个 engine 在并行。<b>异步</b>：CPU 行变绿以后设备还在干活，这段时间 CPU 可以去做别的事；同步提交时 CPU 行大部分是黄色（在等完成）。鼠标移上去看细节。",
+      charts: [
+        ["每次 submit 测到的时间", "x：第几个 submit；y：rdtscp 区间（ns）。线 = 模型，点 = 实测中位数。"],
+        ["最终被接受的 descriptor 数", "x：提交总数；y：最终完成数。点 = 实测（noop sentinel 排空后的计数）。"],
+        ["knee 位置 vs 提交间隔", "模型 knee = 第一次要等空位的 submit；实测 knee = 第一个中位数 ≥ 80 ns 的 K，竖线是 K 网格给出的区间。"],
+      ],
+      paramsSummary: "调参数",
+      bottomNote: "和 hw-eval 旧数据的差别：prefill 加了 gap 以后，模型预测 knee 之后只卡“写出间隔 − 提交间隔”，旧的 X2 实测被计时的那次始终卡约 105 ns。干净计时下模型成立（gap 25 ns 时 63 ns）；旧数据多半是计时窗口里多了一个 store [推断]（Q8）。",
+      opLabel: "操作",
+      sliders: {
+        n: "提交总数", kTrace: "从第几个起进入 trace 模式", stepP: "prefill：不卡时每个 submit 间隔 (ns)", stepT: "trace：不卡时每轮间隔 (ns)",
+        mT: "trace：每轮额外普通 store 项数 m", sb: "store buffer 项数", bin: "设备入口缓冲（假说 c）", lat: "单个写出的首个延迟 (ns)",
+        drain: "写出间隔 (ns/个)", jitter: "写出间隔抖动 ±", wq: "WQ size", slots: "engine 侧在途上限", engines: "engine 数 E",
+        noopNs: "engine 处理 noop (ns)", bw: "每个 engine 带宽 (GB/s)", window: "窗口 W：最多几个在途（0 = 不等完成）", pollNs: "完成后 CPU 多久看到 (ns)",
+      },
+      windows: { 0: "不等完成，一直交", 4: "最多 4 个在途", 1: "同步：等完成再交" },
+      modes: { sb: "b · core store buffer", ingress: "c · 设备入口" },
+      overlayNone: "不叠加", overlayK0: "trace · K=0 开始（noop）", overlayK112: "trace · K=112 开始（noop）",
+      presets: {
+        prefill0: "prefill noop gap 0", prefill50: "prefill noop gap 50", trace0: "trace 从 K=0 开始", trace0c: "同上，但用假说 c",
+        trace112: "K=112 后开 trace", mib300: "1 MiB gap 300 · WQ 溢出", mib0: "1 MiB gap 0 · 既卡又溢出",
+        sync4k: "同步：4 KiB 等完成再交", win4k: "异步：4 KiB 最多 4 个在途", async4k: "异步：4 KiB 不等完成",
+        par1m: "1 MiB × 4 engine 并行", par1m1: "同上，只有 1 个 engine",
+      },
+      tlViews: { all: "全程", cpu: "只看提交阶段" },
+      tlLegend: [["bad", "等 store buffer"], ["muted", "core 内 / 写出"], ["partial", "WQ 里等 · CPU 等完成"], ["rule2", "等 engine"], ["peri", "E0"], ["count", "E1"], ["terra", "E2"], ["hypothesis", "E3"], ["known", "CPU 空闲"]],
+      lanes: { sent: ["CPU 已提交", "submit"], sb: ["store buffer", "core"], ingress: ["设备入口", "假说 c"], wq: ["Work Queue", "dedicated"], eng: ["engine 侧在途", "dispatched"], run: ["正在执行", "engines"], fin: ["已完成", "completion"], drop: "被丢弃" },
+      tlabel: (t, tEnd, dur) => `t = ${t} / ${tEnd} · 每个 descriptor 执行 ${dur}`,
+      wfOrder: "↓ 提交顺序", inflight: "在途数", inflightMax: (m) => `最多 ${m}`,
+      statTitles: { tp: "完成吞吐", tpData: "完成吞吐（数据）", par: "engine 平均并行度", lat: "平均延迟（交出 → 完成）", win: "CPU 等完成", stall: "CPU 等 store buffer", tail: "CPU 交完后设备还要干", drop: "丢弃" },
+      tipDropHead: (i) => `<b>#${i}</b> · 被丢弃`,
+      tipDropRows: (a, o) => [["CPU 交出", a], ["到达设备", o], ["结果", "WQ 已满，丢弃（0x53）"]],
+      tipExecHead: (i, e) => `<b>#${i}</b> · 在 E${e} 上执行`,
+      tipExecRows: (a, sb, o, wq, eng, run, lat) => [["CPU 交出", a], ["等 store buffer", sb], ["写出到达设备", o], ["WQ 里等", wq], ["等 engine", eng], ["执行", run], ["交出 → 完成", lat]],
+      cpuWait: (w, i) => `<b>CPU</b> · 等 #${w} 完成，才能交 #${i}`,
+      cpuStall: (i) => `<b>CPU</b> · 交 #${i} 时 store buffer 满了，在等空位`,
+      cpuIssuing: (i) => `<b>CPU</b> · 正在交 #${i}`,
+      cpuDone: "<b>CPU</b> · 全部交完。异步：这段时间 CPU 可以去做别的事",
+      cpuIdle: "<b>CPU</b> · 空闲",
+      engIdle: (e) => `<b>E${e}</b> · 空闲`,
+      areaHead: (t, sum) => `<b>t = ${t}</b> · 在途 ${sum} 个`,
+      areaRows: (c) => [["core 内 / 写出", c[0]], ["WQ 里等", c[1]], ["等 engine", c[2]], ["正在执行", c[3]]],
+      ptTip: (lab, a, b) => `${lab}：${a} → ${b}`,
+      rgTip: (lab, a, lo, hi) => `${lab}：间隔 ${a} ns → knee 在 ${lo}–${hi}`,
+      chartsData: {
+        xlA: "submit 序号", model: "模型", measMed: "实测中位数",
+        xlB: "提交总数 K+1", ylB: "最终完成数", measSent: "实测（sentinel 后）",
+        xlC: "不卡时每个 submit 的间隔 (ns)", ylC: "knee 序号", modelMed5: "模型（5 次中位数）", measNoop: "实测 noop", meas1m: "实测 1 MiB",
+      },
+    },
+    infTag: "推断",
+  },
+  en: {
+    htmlLang: "en",
+    updated: (d, h) => `<span>Updated ${esc(d)} · ${esc(h)}</span><span class="sq"></span>`,
+    updatedAt: (d) => `Updated ${d}`,
+    footLead: "accel-datapath · dsa-pipeline-model · powered by model.js",
+    tabs: { pipe: "Pipeline & experiments", audit: "Measurement audit", forks: "Design forks", sim: "Model & timeline", data: "Datasets", notes: "Lab notes ↗" },
+    pipe: { status: "Status", cmp: "Compare", cmpBtn: "Compare two", cmpTitle: "Play two experiments side by side and list differences", replay: "Replay", replayTitle: "Replay from step 1", swapTitle: "Swap A and B", suggested: "Suggested:", done: "Done", plan: "Planned" },
+    audit: {
+      intro1: "Audited hw-eval's timing and counting code case by case. The table below lists what interval each completed experiment actually measured and whether its reported claim holds. Click any ID to animate it on the pipeline map.",
+      intro2: "Measurement pitfalls: each item below altered numbers in at least one wave-1 run — avoid these before trusting new measurements.",
+      auditCols: ["Exp", "Name", "Actually measured", "Audit verdict"],
+      pitfallCols: ["Pitfall", "Impact & mitigation", "Source"],
+    },
+    forks: {
+      intro: "Formulate plausible hardware designs up front, then pick experiments that separate them. 'Ruled out' and 'contradicted' cite exact runs; 'open' forks list the remaining experiment.",
+      settled: "Leaning", open: "Open", comps: "Components: ", joiner: ", ",
+    },
+    data: {
+      intro: 'Canonical runs are gzipped inside <code>data/</code> (<code>data/MANIFEST.tsv</code> records original paths, sha256, and launch commands). Remaining datasets sit in the <code>async-binding-intel-idxd</code> worktree; confirm before deleting or archiving.',
+      all: "All", cols: ["Status", "Path (under async-binding-intel-idxd)", "Contents", "Action", "Notes"],
+    },
+    alt: { supported: ["supported", "known"], ruled_out: ["ruled out", "bad"], contradicted: ["contradicted", "bad"], open: ["open", "unknown"] },
+    valid: { ok: ["trusted", "known"], caveat: ["usable with caveats", "partial"], reinterpret: ["data ok, reinterpret", "hypothesis"], broken: ["broken metric", "bad"] },
+    mark: { timer: ["timer", "timer"], count: ["counter", "count"], knob: ["knob", "knob"], caveat: ["pitfall", "caveat"] },
+    pktLegend: [["desc", "ink", "descriptor (MOVDIR64B)"], ["store", "muted", "ordinary store"], ["sentinel", "ink", "sentinel"], ["read", "timer", "CPU status read", 1], ["done", "count", "data / completion WB", 1], ["drop", "bad", "dropped"], ["alt", "peri", "2nd stream"]],
+    player: {
+      aria: "DSA submit pipeline", prevTitle: "Previous (←)", playTitle: "Play / Pause (Space)", nextTitle: "Next (→)", wait: "Wait slot",
+      legTimer: "Blue = rdtscp", legCount: "Green = counter", legStall: "Red box = stall point",
+      titleExp: (x) => `Exp ${x.id} · ${x.name}`, titleBase: "Baseline · Life of a descriptor", stepOf: (i, n) => `Step ${i} / ${n}`,
+    },
+    cmp: {
+      joiner: ", ", comma: ", ", none: "none", zero: "none", quote: (s) => `'${s}'`,
+      bothStall: (s) => `Both stall at <b>${s}</b>.`, onlyAStall: (s) => `Only A stalls at <b>${s}</b>.`, onlyBStall: (s) => `Only B stalls at <b>${s}</b>.`, noStall: "Neither animation hits a stall.",
+      onlyAKind: (s) => `A shows ${s}; B does not.`, onlyBKind: (s) => `B shows ${s}; A does not.`,
+      readingItem: (r, compName) => `<b>${esc(r.text)}</b> (${esc(compName)}, step ${r.step})`,
+      readings: (a, b) => `Readings: A ${a}; B ${b}.`,
+      bothForks: (s) => `Both address ${s}.`, onlyForks: (a, b) => `Only A addresses: ${a}; only B: ${b}.`,
+      onlyAComp: (s) => `Only A traverses: ${s}.`, onlyBComp: (s) => `Only B traverses: ${s}.`,
+      done: "Done", plan: "Planned",
+      headKicker: "Compare · A vs B", diffHead: "Key differences", itemHead: "Side-by-side",
+      rowStatus: "Status", rowMeasures: "Measures", rowMarks: "Markers", rowResults: "Results", rowResPred: "Results / Pred", rowPvr: "Pred vs Res", rowAnim: "Steps",
+      hint: "Click an experiment above to swap B; Shift + click to swap A. Click a component on the diagram to exit comparison and inspect it.",
+    },
+    panel: {
+      hyp: "Hypothesis", pred: "Prediction", res: "Outcome", verdict: "Verdict", expect: "Expected",
+      compKicker: "Component", evCount: (n) => `${n} direct evidence types`, inf: "INFERENCE",
+      what: "What it is", design: "How hardware works", known: "What we know", noData: "No data yet.", open: "Still open", relForks: "Related design forks", relExps: "Experiments touching this component",
+      expKicker: "Experiment", steps: "Animation steps", canCmp: "Compare with", measures: "What was measured", marks: "Markers on pipeline", claimed: "Reported claim", audit: "Audit conclusion", pvr: "Predictions vs outcomes", data: "Data", predsPre: "Predictions (written pre-run)", answers: "Addresses",
+      ovKicker: "Overview", ovTitle: "Most likely pipeline structure", ovOpen: "Unsettled design forks", ovNext: "Next steps", ovCmp: "Recommended comparisons",
+      ovHint: "Left shows the baseline animation: one descriptor traversing the pipeline. Click any experiment above to watch data flow and stalls, or click 'Compare two' to watch two side by side.",
+    },
+    sim: {
+      groups: { measure: "Measured", par: "Parallel & async", mode: "Buffer at", win: "CPU submit", overlay: "Overlay data" },
+      replay: "Replay",
+      modelNote: "A deterministic queuing model to test hypotheses against data, not a real DSA RTL model. Each submit's stores (MOVDIR64B plus trailing plain stores) share the store buffer; write-out serializes at 'initial latency + fixed interval'; device side goes WQ (drop when full) → engine-side slots → E engines. 'CPU submit' controls asynchrony: sync = await prior completion; window W = at most W in flight (tonic async encode raises W above 1); fire-and-forget = submit continuously.",
+      stallPill: "CPU waiting for slot",
+      tlTitle: "Timeline: who is busy when",
+      tlHow: "Each row is one descriptor's lifetime, left to right: red = waiting for store-buffer slot, gray = core write-out, yellow = waiting in WQ, light gray = waiting for engine, colored = running on engine E0–E3. <b>Parallelism</b>: scan vertically at any instant to see how many of E0–E3 are lit simultaneously. <b>Asynchrony</b>: once the CPU row turns green while engines keep working, the CPU is free for other work (whereas sync stays mostly yellow awaiting completions). Hover for details.",
+      charts: [
+        ["Measured time per submit", "x: submit index; y: rdtscp interval (ns). Line = model, dots = measured median."],
+        ["Accepted descriptors", "x: total submitted; y: final completed. Dots = measured (post-sentinel count)."],
+        ["Knee index vs submit gap", "Model knee = first submit waiting for slot; measured knee = first K with median ≥ 80 ns (bars show K grid interval)."],
+      ],
+      paramsSummary: "Parameters",
+      bottomNote: "Difference vs legacy hw-eval: with prefill gaps, the model predicts post-knee stalls of (write-out − submit gap), whereas legacy X2 stalled ~105 ns regardless. Clean inline asm matches the model (63 ns at gap 25 ns); legacy code likely had an extra store in the timed window [INFERENCE] (Q8).",
+      opLabel: "Operation",
+      sliders: {
+        n: "Total submits", kTrace: "Start trace mode at index", stepP: "prefill: unstalled submit gap (ns)", stepT: "trace: unstalled loop step (ns)",
+        mT: "trace: extra plain stores per round m", sb: "store buffer entries", bin: "device ingress buffer (hyp. c)", lat: "first write-out latency (ns)",
+        drain: "write-out interval (ns/op)", jitter: "write-out jitter ±", wq: "WQ size", slots: "engine-side slot cap", engines: "engines E",
+        noopNs: "engine noop service (ns)", bw: "per-engine bandwidth (GB/s)", window: "window W: max in-flight (0 = unbounded)", pollNs: "CPU completion visibility lag (ns)",
+      },
+      windows: { 0: "Fire-and-forget", 4: "Max 4 in flight", 1: "Sync: await completion" },
+      modes: { sb: "b · core store buffer", ingress: "c · device ingress" },
+      overlayNone: "No overlay", overlayK0: "trace · from K=0 (noop)", overlayK112: "trace · from K=112 (noop)",
+      presets: {
+        prefill0: "prefill noop gap 0", prefill50: "prefill noop gap 50", trace0: "trace from K=0", trace0c: "same, under hyp. c",
+        trace112: "trace from K=112", mib300: "1 MiB gap 300 · WQ overflow", mib0: "1 MiB gap 0 · stall + overflow",
+        sync4k: "sync: 4 KiB await each", win4k: "async: 4 KiB window 4", async4k: "async: 4 KiB unbounded",
+        par1m: "1 MiB × 4 engines parallel", par1m1: "same, 1 engine only",
+      },
+      tlViews: { all: "Full span", cpu: "Submit phase" },
+      tlLegend: [["bad", "wait SB"], ["muted", "core / write-out"], ["partial", "WQ wait · CPU wait"], ["rule2", "wait engine"], ["peri", "E0"], ["count", "E1"], ["terra", "E2"], ["hypothesis", "E3"], ["known", "CPU free"]],
+      lanes: { sent: ["CPU submitted", "submit"], sb: ["store buffer", "core"], ingress: ["device ingress", "hyp. c"], wq: ["Work Queue", "dedicated"], eng: ["engine-side", "dispatched"], run: ["running", "engines"], fin: ["completed", "completion"], drop: "dropped" },
+      tlabel: (t, tEnd, dur) => `t = ${t} / ${tEnd} · service time ${dur} / desc`,
+      wfOrder: "↓ submit order", inflight: "in-flight", inflightMax: (m) => `max ${m}`,
+      statTitles: { tp: "Completion rate", tpData: "Copy throughput", par: "Avg engine parallelism", lat: "Avg latency (issue → done)", win: "CPU awaiting completion", stall: "CPU awaiting SB", tail: "Device tail after CPU done", drop: "Dropped" },
+      tipDropHead: (i) => `<b>#${i}</b> · dropped`,
+      tipDropRows: (a, o) => [["CPU issue", a], ["Device arrival", o], ["Fate", "WQ full, dropped (0x53)"]],
+      tipExecHead: (i, e) => `<b>#${i}</b> · ran on E${e}`,
+      tipExecRows: (a, sb, o, wq, eng, run, lat) => [["CPU issue", a], ["SB wait", sb], ["Device arrival", o], ["WQ wait", wq], ["Engine wait", eng], ["Execute", run], ["Issue → done", lat]],
+      cpuWait: (w, i) => `<b>CPU</b> · waiting for #${w} to submit #${i}`,
+      cpuStall: (i) => `<b>CPU</b> · SB full submitting #${i}, waiting for slot`,
+      cpuIssuing: (i) => `<b>CPU</b> · submitting #${i}`,
+      cpuDone: "<b>CPU</b> · all submitted. Async: CPU free for other work",
+      cpuIdle: "<b>CPU</b> · idle",
+      engIdle: (e) => `<b>E${e}</b> · idle`,
+      areaHead: (t, sum) => `<b>t = ${t}</b> · ${sum} in flight`,
+      areaRows: (c) => [["core / write-out", c[0]], ["WQ wait", c[1]], ["engine wait", c[2]], ["executing", c[3]]],
+      ptTip: (lab, a, b) => `${lab}: ${a} → ${b}`,
+      rgTip: (lab, a, lo, hi) => `${lab}: step ${a} ns → knee in ${lo}–${hi}`,
+      chartsData: {
+        xlA: "submit index", model: "Model", measMed: "Measured median",
+        xlB: "Total submitted K+1", ylB: "Completed", measSent: "Measured (post-sentinel)",
+        xlC: "Unstalled submit step (ns)", ylC: "Knee index", modelMed5: "Model (median of 5)", measNoop: "Measured noop", meas1m: "Measured 1 MiB",
+      },
+    },
+    infTag: "INF",
+  },
+};
+const h0 = new URLSearchParams(location.hash.slice(1));
+const q0 = new URLSearchParams(location.search);
+let savedLang0 = null;
+try { savedLang0 = localStorage.getItem("dsa-pipeline-lang"); } catch {}
+const rawLang0 = h0.get("lang") || q0.get("lang") || savedLang0;
+let lang = rawLang0 === "en" && window.DSA_MODEL_EN ? "en" : "zh";
+let M = MODELS[lang], S = M.summary, STR = UI[lang];
+let comp = Object.fromEntries(M.components.map((c) => [c.id, c]));
+let exp = Object.fromEntries(M.experiments.map((x) => [x.id, x]));
+let fork = Object.fromEntries(M.forks.map((f) => [f.id, f]));
+let ALT = STR.alt, VALID = STR.valid, MARK = STR.mark;
 const DSC = { canonical: "known", reinterpret: "hypothesis", superseded: "unknown", orphan: "partial", aborted: "bad", huge: "terra", missing: "bad" };
 const ICON_PLAY = '<svg viewBox="0 0 12 12" fill="currentColor"><path d="M3 1.5 10 6l-7 4.5z"/></svg>';
 const ICON_PAUSE = '<svg viewBox="0 0 12 12" fill="currentColor"><rect x="2.5" y="1.5" width="2.6" height="9" rx="0.6"/><rect x="6.9" y="1.5" width="2.6" height="9" rx="0.6"/></svg>';
@@ -512,12 +826,56 @@ const expColor = (x) => (x.kind === "done" ? VALID[x.validity.level][1] : "timer
 const expChip = (x, attr = "data-go") => `<button class="chip" ${attr}="x:${x.id}" data-x="${x.id}"><i class="${x.kind === "done" ? "" : "hollow"}" style="--c:var(--${expColor(x)})"></i><span class="k">${x.id}</span>${esc(x.name)}</button>`;
 const stagger = (root) => { root.classList.remove("stagger"); [...root.children].forEach((c, i) => c.style.setProperty("--i", i)); void root.offsetWidth; root.classList.add("stagger"); };
 
-// ---------- header ----------
-document.title = `${S.title} · accel-datapath`;
-$("#h1").textContent = S.title;
-$("#lead").textContent = S.lead;
-$("#topmeta").innerHTML = `<span>更新 ${esc(M.updated)} · ${esc(S.hostShort)}</span><span class="sq"></span>`;
-$("#foot").textContent = `更新于 ${M.updated}`;
+// ---------- header & static chrome ----------
+function applyStaticChrome() {
+  document.documentElement.lang = STR.htmlLang;
+  document.title = `${S.title} · accel-datapath`;
+  $("#h1").textContent = S.title;
+  $("#lead").textContent = S.lead;
+  $("#topmeta").innerHTML = STR.updated(M.updated, S.hostShort);
+  $("#footLead").textContent = STR.footLead;
+  $("#foot").textContent = STR.updatedAt(M.updated);
+  $$("#langSwitch button").forEach((b) => {
+    const on = b.dataset.lang === lang;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", String(on));
+  });
+  for (const k of ["pipe", "audit", "forks", "sim", "data"]) {
+    const tb = $(`#tabs [data-tab="${k}"]`);
+    if (tb) tb.textContent = STR.tabs[k];
+  }
+  const nl = $("#notesLink");
+  if (nl) { nl.textContent = STR.tabs.notes; nl.setAttribute("href", lang === "en" ? "notes/?lang=en" : "notes/"); }
+  $("#lab-status").textContent = STR.pipe.status;
+  $("#lab-cmp").textContent = STR.pipe.cmp;
+  $("#cmpToggleLbl").textContent = STR.pipe.cmpBtn;
+  $("#cmpToggle").title = STR.pipe.cmpTitle;
+  $("#replayMapLbl").textContent = STR.pipe.replay;
+  $("#replayMap").title = STR.pipe.replayTitle;
+  $("#cmpSwap").title = STR.pipe.swapTitle;
+  $("#cmpSuggestedLbl").textContent = STR.pipe.suggested;
+  $("#lab-done").textContent = STR.pipe.done;
+  $("#lab-plan").textContent = STR.pipe.plan;
+  $("#auditIntro1").textContent = STR.audit.intro1;
+  $("#auditIntro2").textContent = STR.audit.intro2;
+  $("#forksIntro").textContent = STR.forks.intro;
+  $("#lab-sim-measure").textContent = STR.sim.groups.measure;
+  $("#lab-sim-par").textContent = STR.sim.groups.par;
+  $("#lab-sim-mode").textContent = STR.sim.groups.mode;
+  $("#lab-sim-win").textContent = STR.sim.groups.win;
+  $("#lab-sim-overlay").textContent = STR.sim.groups.overlay;
+  $("#replaySimLbl").textContent = STR.sim.replay;
+  $("#modelNote").textContent = STR.sim.modelNote;
+  $("#stallpillLbl").textContent = STR.sim.stallPill;
+  $("#tlTitle").textContent = STR.sim.tlTitle;
+  $("#tlHow").innerHTML = STR.sim.tlHow;
+  $("#chartATitle").textContent = STR.sim.charts[0][0]; $("#chartANote").textContent = STR.sim.charts[0][1];
+  $("#chartBTitle").textContent = STR.sim.charts[1][0]; $("#chartBNote").textContent = STR.sim.charts[1][1];
+  $("#chartCTitle").textContent = STR.sim.charts[2][0]; $("#chartCNote").textContent = STR.sim.charts[2][1];
+  $("#paramsSummary").textContent = STR.sim.paramsSummary;
+  $("#simBottomNote").textContent = STR.sim.bottomNote;
+  $("#dataIntro").innerHTML = STR.data.intro;
+}
 
 // ---------- tabs ----------
 const state = { tab: "find", sel: null, preset: null, statusFilter: null, cmp: null };
@@ -533,17 +891,24 @@ function setTab(t, { push = true } = {}) {
   if (push) writeHash();
 }
 $("#tabs").addEventListener("click", (e) => { if (e.target.dataset.tab) setTab(e.target.dataset.tab); });
+$("#langSwitch").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-lang]");
+  if (b && b.dataset.lang !== lang) setLang(b.dataset.lang);
+});
 
 // ---------- legend + chips ----------
 const count = (s) => M.components.filter((c) => c.status === s).length;
-$("#legend").innerHTML = Object.entries(M.statuses).map(([k, s]) => `<button class="chip" data-status="${k}" title="${esc(s.hint)}"><i class="sq" style="--c:var(--${k})"></i>${esc(s.label)} · ${count(k)}</button>`).join("");
-$("#chips-done").innerHTML = M.experiments.filter((x) => x.kind === "done").map((x) => expChip(x, "data-toggle")).join("");
-const planned = M.experiments.filter((x) => x.kind === "planned");
-$("#chips-plan").innerHTML = planned.map((x) => expChip(x, "data-toggle")).join("");
-$("#chips-plan").closest(".frow").hidden = !planned.length;
-const PKT_LEGEND = [["desc", "ink", "descriptor（MOVDIR64B）"], ["store", "muted", "普通 store"], ["sentinel", "ink", "sentinel"], ["read", "timer", "CPU 读 status", 1], ["done", "count", "数据 / 完成写回", 1], ["drop", "bad", "被丢弃"], ["alt", "peri", "另一股流"]];
-const PKT_NAME = Object.fromEntries(PKT_LEGEND.map(([k, , t]) => [k, t]));
-
+let PKT_LEGEND = STR.pktLegend;
+let PKT_NAME = Object.fromEntries(PKT_LEGEND.map(([k, , t]) => [k, t]));
+function renderPipeChrome() {
+  $("#legend").innerHTML = Object.entries(M.statuses).map(([k, s]) => `<button class="chip" data-status="${k}" title="${esc(s.hint)}"><i class="sq" style="--c:var(--${k})"></i>${esc(s.label)} · ${count(k)}</button>`).join("");
+  $("#chips-done").innerHTML = M.experiments.filter((x) => x.kind === "done").map((x) => expChip(x, "data-toggle")).join("");
+  const planned = M.experiments.filter((x) => x.kind === "planned");
+  $("#chips-plan").innerHTML = planned.map((x) => expChip(x, "data-toggle")).join("");
+  $("#chips-plan").closest(".frow").hidden = !planned.length;
+  $("#cmpA").innerHTML = $("#cmpB").innerHTML = M.experiments.map((x) => `<option value="${x.id}">${x.id} · ${esc(x.name)}</option>`).join("");
+  $("#cmpSuggest").innerHTML = M.comparisons.map((c) => `<button class="chip" data-cmp="${c.a},${c.b}" title="${esc(c.why)}"><span class="k">${c.a} vs ${c.b}</span>${esc(c.t)}</button>`).join("");
+}
 // ---------- animation helpers ----------
 const RATE = { burst: 150, fast: 260, pace: 480, slow: 900, trickle: 1500 };
 const CAP = { store_buffer: 114, wq: 128, engine_slots: 12, engines: 4 };
@@ -608,7 +973,7 @@ const fmtVal = (v, unit) => (unit === "M/s" ? (v >= 100 ? Math.round(v) : v.toFi
 // ---------- map view (one per diagram) ----------
 let mapUid = 0;
 function createMapView(svg, onComp) {
-  const uid = ++mapUid, v = { svg, compEls: {}, badgeEls: {}, edgeEls: [] };
+  const uid = ++mapUid, v = { svg, compEls: {}, compTextEls: {}, badgeEls: {}, domTextEls: {}, edgeEls: [] };
   v.marker = (k) => `url(#${k}${uid})`;
   const defs = el("defs", {}, svg);
   const pat = el("pattern", { id: `grid${uid}`, width: 25, height: 25, patternUnits: "userSpaceOnUse" }, defs);
@@ -627,7 +992,8 @@ function createMapView(svg, onComp) {
     const g = el("g", { class: "dom" }, gDom);
     const [x, y, w, h] = d.box;
     el("rect", { x, y, width: w, height: h, rx: 10 }, g);
-    el("text", { x: x + 10, y: y + 17 }, g).textContent = d.label.toUpperCase();
+    v.domTextEls[d.id] = el("text", { x: x + 10, y: y + 17 }, g);
+    v.domTextEls[d.id].textContent = d.label.toUpperCase();
   }
   for (const e of M.edges) {
     const path = el("path", { d: "M" + e.pts.map((p) => p.join(",")).join(" L"), class: "edge " + (e.kind || ""), "marker-end": v.marker(e.kind === "drop" ? "arrbad" : "arr") }, gEdge);
@@ -644,11 +1010,15 @@ function createMapView(svg, onComp) {
   for (const c of M.components) {
     const [x, y, w, h] = c.box;
     const g = el("g", { class: "comp", tabindex: 0, role: "button", style: `--s:var(--${c.status})` }, gComp);
-    el("title", {}, g).textContent = `${c.name} · ${M.statuses[c.status].label}`;
+    const titleEl = el("title", {}, g);
+    titleEl.textContent = `${c.name} · ${M.statuses[c.status].label}`;
     el("rect", { class: "body", x, y, width: w, height: h, rx: 9 }, g);
     el("circle", { cx: x + 15, cy: y + 16.5, r: 4.5, fill: `var(--${c.status})` }, g);
-    el("text", { class: "name", x: x + 26, y: y + 21 }, g).textContent = c.name;
-    el("text", { class: "en", x: x + 15, y: y + 38 }, g).textContent = c.en;
+    const nameEl = el("text", { class: "name", x: x + 26, y: y + 21 }, g);
+    nameEl.textContent = c.name;
+    const enEl = el("text", { class: "en", x: x + 15, y: y + 38 }, g);
+    enEl.textContent = c.en;
+    v.compTextEls[c.id] = { title: titleEl, name: nameEl, en: enEl };
     v.badgeEls[c.id] = el("text", { class: "badge", x: x + 15, y: y + h - 13 }, g);
     v.badgeEls[c.id].textContent = c.badge;
     g.addEventListener("click", () => onComp(c.id));
@@ -685,7 +1055,7 @@ function paintView(v, { x = null, compSel = null, statusFilter = null }) {
     const cx = bx + bw - 14 - (n - 1) * 24, cy = by;
     el("circle", { cx, cy, r: 10.5, fill: `var(--${MARK[m.k][1]})`, stroke: "var(--paper)", "stroke-width": 2 }, g);
     el("text", { x: cx, y: cy + 3.8, "text-anchor": "middle" }, g).textContent = i + 1;
-    el("title", {}, g).textContent = `${MARK[m.k][0]}：${m.label}`;
+    el("title", {}, g).textContent = `${MARK[m.k][0]}: ${m.label}`;
   });
 }
 
@@ -696,12 +1066,12 @@ class Player {
   constructor(block, name, onComp) {
     this.name = name;
     block.innerHTML = (name === "main" ? "" : `<div class="cmphead"><span class="abadge ${name === "B" ? "b" : ""}">${name}</span><span class="cmpname"></span></div>`)
-      + `<div class="mapbox"><svg class="pmap" viewBox="0 0 1100 600" role="img" aria-label="DSA 提交流水线"></svg></div>`
+      + `<div class="mapbox"><svg class="pmap" viewBox="0 0 1100 600" role="img" aria-label="${esc(STR.player.aria)}"></svg></div>`
       + `<div class="player"><div class="phead"><span class="ptitle"></span><div class="pctl">`
-      + `<button class="pbtn" data-act="prev" title="上一步 (←)">${ICON_PREV}</button><button class="pbtn main" data-act="play" title="播放 / 暂停 (空格)"></button><button class="pbtn" data-act="next" title="下一步 (→)">${ICON_NEXT}</button>`
+      + `<button class="pbtn" data-act="prev" title="${esc(STR.player.prevTitle)}">${ICON_PREV}</button><button class="pbtn main" data-act="play" title="${esc(STR.player.playTitle)}"></button><button class="pbtn" data-act="next" title="${esc(STR.player.nextTitle)}">${ICON_NEXT}</button>`
       + `</div></div><div class="psteps" data-player="${name}"></div><p class="pcap"></p><div class="plegend"></div></div>`;
     const q = (s) => block.querySelector(s);
-    this.ui = { title: q(".ptitle"), steps: q(".psteps"), cap: q(".pcap"), legend: q(".plegend"), play: q('[data-act="play"]'), name: q(".cmpname") };
+    this.ui = { title: q(".ptitle"), steps: q(".psteps"), cap: q(".pcap"), legend: q(".plegend"), play: q('[data-act="play"]'), prev: q('[data-act="prev"]'), next: q('[data-act="next"]'), svg: q("svg"), name: q(".cmpname") };
     this.v = createMapView(q("svg"), onComp);
     q('[data-act="prev"]').addEventListener("click", () => this.jump(this.i - 1));
     q('[data-act="next"]').addEventListener("click", () => this.jump(this.i + 1));
@@ -753,7 +1123,7 @@ class Player {
     v.gNote.innerHTML = "";
     const ov = { meters: {}, timer: null, count: null, wait: null };
     for (const c of sc.focus) { const [x, y, w, h] = comp[c].box; el("rect", { class: "halo", x: x - 3, y: y - 3, width: w + 6, height: h + 6, rx: 11 }, v.gOver); }
-    for (const c of M.components) { v.badgeEls[c.id].textContent = c.badge; v.badgeEls[c.id].classList.remove("live", "full"); }
+    for (const c of M.components) { v.badgeEls[c.id].textContent = c.badge; v.badgeEls[c.id].classList.remove("live", "full"); v.badgeEls[c.id].setAttribute("visibility", "visible"); }
     for (const c of Object.keys(sc.fill)) {
       const [x, y, w, h] = comp[c].box;
       el("rect", { class: "meter-track", x: x + 12, y: y + h - 7, width: w - 24, height: 3.5, rx: 1.75 }, v.gOver);
@@ -764,11 +1134,12 @@ class Player {
       if (!val) continue;
       const [x, y, w, h] = comp[val.at].box;
       const shift = k === "count" && sc.timer && sc.timer.at === val.at ? 18 : 0;
+      if (!(val.at in sc.fill)) v.badgeEls[val.at].setAttribute("visibility", "hidden");
       ov[k] = { el: el("text", { class: `val ${k}`, x: x + w - 12, y: y + h - 13 - shift, "text-anchor": "end" }, v.gOver), v: val };
     }
     const sl = comp.submit_loop.box;
     ov.wait = el("text", { class: "waitlbl", x: sl[0] + sl[2] - 12, y: sl[1] + 21, "text-anchor": "end", visibility: "hidden" }, v.gOver);
-    ov.wait.textContent = "等待空位";
+    ov.wait.textContent = STR.player.wait;
     if (sc.note) this.drawNote(sc.note);
     this.overlay = ov;
   }
@@ -777,7 +1148,7 @@ class Player {
     const g = el("g", { class: "bubble" }, this.v.gNote);
     const txt = el("text", { x: 0, y: 0, "text-anchor": "middle" }, g);
     txt.textContent = t;
-    const est = [...t].reduce((s, ch) => s + (ch.charCodeAt(0) > 0x2e80 ? 12.3 : 7), 0);
+    const est = [...t].reduce((s, ch) => s + (ch.charCodeAt(0) > 0x2e80 ? 12.3 : 7.2), 0);
     const tw = Math.max(40, est, txt.getComputedTextLength ? txt.getComputedTextLength() : 0);
     const bw = tw + 22, bh = 24, gap = 10;
     const clampX = (cx) => Math.min(1100 - bw / 2 - 6, Math.max(bw / 2 + 6, cx));
@@ -902,13 +1273,45 @@ class Player {
     const used = new Set();
     for (const s of this.scenes) for (const f of s.flows) used.add(f.kind || "desc");
     this.ui.legend.innerHTML = PKT_LEGEND.filter(([k]) => used.has(k)).map(([k, c, t, round]) => `<span><i class="${round ? "c" : ""} ${k === "sentinel" ? "h" : ""}" style="--c:var(--${c})"></i>${esc(t)}</span>`).join("")
-      + (this.scenes.some((s) => s.timer) ? `<span><i class="c" style="--c:var(--timer)"></i>蓝字 = rdtscp 读数</span>` : "")
-      + (this.scenes.some((s) => s.count) ? `<span><i class="c" style="--c:var(--count)"></i>绿字 = 计数</span>` : "")
-      + (this.scenes.some((s) => s.stall.length) ? `<span><i style="--c:var(--bad)"></i>红框 = 卡住的地方</span>` : "");
+      + (this.scenes.some((s) => s.timer) ? `<span><i class="c" style="--c:var(--timer)"></i>${esc(STR.player.legTimer)}</span>` : "")
+      + (this.scenes.some((s) => s.count) ? `<span><i class="c" style="--c:var(--count)"></i>${esc(STR.player.legCount)}</span>` : "")
+      + (this.scenes.some((s) => s.stall.length) ? `<span><i style="--c:var(--bad)"></i>${esc(STR.player.legStall)}</span>` : "");
+  }
+  refreshLang() {
+    const v = this.v;
+    this.ui.svg.setAttribute("aria-label", STR.player.aria);
+    this.ui.prev.title = STR.player.prevTitle;
+    this.ui.play.title = STR.player.playTitle;
+    this.ui.next.title = STR.player.nextTitle;
+    for (const d of M.domains) if (v.domTextEls[d.id]) v.domTextEls[d.id].textContent = d.label.toUpperCase();
+    for (const { e, label } of v.edgeEls) {
+      if (!label) continue;
+      const ne = M.edges.find((x) => x.from === e.from && x.to === e.to);
+      if (ne && ne.label) label.textContent = ne.label;
+    }
+    for (const c of M.components) {
+      const ct = v.compTextEls[c.id];
+      ct.title.textContent = `${c.name} · ${M.statuses[c.status].label}`;
+      ct.name.textContent = c.name;
+      ct.en.textContent = c.en;
+      if (!v.badgeEls[c.id].classList.contains("live")) v.badgeEls[c.id].textContent = c.badge;
+    }
+    if (this.overlay && this.overlay.wait) this.overlay.wait.textContent = STR.player.wait;
+    if (!this.key) return;
+    const script = M.animations[this.key] || M.animations.baseline;
+    this.scenes = resolveScript(script);
+    if (this.overlay) {
+      const sc = this.scenes[this.i];
+      for (const k of ["timer", "count"]) if (this.overlay[k] && sc[k]) this.overlay[k].v = sc[k];
+      v.gNote.innerHTML = "";
+      if (sc.note) this.drawNote(sc.note);
+    }
+    this.renderSteps();
+    this.syncUi();
   }
   syncUi() {
     const sc = this.scenes[this.i], x = exp[this.key];
-    this.ui.title.textContent = `${x ? `实验 ${x.id} · ${x.name}` : "基线 · 一个 descriptor 的一生"} — 第 ${this.i + 1} / ${this.scenes.length} 步`;
+    this.ui.title.textContent = `${x ? STR.player.titleExp(x) : STR.player.titleBase} — ${STR.player.stepOf(this.i + 1, this.scenes.length)}`;
     [...this.ui.steps.children].forEach((b, i) => { b.classList.toggle("cur", i === this.i); b.classList.toggle("done", i < this.i); b.querySelector(".bar b").style.width = i < this.i ? "100%" : "0%"; });
     const cap = this.ui.cap;
     cap.textContent = sc.cap;
@@ -993,8 +1396,6 @@ function partnerOf(id) {
   const ids = M.experiments.map((x) => x.id);
   return ids[(ids.indexOf(id) + 1) % ids.length];
 }
-$("#cmpA").innerHTML = $("#cmpB").innerHTML = M.experiments.map((x) => `<option value="${x.id}">${x.id} · ${esc(x.name)}</option>`).join("");
-$("#cmpSuggest").innerHTML = M.comparisons.map((c) => `<button class="chip" data-cmp="${c.a},${c.b}" title="${esc(c.why)}"><span class="k">${c.a} vs ${c.b}</span>${esc(c.t)}</button>`).join("");
 $("#cmpA").addEventListener("change", (e) => setCompare(e.target.value, state.cmp[1]));
 $("#cmpB").addEventListener("change", (e) => setCompare(state.cmp[0], e.target.value));
 $("#cmpSwap").addEventListener("click", () => setCompare(state.cmp[1], state.cmp[0]));
@@ -1062,46 +1463,46 @@ function expFacts(x) {
 }
 function comparePanel(A, B) {
   const fa = expFacts(A), fb = expFacts(B);
-  const names = (ids) => [...ids].map((c) => comp[c].name).join("、");
-  const split = (sa, sb) => ({ both: [...sa].filter((v) => sb.has(v)), onlyA: [...sa].filter((v) => !sb.has(v)), onlyB: [...sb].filter((v) => !sa.has(v)) });
+  const names = (ids) => [...ids].map((c) => comp[c].name).join(STR.cmp.joiner);
+  const split = (sa, sb) => ({ both: [...sa].filter((v) => sb.has(v)), onlyA: [...sa].filter((v) => !sb.has(v)), onlyB: [...sa].filter((v) => !sa.has(v)) });
   const diff = [];
   const st = split(new Set(fa.stalls.keys()), new Set(fb.stalls.keys()));
-  if (st.both.length) diff.push(["ink2", `两个都在 <b>${names(st.both)}</b> 卡住。`]);
-  if (st.onlyA.length) diff.push(["ink", `只有 A 在 <b>${names(st.onlyA)}</b> 卡住。`]);
-  if (st.onlyB.length) diff.push(["peri", `只有 B 在 <b>${names(st.onlyB)}</b> 卡住。`]);
-  if (!st.both.length && !st.onlyA.length && !st.onlyB.length) diff.push(["muted", "两个动画里都没有卡住的地方。"]);
+  if (st.both.length) diff.push(["ink2", STR.cmp.bothStall(names(st.both))]);
+  if (st.onlyA.length) diff.push(["ink", STR.cmp.onlyAStall(names(st.onlyA))]);
+  if (st.onlyB.length) diff.push(["peri", STR.cmp.onlyBStall(names(st.onlyB))]);
+  if (!st.both.length && !st.onlyA.length && !st.onlyB.length) diff.push(["muted", STR.cmp.noStall]);
   const kd = split(fa.kinds, fb.kinds);
-  const pk = (ks) => ks.map((k) => `「${PKT_NAME[k]}」`).join("");
-  if (kd.onlyA.length) diff.push(["ink", `A 的动画里有${pk(kd.onlyA)}，B 没有。`]);
-  if (kd.onlyB.length) diff.push(["peri", `B 的动画里有${pk(kd.onlyB)}，A 没有。`]);
-  const rd = (f) => f.readings.map((r) => `<b>${esc(r.text)}</b>（${esc(comp[r.at].name)}，第 ${r.step} 步）`).join("，") || "没有";
-  if (fa.readings.length || fb.readings.length) diff.push(["timer", `读数：A ${rd(fa)}。B ${rd(fb)}。`]);
+  const pk = (ks) => ks.map((k) => STR.cmp.quote(PKT_NAME[k])).join(STR.cmp.comma);
+  if (kd.onlyA.length) diff.push(["ink", STR.cmp.onlyAKind(pk(kd.onlyA))]);
+  if (kd.onlyB.length) diff.push(["peri", STR.cmp.onlyBKind(pk(kd.onlyB))]);
+  const rd = (f) => f.readings.map((r) => STR.cmp.readingItem(r, comp[r.at].name)).join(STR.cmp.comma) || STR.cmp.none;
+  if (fa.readings.length || fb.readings.length) diff.push(["timer", STR.cmp.readings(rd(fa), rd(fb))]);
   const fk = split(fa.forks, fb.forks);
-  if (fk.both.length) diff.push(["known", `都用来回答 ${fk.both.join("、")}。`]);
-  if (fk.onlyA.length || fk.onlyB.length) diff.push(["muted", `只有 A 回答：${fk.onlyA.join("、") || "无"}；只有 B 回答：${fk.onlyB.join("、") || "无"}。`]);
+  if (fk.both.length) diff.push(["known", STR.cmp.bothForks(fk.both.join(STR.cmp.joiner))]);
+  if (fk.onlyA.length || fk.onlyB.length) diff.push(["muted", STR.cmp.onlyForks(fk.onlyA.join(STR.cmp.joiner) || STR.cmp.zero, fk.onlyB.join(STR.cmp.joiner) || STR.cmp.zero)]);
   const cp = split(fa.comps, fb.comps);
-  if (cp.onlyA.length) diff.push(["ink", `只有 A 经过：${names(cp.onlyA)}。`]);
-  if (cp.onlyB.length) diff.push(["peri", `只有 B 经过：${names(cp.onlyB)}。`]);
-  const status = (x) => (x.kind === "done" ? tag("已做", "known") + tag(VALID[x.validity.level][0], VALID[x.validity.level][1]) : tag("计划", "timer") + tag(x.cost, "muted"));
+  if (cp.onlyA.length) diff.push(["ink", STR.cmp.onlyAComp(names(cp.onlyA))]);
+  if (cp.onlyB.length) diff.push(["peri", STR.cmp.onlyBComp(names(cp.onlyB))]);
+  const status = (x) => (x.kind === "done" ? tag(STR.cmp.done, "known") + tag(VALID[x.validity.level][0], VALID[x.validity.level][1]) : tag(STR.cmp.plan, "timer") + tag(x.cost, "muted"));
   const marks = (x) => x.marks.map((m, i) => `<div><span class="mk" style="--c:var(--${MARK[m.k][1]})">${i + 1}</span>${esc(MARK[m.k][0])} · ${esc(comp[m.c].name)}</div>`).join("");
-  const outcome = (x) => (x.kind === "done" ? x.results.map((r) => `<div>· ${esc(r)}</div>`).join("") : x.predictions.map((p) => `<div>· <b>${esc(p.h)}</b>：${esc(p.expect)}</div>`).join(""));
-  const pvr = (x) => (hasOutcome(x) ? x.predictions.map((p) => `<div>${tag(ALT[p.verdict][0], ALT[p.verdict][1])}<b>${esc(p.h)}</b>：${esc(p.outcome)}</div>`).join("") : "—");
+  const outcome = (x) => (x.kind === "done" ? x.results.map((r) => `<div>· ${esc(r)}</div>`).join("") : x.predictions.map((p) => `<div>· <b>${esc(p.h)}</b>: ${esc(p.expect)}</div>`).join(""));
+  const pvr = (x) => (hasOutcome(x) ? x.predictions.map((p) => `<div>${tag(ALT[p.verdict][0], ALT[p.verdict][1])}<b>${esc(p.h)}</b>: ${esc(p.outcome)}</div>`).join("") : "—");
   const steps = (x, side) => `<ol class="ast" data-player="${side}">${(M.animations[x.id] || []).map((s, i) => `<li data-step="${i}"><span><b>${esc(s.h)}</b></span></li>`).join("")}</ol>`;
   const pair = findPair(A.id, B.id);
   const row = (k, va, vb) => `<tr><td>${k}</td><td>${va}</td><td>${vb}</td></tr>`;
-  return `<div class="dk">对比 · A vs B</div><h3>${A.id} vs ${B.id}</h3>`
+  return `<div class="dk">${esc(STR.cmp.headKicker)}</div><h3>${A.id} vs ${B.id}</h3>`
     + `<div>${tag(A.name, "ink")}${tag(B.name, "peri")}</div>`
     + (pair ? `<div class="callout"><b>${esc(pair.t)}</b>　${esc(pair.why)}</div>` : "")
-    + `<h4>差别在哪</h4><ul class="diff">${diff.map(([c, t]) => `<li style="--c:var(--${c})">${t}</li>`).join("")}</ul>`
-    + `<h4>逐项对照</h4><table class="cmp"><tr><th></th><th><span class="abadge">A</span></th><th><span class="abadge b">B</span></th></tr>`
-    + row("状态", status(A), status(B))
-    + row("测什么", esc(A.measures), esc(B.measures))
-    + row("标记点", marks(A), marks(B))
-    + row(A.kind === "done" && B.kind === "done" ? "结果" : "结果 / 预测", outcome(A), outcome(B))
-    + (hasOutcome(A) || hasOutcome(B) ? row("预测 vs 结果", pvr(A), pvr(B)) : "")
-    + row("动画", steps(A, "A"), steps(B, "B"))
+    + `<h4>${esc(STR.cmp.diffHead)}</h4><ul class="diff">${diff.map(([c, t]) => `<li style="--c:var(--${c})">${t}</li>`).join("")}</ul>`
+    + `<h4>${esc(STR.cmp.itemHead)}</h4><table class="cmp"><tr><th></th><th><span class="abadge">A</span></th><th><span class="abadge b">B</span></th></tr>`
+    + row(STR.cmp.rowStatus, status(A), status(B))
+    + row(STR.cmp.rowMeasures, esc(A.measures), esc(B.measures))
+    + row(STR.cmp.rowMarks, marks(A), marks(B))
+    + row(A.kind === "done" && B.kind === "done" ? STR.cmp.rowResults : STR.cmp.rowResPred, outcome(A), outcome(B))
+    + (hasOutcome(A) || hasOutcome(B) ? row(STR.cmp.rowPvr, pvr(A), pvr(B)) : "")
+    + row(STR.cmp.rowAnim, steps(A, "A"), steps(B, "B"))
     + `</table>`
-    + `<p style="margin-top:14px;color:var(--muted);font-size:12.5px">点上面的实验 = 换 B，Shift + 点 = 换 A。点图里的部件会退出对比，看那个部件的详情。</p>`;
+    + `<p style="margin-top:14px;color:var(--muted);font-size:12.5px">${esc(STR.cmp.hint)}</p>`;
 }
 
 // ---------- panels ----------
@@ -1111,47 +1512,47 @@ function miniFork(f) {
 }
 const relatedExps = (cid) => M.experiments.filter((x) => x.path.includes(cid)).sort((a, b) => b.marks.some((m) => m.c === cid) - a.marks.some((m) => m.c === cid));
 const hasOutcome = (x) => (x.predictions || []).some((p) => p.outcome);
-const predTable = (x) => `<table class="pvr"><tr><th>假说</th><th>预测</th><th>结果</th><th>判定</th></tr>${x.predictions.map((p) => `<tr><td>${esc(p.h)}</td><td>${esc(p.expect)}</td><td>${esc(p.outcome)}</td><td>${tag(ALT[p.verdict][0], ALT[p.verdict][1])}</td></tr>`).join("")}</table>`;
+const predTable = (x) => `<table class="pvr"><tr><th>${esc(STR.panel.hyp)}</th><th>${esc(STR.panel.pred)}</th><th>${esc(STR.panel.res)}</th><th>${esc(STR.panel.verdict)}</th></tr>${x.predictions.map((p) => `<tr><td>${esc(p.h)}</td><td>${esc(p.expect)}</td><td>${esc(p.outcome)}</td><td>${tag(ALT[p.verdict][0], ALT[p.verdict][1])}</td></tr>`).join("")}</table>`;
 function compPanel(c) {
-  const ev = c.evidence.map((e) => `<li>${tag(M.evidenceTypes[e.ev], "muted")}${e.inf ? tag("推断", "hypothesis") : ""}<div>${esc(e.t)}</div><span class="src">${esc(e.src)}</span></li>`).join("");
+  const ev = c.evidence.map((e) => `<li>${tag(M.evidenceTypes[e.ev], "muted")}${e.inf ? tag(STR.panel.inf, "hypothesis") : ""}<div>${esc(e.t)}</div><span class="src">${esc(e.src)}</span></li>`).join("");
   const kinds = new Set(c.evidence.filter((e) => !e.inf).map((e) => e.ev));
-  return `<div class="dk">部件 · ${esc(c.en)}</div><h3>${esc(c.name)}</h3>`
-    + `<div>${tag(M.statuses[c.status].label, c.status)}${tag(`${kinds.size} 类直接证据`, "muted")}${tag(c.badge, "muted")}</div>`
-    + `<h4>是什么</h4><p>${esc(c.what)}</p><h4>一般会怎么设计</h4><p>${esc(c.design)}</p>`
-    + `<h4>我们知道什么</h4>${ev ? `<ul class="ev">${ev}</ul>` : "<p>还没有任何数据。</p>"}`
-    + (c.open.length ? `<h4>还不知道</h4><ul class="plain">${c.open.map((o) => `<li>${esc(o)}</li>`).join("")}</ul>` : "")
-    + (c.forks.length ? `<h4>相关设计分叉</h4>${c.forks.map((f) => miniFork(fork[f])).join("")}` : "")
-    + `<h4>经过这个部件的实验</h4><div class="chips">${relatedExps(c.id).map((x) => expChip(x)).join("")}</div>`;
+  return `<div class="dk">${esc(STR.panel.compKicker)} · ${esc(c.en)}</div><h3>${esc(c.name)}</h3>`
+    + `<div>${tag(M.statuses[c.status].label, c.status)}${tag(STR.panel.evCount(kinds.size), "muted")}${tag(c.badge, "muted")}</div>`
+    + `<h4>${esc(STR.panel.what)}</h4><p>${esc(c.what)}</p><h4>${esc(STR.panel.design)}</h4><p>${esc(c.design)}</p>`
+    + `<h4>${esc(STR.panel.known)}</h4>${ev ? `<ul class="ev">${ev}</ul>` : `<p>${esc(STR.panel.noData)}</p>`}`
+    + (c.open.length ? `<h4>${esc(STR.panel.open)}</h4><ul class="plain">${c.open.map((o) => `<li>${esc(o)}</li>`).join("")}</ul>` : "")
+    + (c.forks.length ? `<h4>${esc(STR.panel.relForks)}</h4>${c.forks.map((f) => miniFork(fork[f])).join("")}` : "")
+    + `<h4>${esc(STR.panel.relExps)}</h4><div class="chips">${relatedExps(c.id).map((x) => expChip(x)).join("")}</div>`;
 }
 function expPanel(x) {
   const script = M.animations[x.id] || [];
-  const marks = x.marks.map((m, i) => `<li><span class="mk" style="--c:var(--${MARK[m.k][1]})">${i + 1}</span><b>${esc(comp[m.c].name)}</b> · ${esc(MARK[m.k][0])}：${esc(m.label)}</li>`).join("");
+  const marks = x.marks.map((m, i) => `<li><span class="mk" style="--c:var(--${MARK[m.k][1]})">${i + 1}</span><b>${esc(comp[m.c].name)}</b> · ${esc(MARK[m.k][0])}: ${esc(m.label)}</li>`).join("");
   const pairs = M.comparisons.filter((c) => c.a === x.id || c.b === x.id);
-  let body = `<div class="dk">实验 ${x.id}${x.selector ? " · " + esc(x.selector) : ""}</div><h3>${esc(x.name)}</h3><div>`
-    + (x.kind === "done" ? tag("已做", "known") + tag(VALID[x.validity.level][0], VALID[x.validity.level][1]) : tag("计划", "timer") + tag(x.cost, "muted"))
-    + `</div><h4>动画步骤</h4><ol class="ast" data-player="main">${script.map((s, i) => `<li data-step="${i}"><span><b>${esc(s.h)}</b></span></li>`).join("")}</ol>`
-    + (pairs.length ? `<h4>可以对比</h4><div class="chips">${pairs.map((c) => `<button class="chip" data-cmp="${x.id},${c.a === x.id ? c.b : c.a}" title="${esc(c.why)}"><span class="k">vs ${c.a === x.id ? c.b : c.a}</span>${esc(c.t)}</button>`).join("")}</div>` : "")
-    + `<h4>具体测的是什么</h4><p>${esc(x.measures)}</p><h4>流水线上的标记</h4><ul class="ev">${marks}</ul>`;
+  let body = `<div class="dk">${esc(STR.panel.expKicker)} ${x.id}${x.selector ? " · " + esc(x.selector) : ""}</div><h3>${esc(x.name)}</h3><div>`
+    + (x.kind === "done" ? tag(STR.cmp.done, "known") + tag(VALID[x.validity.level][0], VALID[x.validity.level][1]) : tag(STR.cmp.plan, "timer") + tag(x.cost, "muted"))
+    + `</div><h4>${esc(STR.panel.steps)}</h4><ol class="ast" data-player="main">${script.map((s, i) => `<li data-step="${i}"><span><b>${esc(s.h)}</b></span></li>`).join("")}</ol>`
+    + (pairs.length ? `<h4>${esc(STR.panel.canCmp)}</h4><div class="chips">${pairs.map((c) => `<button class="chip" data-cmp="${x.id},${c.a === x.id ? c.b : c.a}" title="${esc(c.why)}"><span class="k">vs ${c.a === x.id ? c.b : c.a}</span>${esc(c.t)}</button>`).join("")}</div>` : "")
+    + `<h4>${esc(STR.panel.measures)}</h4><p>${esc(x.measures)}</p><h4>${esc(STR.panel.marks)}</h4><ul class="ev">${marks}</ul>`;
   if (x.kind === "done") {
-    body += `<h4>报告里的说法</h4><p>${esc(x.claimed)}</p><h4>审计结论</h4><p>${esc(x.validity.text)}</p>`
-      + (hasOutcome(x) ? `<h4>预测 vs 结果</h4>${predTable(x)}` : "")
-      + `<h4>结果</h4><ul class="plain">${x.results.map((r) => `<li>${esc(r)}</li>`).join("")}</ul><h4>数据</h4>${x.data.map((d) => `<span class="src">${esc(d)}</span>`).join("")}`;
+    body += `<h4>${esc(STR.panel.claimed)}</h4><p>${esc(x.claimed)}</p><h4>${esc(STR.panel.audit)}</h4><p>${esc(x.validity.text)}</p>`
+      + (hasOutcome(x) ? `<h4>${esc(STR.panel.pvr)}</h4>${predTable(x)}` : "")
+      + `<h4>${esc(STR.panel.res)}</h4><ul class="plain">${x.results.map((r) => `<li>${esc(r)}</li>`).join("")}</ul><h4>${esc(STR.panel.data)}</h4>${x.data.map((d) => `<span class="src">${esc(d)}</span>`).join("")}`;
   } else {
-    body += `<h4>各假说的预测（先写下，再跑）</h4><table><tr><th>假说</th><th>预期看到</th></tr>${x.predictions.map((p) => `<tr><td>${esc(p.h)}</td><td>${esc(p.expect)}</td></tr>`).join("")}</table>`;
+    body += `<h4>${esc(STR.panel.predsPre)}</h4><table><tr><th>${esc(STR.panel.hyp)}</th><th>${esc(STR.panel.expect)}</th></tr>${x.predictions.map((p) => `<tr><td>${esc(p.h)}</td><td>${esc(p.expect)}</td></tr>`).join("")}</table>`;
   }
-  if (x.forks.length) body += `<h4>用来回答</h4>${x.forks.map((f) => miniFork(fork[f])).join("")}`;
+  if (x.forks.length) body += `<h4>${esc(STR.panel.answers)}</h4>${x.forks.map((f) => miniFork(fork[f])).join("")}`;
   return body;
 }
 function overviewPanel() {
   const open = M.forks.filter((f) => f.alts.every((a) => a.status !== "supported"));
-  return `<div class="dk">概览</div><h3>目前最可能的结构</h3>`
+  return `<div class="dk">${esc(STR.panel.ovKicker)}</div><h3>${esc(STR.panel.ovTitle)}</h3>`
     + `<div>${Object.entries(M.statuses).map(([k, s]) => tag(`${s.label} ${count(k)}`, k)).join("")}</div>`
     + `<ul class="plain" style="margin-top:10px">${S.structure.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>`
     + `<div class="callout">${esc(S.openQuestion)}</div>`
-    + `<h4>还没定下来的分叉</h4>${open.map((f) => `<p><span style="font:500 12px var(--mono);color:var(--muted);margin-right:6px">${f.id}</span>${esc(f.q)}</p>`).join("")}`
-    + `<h4>下一步</h4>${S.nextSteps.map((s, i) => `<p style="margin-top:8px"><span style="font:500 12px var(--mono);color:var(--muted);margin-right:6px">0${i + 1}</span>${esc(s.t)}</p><div class="chips" style="margin:4px 0 0 24px">${s.exps.map((e) => expChip(exp[e])).join("")}</div>`).join("")}`
-    + `<h4>值得并排看的实验</h4><div class="chips">${M.comparisons.map((c) => `<button class="chip" data-cmp="${c.a},${c.b}" title="${esc(c.why)}"><span class="k">${c.a} vs ${c.b}</span>${esc(c.t)}</button>`).join("")}</div>`
-    + `<p style="margin-top:16px;color:var(--muted);font-size:13px">左边正在播放基线动画：一个 descriptor 怎么走完流水线。点上面任一实验，看它的数据怎么流、在哪里卡住；点“对比两个实验”并排看两个。</p>`;
+    + `<h4>${esc(STR.panel.ovOpen)}</h4>${open.map((f) => `<p><span style="font:500 12px var(--mono);color:var(--muted);margin-right:6px">${f.id}</span>${esc(f.q)}</p>`).join("")}`
+    + `<h4>${esc(STR.panel.ovNext)}</h4>${S.nextSteps.map((s, i) => `<p style="margin-top:8px"><span style="font:500 12px var(--mono);color:var(--muted);margin-right:6px">0${i + 1}</span>${esc(s.t)}</p><div class="chips" style="margin:4px 0 0 24px">${s.exps.map((e) => expChip(exp[e])).join("")}</div>`).join("")}`
+    + `<h4>${esc(STR.panel.ovCmp)}</h4><div class="chips">${M.comparisons.map((c) => `<button class="chip" data-cmp="${c.a},${c.b}" title="${esc(c.why)}"><span class="k">${c.a} vs ${c.b}</span>${esc(c.t)}</button>`).join("")}</div>`
+    + `<p style="margin-top:16px;color:var(--muted);font-size:13px">${esc(STR.panel.ovHint)}</p>`;
 }
 $("#replayMap").addEventListener("click", (e) => {
   const b = e.currentTarget; b.classList.remove("spin"); void b.offsetWidth; b.classList.add("spin");
@@ -1167,29 +1568,31 @@ document.addEventListener("keydown", (e) => {
 });
 
 // ---------- audit / forks / data ----------
-$("#audit-table").innerHTML = `<thead><tr><th>实验</th><th style="width:22%">名称</th><th style="width:32%">实际测的区间</th><th>审计结论</th></tr></thead><tbody>`
-  + M.experiments.filter((x) => x.kind === "done").map((x) => `<tr><td class="id"><a data-go="x:${x.id}">${x.id}</a></td>`
-    + `<td><span class="nm">${esc(x.name)}</span><span class="sel">${esc(x.selector)}</span></td><td>${esc(x.measures)}</td>`
-    + `<td>${tag(VALID[x.validity.level][0], VALID[x.validity.level][1])}<div>${esc(x.validity.text)}</div></td></tr>`).join("") + `</tbody>`;
-$("#pitfall-table").innerHTML = `<thead><tr><th style="width:24%">陷阱</th><th>影响和对策</th><th style="width:28%">出处</th></tr></thead><tbody>`
-  + (M.pitfalls || []).map((p) => `<tr><td><span class="nm">${esc(p.t)}</span></td><td>${esc(p.d)}</td><td class="path">${esc(p.src)}</td></tr>`).join("") + `</tbody>`;
-$("#forkgrid").innerHTML = M.forks.map((f) => {
-  const settled = f.alts.some((a) => a.status === "supported");
-  return `<div class="fork"><div class="qid"><span>${f.id}</span>${tag(settled ? "有倾向" : "未定", settled ? "known" : "unknown")}</div><h3>${esc(f.q)}</h3>`
-    + f.alts.map((a) => `<div class="alt ${a.status === "ruled_out" || a.status === "contradicted" ? "out" : ""}"><div>${tag(ALT[a.status][0], ALT[a.status][1])}</div><div><div class="t">${esc(a.t)}</div>${a.why ? `<div class="why">${esc(a.why)}</div>` : ""}</div></div>`).join("")
-    + `<div class="foot"><div class="chips">${f.exps.map((e) => expChip(exp[e])).join("")}</div>`
-    + `<div class="comps">部件：${f.comps.map((c) => `<a data-go="c:${c}">${esc(comp[c].name)}</a>`).join("、")}</div></div></div>`;
-}).join("");
+function renderAuditAndForks() {
+  const ac = STR.audit.auditCols, pc = STR.audit.pitfallCols;
+  $("#audit-table").innerHTML = `<thead><tr><th>${esc(ac[0])}</th><th style="width:22%">${esc(ac[1])}</th><th style="width:32%">${esc(ac[2])}</th><th>${esc(ac[3])}</th></tr></thead><tbody>`
+    + M.experiments.filter((x) => x.kind === "done").map((x) => `<tr><td class="id"><a data-go="x:${x.id}">${x.id}</a></td>`
+      + `<td><span class="nm">${esc(x.name)}</span><span class="sel">${esc(x.selector)}</span></td><td>${esc(x.measures)}</td>`
+      + `<td>${tag(VALID[x.validity.level][0], VALID[x.validity.level][1])}<div>${esc(x.validity.text)}</div></td></tr>`).join("") + `</tbody>`;
+  $("#pitfall-table").innerHTML = `<thead><tr><th style="width:24%">${esc(pc[0])}</th><th>${esc(pc[1])}</th><th style="width:28%">${esc(pc[2])}</th></tr></thead><tbody>`
+    + (M.pitfalls || []).map((p) => `<tr><td><span class="nm">${esc(p.t)}</span></td><td>${esc(p.d)}</td><td class="path">${esc(p.src)}</td></tr>`).join("") + `</tbody>`;
+  $("#forkgrid").innerHTML = M.forks.map((f) => {
+    const settled = f.alts.some((a) => a.status === "supported");
+    return `<div class="fork"><div class="qid"><span>${f.id}</span>${tag(settled ? STR.forks.settled : STR.forks.open, settled ? "known" : "unknown")}</div><h3>${esc(f.q)}</h3>`
+      + f.alts.map((a) => `<div class="alt ${a.status === "ruled_out" || a.status === "contradicted" ? "out" : ""}"><div>${tag(ALT[a.status][0], ALT[a.status][1])}</div><div><div class="t">${esc(a.t)}</div>${a.why ? `<div class="why">${esc(a.why)}</div>` : ""}</div></div>`).join("")
+      + `<div class="foot"><div class="chips">${f.exps.map((e) => expChip(exp[e])).join("")}</div>`
+      + `<div class="comps">${esc(STR.forks.comps)}${f.comps.map((c) => `<a data-go="c:${c}">${esc(comp[c].name)}</a>`).join(STR.forks.joiner)}</div></div></div>`;
+  }).join("");
+}
 let dfilter = null;
 function renderData() {
-  const st = M.datasetStatuses;
-  $("#dfilter").innerHTML = `<button class="chip ${dfilter ? "" : "on"}" data-f="">全部 · ${M.datasets.length}</button>`
+  const st = M.datasetStatuses, dc = STR.data.cols;
+  $("#dfilter").innerHTML = `<button class="chip ${dfilter ? "" : "on"}" data-f="">${esc(STR.data.all)} · ${M.datasets.length}</button>`
     + Object.entries(st).map(([k, v]) => `<button class="chip ${dfilter === k ? "on" : ""}" data-f="${k}"><i style="--c:var(--${DSC[k]})"></i>${esc(v)} · ${M.datasets.filter((d) => d.status === k).length}</button>`).join("");
   $$("#dfilter button").forEach((b) => b.addEventListener("click", () => { dfilter = b.dataset.f || null; renderData(); stagger($("#dtable tbody")); }));
-  $("#dtable").innerHTML = `<thead><tr><th>状态</th><th style="width:30%">路径（async-binding-intel-idxd 下）</th><th>内容</th><th>建议</th><th>备注</th></tr></thead><tbody>`
+  $("#dtable").innerHTML = `<thead><tr><th>${esc(dc[0])}</th><th style="width:30%">${esc(dc[1])}</th><th>${esc(dc[2])}</th><th>${esc(dc[3])}</th><th>${esc(dc[4])}</th></tr></thead><tbody>`
     + M.datasets.filter((d) => !dfilter || d.status === dfilter).map((d) => `<tr><td>${tag(st[d.status], DSC[d.status])}</td><td class="path">${esc(d.path)}</td><td>${esc(d.what)}</td><td>${esc(d.action)}</td><td>${esc(d.note)}</td></tr>`).join("") + `</tbody>`;
 }
-renderData();
 
 // ---------- toy model ----------
 const P = {
@@ -1199,18 +1602,12 @@ const P = {
 };
 // Every preset starts from these, so switching presets never inherits an engine count or window from the last one.
 const PRESET_BASE = { mode: "sb", kTrace: 400, stepT: 24, mT: 5.5, wq: 128, slots: 11, engines: 4, payload: "noop", overlay: "none", window: 0, pollNs: 100 };
-const SLIDERS = [
-  ["n", "提交总数", [20, 400, 1]], ["kTrace", "从第几个起进入 trace 模式", [0, 400, 1]],
-  ["stepP", "prefill：不卡时每个 submit 间隔 (ns)", [1, 200, 0.1]], ["stepT", "trace：不卡时每轮间隔 (ns)", [5, 120, 1]],
-  ["mT", "trace：每轮额外普通 store 项数 m", [0, 10, 0.1]], ["sb", "store buffer 项数", [16, 200, 1]],
-  ["bin", "设备入口缓冲（假说 c）", [16, 200, 1]], ["lat", "单个写出的首个延迟 (ns)", [20, 400, 1]],
-  ["drain", "写出间隔 (ns/个)", [20, 250, 1]], ["jitter", "写出间隔抖动 ±", [0, 0.6, 0.01]],
-  ["wq", "WQ size", [8, 128, 1]], ["slots", "engine 侧在途上限", [1, 64, 1]], ["engines", "engine 数 E", [1, 4, 1]],
-  ["noopNs", "engine 处理 noop (ns)", [5, 400, 1]], ["bw", "每个 engine 带宽 (GB/s)", [1, 30, 0.5]],
-  ["window", "窗口 W：最多几个在途（0 = 不等完成）", [0, 64, 1]], ["pollNs", "完成后 CPU 多久看到 (ns)", [0, 1000, 10]],
-];
-const WINDOWS = [[0, "不等完成，一直交"], [4, "最多 4 个在途"], [1, "同步：等完成再交"]];
-const MODES = [["sb", "b · core store buffer"], ["ingress", "c · 设备入口"]];
+const SLIDER_BOUNDS = {
+  n: [20, 400, 1], kTrace: [0, 400, 1], stepP: [1, 200, 0.1], stepT: [5, 120, 1],
+  mT: [0, 10, 0.1], sb: [16, 200, 1], bin: [16, 200, 1], lat: [20, 400, 1],
+  drain: [20, 250, 1], jitter: [0, 0.6, 0.01], wq: [8, 128, 1], slots: [1, 64, 1], engines: [1, 4, 1],
+  noopNs: [5, 400, 1], bw: [1, 30, 0.5], window: [0, 64, 1], pollNs: [0, 1000, 10],
+};
 const PAYLOADS = [["noop", "noop"], ["4k", "memmove 4 KiB"], ["1m", "memmove 1 MiB"]];
 function overlayOptions() {
   const occ = [], seen = new Set();
@@ -1219,45 +1616,44 @@ function overlayOptions() {
     if (!seen.has(key)) { seen.add(key); occ.push([key, `prefill · ${r.workload} · gap ${r.gap}`]); }
   }
   occ.sort((a, b) => a[1].localeCompare(b[1], "en", { numeric: true }));
-  return [["none", "不叠加"], ["trace_k0_noop", "trace · K=0 开始（noop）"], ["trace_k112_noop", "trace · K=112 开始（noop）"], ...occ];
+  return [["none", STR.sim.overlayNone], ["trace_k0_noop", STR.sim.overlayK0], ["trace_k112_noop", STR.sim.overlayK112], ...occ];
 }
 function stepFor(workload, gap) {
   const rows = D.occupancy.filter((r) => r.workload === workload && r.gap === gap && r.k === 96);
   return rows.length ? +(rows.reduce((s, r) => s + r.step_ns, 0) / rows.length).toFixed(1) : 3;
 }
-const PRESETS = {
-  prefill0: ["prefill noop gap 0", () => ({ n: 330, stepP: stepFor("noop", 0), overlay: "occ:noop:0" })],
-  prefill50: ["prefill noop gap 50", () => ({ n: 330, stepP: stepFor("noop", 50), overlay: "occ:noop:50" })],
-  trace0: ["trace 从 K=0 开始", () => ({ n: 160, kTrace: 0, overlay: "trace_k0_noop" })],
-  trace0c: ["同上，但用假说 c", () => ({ mode: "ingress", n: 160, kTrace: 0, overlay: "trace_k0_noop" })],
-  trace112: ["K=112 后开 trace", () => ({ n: 128, kTrace: 112, stepP: stepFor("noop", 0), overlay: "trace_k112_noop" })],
-  mib300: ["1 MiB gap 300 · WQ 溢出", () => ({ n: 321, stepP: stepFor("memmove1m", 300), payload: "1m", overlay: "occ:memmove1m:300" })],
-  mib0: ["1 MiB gap 0 · 既卡又溢出", () => ({ n: 321, stepP: stepFor("memmove1m", 0), payload: "1m", overlay: "occ:memmove1m:0" })],
-  sync4k: ["同步：4 KiB 等完成再交", () => ({ n: 40, stepP: 3, payload: "4k", window: 1 }), "par"],
-  win4k: ["异步：4 KiB 最多 4 个在途", () => ({ n: 40, stepP: 3, payload: "4k", window: 4 }), "par"],
-  async4k: ["异步：4 KiB 不等完成", () => ({ n: 40, stepP: 3, payload: "4k", window: 0 }), "par"],
-  par1m: ["1 MiB × 4 engine 并行", () => ({ n: 16, stepP: 3, payload: "1m" }), "par"],
-  par1m1: ["同上，只有 1 个 engine", () => ({ n: 16, stepP: 3, payload: "1m", engines: 1 }), "par"],
+const PRESET_DEFS = {
+  prefill0: [() => ({ n: 330, stepP: stepFor("noop", 0), overlay: "occ:noop:0" })],
+  prefill50: [() => ({ n: 330, stepP: stepFor("noop", 50), overlay: "occ:noop:50" })],
+  trace0: [() => ({ n: 160, kTrace: 0, overlay: "trace_k0_noop" })],
+  trace0c: [() => ({ mode: "ingress", n: 160, kTrace: 0, overlay: "trace_k0_noop" })],
+  trace112: [() => ({ n: 128, kTrace: 112, stepP: stepFor("noop", 0), overlay: "trace_k112_noop" })],
+  mib300: [() => ({ n: 321, stepP: stepFor("memmove1m", 300), payload: "1m", overlay: "occ:memmove1m:300" })],
+  mib0: [() => ({ n: 321, stepP: stepFor("memmove1m", 0), payload: "1m", overlay: "occ:memmove1m:0" })],
+  sync4k: [() => ({ n: 40, stepP: 3, payload: "4k", window: 1 }), "par"],
+  win4k: [() => ({ n: 40, stepP: 3, payload: "4k", window: 4 }), "par"],
+  async4k: [() => ({ n: 40, stepP: 3, payload: "4k", window: 0 }), "par"],
+  par1m: [() => ({ n: 16, stepP: 3, payload: "1m" }), "par"],
+  par1m1: [() => ({ n: 16, stepP: 3, payload: "1m", engines: 1 }), "par"],
 };
 function buildControls() {
-  const presetChips = (group) => Object.entries(PRESETS).filter(([, v]) => (v[2] || "measure") === group).map(([k, [t]]) => `<button class="chip" data-p="${k}">${esc(t)}</button>`).join("");
+  const presetChips = (group) => Object.entries(PRESET_DEFS).filter(([, v]) => (v[1] || "measure") === group).map(([k]) => `<button class="chip" data-p="${k}">${esc(STR.sim.presets[k])}</button>`).join("");
   $("#presets").innerHTML = presetChips("measure");
   $("#presetsPar").innerHTML = presetChips("par");
   $$("#presets button, #presetsPar button").forEach((b) => b.addEventListener("click", () => applyPreset(b.dataset.p)));
-  $("#modeSeg").innerHTML = MODES.map(([v, t]) => `<button class="chip" data-mode="${v}">${esc(t)}</button>`).join("");
+  $("#modeSeg").innerHTML = ["sb", "ingress"].map((v) => `<button class="chip" data-mode="${v}">${esc(STR.sim.modes[v])}</button>`).join("");
   $$("#modeSeg button").forEach((b) => b.addEventListener("click", () => setParam("mode", b.dataset.mode, true)));
-  $("#winSeg").innerHTML = WINDOWS.map(([v, t]) => `<button class="chip" data-win="${v}">${esc(t)}</button>`).join("");
+  $("#winSeg").innerHTML = [0, 4, 1].map((v) => `<button class="chip" data-win="${v}">${esc(STR.sim.windows[v])}</button>`).join("");
   $$("#winSeg button").forEach((b) => b.addEventListener("click", () => setParam("window", +b.dataset.win, true)));
   $("#overlaySel").innerHTML = overlayOptions().map(([v, t]) => `<option value="${v}">${esc(t)}</option>`).join("");
-  $("#overlaySel").addEventListener("change", (e) => setParam("overlay", e.target.value, true));
-  $("#controls").innerHTML = `<label>操作<select data-k="payload">${PAYLOADS.map(([v, t]) => `<option value="${v}">${esc(t)}</option>`).join("")}</select></label>`
-    + SLIDERS.map(([k, label, [lo, hi, step]]) => `<label>${esc(label)}：<b data-v="${k}"></b><input type="range" data-k="${k}" min="${lo}" max="${hi}" step="${step}"></label>`).join("");
+  $("#overlaySel").onchange = (e) => setParam("overlay", e.target.value, true);
+  $("#controls").innerHTML = `<label>${esc(STR.sim.opLabel)}<select data-k="payload">${PAYLOADS.map(([v, t]) => `<option value="${v}">${esc(t)}</option>`).join("")}</select></label>`
+    + Object.entries(SLIDER_BOUNDS).map(([k, [lo, hi, step]]) => `<label>${esc(STR.sim.sliders[k])}${lang === "en" ? ": " : "："}<b data-v="${k}"></b><input type="range" data-k="${k}" min="${lo}" max="${hi}" step="${step}"></label>`).join("");
   $$("#controls [data-k]").forEach((inp) => inp.addEventListener("input", () => setParam(inp.dataset.k, inp.tagName === "SELECT" ? inp.value : +inp.value, inp.tagName === "SELECT")));
-  $("#replaySim").addEventListener("click", (e) => { const b = e.currentTarget; b.classList.remove("spin"); void b.offsetWidth; b.classList.add("spin"); runSim(true); simPlay(); });
-  $("#tlView").innerHTML = [["all", "全程"], ["cpu", "只看提交阶段"]].map(([v, t]) => `<button class="chip" data-view="${v}">${t}</button>`).join("");
+  $("#replaySim").onclick = (e) => { const b = e.currentTarget; b.classList.remove("spin"); void b.offsetWidth; b.classList.add("spin"); runSim(true); simPlay(); };
+  $("#tlView").innerHTML = ["all", "cpu"].map((v) => `<button class="chip" data-view="${v}">${esc(STR.sim.tlViews[v])}</button>`).join("");
   $$("#tlView button").forEach((b) => b.addEventListener("click", () => { TL.view = b.dataset.view; syncControls(); drawTimeline(); }));
-  $("#tlLegend").innerHTML = [["bad", "等 store buffer"], ["muted", "core 内 / 写出"], ["partial", "WQ 里等 · CPU 等完成"], ["rule2", "等 engine"], ["peri", "E0"], ["count", "E1"], ["terra", "E2"], ["hypothesis", "E3"], ["known", "CPU 空闲"]]
-    .map(([c, t]) => `<span><i style="--c:var(--${c})"></i>${t}</span>`).join("");
+  $("#tlLegend").innerHTML = STR.sim.tlLegend.map(([c, t]) => `<span><i style="--c:var(--${c})"></i>${esc(t)}</span>`).join("");
 }
 function setParam(k, v, animate) { P[k] = v; state.preset = null; runSim(animate); if (animate) simPlay(); writeHash(); }
 function syncControls() {
@@ -1269,7 +1665,7 @@ function syncControls() {
   $$("#tlView button").forEach((b) => b.classList.toggle("on", b.dataset.view === TL.view));
   $("#overlaySel").value = P.overlay;
 }
-function applyPreset(k) { Object.assign(P, PRESET_BASE, PRESETS[k][1]()); state.preset = k; runSim(true); simPlay(); writeHash(); }
+function applyPreset(k) { Object.assign(P, PRESET_BASE, PRESET_DEFS[k][0]()); state.preset = k; runSim(true); simPlay(); writeHash(); }
 function rng(seed) { let s = seed >>> 0 || 1; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
 const serviceNs = (p) => (p.payload === "noop" ? p.noopNs : p.fixed + (p.payload === "4k" ? 4096 : 1048576) / p.bw);
 // Sequential simulation: descriptor i only depends on earlier descriptors, so the CPU can wait on the
@@ -1350,15 +1746,16 @@ function drawLanes() {
     const full = cap && v >= cap - 0.5 && !/done|solid/.test(cls);
     return `<div class="lane ${full ? "full" : ""}"><div class="ll">${esc(label)}<small>${esc(sub)}</small></div><div class="cells ${cls} ${full ? "full" : ""}" style="--n:${Math.min(cap || 1, 160)}"><b style="width:${cap ? Math.min(100, (100 * v) / cap) : 0}%"></b></div><div class="lv">${Math.round(v)}<small> / ${cap}</small></div></div>`;
   };
-  $("#lanes").innerHTML = lane("CPU 已提交", "submit", z.sent, p.n, "solid")
-    + (sbMode ? lane("store buffer", "core", z.sb, p.sb) : lane("设备入口", "假说 c", z.ingress, p.bin))
-    + lane("Work Queue", "dedicated", z.wq, p.wq)
-    + lane("engine 侧在途", "dispatched", z.eng, p.slots)
-    + lane("正在执行", "engines", z.run, p.engines, "eng")
-    + lane("已完成", "completion", z.fin, p.n, "done solid")
-    + `<div class="lane ${z.drop ? "full" : ""}"><div class="ll">被丢弃<small>SWERROR 0x53</small></div><div class="cells solid ${z.drop ? "full" : ""}"><b style="width:${(100 * z.drop) / p.n}%"></b></div><div class="lv">${z.drop}</div></div>`;
+  const L = STR.sim.lanes;
+  $("#lanes").innerHTML = lane(L.sent[0], L.sent[1], z.sent, p.n, "solid")
+    + (sbMode ? lane(L.sb[0], L.sb[1], z.sb, p.sb) : lane(L.ingress[0], L.ingress[1], z.ingress, p.bin))
+    + lane(L.wq[0], L.wq[1], z.wq, p.wq)
+    + lane(L.eng[0], L.eng[1], z.eng, p.slots)
+    + lane(L.run[0], L.run[1], z.run, p.engines, "eng")
+    + lane(L.fin[0], L.fin[1], z.fin, p.n, "done solid")
+    + `<div class="lane ${z.drop ? "full" : ""}"><div class="ll">${esc(L.drop)}<small>SWERROR 0x53</small></div><div class="cells solid ${z.drop ? "full" : ""}"><b style="width:${(100 * z.drop) / p.n}%"></b></div><div class="lv">${z.drop}</div></div>`;
   $("#stallpill").classList.toggle("on", z.stalled);
-  $("#tlabel").textContent = `t = ${fmtT(t)} / ${fmtT(tEnd)} · 每个 descriptor 执行 ${fmtT(s.T)}`;
+  $("#tlabel").textContent = STR.sim.tlabel(fmtT(t), fmtT(tEnd), fmtT(s.T));
   drawCursor();
 }
 function simStop() { if (simRaf) cancelAnimationFrame(simRaf); simRaf = 0; $("#simPlay").innerHTML = ICON_PLAY; }
@@ -1438,7 +1835,7 @@ function drawTimeline() {
   const [wy, wh] = lay.wf, rh = wh / n;
   label("descriptor", wy + 7, col.ink);
   label(`#0 – #${n - 1}`, wy + 21);
-  label("↓ 提交顺序", wy + 35);
+  label(STR.sim.wfOrder, wy + 35);
   for (let i = 0; i < n; i++) {
     const y0 = wy + i * rh, h = Math.max(1, rh * 0.78);
     seg(s.a[i], s.acc[i], y0, h, col.bad, 1, 0);
@@ -1469,8 +1866,8 @@ function drawTimeline() {
     maxTot = Math.max(maxTot, c[0] + c[1] + c[2] + c[3]);
   }
   TL.bins = bins;
-  label("在途数", ay + 7, col.ink);
-  label(`最多 ${maxTot}`, ay + 21);
+  label(STR.sim.inflight, ay + 7, col.ink);
+  label(STR.sim.inflightMax(maxTot), ay + 21);
   const bw = (W - L - R) / B;
   bins.forEach((c, b) => {
     let yb = ay + ah;
@@ -1526,37 +1923,38 @@ function drawStats(s, tEnd, cpuEnd) {
     first = Math.min(first, s.start[i]); last = Math.max(last, s.done[i]);
   }
   const pct = (v) => `${Math.round(100 * v)}<small>%</small>`;
+  const st = STR.sim.statTitles;
   const tiles = [
     s.p.payload === "noop"
-      ? ["完成吞吐", ok ? `${((ok / last) * 1e3).toFixed(2)}<small>M/s</small>` : "—"]
-      : ["完成吞吐（数据）", ok ? `${((ok * (s.p.payload === "4k" ? 4096 : 1048576)) / last).toFixed(1)}<small>GB/s · ${((ok / last) * 1e3).toFixed(2)} M/s</small>` : "—"],
-    ["engine 平均并行度", ok ? `${(exec / (last - first)).toFixed(2)}<small>/ ${E}</small>` : "—"],
-    ["平均延迟（交出 → 完成）", ok ? fmtT(lat / ok) : "—"],
-    ["CPU 等完成", pct(win / cpuEnd)],
-    ["CPU 等 store buffer", pct(stall / cpuEnd)],
-    ["CPU 交完后设备还要干", fmtT(Math.max(0, tEnd - cpuEnd))],
-    ["丢弃", `${n - ok}`],
+      ? [st.tp, ok ? `${((ok / last) * 1e3).toFixed(2)}<small>M/s</small>` : "—"]
+      : [st.tpData, ok ? `${((ok * (s.p.payload === "4k" ? 4096 : 1048576)) / last).toFixed(1)}<small>GB/s · ${((ok / last) * 1e3).toFixed(2)} M/s</small>` : "—"],
+    [st.par, ok ? `${(exec / (last - first)).toFixed(2)}<small>/ ${E}</small>` : "—"],
+    [st.lat, ok ? fmtT(lat / ok) : "—"],
+    [st.win, pct(win / cpuEnd)],
+    [st.stall, pct(stall / cpuEnd)],
+    [st.tail, fmtT(Math.max(0, tEnd - cpuEnd))],
+    [st.drop, `${n - ok}`],
   ];
   $("#tlStats").innerHTML = tiles.map(([k, v]) => `<div class="tlstat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
 }
 const tipRows = (rows) => rows.map(([k, v]) => `<div class="r"><span>${k}</span><span>${v}</span></div>`).join("");
 function descTip(i) {
   const s = SIM;
-  if (s.fate[i] === "drop") return `<b>#${i}</b> · 被丢弃<br>${tipRows([["CPU 交出", fmtT(s.a[i])], ["到达设备", fmtT(s.out[i])], ["结果", "WQ 已满，丢弃（0x53）"]])}`;
-  return `<b>#${i}</b> · 在 E${s.eng[i]} 上执行<br>` + tipRows([
-    ["CPU 交出", fmtT(s.a[i])], ["等 store buffer", fmtT(s.acc[i] - s.a[i])], ["写出到达设备", fmtT(s.out[i])],
-    ["WQ 里等", fmtT(s.wqOut[i] - s.out[i])], ["等 engine", fmtT(s.start[i] - s.wqOut[i])], ["执行", `${fmtT(s.start[i])} → ${fmtT(s.done[i])}`],
-    ["交出 → 完成", fmtT(s.done[i] - s.a[i])],
-  ]);
+  if (s.fate[i] === "drop") return `${STR.sim.tipDropHead(i)}<br>${tipRows(STR.sim.tipDropRows(fmtT(s.a[i]), fmtT(s.out[i])))}`;
+  return `${STR.sim.tipExecHead(i, s.eng[i])}<br>` + tipRows(STR.sim.tipExecRows(
+    fmtT(s.a[i]), fmtT(s.acc[i] - s.a[i]), fmtT(s.out[i]),
+    fmtT(s.wqOut[i] - s.out[i]), fmtT(s.start[i] - s.wqOut[i]), `${fmtT(s.start[i])} → ${fmtT(s.done[i])}`,
+    fmtT(s.done[i] - s.a[i]),
+  ));
 }
 function cpuTip(t) {
   const s = SIM, n = s.p.n;
   for (let i = 0; i < n; i++) {
-    if (s.ready[i] <= t && t < s.a[i]) return `<b>CPU</b> · 等 #${i - s.p.window} 完成，才能交 #${i}`;
-    if (s.a[i] <= t && t < s.acc[i]) return `<b>CPU</b> · 交 #${i} 时 store buffer 满了，在等空位`;
-    if (s.acc[i] <= t && t < s.nxt[i]) return `<b>CPU</b> · 正在交 #${i}`;
+    if (s.ready[i] <= t && t < s.a[i]) return STR.sim.cpuWait(i - s.p.window, i);
+    if (s.a[i] <= t && t < s.acc[i]) return STR.sim.cpuStall(i);
+    if (s.acc[i] <= t && t < s.nxt[i]) return STR.sim.cpuIssuing(i);
   }
-  return t >= TL.cpuEnd ? "<b>CPU</b> · 全部交完。异步：这段时间 CPU 可以去做别的事" : "<b>CPU</b> · 空闲";
+  return t >= TL.cpuEnd ? STR.sim.cpuDone : STR.sim.cpuIdle;
 }
 $("#tlCur").addEventListener("mousemove", (e) => {
   const lay = TL.lay, s = SIM;
@@ -1573,10 +1971,10 @@ $("#tlCur").addEventListener("mousemove", (e) => {
     if (e2 >= 0) {
       let i = -1;
       for (let j = 0; j < s.p.n; j++) if (s.eng[j] === e2 && s.start[j] <= t && t < s.done[j]) i = j;
-      html = i >= 0 ? descTip(i) : `<b>E${e2}</b> · 空闲`;
+      html = i >= 0 ? descTip(i) : STR.sim.engIdle(e2);
     } else if (y >= lay.area[0] && y < lay.area[0] + lay.area[1]) {
       const c = TL.bins[Math.min(TL.bins.length - 1, Math.floor((t / TL.xMax) * TL.bins.length))];
-      html = `<b>t = ${fmtT(t)}</b> · 在途 ${c[0] + c[1] + c[2] + c[3]} 个<br>` + tipRows([["core 内 / 写出", c[0]], ["WQ 里等", c[1]], ["等 engine", c[2]], ["正在执行", c[3]]]);
+      html = `${STR.sim.areaHead(fmtT(t), c[0] + c[1] + c[2] + c[3])}<br>` + tipRows(STR.sim.areaRows(c));
     }
   }
   TL.hover = t;
@@ -1611,11 +2009,11 @@ function chart(svg, { x, y, xl, yl, series }, animate) {
     if (s.type === "line") el("path", { d: "M" + s.data.map(([a, b]) => `${sx(a).toFixed(1)},${sy(b).toFixed(1)}`).join(" L"), fill: "none", stroke: col, "stroke-width": 1.9, "stroke-linejoin": "round", pathLength: 1, class: animate ? "draw" : "" }, svg);
     else if (s.type === "points") s.data.forEach(([a, b], i) => {
       const c = el("circle", { cx: sx(a), cy: sy(b), r: 3.2, fill: col, "fill-opacity": 0.9, stroke: "var(--paper)", "stroke-width": 0.8, class: animate ? "pop" : "", style: animate ? `animation-delay:${350 + (800 * i) / s.data.length}ms` : "" }, svg);
-      el("title", {}, c).textContent = `${s.label}：${a} → ${b}`;
+      el("title", {}, c).textContent = STR.sim.ptTip(s.label, a, b);
     });
     else if (s.type === "ranges") s.data.forEach(([a, lo, hi], i) => {
       const l = el("line", { x1: sx(a), x2: sx(a), y1: sy(lo), y2: sy(hi), stroke: col, "stroke-width": 3.4, "stroke-linecap": "round", "stroke-opacity": 0.85, class: animate ? "grow" : "", style: animate ? `animation-delay:${300 + i * 70}ms` : "" }, svg);
-      el("title", {}, l).textContent = `${s.label}：间隔 ${a.toFixed(1)} ns → knee 在 ${lo}–${hi}`;
+      el("title", {}, l).textContent = STR.sim.rgTip(s.label, a.toFixed(1), lo, hi);
     });
     const lx = L + 12;
     if (s.type === "line") el("line", { x1: lx, x2: lx + 14, y1: ly - 3, y2: ly - 3, stroke: col, "stroke-width": 2 }, lg);
@@ -1648,26 +2046,26 @@ function measuredKnees(w) {
   return out.sort((u, v) => u[0] - v[0]);
 }
 function drawCharts(animate) {
-  const s = SIM, n = s.p.n, ov = overlaySeries();
-  chart($("#chartA"), { x: [0, n], y: [0, 300], xl: "submit 序号", yl: "ns", series: [
-    { type: "line", color: "ink", label: "模型", data: Array.from(s.meas, (v, i) => [i, v]) },
-    { type: "points", color: "terra", label: "实测中位数", data: ov.a.filter(([i]) => i < n) },
+  const s = SIM, n = s.p.n, ov = overlaySeries(), cd = STR.sim.chartsData;
+  chart($("#chartA"), { x: [0, n], y: [0, 300], xl: cd.xlA, yl: "ns", series: [
+    { type: "line", color: "ink", label: cd.model, data: Array.from(s.meas, (v, i) => [i, v]) },
+    { type: "points", color: "terra", label: cd.measMed, data: ov.a.filter(([i]) => i < n) },
   ] }, animate);
   let ok = 0; const accepted = [];
   for (let i = 0; i < n; i++) { if (s.fate[i] === "ok") ok++; accepted.push([i + 1, ok]); }
-  chart($("#chartB"), { x: [0, n], y: [0, Math.max(n, 10)], xl: "提交总数 K+1", yl: "最终完成数", series: [
-    { type: "line", color: "ink", label: "模型", data: accepted },
-    { type: "points", color: "terra", label: "实测（sentinel 后）", data: ov.b.filter(([k]) => k <= n) },
+  chart($("#chartB"), { x: [0, n], y: [0, Math.max(n, 10)], xl: cd.xlB, yl: cd.ylB, series: [
+    { type: "line", color: "ink", label: cd.model, data: accepted },
+    { type: "points", color: "terra", label: cd.measSent, data: ov.b.filter(([k]) => k <= n) },
   ] }, animate);
   const simKnee = [];
   for (let st = 1; st <= 100; st += 3) {
     const ks = [1, 2, 3, 4, 5].map((seed) => kneeOf(simulate({ ...P, n: 400, kTrace: 1e9, stepP: st }, seed)) ?? 400).sort((u, v) => u - v);
     simKnee.push([st, ks[2]]);
   }
-  chart($("#chartC"), { x: [0, 100], y: [0, 400], xl: "不卡时每个 submit 的间隔 (ns)", yl: "knee 序号", series: [
-    { type: "line", color: "ink", label: "模型（5 次中位数）", data: simKnee },
-    { type: "ranges", color: "terra", label: "实测 noop", data: measuredKnees("noop") },
-    { type: "ranges", color: "peri", label: "实测 1 MiB", data: measuredKnees("memmove1m") },
+  chart($("#chartC"), { x: [0, 100], y: [0, 400], xl: cd.xlC, yl: cd.ylC, series: [
+    { type: "line", color: "ink", label: cd.modelMed5, data: simKnee },
+    { type: "ranges", color: "terra", label: cd.measNoop, data: measuredKnees("noop") },
+    { type: "ranges", color: "peri", label: cd.meas1m, data: measuredKnees("memmove1m") },
   ] }, animate);
 }
 
@@ -1675,17 +2073,17 @@ function drawCharts(animate) {
 // One card per M.cases entry: a stepper over its steps (one figure + at most 2 short lines per step), or every step at
 // once in 「全部展开」 mode. Every string comes from M.casesUi / M.cases; each figure is drawn from its step's `fig` spec
 // (line | bars | strip | schema | code). Schematics use at most one CSS loop, which the reduced-motion rule freezes.
-const rich = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\[推断\]/g, '<span class="inf">推断</span>');
-const CU = M.casesUi;
-const CASE = Object.fromEntries(M.cases.map((c) => [c.id, c]));
+const rich = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\[(?:推断|INFERENCE)\]/g, () => `<span class="inf">${esc(STR.infTag)}</span>`);
+let CU = M.casesUi;
+let CASE = Object.fromEntries(M.cases.map((c) => [c.id, c]));
 const caseStep = Object.fromEntries(M.cases.map((c) => [c.id, 0]));
 let casesAll = false;
 const TONE = { main: "var(--ink2)", alt: "var(--timer)", hl: "var(--terra)", bad: "var(--bad)", muted: "var(--unknown)", exp: "var(--muted)", ok: "var(--known)" };
 const KIND_C = { phen: "ink", guess: "partial", rule: "bad", truth: "known", check: "timer", so: "terra" };
 const FW = 720;
 const f1 = (v) => (+v).toFixed(1);
-// Approximate rendered label width (CJK ≈ 1 em, Latin ≈ 0.6 em) so annotation boxes fit their text.
-const textW = (s, size) => [...String(s)].reduce((w, ch) => w + (ch.charCodeAt(0) > 0x2e7f ? size : size * 0.6), 0);
+// Approximate rendered label width (CJK ≈ 1 em, Latin ≈ 0.62 em) so annotation boxes fit their text.
+const textW = (s, size) => [...String(s)].reduce((w, ch) => w + (ch.charCodeAt(0) > 0x2e7f ? size : size * 0.62), 0);
 function svgLabel(x, y, s, cls = "", anchor = "middle", style = "") {
   const ls = String(s).split("\n");
   return `<text x="${f1(x)}" y="${f1(y)}" class="${cls}" text-anchor="${anchor}"${style ? ` style="${style}"` : ""}>`
@@ -1935,12 +2333,14 @@ function setCasesAll(on) {
   $$("#caseMode .chip").forEach((b) => b.classList.toggle("on", (b.dataset.cm === "all") === on));
   M.cases.forEach((c) => renderCase(c.id, false));
 }
-$('#tabs [data-tab="find"]').textContent = CU.tab;
-$("#casesIntro").textContent = CU.intro;
-$("#caseMode").innerHTML = `<button class="chip on" data-cm="step">${esc(CU.modeStep)}</button><button class="chip" data-cm="all">${esc(CU.modeAll)}</button>`;
+function renderCasesAll() {
+  $('#tabs [data-tab="find"]').textContent = CU.tab;
+  $("#casesIntro").textContent = CU.intro;
+  $("#caseMode").innerHTML = `<button class="chip ${casesAll ? "" : "on"}" data-cm="step">${esc(CU.modeStep)}</button><button class="chip ${casesAll ? "on" : ""}" data-cm="all">${esc(CU.modeAll)}</button>`;
+  $("#casecards").innerHTML = M.cases.map(caseCard).join("");
+  M.cases.forEach((c) => renderCase(c.id, false));
+}
 $("#caseMode").addEventListener("click", (e) => { const b = e.target.closest("[data-cm]"); if (b) setCasesAll(b.dataset.cm === "all"); });
-$("#casecards").innerHTML = M.cases.map(caseCard).join("");
-M.cases.forEach((c) => renderCase(c.id, false));
 $("#casecards").addEventListener("click", (e) => {
   const b = e.target.closest("[data-cs]");
   if (b) { const [id, w] = b.dataset.cs.split(":"); caseGo(id, w === "prev" ? caseStep[id] - 1 : w === "next" ? caseStep[id] + 1 : +w); return; }
@@ -1952,36 +2352,72 @@ $("#casecards").addEventListener("click", (e) => {
   setTimeout(() => t.classList.remove("flash"), 1800);
 });
 
-// ---------- hash ----------
+// ---------- hash & language ----------
 function writeHash() {
   const p = new URLSearchParams();
-  if (state.tab === "find") { history.replaceState(null, "", location.pathname + location.search); return; }
-  p.set("tab", state.tab);
-  if (state.cmp) p.set("cmp", state.cmp.join(","));
-  else if (state.sel) p.set("sel", state.sel);
-  if (!state.cmp && state.tab === "pipe" && state.sel && state.sel.startsWith("x:") && PLAYERS.main.i) p.set("step", PLAYERS.main.i + 1);
-  if (state.preset) p.set("preset", state.preset);
+  if (state.tab !== "find" || lang === "en") {
+    if (state.tab !== "find") p.set("tab", state.tab);
+    if (state.cmp) p.set("cmp", state.cmp.join(","));
+    else if (state.sel) p.set("sel", state.sel);
+    if (!state.cmp && state.tab === "pipe" && state.sel && state.sel.startsWith("x:") && PLAYERS.main.i) p.set("step", PLAYERS.main.i + 1);
+    if (state.preset) p.set("preset", state.preset);
+    if (lang === "en") p.set("lang", "en");
+  }
+  const sp = new URLSearchParams(location.search);
+  sp.delete("lang");
+  const qs = sp.toString();
   const h = p.toString();
-  history.replaceState(null, "", h ? "#" + h : location.pathname + location.search);
+  history.replaceState(null, "", location.pathname + (qs ? "?" + qs : "") + (h ? "#" + h : ""));
+}
+
+function setLang(nextLang, { push = true, init = false } = {}) {
+  lang = nextLang === "en" && window.DSA_MODEL_EN ? "en" : "zh";
+  try { localStorage.setItem("dsa-pipeline-lang", lang); } catch {}
+  M = MODELS[lang];
+  S = M.summary;
+  STR = UI[lang];
+  comp = Object.fromEntries(M.components.map((c) => [c.id, c]));
+  exp = Object.fromEntries(M.experiments.map((x) => [x.id, x]));
+  fork = Object.fromEntries(M.forks.map((f) => [f.id, f]));
+  CU = M.casesUi;
+  CASE = Object.fromEntries(M.cases.map((c) => [c.id, c]));
+  ALT = STR.alt;
+  VALID = STR.valid;
+  MARK = STR.mark;
+  PKT_LEGEND = STR.pktLegend;
+  PKT_NAME = Object.fromEntries(PKT_LEGEND.map(([k, , t]) => [k, t]));
+
+  applyStaticChrome();
+  renderPipeChrome();
+  renderAuditAndForks();
+  renderData();
+  renderCasesAll();
+  buildControls();
+  runSim(false);
+  for (const p of Object.values(PLAYERS)) p.refreshLang();
+  if (state.cmp) {
+    PLAYERS.A.ui.name.textContent = `${state.cmp[0]} · ${exp[state.cmp[0]].name}`;
+    PLAYERS.B.ui.name.textContent = `${state.cmp[1]} · ${exp[state.cmp[1]].name}`;
+  }
+  if (!init) render();
+  if (push) writeHash();
 }
 
 // ---------- boot ----------
-buildControls();
-const h = new URLSearchParams(location.hash.slice(1));
-const preset = PRESETS[h.get("preset")] ? h.get("preset") : null;
-Object.assign(P, PRESET_BASE, PRESETS[preset || "trace0"][1]());
+const preset = PRESET_DEFS[h0.get("preset")] ? h0.get("preset") : null;
+Object.assign(P, PRESET_BASE, PRESET_DEFS[preset || "trace0"][0]());
 state.preset = preset;
-syncControls();
-runSim(false);
-const sel0 = h.get("sel");
+const sel0 = h0.get("sel");
 state.sel = sel0 && ((sel0.startsWith("x:") && exp[sel0.slice(2)]) || (sel0.startsWith("c:") && comp[sel0.slice(2)])) ? sel0 : null;
-const tab0 = { find: "find", pipe: "pipe", audit: "audit", forks: "forks", sim: "sim", data: "data" }[h.get("tab")] || (preset ? "sim" : state.sel || h.get("cmp") ? "pipe" : "find");
+const tab0 = { find: "find", pipe: "pipe", audit: "audit", forks: "forks", sim: "sim", data: "data" }[h0.get("tab")] || (preset ? "sim" : state.sel || h0.get("cmp") ? "pipe" : "find");
 state.tab = tab0; // before render/load, which write the hash
+setLang(lang, { push: false, init: true });
 render();
-PLAYERS.main.load(state.sel && state.sel.startsWith("x:") ? state.sel.slice(2) : "baseline", Math.max(0, (+h.get("step") || 1) - 1));
+PLAYERS.main.load(state.sel && state.sel.startsWith("x:") ? state.sel.slice(2) : "baseline", Math.max(0, (+h0.get("step") || 1) - 1));
 setTab(tab0, { push: false });
-const cmp0 = (h.get("cmp") || "").split(",");
+const cmp0 = (h0.get("cmp") || "").split(",");
 if (cmp0.length === 2 && exp[cmp0[0]] && exp[cmp0[1]]) enterCompare(cmp0[0], cmp0[1]);
+if (q0.has("lang") || lang === "en") writeHash();
 </script>
 </body>
 </html>

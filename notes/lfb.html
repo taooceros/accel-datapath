@@ -4,8 +4,12 @@
 @media (prefers-color-scheme: dark) { :root { --paper:#141311; --card:#1b1a17; --sunk:#201f1b; --ink:#ece8df; --ink2:#cfcac0; --muted:#9a958a; --rule:#2f2d29; --rule2:#46433c; } }
 body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.65 var(--sans); -webkit-font-smoothing:antialiased; }
 .wrap { max-width:980px; margin:0 auto; padding:28px 28px 80px; }
-nav.crumb { font:500 12px var(--mono); letter-spacing:.04em; color:var(--muted); margin-bottom:22px; }
+nav.crumb { display:flex; align-items:center; justify-content:space-between; gap:12px; font:500 12px var(--mono); letter-spacing:.04em; color:var(--muted); margin-bottom:22px; flex-wrap:wrap; }
 nav.crumb a { color:var(--muted); }
+.langsw { display:inline-flex; border:1px solid var(--rule2); background:var(--card); border-radius:999px; padding:2px; flex:none; }
+.langsw button { border:none; background:transparent; color:var(--muted); font:500 11.5px/1 var(--mono); padding:4px 9px; border-radius:999px; cursor:pointer; }
+.langsw button:hover { color:var(--ink); }
+.langsw button.on { background:var(--ink); color:var(--paper); }
 h1, h2, h3 { font-family:var(--serif); font-weight:500; line-height:1.25; }
 h1 { font-size:30px; margin:0 0 18px; } h2 { font-size:22px; margin:34px 0 10px; padding-top:14px; border-top:1px solid var(--rule); } h3 { font-size:18px; margin:24px 0 8px; }
 a { color:var(--ink); text-decoration-color:var(--rule2); text-underline-offset:3px; }
@@ -18,7 +22,7 @@ blockquote { margin:12px 0; padding:4px 14px; border-left:3px solid var(--rule2)
 ul.notes { list-style:none; padding:0; } ul.notes li { padding:14px 0; border-bottom:1px solid var(--rule); }
 ul.notes a { font:500 18px var(--serif); } ul.notes .d { color:var(--ink2); } ul.notes .t { font:12px var(--mono); color:var(--muted); }
 .lead { color:var(--ink2); }
-</style></head><body><main class="wrap"><nav class="crumb"><a href="../">DSA 提交流水线</a> · <a href="./">实验笔记</a> · lfb</nav><h1>lfb: does a MOVDIR64B need a fill buffer (LFB) to leave the core?</h1>
+</style></head><body><main class="wrap"><nav class="crumb"><span><a href="../" data-home="1" data-en="DSA Submit Pipeline">DSA 提交流水线</a> · <a href="./" data-notes-idx="1" data-en="Lab Notes">实验笔记</a> · lfb</span><div class="langsw" id="langSwitch" role="group" aria-label="Language"><button type="button" data-lang="zh">中文</button><button type="button" data-lang="en">EN</button></div></nav><h1>lfb: does a MOVDIR64B need a fill buffer (LFB) to leave the core?</h1>
 <p>Probe: <code>dsa-lab/src/bin/lfb_mov.rs</code>. Run directories are relative to
 <code>dsa-lab-runs/</code>.</p>
 <p>Background (pushpull): one core keeps ~30 MOVDIR64B in the CHA TORs at once, more than the ~16
@@ -165,4 +169,150 @@ or in another core-side queue (e.g. L2) is not measured].</li>
 buffers delay a submit by up to one memory latency.</li>
 </ul>
 <p>Not independently audited yet; replicated on a second core pair.</p>
-</main></body></html>
+<hr />
+<h1>Follow-up: is it the source read? (written before running)</h1>
+<p>Probe: <code>dsa-lab/src/bin/lfb_src.rs</code>. MOVDIR64B first loads its 64 B source with ordinary loads; a
+source that misses L1 needs a fill buffer for that load. In LFB r1/r2 the descriptor was read
+just before each trial (one 64 B-aligned line, L1-resident), so the load should hit L1, but that
+was not checked. Variants, same prefetch filling as before (N = 0, 14, 15, 16; local and remote
+targets), poller on the same node:</p>
+<table>
+<thead>
+<tr>
+<th>variant</th>
+<th>write</th>
+<th>what the poller watches</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mov_l1src</code></td>
+<td>MOVDIR64B to the DSA portal, source in L1 (as before)</td>
+<td>completion record</td>
+</tr>
+<tr>
+<td><code>mov_memsrc</code></td>
+<td>same, source line flushed (CLFLUSHOPT) before the trial</td>
+<td>completion record</td>
+</tr>
+<tr>
+<td><code>movdiri</code></td>
+<td>MOVDIRI (8 B direct store from a register, no memory source) to a normal memory line</td>
+<td>that line</td>
+</tr>
+<tr>
+<td><code>store</code></td>
+<td>ordinary 8 B store to a line the poller keeps reading (so a store miss: RFO)</td>
+<td>that line</td>
+</tr>
+</tbody>
+</table>
+<p>Predictions:</p>
+<ul>
+<li>If the fill-buffer wait came only from the source load: <code>mov_l1src</code> would not wait (but r1/r2
+already show it waits, so this would require the source not to be in L1), and <strong><code>movdiri</code>
+would not wait</strong> at N = 15–16.</li>
+<li><strong>H-store-path (the direct store itself needs a fill buffer):</strong> <code>movdiri</code> waits at N = 15–16
+like <code>mov_l1src</code> (+~85 ns local, +~145 ns remote), with matching FB_FULL cycles.</li>
+<li><code>mov_memsrc</code>: one memory read longer than <code>mov_l1src</code> already at N ≤ 14.</li>
+<li><code>store</code>: waits too (the RFO needs a fill buffer). If one fill buffer is kept for loads/RFOs
+[the earlier inference], it waits only at N = 16, not 15.</li>
+</ul>
+<h2>Results (2026-11-02, run <code>LFB/20261102T231001Z-AB-src2</code>)</h2>
+<p>cpu 4 → dsa0 / memory, poller cpu 6, remote region via cpu 40; 4 rounds × 200 trials per point;
+mesh as before; drains ok. (<code>LFB/20261102T225022Z-AB-src1</code> hung: in the line-watching variants
+the poller ran ahead because the page touch left the watched value at 1; killed, fixed by
+resetting the line before each trial. <code>LFBDBG/*</code> are short debug runs.) Medians in ns.</p>
+<table>
+<thead>
+<tr>
+<th>variant</th>
+<th>N ≤ 14</th>
+<th>N = 15–16, local</th>
+<th>N = 15–16, remote</th>
+<th>FB_FULL cycles at 15–16 (local / remote)</th>
+<th>L1D fills per trial at N = 0</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MOVDIR64B, source in L1</td>
+<td>383–384</td>
+<td>474 (+91)</td>
+<td>527–528 (+145)</td>
+<td>218 / 355</td>
+<td>1.4</td>
+</tr>
+<tr>
+<td>MOVDIR64B, source flushed</td>
+<td>479–492</td>
+<td>575–576 (+97)</td>
+<td>625–626 (+146)</td>
+<td>388 / 511</td>
+<td>2.4</td>
+</tr>
+<tr>
+<td>MOVDIRI (no memory source)</td>
+<td>308–310</td>
+<td>399–400 (+91)</td>
+<td>453 (+144)</td>
+<td>204–207 / 355–357</td>
+<td>1.4</td>
+</tr>
+<tr>
+<td>ordinary store, line held by the poller (RFO)</td>
+<td>146–149</td>
+<td>244 (+97)</td>
+<td>298 (+150)</td>
+<td>222 / 357–362</td>
+<td>2.4</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>H-store-path: supported.</strong> MOVDIRI has no memory source and waits exactly like MOVDIR64B
+(+91 / +144 ns, same FB_FULL cycles). The fill-buffer wait belongs to the direct store itself,
+not to the 64 B source load.</li>
+<li>The source of MOVDIR64B was indeed in L1 in the earlier runs: with the source flushed, the
+arrival is one memory read later (+96 ns) at every N and the core takes one more L1 fill per
+trial (2.4 vs 1.4); with the source in L1 neither appears. The two waits add.</li>
+<li>The ordinary store miss (RFO) also waits at N = 15, not only at 16. So the fill buffer that
+prefetches can still use when 15 are busy is not available to stores of any kind (direct
+stores, RFOs) or MFENCE [INFERENCE: it is kept for loads].</li>
+</ul>
+</main><script>
+(function(){
+  var h = new URLSearchParams(location.hash.slice(1)), q = new URLSearchParams(location.search), s = null;
+  try { s = localStorage.getItem("dsa-pipeline-lang"); } catch (e) {}
+  var lang = (h.get("lang") || q.get("lang") || s) === "en" ? "en" : "zh";
+  function set(l, push) {
+    lang = l === "en" ? "en" : "zh";
+    try { localStorage.setItem("dsa-pipeline-lang", lang); } catch (e) {}
+    document.documentElement.lang = lang === "en" ? "en" : "zh-CN";
+    document.querySelectorAll("#langSwitch button").forEach(function(b){
+      var on = b.dataset.lang === lang;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", String(on));
+    });
+    document.querySelectorAll("[data-en]").forEach(function(el){
+      if (!el.dataset.zh) el.dataset.zh = el.innerHTML;
+      el.innerHTML = lang === "en" ? el.dataset.en : el.dataset.zh;
+    });
+    var t = document.querySelector("title");
+    if (t && t.dataset.en) { if (!t.dataset.zh) t.dataset.zh = t.textContent; t.textContent = lang === "en" ? t.dataset.en : t.dataset.zh; }
+    document.querySelectorAll('a[data-home]').forEach(function(a){ a.setAttribute("href", lang === "en" ? "../#lang=en" : "../"); });
+    document.querySelectorAll('a[data-notes-idx]').forEach(function(a){ a.setAttribute("href", lang === "en" ? "./?lang=en" : "./"); });
+    if (push) {
+      var u = new URL(location.href);
+      if (lang === "en") u.searchParams.set("lang", "en"); else u.searchParams.delete("lang");
+      u.hash = "";
+      history.replaceState(null, "", u.pathname + u.search);
+    }
+  }
+  document.getElementById("langSwitch").addEventListener("click", function(e){
+    var b = e.target.closest("[data-lang]");
+    if (b && b.dataset.lang !== lang) set(b.dataset.lang, true);
+  });
+  set(lang, false);
+})();
+</script></body></html>
